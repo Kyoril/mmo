@@ -157,24 +157,44 @@ namespace mmo
 
 	std::map<uint32, WaterAmbience::BedTarget> WaterAmbience::GatherBedTargets(const Vector3& ear) const
 	{
-		std::map<uint32, BedTarget> targets;
+		// Two profiles may share a sound entry, but a streamed entry plays on one channel only.
+		// Picking the louder profile would make the voice jump sides whenever the winner flips,
+		// so the candidates are blended: volume-weighted direction and spread, equal-power volume.
+		struct Blend
+		{
+			float volumeSum = 0.0f;
+			float volumeSquareSum = 0.0f;
+			Vector3 weightedDirection;
+			float weightedSpread = 0.0f;
 
-		// Two profiles may share a sound entry, but a streamed entry plays on one channel only:
-		// the louder profile wins.
-		const auto offer = [this, &targets](const uint32 soundId, BedTarget candidate)
+			// Unweighted sums, used while every candidate is silent.
+			Vector3 directionSum;
+			float spreadSum = 0.0f;
+			int count = 0;
+
+			float range = 0.0f;
+		};
+
+		std::map<uint32, Blend> blends;
+
+		const auto offer = [this, &blends](const uint32 soundId, const float volume, const Vector3& direction, const float spread, const float range)
 		{
 			if (soundId == 0)
 			{
 				return;
 			}
 
-			candidate.volume *= m_player.GetEntryVolume(soundId);
+			const float entryVolume = volume * m_player.GetEntryVolume(soundId);
 
-			const auto it = targets.find(soundId);
-			if (it == targets.end() || candidate.volume > it->second.volume)
-			{
-				targets[soundId] = candidate;
-			}
+			Blend& blend = blends[soundId];
+			blend.volumeSum += entryVolume;
+			blend.volumeSquareSum += entryVolume * entryVolume;
+			blend.weightedDirection += direction * entryVolume;
+			blend.weightedSpread += spread * entryVolume;
+			blend.directionSum += direction;
+			blend.spreadSum += spread;
+			++blend.count;
+			blend.range = std::max(blend.range, range);
 		};
 
 		for (size_t i = 0; i < m_profiles.size(); ++i)
@@ -182,29 +202,42 @@ namespace mmo
 			const WaterAmbienceSounds& sounds = m_profiles[i];
 			const WaterAmbienceField& field = m_smoothedFields[i];
 
-			BedTarget target;
-			target.range = sounds.profile.range;
-
 			const float focus = std::clamp(field.GetFocus(), 0.0f, 1.0f);
-			target.spread = water_ambience::MinSpread + (1.0f - focus) * (water_ambience::MaxSpread - water_ambience::MinSpread);
-
-			const float directionLength = field.direction.GetLength();
-			target.position = directionLength < MinDirectionLength
-				? ear
-				: ear + field.direction * (water_ambience::VirtualDistance / directionLength);
+			const float spread = water_ambience::MinSpread + (1.0f - focus) * (water_ambience::MaxSpread - water_ambience::MinSpread);
 
 			const float speed = std::clamp(field.speed, 0.0f, 1.0f);
 			const float calmWeight = sounds.fastSound == 0 ? 1.0f : std::cos(speed * HalfPi);
 			const float fastWeight = std::sin(speed * HalfPi);
 			const float baseVolume = sounds.volume * field.level;
 
-			BedTarget calm = target;
-			calm.volume = baseVolume * calmWeight;
-			offer(sounds.calmSound, calm);
+			offer(sounds.calmSound, baseVolume * calmWeight, field.direction, spread, sounds.profile.range);
+			offer(sounds.fastSound, baseVolume * fastWeight, field.direction, spread, sounds.profile.range);
+		}
 
-			BedTarget fast = target;
-			fast.volume = baseVolume * fastWeight;
-			offer(sounds.fastSound, fast);
+		std::map<uint32, BedTarget> targets;
+		for (const auto& [soundId, blend] : blends)
+		{
+			BedTarget& target = targets[soundId];
+			target.range = blend.range;
+			target.volume = std::sqrt(blend.volumeSquareSum);
+
+			// Weighted means: a single candidate keeps its own direction and spread exactly.
+			Vector3 direction;
+			if (blend.volumeSum > 0.0f)
+			{
+				direction = blend.weightedDirection / blend.volumeSum;
+				target.spread = blend.weightedSpread / blend.volumeSum;
+			}
+			else
+			{
+				direction = blend.directionSum / static_cast<float>(blend.count);
+				target.spread = blend.spreadSum / static_cast<float>(blend.count);
+			}
+
+			const float directionLength = direction.GetLength();
+			target.position = directionLength < MinDirectionLength
+				? ear
+				: ear + direction * (water_ambience::VirtualDistance / directionLength);
 		}
 
 		return targets;

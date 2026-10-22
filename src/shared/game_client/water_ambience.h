@@ -143,7 +143,8 @@ namespace mmo
 		/// @brief Low-passes the latest scan into the smoothed fields.
 		void Smooth(float deltaSeconds);
 
-		/// @brief Collects the target of every bed sound entry, the louder profile winning.
+		/// @brief Collects the target of every bed sound entry. Profiles sharing an entry are
+		///	blended: volume-weighted direction and spread, equal-power summed volume.
 		[[nodiscard]] std::map<uint32, BedTarget> GatherBedTargets(const Vector3& ear) const;
 
 		/// @brief Starts, adjusts and stops the bed voices.

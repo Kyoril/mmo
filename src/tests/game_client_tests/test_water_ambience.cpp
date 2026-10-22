@@ -320,6 +320,60 @@ TEST_CASE("shared sound entries never run two voices", "[water_ambience]")
 	CHECK(f.ambience->GetVoices().size() == 1);
 }
 
+TEST_CASE("a shared bed entry glides between its profiles", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds left = RiverProfile();
+	left.fastSound = 0;
+	WaterAmbienceSounds right = left;
+	right.profile.waterType = 2;
+	f.ambience->SetProfiles({ left, right });
+
+	// Loud water to the left and quiet (deep) water to the right; over time the left water
+	// sinks and the right water rises, swapping which profile is louder.
+	constexpr float DeepSurface = -35.0f;
+	float blend = 0.0f;
+	const FakeWaterSource source([&blend](const float x, float)
+	{
+		if (x < -10.0f && x > -22.0f)
+		{
+			return MakeWater(1, blend * DeepSurface);
+		}
+
+		if (x > 10.0f && x < 22.0f)
+		{
+			return MakeWater(2, (1.0f - blend) * DeepSurface);
+		}
+
+		return Dry();
+	});
+
+	f.Run(source, 2.0f);
+
+	auto voices = f.ambience->GetVoices();
+	REQUIRE(voices.size() == 1);
+	CHECK(voices[0].soundEntryId == CalmEntry);
+	float lastX = voices[0].position.x;
+	CHECK(lastX < 0.0f);
+
+	float largestStep = 0.0f;
+	constexpr int SwapFrames = 160;
+	for (int frame = 0; frame < SwapFrames + 60; ++frame)
+	{
+		blend = std::min(1.0f, static_cast<float>(frame + 1) / SwapFrames);
+		f.ambience->Update(source, Vector3::Zero, false, 0, FrameSeconds);
+
+		voices = f.ambience->GetVoices();
+		REQUIRE(voices.size() == 1);
+		largestStep = std::max(largestStep, std::abs(voices[0].position.x - lastX));
+		lastX = voices[0].position.x;
+	}
+
+	CHECK(largestStep < 1.0f);
+	CHECK(lastX > 0.0f);
+	CHECK(std::count(f.audio.playedFiles.begin(), f.audio.playedFiles.end(), String(CalmFile)) == 1);
+}
+
 TEST_CASE("no profiles means no work", "[water_ambience]")
 {
 	Fixture f;
