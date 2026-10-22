@@ -2,6 +2,7 @@
 
 #include "world_model_instance.h"
 #include "world_model_merge.h"
+#include "world_model_flatten.h"
 #include "mesh_merge.h"
 
 #include "entity.h"
@@ -96,7 +97,9 @@ namespace mmo
 				for (size_t refIndex = 0; refIndex < meshRefs.size(); ++refIndex)
 				{
 					const WorldModelMeshRef& meshRef = meshRefs[refIndex];
-					if (!meshRef.visible)
+
+					// Particle systems (.hpar) are created by WorldModelInstance::CreateParticleSystems
+					if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
 					{
 						continue;
 					}

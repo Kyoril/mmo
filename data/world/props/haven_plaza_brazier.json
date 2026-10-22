@@ -1,0 +1,17 @@
+{
+  "worldModel": {
+    "path": "Models/Haven/Props/Haven_PlazaBrazier.hwmo",
+    "name": "Haven Plaza Brazier",
+    "props": [
+      {"mesh": "Models/FalwynPlains/Props/Furniture/SM_hc_Brazier_B.hmsh", "name": "Brazier", "position": [0.0, 0.0, 0.0], "scale": 2.0},
+      {"mesh": "Particles/Haven_BrazierFlame.hpar", "name": "Brazier Flame", "position": [0.0, 0.78, 0.0]}
+    ],
+    "lights": [
+      {"type": "omni", "color": "ffff9a40", "position": [0.0, 1.7, 0.0], "intensity": 2.5, "range": 9.0, "fogScattering": 1.0}
+    ]
+  },
+  "place": [
+    {"world": "Development", "worldModel": "Models/Haven/Props/Haven_PlazaBrazier.hwmo", "uniqueId": "12157952135009258207",
+     "name": "Haven Plaza Brazier", "category": "Haven", "position": [-689.0, 2.6, 1020.5], "yaw": 0}
+  ]
+}
