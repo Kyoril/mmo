@@ -575,6 +575,12 @@ namespace mmo
 			/// @return The bilinearly interpolated water height, or 0.0f if outside terrain bounds.
 			[[nodiscard]] float GetWaterHeightAtWorldPos(float x, float z) const;
 
+			/// @brief Gets the river flow speed at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return Normalized flow speed in [0, 1]; 0 off the map, without a page, or without flow data.
+			[[nodiscard]] float GetWaterFlowSpeedAtWorldPos(float x, float z) const;
+
 			/// @brief Returns true if there is water at the given world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
