@@ -79,6 +79,11 @@ pages, and everything else in them is kept. Every page of the rect must exist.
   water vertex a flow-aligned UV (u = distance downstream, v = across) and a speed that falls off
   beyond the channel. `Worlds/Water_River.hmat` (`tools/water_gen/build_ocean_material.py --variant
   river`) pans its normals and foam streaks along it. Pages without the chunk keep world UVs.
+  The flow only shows on pages whose water material is `Water_River.hmat`.
+  Easier: the world editor's Terrain → Water → Brush Mode **Flow** draws river paths in the viewport
+  (click to add points, drag to move, Shift+wheel for width), shows the stored flow as arrows and
+  writes the same chunk (and the river material) on its own. Its paths are kept in `<world>.hflow`
+  next to the world file, in the same `[x, z, halfWidth]` format.
 
 A zero image with only `paint`, `tileMaterials`, `waterFlow` or `clearWaterMask` is a data-only patch. Rebake the distant
 terrain afterwards (`mmo_edit --bake-terrain-lod <world.hwld>`), rebuild the nav mesh, and move

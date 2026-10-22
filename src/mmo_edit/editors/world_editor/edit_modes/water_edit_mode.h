@@ -8,6 +8,10 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 #include "terrain/constants.h"
+#include "terrain_io/water_flow.h"
+#include "math/matrix4.h"
+
+#include <imgui.h>
 
 namespace mmo
 {
@@ -38,6 +42,9 @@ namespace mmo
 
 		/// Lower water vertex heights within the brush area.
 		Lower,
+
+		/// Author river flow by drawing paths; shows the stored flow as arrows.
+		Flow,
 
 		/// The total number of modes. Always the last element!
 		Count_
@@ -74,10 +81,53 @@ namespace mmo
 		/// Invalidates the brush position and clears the brush circle overlay.
 		void ClearBrushPosition();
 
+		/// Loads the world's river paths. A missing file means no rivers.
+		/// @param fileName Asset path of the .hflow file.
+		void LoadFlowPaths(const String& fileName);
+
+		/// Writes the world's river paths if they changed (removes the file once no river is left).
+		/// @param fileName Asset path of the .hflow file.
+		void SaveFlowPaths(const String& fileName);
+
 	private:
+		/// A river the flow brush edits: a name for the list and its path in downstream order.
+		struct River
+		{
+			String name;
+			terrain_io::water_flow::FlowPath path;
+		};
+
 		void UpdateBrushOverlay();
 
 		void ApplyBrush();
+
+		void DrawFlowDetails();
+
+		void DrawFlowOverlay(ImDrawList& drawList);
+
+		void FlowMouseDown();
+
+		/// Writes the flow of all rivers into the terrain pages they reach.
+		void ApplyFlow();
+
+		/// Applies the flow shortly after the last change, so dragging sliders or the wheel does not
+		/// recompute every frame.
+		void ScheduleFlowApply();
+
+		void DeleteSelectedFlowPoint();
+
+		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectFlowPaths() const;
+
+		[[nodiscard]] bool ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const;
+
+		/// Height to draw a flow path point at: the water surface, else the ground.
+		[[nodiscard]] float GetFlowPointHeight(float x, float z) const;
+
+		/// Finds the path point under the mouse cursor.
+		[[nodiscard]] bool HitTestFlowPoint(int32& riverIndex, int32& pointIndex) const;
+
+		/// Finds the path segment under the mouse cursor (its first point).
+		[[nodiscard]] bool HitTestFlowSegment(int32& riverIndex, int32& pointIndex) const;
 
 	private:
 		terrain::Terrain& m_terrain;
@@ -111,5 +161,34 @@ namespace mmo
 
 		ManualRenderObject* m_brushCircle = nullptr;
 		SceneNode*          m_brushCircleNode = nullptr;
+
+		// River flow authoring
+		std::vector<River> m_rivers;
+		terrain_io::water_flow::FlowSettings m_flowSettings;
+
+		/// Paths and settings of the last apply: pages they reached and the current paths do not
+		/// lose their flow on the next apply.
+		std::vector<terrain_io::water_flow::FlowPath> m_appliedFlowPaths;
+		terrain_io::water_flow::FlowSettings m_appliedFlowSettings;
+
+		int32 m_selectedRiver = -1;
+		int32 m_selectedPoint = -1;
+		bool  m_flowDragging = false;
+		bool  m_flowDragMoved = false;
+
+		/// Half width given to the first point of a new river.
+		float m_newRiverHalfWidth = 12.0f;
+
+		bool  m_flowAutoApply = true;
+		bool  m_flowAssignRiverMaterial = true;
+		bool  m_flowShowArrows = true;
+		float m_flowApplyCountdown = -1.0f;
+		bool  m_flowFileDirty = false;
+		String m_flowStatus;
+
+		// Viewport state of the last overlay draw, used to pick path points with the mouse.
+		Matrix4 m_overlayViewProj = Matrix4::Identity;
+		ImVec2  m_overlayViewportMin{};
+		ImVec2  m_overlayViewportSize{};
 	};
 }

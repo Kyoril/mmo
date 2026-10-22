@@ -501,6 +501,12 @@ namespace mmo
 			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
 		}
 
+		// River flow paths (editor-only; the pages carry the computed flow).
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->LoadFlowPaths(GetFlowPathsFileName());
+		}
+
 		CreateFarTerrain();
 
 		m_worldSettingsPanel->SetExtraContent([this]() { DrawViewSettings(); });
@@ -1008,8 +1014,23 @@ namespace mmo
 		}
 	}
 
+	String WorldEditorInstance::GetFlowPathsFileName() const
+	{
+		Path flowPath = m_assetPath;
+		flowPath.replace_extension(".hflow");
+		String fileName = flowPath.string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		return fileName;
+	}
+
 	bool WorldEditorInstance::Save()
 	{
+		// River flow first: a pending flow apply changes terrain pages, which are saved below.
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->SaveFlowPaths(GetFlowPathsFileName());
+		}
+
 		// Build mesh name index map (only for mesh entities)
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
