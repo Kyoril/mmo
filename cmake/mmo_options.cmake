@@ -52,7 +52,11 @@ option(MMO_BUILD_TESTS "If checked, will try to test programs." ON)
 # The headless bot client and everything built on it (the e2e scenario client and the bot swarm).
 # Defaults to following MMO_BUILD_TESTS, because the e2e client is part of the test story; turn it
 # on explicitly to get the swarm without the unit tests.
-option(MMO_BUILD_BOTS "If checked, builds the headless bot client, the e2e client and the bot swarm." ${MMO_BUILD_TESTS})
+option(MMO_BUILD_BOTS "If checked, builds the headless bot client and the e2e client." ${MMO_BUILD_TESTS})
+
+# Projects kept outside this repository that build against it: each directory is added after
+# everything here, so its targets link any library of this tree and its tests use mmo_add_test.
+set(MMO_EXTERNAL_PROJECTS "" CACHE STRING "Directories of external projects to build along (separated by ;)")
 
 # If enabled, disables MSVC iterator debugging in debug builds for better performance
 option(MMO_DISABLE_ITERATOR_DEBUG "If checked, disables MSVC iterator debugging in debug builds." ON)
