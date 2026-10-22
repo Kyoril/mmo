@@ -2507,5 +2507,109 @@ namespace mmo
 				}
 			}
 		}
+
+		Terrain::WaterFlowResult Terrain::ApplyWaterFlow(const std::vector<terrain_io::water_flow::FlowPath>& paths, const terrain_io::water_flow::FlowSettings& settings,
+			const std::vector<terrain_io::water_flow::FlowPath>& previousPaths, const terrain_io::water_flow::FlowSettings& previousSettings,
+			const String& riverMaterialName)
+		{
+			const float halfW = static_cast<float>(m_width * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+			const float pageSize = static_cast<float>(constants::PageSize);
+
+			const auto hasAnyWater = [](const Page& page)
+			{
+				for (uint32 tz = 0; tz < constants::TilesPerPage; ++tz)
+				{
+					for (uint32 tx = 0; tx < constants::TilesPerPage; ++tx)
+					{
+						if (page.HasWater(tx, tz))
+						{
+							return true;
+						}
+					}
+				}
+				return false;
+			};
+
+			WaterFlowResult result;
+			for (uint32 pageZ = 0; pageZ < m_height; ++pageZ)
+			{
+				for (uint32 pageX = 0; pageX < m_width; ++pageX)
+				{
+					const float minX = static_cast<float>(pageX) * pageSize - halfW;
+					const float minZ = static_cast<float>(pageZ) * pageSize - halfH;
+					const bool inReach = terrain_io::water_flow::IsRectInReach(paths, settings, minX, minZ, minX + pageSize, minZ + pageSize);
+					const bool wasInReach = terrain_io::water_flow::IsRectInReach(previousPaths, previousSettings, minX, minZ, minX + pageSize, minZ + pageSize);
+					if (!inReach && !wasInReach)
+					{
+						continue;
+					}
+
+					Page* page = GetPage(pageX, pageZ);
+					if (!page)
+					{
+						continue;
+					}
+
+					// Off-screen pages only need their data, which preparing reads without building any
+					// render objects. It stays resident, so the save picks the change up.
+					// A page the streamer is still preparing is skipped rather than read half-parsed.
+					if (!page->IsPrepared() && (!page->Prepare() || !page->IsPrepared()))
+					{
+						continue;
+					}
+
+					if (inReach && hasAnyWater(*page))
+					{
+						std::vector<float> uvs;
+						std::vector<uint8> speeds;
+						terrain_io::water_flow::ComputePageFlow(paths, settings, minX, minZ, uvs, speeds);
+						page->SetWaterFlow(std::move(uvs), std::move(speeds));
+						if (!riverMaterialName.empty() && page->GetWaterMaterialName() != riverMaterialName)
+						{
+							page->SetWaterMaterialName(riverMaterialName);
+						}
+						page->RebuildWaterMesh();
+						++result.pagesWritten;
+					}
+					else if (page->HasWaterFlow())
+					{
+						page->ClearWaterFlow();
+						page->RebuildWaterMesh();
+						++result.pagesCleared;
+					}
+				}
+			}
+
+			return result;
+		}
+
+		uint32 Terrain::ClearWaterFlow(const float centerX, const float centerZ, const float radius)
+		{
+			const float halfW = static_cast<float>(m_width * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+
+			const int32 minPageX = std::max(0, static_cast<int32>(std::floor((centerX - radius + halfW) / constants::PageSize)));
+			const int32 maxPageX = std::min(static_cast<int32>(m_width) - 1, static_cast<int32>(std::floor((centerX + radius + halfW) / constants::PageSize)));
+			const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((centerZ - radius + halfH) / constants::PageSize)));
+			const int32 maxPageZ = std::min(static_cast<int32>(m_height) - 1, static_cast<int32>(std::floor((centerZ + radius + halfH) / constants::PageSize)));
+
+			uint32 cleared = 0;
+			for (int32 pageZ = minPageZ; pageZ <= maxPageZ; ++pageZ)
+			{
+				for (int32 pageX = minPageX; pageX <= maxPageX; ++pageX)
+				{
+					Page* page = GetPage(pageX, pageZ);
+					if (page && page->HasWaterFlow())
+					{
+						page->ClearWaterFlow();
+						page->RebuildWaterMesh();
+						++cleared;
+					}
+				}
+			}
+
+			return cleared;
+		}
 	}
 }

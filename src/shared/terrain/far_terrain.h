@@ -113,6 +113,9 @@ namespace mmo
 			///        Zero for a map without baked data.
 			[[nodiscard]] uint32 GetReadyPageCount() const { return m_readyPageCount; }
 
+			/// @brief Number of selected stand-ins still streaming in (as of the last Update).
+			[[nodiscard]] uint32 GetLoadingPageCount() const { return m_loadingPageCount; }
+
 		private:
 			enum class EntryState : uint8
 			{
@@ -145,6 +148,7 @@ namespace mmo
 
 			uint32 m_radius = 0;
 			uint32 m_visiblePageCount = 0;
+			uint32 m_loadingPageCount = 0;
 			uint32 m_readyPageCount = 0;
 
 			std::unordered_map<uint32, Entry> m_entries;

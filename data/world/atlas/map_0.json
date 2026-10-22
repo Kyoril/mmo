@@ -728,6 +728,139 @@
       "radius": 114.0,
       "status": "canon",
       "source": "user"
+    },
+    {
+      "id": "river_meadows",
+      "name": "River Meadows",
+      "kind": "landmark",
+      "center": [
+        -277.8,
+        669.2
+      ],
+      "radius": 80.0,
+      "description": "Open floodplain meadows inside the river's eastern meander, with lone oaks and wildflowers.",
+      "status": "placeholder",
+      "ask": "Confirm the name and whether quests or creatures belong here.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "woodland_trails",
+      "name": "Woodland Trails",
+      "kind": "landmark",
+      "center": [
+        -240.0,
+        850.0
+      ],
+      "radius": 220.0,
+      "description": "Mixed broadleaf woodland south of the King's Road with winding dirt trails to the meadows, the backwater and the barrow ridge.",
+      "status": "placeholder",
+      "ask": "Confirm the name; decide which creatures live in the woodland (it has no spawns yet).",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "mirewater_backwater",
+      "name": "Mirewater Backwater",
+      "kind": "landmark",
+      "center": [
+        -175.0,
+        1010.0
+      ],
+      "radius": 75.0,
+      "description": "A still woodland pond ringed by slender trees and muddy banks, where the concept places the misty backwater.",
+      "status": "placeholder",
+      "ask": "The Mirewater quests (q44-q47) still play in the marsh at (-330, 230), north-west of the road. Rename this pond, or move the Mirewater here?",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "barrow_ridge",
+      "name": "Barrow Ridge",
+      "kind": "landmark",
+      "center": [
+        190.0,
+        1240.0
+      ],
+      "radius": 220.0,
+      "description": "A rolling ridge south of Oakenshire's ring with five grave mounds and standing stones on its crest, rock outcrops and pines.",
+      "status": "placeholder",
+      "ask": "The Barrowfield quests (q48-q53) still play north-west at (-475, 227). Is this ridge part of the barrows, a second barrow site, or should it be renamed?",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_lake",
+      "name": "Haven Lake",
+      "kind": "landmark",
+      "center": [
+        -345.0,
+        1480.0
+      ],
+      "radius": 70.0,
+      "description": "The lake east of Haven where the river ends.",
+      "status": "placeholder",
+      "ask": "Name the lake, or say where the river should flow on to.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "concept_view_green_valley",
+      "name": "Concept view: Briarwatch, the green valley",
+      "kind": "note",
+      "center": [
+        -80.0,
+        80.0
+      ],
+      "radius": 20.0,
+      "description": "Editor viewpoint matching the concept (gate bottom-left, Haven upper right). World Settings > View: paste \"-80,300,80,161,-30,50,0.33\" and press Go. Unattended: mmo_edit --capture-view Worlds/Development/Development.hwld --view \"-80,300,80,161,-30,50,0.33\" --out shot.png --size 1586x992 --grass --far-radius 6 [--fog]",
+      "status": "note",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_harbour",
+      "name": "Haven Harbour",
+      "kind": "landmark",
+      "center": [
+        -640.0,
+        882.0
+      ],
+      "radius": 175.0,
+      "description": "A broad bay of the river in front of Haven's north wall. Haven's main gate is reached over it: a stone bridge from the north bank onto an island with two houses and piers, and a second bridge from the island to a quay before the gate.",
+      "status": "placeholder",
+      "ask": "Name the bay and the island. Should the island become a riverfront quay with warehouses (concept option A) once there are assets for it?",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_trading_basin",
+      "name": "Haven Trading Basin",
+      "kind": "landmark",
+      "center": [
+        -767.0,
+        885.0
+      ],
+      "radius": 60.0,
+      "description": "Stone-quayed basin at the west end of the harbour bay below Haven's north wall, with warehouses (Haven houses), piers and market stalls (concept option C).",
+      "status": "placeholder",
+      "ask": "Name it; should it get dockworkers, a harbourmaster or merchant NPCs?",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "haven_west_lake",
+      "name": "Haven West Lake",
+      "kind": "landmark",
+      "center": [
+        -1140.0,
+        1680.0
+      ],
+      "radius": 85.0,
+      "description": "Lake south-west of Haven where the river's western arm ends.",
+      "status": "placeholder",
+      "ask": "Name the lake, or say where the western arm should flow on to.",
+      "source": "agent"
     }
   ],
   "roads": [
@@ -871,6 +1004,152 @@
       "status": "placeholder",
       "ask": "Layout sketch: 8 - Haven Road (south-west), from the Old Stone Bridge down the valley past the farmlands and the Crossroads Inn to Haven. Only if Haven goes south-west. Drag the bends, then confirm.",
       "source": "user"
+    },
+    {
+      "id": "woodland_trail",
+      "name": "Woodland Trail",
+      "points": [
+        [
+          -170.0,
+          468.0
+        ],
+        [
+          -180.0,
+          540.0
+        ],
+        [
+          -200.0,
+          620.0
+        ],
+        [
+          -215.0,
+          700.0
+        ],
+        [
+          -205.0,
+          780.0
+        ],
+        [
+          -195.0,
+          860.0
+        ],
+        [
+          -190.0,
+          950.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Trail painted on the terrain after the green-valley concept. Confirm or rename.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "meadow_trail",
+      "name": "Meadow Trail",
+      "points": [
+        [
+          -215.0,
+          700.0
+        ],
+        [
+          -250.0,
+          690.0
+        ],
+        [
+          -275.0,
+          660.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Trail painted on the terrain after the green-valley concept. Confirm or rename.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "ridge_trail",
+      "name": "Barrow Ridge Trail",
+      "points": [
+        [
+          -150.0,
+          1066.0
+        ],
+        [
+          -118.0,
+          1112.0
+        ],
+        [
+          -62.0,
+          1150.0
+        ],
+        [
+          18.0,
+          1176.0
+        ],
+        [
+          110.0,
+          1196.0
+        ],
+        [
+          190.0,
+          1180.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Trail painted on the terrain after the green-valley concept. Confirm or rename.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "backwater_loop",
+      "name": "Backwater Loop",
+      "points": [
+        [
+          -190.0,
+          950.0
+        ],
+        [
+          -232.0,
+          975.0
+        ],
+        [
+          -236.0,
+          1030.0
+        ],
+        [
+          -200.0,
+          1066.0
+        ],
+        [
+          -150.0,
+          1066.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Trail painted on the terrain after the green-valley concept. Confirm or rename.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
+    },
+    {
+      "id": "outpost_road",
+      "name": "Outpost Road",
+      "points": [
+        [
+          -552.0,
+          420.0
+        ],
+        [
+          -600.0,
+          380.0
+        ],
+        [
+          -622.0,
+          312.0
+        ]
+      ],
+      "status": "placeholder",
+      "ask": "Trail painted on the terrain after the green-valley concept. Confirm or rename.",
+      "source": "agent",
+      "notes": "Shaped 2026-10-18 after the concept docs/world/reference/briarwatch-green-valley-concept.webp."
     }
   ]
 }

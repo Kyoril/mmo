@@ -156,6 +156,20 @@ namespace mmo
 			return soundLength;
 		}
 
+		/// Sound indices reported as still opening by IsSoundLoading.
+		std::set<SoundIndex> loadingSounds;
+
+		bool IsSoundLoading(const SoundIndex sound) override
+		{
+			return loadingSounds.count(sound) != 0;
+		}
+
+		/// @brief Index the next created sound gets, so a test can mark it loading beforehand.
+		SoundIndex GetNextSoundIndex() const
+		{
+			return m_nextSound;
+		}
+
 		ISoundInstance* GetSoundInstance(SoundIndex) override
 		{
 			return nullptr;

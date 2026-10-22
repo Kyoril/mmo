@@ -26,5 +26,6 @@ namespace mmo
 		inline const ChunkMagic HoleChunk = MakeChunkMagic('LOHM');
 		inline const ChunkMagic WaterChunk = MakeChunkMagic('WCLM');     // legacy v1
 		inline const ChunkMagic WaterQuadChunk = MakeChunkMagic('QWCM'); // current v2
+		inline const ChunkMagic WaterFlowChunk = MakeChunkMagic('WFLW'); // optional: river flow per water vertex
 	}
 }
