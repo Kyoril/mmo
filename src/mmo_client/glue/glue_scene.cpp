@@ -363,6 +363,14 @@ namespace mmo
 			return std::nullopt;
 		}
 
+		if (manifest->rulesVersion != GlueBakeRulesVersion)
+		{
+			WLOG("Glue scene: the glue bake was made with bake rules version " << manifest->rulesVersion << ", but this build expects "
+				<< GlueBakeRulesVersion << " (bake rules version " << manifest->rulesVersion << " != " << GlueBakeRulesVersion
+				<< "), streaming the world instead. Rebake with mmo_edit --bake-glue-scene.");
+			return std::nullopt;
+		}
+
 		if (!ShouldUseGlueBake(manifest, definitionHash))
 		{
 			WLOG("Glue scene: the glue bake was made from another GlueScene.json (scene hash " << manifest->sceneHash

@@ -233,6 +233,14 @@ def main() -> int:
             if failed:
                 report["passed"] = False
 
+    # Warn-only: a stale glue bake never fails the audit, but lands in the report.
+    sys.path.insert(0, str(REPO / "tools"))
+    import glue_bake_check
+    glue_warnings = glue_bake_check.check(str(REPO))
+    for line in glue_warnings:
+        print(line)
+    report["glue_bake_warnings"] = glue_warnings
+
     report_dir = REPO / "tools" / "gate" / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     path = report_dir / f"content-audit-{datetime.now().strftime('%Y-%m-%d')}.json"

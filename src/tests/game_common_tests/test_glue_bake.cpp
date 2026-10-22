@@ -39,6 +39,7 @@ namespace
 	GlueBakeManifest makeManifest()
 	{
 		GlueBakeManifest m;
+		m.rulesVersion = GlueBakeRulesVersion;
 		m.sceneHash = "0123456789abcdef";
 		m.inputs = { { "a/b.wmo", "1111111111111111" }, { "c.json", "2222222222222222" } };
 		Matrix4 t = Matrix4::Identity;
@@ -159,6 +160,7 @@ TEST_CASE("Manifest round trips", "[glue_bake]")
 	REQUIRE(parsed.has_value());
 
 	CHECK(parsed->version == 1);
+	CHECK(parsed->rulesVersion == GlueBakeRulesVersion);
 	CHECK(parsed->sceneHash == m.sceneHash);
 	REQUIRE(parsed->inputs.size() == 2);
 	CHECK(parsed->inputs[1].path == "c.json");
@@ -218,6 +220,9 @@ TEST_CASE("Manifest parsing rejects bad input", "[glue_bake]")
 
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"sceneHash\"", "\"sceneHashX\"")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"version\":1", "\"version\":2")).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"rulesVersion\"", "\"rulesVersionX\"")).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"rulesVersion\":2", "\"rulesVersion\":\"2\"")).has_value());
+	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"rulesVersion\":2", "\"rulesVersion\":-1")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"meshes\":[", "\"meshes\":{\"a\":[")).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(good.substr(0, good.size() / 2)).has_value());
 	CHECK_FALSE(ParseGlueBakeManifest(replaced("\"water\":[", "\"waterX\":[")).has_value());
@@ -305,10 +310,17 @@ TEST_CASE("The bake is used only for a parsed manifest of the current scene", "[
 	CHECK_FALSE(ShouldUseGlueBake(std::nullopt, "94f0b479e45f9382"));
 
 	GlueBakeManifest manifest;
+	manifest.rulesVersion = GlueBakeRulesVersion;
 	manifest.sceneHash = "94f0b479e45f9382";
 	CHECK_FALSE(ShouldUseGlueBake(manifest, "0000000000000000"));
 	CHECK_FALSE(ShouldUseGlueBake(manifest, ""));
 	CHECK(ShouldUseGlueBake(manifest, "94f0b479e45f9382"));
+
+	manifest.rulesVersion = GlueBakeRulesVersion - 1;
+	CHECK_FALSE(ShouldUseGlueBake(manifest, "94f0b479e45f9382"));
+	manifest.rulesVersion = GlueBakeRulesVersion + 1;
+	CHECK_FALSE(ShouldUseGlueBake(manifest, "94f0b479e45f9382"));
+	manifest.rulesVersion = GlueBakeRulesVersion;
 
 	manifest.sceneHash.clear();
 	CHECK_FALSE(ShouldUseGlueBake(manifest, ""));

@@ -1073,6 +1073,7 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world file " << GetAssetPath());
+		RemindGlueBakeMayBeStale(*this);
 
 		struct MaterialOverride
 		{

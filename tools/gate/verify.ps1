@@ -144,6 +144,13 @@ try
 		& (Join-Path $repoRoot "tools/sync_skills.ps1") -Check
 	}
 
+	# Warning only: a stale glue scene bake makes the client stream the world on the login screen
+	# (or draw an outdated scene), but never breaks the build. The checker always exits 0.
+	foreach ($line in @(& $python (Join-Path $repoRoot "tools/glue_bake_check.py") --root $repoRoot))
+	{
+		Write-Host $line -ForegroundColor Yellow
+	}
+
 	if ($ok)
 	{
 		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)

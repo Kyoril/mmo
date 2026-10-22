@@ -32,6 +32,12 @@ namespace mmo
 	///         a file could not be written. No manifest is written then.
 	bool BakeGlueScene(WorldEditorInstance& world, const String& glueSceneJsonPath, String& outSummary);
 
+	/// @brief Logs a reminder to rebake when the given world is the one the glue scene definition names
+	///        (the bake does not follow edits on its own). Does nothing for other worlds or when the
+	///        definition cannot be read.
+	/// @param world The world that was just saved.
+	void RemindGlueBakeMayBeStale(const WorldEditorInstance& world);
+
 	/// @brief Opens the world the glue scene definition names through the host and bakes it (the
 	///        `--bake-glue-scene <GlueScene.json>` job), see BakeGlueScene(WorldEditorInstance&, ...).
 	bool BakeGlueScene(EditorHost& host, const String& glueSceneJsonPath, String& outSummary);

@@ -138,10 +138,19 @@ namespace mmo
 		Matrix4 transform;
 	};
 
+	/// Version of the rules the baker applies (what is kept, culled or merged). Bump it whenever
+	/// the bake rules change, so existing bakes are known to be out of date and the client falls
+	/// back to streaming the world until a rebake. The interior-facade change (facades of
+	/// interior-flagged house storeys are kept) is rules version 2.
+	constexpr uint32 GlueBakeRulesVersion = 2;
+
 	/// Describes what a glue bake contains and what it was baked from.
 	struct GlueBakeManifest
 	{
 		uint32 version = 1;
+
+		/// The GlueBakeRulesVersion the baker that wrote this bake had.
+		uint32 rulesVersion = 0;
 
 		/// Hex FNV-1a 64 of the GlueScene.json bytes.
 		String sceneHash;
@@ -171,7 +180,7 @@ namespace mmo
 
 	/// Whether the client draws the glue scene from the bake: only for a parsed manifest whose
 	/// sceneHash matches the hash of the current GlueScene.json (a camera edit without a rebake
-	/// falls back to streaming the world).
+	/// falls back to streaming the world) and whose rulesVersion is GlueBakeRulesVersion.
 	/// @param manifest The parsed manifest, or nullopt when it is missing or unparsable.
 	/// @param currentSceneHash HashGlueBakeBytes of the current GlueScene.json.
 	bool ShouldUseGlueBake(const std::optional<GlueBakeManifest>& manifest, const String& currentSceneHash);

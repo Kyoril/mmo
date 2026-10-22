@@ -350,6 +350,7 @@ namespace mmo
 		}
 
 		GlueBakeManifest manifest;
+		manifest.rulesVersion = GlueBakeRulesVersion;
 		manifest.sceneHash = HashGlueBakeBytes(source->bytes.data(), source->bytes.size());
 		manifest.inputs = collection.inputs;
 		manifest.meshes = std::move(meshes);
@@ -421,6 +422,26 @@ namespace mmo
 
 		outSummary = summary.GetText();
 		return true;
+	}
+
+	void RemindGlueBakeMayBeStale(const WorldEditorInstance& world)
+	{
+		const std::optional<GlueSceneSource> source = ReadGlueSceneSource(GlueSceneDefinitionPath);
+		if (!source)
+		{
+			return;
+		}
+
+		const std::optional<GlueSceneDefinition> definition = ParseGlueSceneDefinition(source->bytes);
+		if (!definition)
+		{
+			return;
+		}
+
+		if (ToForwardSlashes(world.GetWorldPath().generic_string()) == ToForwardSlashes(definition->world + ".hwld"))
+		{
+			WLOG("Glue bake may be stale; rerun mmo_edit --bake-glue-scene data/client/Interface/GlueUI/GlueScene.json");
+		}
 	}
 
 	bool BakeGlueScene(EditorHost& host, const String& glueSceneJsonPath, String& outSummary)

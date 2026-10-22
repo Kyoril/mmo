@@ -419,6 +419,7 @@ namespace mmo
 	{
 		json root = json::object();
 		root["version"] = manifest.version;
+		root["rulesVersion"] = manifest.rulesVersion;
 		root["sceneHash"] = manifest.sceneHash;
 
 		json inputs = json::array();
@@ -516,6 +517,11 @@ namespace mmo
 
 		GlueBakeManifest result;
 		if (!readUInt(root, "version", result.version) || result.version != 1)
+		{
+			return std::nullopt;
+		}
+
+		if (!readUInt(root, "rulesVersion", result.rulesVersion))
 		{
 			return std::nullopt;
 		}
@@ -683,7 +689,8 @@ namespace mmo
 
 	bool ShouldUseGlueBake(const std::optional<GlueBakeManifest>& manifest, const String& currentSceneHash)
 	{
-		return manifest.has_value() && !currentSceneHash.empty() && manifest->sceneHash == currentSceneHash;
+		return manifest.has_value() && !currentSceneHash.empty() && manifest->sceneHash == currentSceneHash
+			&& manifest->rulesVersion == GlueBakeRulesVersion;
 	}
 
 	std::vector<GlueBakeMeshGroup> GroupGlueBakeMeshes(const std::vector<GlueBakeMesh>& meshes, const float cellSize)
