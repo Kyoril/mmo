@@ -9,27 +9,42 @@ using namespace mmo;
 TEST_CASE("No characters leaves every spot empty", "[plaza]")
 {
 	const auto a = AssignPlaza(0, -1);
-	CHECK(a.frontCharacter == -1);
+	CHECK(a.visitor == -1);
 	for (const int32 c : a.spotCharacter)
 	{
 		CHECK(c == -1);
 	}
 }
 
-TEST_CASE("A selected plaza character leaves their spot for the front", "[plaza]")
+TEST_CASE("A selected plaza character stays at their spot", "[plaza]")
 {
-	const auto a = AssignPlaza(7, 2);
-	CHECK(a.frontCharacter == 2);
-	CHECK_FALSE(a.frontIsVisitor);
-	CHECK(a.spotCharacter == std::array<int32, 5>{ 0, 1, -1, 3, 4 });
+	for (int32 selected = 0; selected < PlazaSpotCount; ++selected)
+	{
+		const auto a = AssignPlaza(7, selected);
+		CHECK(a.visitor == -1);
+		CHECK(a.spotCharacter == std::array<int32, 5>{ 0, 1, 2, 3, 4 });
+	}
 }
 
-TEST_CASE("A visitor takes the front and all five stay at their spots", "[plaza]")
+TEST_CASE("No selection keeps the plaza characters at their spots", "[plaza]")
+{
+	const auto a = AssignPlaza(3, -1);
+	CHECK(a.visitor == -1);
+	CHECK(a.spotCharacter == std::array<int32, 5>{ 0, 1, 2, -1, -1 });
+}
+
+TEST_CASE("A selected visitor takes the visitor spot and all five stay at their spots", "[plaza]")
 {
 	const auto a = AssignPlaza(7, 6);
-	CHECK(a.frontCharacter == 6);
-	CHECK(a.frontIsVisitor);
+	CHECK(a.visitor == 6);
 	CHECK(a.spotCharacter == std::array<int32, 5>{ 0, 1, 2, 3, 4 });
+}
+
+TEST_CASE("An out of range selection brings no visitor", "[plaza]")
+{
+	CHECK(AssignPlaza(7, 7).visitor == -1);
+	CHECK(AssignPlaza(4, 4).visitor == -1);
+	CHECK(AssignPlaza(4, 4).spotCharacter == std::array<int32, 5>{ 0, 1, 2, 3, -1 });
 }
 
 TEST_CASE("Initial selection falls back to the first character", "[plaza]")

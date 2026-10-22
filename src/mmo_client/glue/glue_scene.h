@@ -111,9 +111,11 @@ namespace mmo
 		/// Jumps to the gate, dropping a pending plaza arrival and the push-in.
 		void SnapToGate();
 
-		/// Eases the camera part of the way towards the front character, then holds it there.
+		/// Eases the camera part of the way towards a character, then holds it there.
 		/// @param seconds Duration of the push-in. 0 or less finishes it at once.
-		void PushIn(float seconds);
+		/// @param characterPosition Where the character stands (its feet); the camera moves
+		///        towards a point about chest high above it.
+		void PushIn(float seconds, const Vector3& characterPosition);
 
 		/// Whether a push-in finished since the last call.
 		[[nodiscard]] bool ConsumePushInFinished();
@@ -124,6 +126,12 @@ namespace mmo
 		/// @param y Receives the vertical position, 0 (top) to 1 (bottom).
 		/// @return False when the position is behind the camera or off screen.
 		[[nodiscard]] bool ProjectToScreen(const Vector3& worldPosition, float& x, float& y) const;
+
+		/// Finds the plaza character under a screen position, with a ray from the camera.
+		/// @param x Horizontal position, 0 (left) to 1 (right).
+		/// @param y Vertical position, 0 (top) to 1 (bottom).
+		/// @return The character's order index, or -1 for none (or while the camera flies).
+		[[nodiscard]] int32 PickPlazaCharacter(float x, float y) const;
 
 	private:
 		/// Loads the world file and creates the world instance.
@@ -208,6 +216,9 @@ namespace mmo
 		float m_pushInSeconds = 0.0f;
 		float m_pushInElapsed = 0.0f;
 		bool m_pushInFinished = false;
+
+		/// Where the character the push-in moves towards stands.
+		Vector3 m_pushInCharacterPosition;
 
 		// Declared after the scene: destroyed first, so handlers still queued in them (which may
 		// hold the world instance) are released while the scene is alive.

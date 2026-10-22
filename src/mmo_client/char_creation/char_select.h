@@ -52,7 +52,7 @@ namespace mmo
 
 		/// Selects a character and places the characters on the plaza for it. The first valid
 		/// selection after the glue scene was set (or after the roster became empty) places everyone
-		/// instantly; later ones make them walk. An invalid index (-1) only records the selection
+		/// instantly; later ones make them run. An invalid index (-1) only records the selection
 		/// and leaves the plaza untouched, unless the roster is empty, in which case the plaza is
 		/// cleared.
 		/// @param index Order index of the character, or -1 for none.
@@ -111,6 +111,9 @@ namespace mmo
 		/// Gets the screen position of a world position in UI units.
 		/// @return False when the position is not on screen or there is no glue scene.
 		bool ProjectToUi(const Vector3& worldPosition, float& x, float& y) const;
+
+		/// Gets the order index of the plaza character under the mouse cursor, or -1.
+		[[nodiscard]] int32 GetPlazaCharacterAtCursor() const;
 
 		/// Gets the name of a character's zone, or an empty string.
 		String GetCharacterZoneName(int32 index) const;

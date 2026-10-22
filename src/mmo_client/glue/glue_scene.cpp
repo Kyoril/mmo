@@ -15,6 +15,7 @@
 #include "graphics/sky_component.h"
 #include "log/default_log_levels.h"
 #include "math/constants.h"
+#include "math/ray.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/octree_scene.h"
 #include "scene_graph/scene_node.h"
@@ -38,10 +39,13 @@ namespace mmo
 		/// Seconds of one idle drift cycle at the gate.
 		constexpr float driftPeriodSeconds = 20.0f;
 
-		/// Share of the way from the plaza camera to the front character covered by the push-in.
+		/// Share of the way from the plaza camera to the selected character covered by the push-in.
 		constexpr float pushInFraction = 0.4f;
 
-		/// Height above the front spot the push-in moves towards, in metres (about chest height).
+		/// Farthest a cursor ray reaches, in metres.
+		constexpr float pickDistance = 200.0f;
+
+		/// Height above the character's feet the push-in moves towards, in metres (about chest height).
 		constexpr float pushInTargetHeight = 1.4f;
 
 		/// Milliseconds after loading of the gate (resp. the plaza) began when it counts as ready
@@ -214,8 +218,10 @@ namespace mmo
 		m_pushInFinished = false;
 	}
 
-	void GlueScene::PushIn(const float seconds)
+	void GlueScene::PushIn(const float seconds, const Vector3& characterPosition)
 	{
+		m_pushInCharacterPosition = characterPosition;
+
 		if (seconds <= 0.0f)
 		{
 			// Finished at once: hold the end of the push-in.
@@ -250,6 +256,16 @@ namespace mmo
 
 		m_camera->GetNormalizedScreenPosition(worldPosition, x, y);
 		return x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f;
+	}
+
+	int32 GlueScene::PickPlazaCharacter(const float x, const float y) const
+	{
+		if (IsFlightActive() || x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f)
+		{
+			return -1;
+		}
+
+		return m_plazaAvatars->Pick(m_camera->GetCameraToViewportRay(x, y, pickDistance));
 	}
 
 	bool GlueScene::LoadWorld()
@@ -328,9 +344,9 @@ namespace mmo
 
 		UpdateCamera(deltaSeconds);
 
-		m_plazaAvatars->Update(deltaSeconds);
-
 		const Vector3 cameraPosition = m_camera->GetDerivedPosition();
+
+		m_plazaAvatars->Update(deltaSeconds, cameraPosition);
 		if (m_worldInstance && m_worldInstance->HasTerrain())
 		{
 			m_worldInstance->GetTerrain()->NotifyCameraPosition(cameraPosition);
@@ -505,7 +521,7 @@ namespace mmo
 
 			const float t = m_pushInElapsed / m_pushInSeconds;
 			const float eased = t * t * (3.0f - 2.0f * t);
-			const Vector3 target = m_definition.front.position + Vector3(0.0f, pushInTargetHeight, 0.0f);
+			const Vector3 target = m_pushInCharacterPosition + Vector3(0.0f, pushInTargetHeight, 0.0f);
 			position += (target - position) * (pushInFraction * eased);
 		}
 

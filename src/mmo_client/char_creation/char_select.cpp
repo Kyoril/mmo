@@ -30,8 +30,8 @@ namespace mmo
 		/// Name of the cvar remembering the last played character per realm.
 		const char* const lastCharactersVarName = "lastCharacters";
 
-		/// Seconds the camera takes to push in on the front character before entering the world.
-		constexpr float pushInSeconds = 0.8f;
+		/// Seconds the camera takes to push in on the selected character before entering the world.
+		constexpr float pushInSeconds = 0.5f;
 
 		/// Height above a plaza spot where its "new character" marker hangs, in metres.
 		constexpr float spotMarkerHeight = 1.0f;
@@ -62,6 +62,22 @@ namespace mmo
 					if (m_glueScene)
 					{
 						m_glueScene->GetPlazaAvatars().Rotate(degrees);
+					}
+				}),
+
+			// Order index of the plaza character under the cursor, or -1. Standing characters only;
+			// always -1 while the camera flies.
+			luabind::def_lambda("GetPlazaCharacterAtCursor", [this]()
+				{
+					return GetPlazaCharacterAtCursor();
+				}),
+
+			// The plaza character under the cursor (-1 for none) reacts to the hover.
+			luabind::def_lambda("SetPlazaHoverCharacter", [this](int32 index)
+				{
+					if (m_glueScene)
+					{
+						m_glueScene->GetPlazaAvatars().SetHovered(index);
 					}
 				}),
 
@@ -153,7 +169,9 @@ namespace mmo
 						return false;
 					}
 
-					m_glueScene->PushIn(pushInSeconds);
+					// Towards the selected character, wherever it stands; the visitor spot without one.
+					const std::optional<Vector3> position = m_glueScene->GetPlazaAvatars().GetCharacterPosition(m_selectedCharacter);
+					m_glueScene->PushIn(pushInSeconds, position.value_or(m_glueScene->GetDefinition().front.position));
 					return true;
 				})
 		);
@@ -211,8 +229,8 @@ namespace mmo
 		}
 
 		// Otherwise "no selection" is a transient state of the character screen (it clears the
-		// selection before picking one): leave the plaza as it is, so the front character neither
-		// walks back to its spot nor restarts its pose, and the first real selection stays instant.
+		// selection before picking one): leave the plaza as it is, so a selected visitor neither
+		// runs back out nor restarts its pose, and the first real selection stays instant.
 	}
 
 	int32 CharSelect::GetNumCharacters() const
@@ -268,7 +286,7 @@ namespace mmo
 			return;
 		}
 
-		// Characters dragged into or out of the top spots walk in or out right away.
+		// Characters dragged into or out of the top spots run in or out right away.
 		PlazaAvatars& plaza = SyncPlaza();
 		if (m_selectedCharacter >= 0)
 		{
@@ -419,6 +437,29 @@ namespace mmo
 		x = normalizedX * native.width;
 		y = normalizedY * native.height;
 		return true;
+	}
+
+	int32 CharSelect::GetPlazaCharacterAtCursor() const
+	{
+		if (!m_glueScene)
+		{
+			return -1;
+		}
+
+		// Screen px / (native resolution * uiScale) is the normalized screen position, the inverse
+		// of ProjectToUi.
+		const FrameManager& frameManager = FrameManager::Get();
+		const Point mouse = frameManager.GetMousePosition();
+		const Point uiScale = frameManager.GetUIScale();
+		const Size& native = frameManager.GetNativeResolution();
+		if (uiScale.x <= 0.0f || uiScale.y <= 0.0f || native.width <= 0.0f || native.height <= 0.0f)
+		{
+			return -1;
+		}
+
+		const float x = mouse.x / (uiScale.x * native.width);
+		const float y = mouse.y / (uiScale.y * native.height);
+		return m_glueScene->PickPlazaCharacter(x, y);
 	}
 
 	String CharSelect::GetCharacterZoneName(const int32 index) const
