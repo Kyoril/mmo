@@ -91,6 +91,7 @@
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
 #include "prop_kit_job.h"
+#include "entities_to_world_model_job.h"
 #include "glue_bake/glue_bake_job.h"
 #include "glue_bake/glue_scene_baker.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
@@ -609,6 +610,29 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(mmo::ApplyPropKitJob(args[i + 1]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--entities-to-wmo")
+			{
+				// `--entities-to-wmo <job.json>` bundles placed mesh entities into one placed world model
+				// (see entities_to_world_model_job.h; log in entities_to_wmo.log, exit code 1 on failure).
+				static std::ofstream wmoJobLog("entities_to_wmo.log", std::ios::out | std::ios::trunc);
+				static std::mutex wmoJobLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ wmoJobLogMutex };
+					wmoJobLog << entry.message << std::endl;
+				});
+
+				if (i + 1 >= argCount)
+				{
+					ELOG("--entities-to-wmo needs <job.json>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				PostQuitMessage(mmo::ApplyEntitiesToWorldModelJob(args[i + 1]) ? 0 : 1);
 				break;
 			}
 

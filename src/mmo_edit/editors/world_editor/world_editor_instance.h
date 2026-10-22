@@ -660,6 +660,21 @@ namespace mmo
 		/// @return False when any page failed.
 		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
+		/// @brief Starts an interactive minimap bake that runs a few pages per frame (see TickMinimapBake),
+		///        so the editor stays responsive and the bake can be cancelled.
+		/// @param onlyStale Skip pages whose tile is newer than their .tile file.
+		void StartMinimapBake(bool onlyStale);
+
+		/// @brief Bakes pages of the running interactive minimap bake for up to a frame budget and
+		///        finishes it when the queue is empty.
+		void TickMinimapBake();
+
+		/// @brief Stops the running interactive minimap bake, keeping the tiles baked so far.
+		void FinishMinimapBake();
+
+		/// @brief Draws the "Generate Minimaps" dialog: choice of pages, then progress and Cancel.
+		void DrawMinimapBakeDialog();
+
 		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
 		///        streamed pages. See TerrainLodBaker.
 		/// @param onlyStale Skip pages whose baked files are newer than their .tile and that have no unsaved changes.
@@ -965,6 +980,14 @@ namespace mmo
 		std::set<uint16> m_entityPages;
 		/// @brief Page indices whose entities only the minimap bake or ForceLoadPages loaded.
 		std::set<uint16> m_bakeEntityPages;
+
+		/// @brief Interactive minimap bake state (see StartMinimapBake).
+		std::unique_ptr<MinimapBaker> m_minimapBake;
+		std::vector<MinimapBaker::PageCoord> m_minimapBakeQueue;
+		size_t m_minimapBakeNext = 0;
+		MinimapBaker::Stats m_minimapBakeStats;
+		uint32 m_minimapBakeFarTerrainRadius = 0;
+		bool m_openMinimapBakeDialog = false;
 		/// @brief Page indices whose authored foliage only ForceLoadPages loaded.
 		std::set<uint16> m_bakeFoliagePages;
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
