@@ -28,6 +28,7 @@ namespace mmo
     class SubMesh;
     class Mesh;
     class Light;
+    class ParticleSystem;
 
     /// @brief Represents a runtime instance of a world model placed in the scene.
     /// Handles rendering with portal culling, visibility determination, and collision.
@@ -159,6 +160,10 @@ namespace mmo
 
         /// @brief Gets the number of scene lights created from the applied kits.
         [[nodiscard]] size_t GetKitLightCount() const;
+
+        /// @brief Gets the number of particle systems created from particle system references
+        ///        (.hpar paths) among the mesh references, active doodads and kit props.
+        [[nodiscard]] size_t GetParticleSystemCount() const { return m_particleInstances.size(); }
 
         /// @brief Gets the room a realized kit prop was derived into.
         /// @param index Index of the prop among all visible props of all kits, in kit order.
@@ -465,6 +470,17 @@ namespace mmo
         /// @param scene The scene to destroy lights in (can be null).
         void ClearLights(Scene* scene);
 
+        /// @brief Creates one looping particle system per particle system reference (.hpar path) among
+        ///        the visible mesh references, the active doodads and the visible kit props.
+        /// @details Recreates all of them, so it is called again whenever doodads or kits change. The
+        ///          geometry paths skip these references; FlattenWorldModelExtras reports the same set.
+        /// @param scene The scene to create the particle systems in.
+        void CreateParticleSystems(Scene& scene);
+
+        /// @brief Destroys all particle systems created by CreateParticleSystems.
+        /// @param scene The scene to destroy them in (can be null).
+        void ClearParticleSystems(Scene* scene);
+
         /// @brief Clears all geometry.
         /// @param scene The scene to destroy entities in (can be null).
         void ClearGeometry(Scene* scene);
@@ -535,6 +551,19 @@ namespace mmo
         std::set<String> m_warnedInstancingMaterials;
 
         std::vector<LightInstance> m_lightInstances;
+
+        /// @brief One particle system created from a particle system reference.
+        struct ParticleInstance
+        {
+            ParticleSystem* system { nullptr };
+            SceneNode* node { nullptr };
+        };
+
+        /// @brief Particle systems of mesh references, doodads and kit props that name a .hpar file.
+        std::vector<ParticleInstance> m_particleInstances;
+
+        /// @brief Counts particle systems ever created, so recreated ones never reuse a scene name.
+        uint32 m_particleCounter { 0 };
 
         /// @brief Prop kits applied to this instance, in application order. Shared with other
         ///        instances, never modified here.

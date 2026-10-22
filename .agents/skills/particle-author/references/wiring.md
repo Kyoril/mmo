@@ -73,6 +73,16 @@ Load with `ParticleSystemSerializer` (all emitters). `ParticleEmitterSerializer`
 emitter 0 — it exists for old call sites and will silently drop the rest of a layered
 effect.
 
+## 5. Ambient effects placed in the world
+
+A world model mesh reference (or doodad, or prop kit prop) whose path is a `.hpar` becomes a
+looping particle system at that transform: `WorldModelInstance::CreateParticleSystems` creates it
+in the client and the editor, and the glue bake carries it into the character-select scene. Build
+a small world model holding the prop mesh, the effect and a light with the `worldModel` / `place`
+keys of `mmo_edit --apply-prop-kit` (see `docs/world-model-prop-kits.md`). Example: the Haven
+plaza brazier (`data/world/props/haven_plaza_brazier.json`,
+`tools/particle_gen/recipes/haven_plaza_brazier.py`). Every emitter must loop.
+
 ## Where files go
 
 - Effects: `data/client/Particles/<Name>.hpar`

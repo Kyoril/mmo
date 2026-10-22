@@ -805,8 +805,9 @@ namespace mmo
 
 		io::StreamSource source(*file);
 		io::Reader reader(source);
-		ParticleEmitterSerializer serializer;
-		ParticleEmitterParameters parameters;
+		// The whole system: a .hpar may hold several emitters (flame, embers, ...)
+		ParticleSystemSerializer serializer;
+		ParticleSystemParameters parameters;
 		if (!serializer.Deserialize(parameters, reader))
 		{
 			WLOG("Glue scene: cannot read particle system " << particles.file);
@@ -820,7 +821,7 @@ namespace mmo
 			return;
 		}
 
-		emitter->SetParameters(parameters);
+		emitter->SetSystemParameters(parameters);
 
 		Vector3 position;
 		Vector3 scale;
