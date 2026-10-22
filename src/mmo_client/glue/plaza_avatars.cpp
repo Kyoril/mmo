@@ -33,6 +33,9 @@ namespace mmo
 		/// Height of the nameplate anchor above the head bone, in metres.
 		constexpr float nameplateHeadOffset = 0.4f;
 
+		/// Seconds a deselected character takes to turn its manual rotation back.
+		constexpr float rotationReturnSeconds = 0.3f;
+
 		/// Largest turn of a hovered character towards the camera, in degrees.
 		constexpr float hoverMaxTurnDegrees = 35.0f;
 
@@ -178,9 +181,8 @@ namespace mmo
 		m_departing.clear();
 
 		m_leavingGuids.clear();
-		m_selectedGuid = 0;
-		m_selectedRotationDegrees = 0.0f;
 		m_hoveredGuid = 0;
+		m_arrived = false;
 	}
 
 	void PlazaAvatars::Select(int32 orderIndex, const bool animate)
@@ -192,13 +194,6 @@ namespace mmo
 		}
 
 		const PlazaAssignment assignment = AssignPlaza(numCharacters, orderIndex);
-
-		const uint64 selectedGuid = orderIndex >= 0 ? m_avatars[orderIndex]->guid : 0;
-		if (selectedGuid != m_selectedGuid)
-		{
-			m_selectedRotationDegrees = 0.0f;
-			m_selectedGuid = selectedGuid;
-		}
 
 		for (int32 index = 0; index < numCharacters; ++index)
 		{
@@ -231,10 +226,18 @@ namespace mmo
 
 			const bool wasSelected = avatar.selected;
 			avatar.selected = index == orderIndex;
-			if (wasSelected != avatar.selected)
+			if (wasSelected && !avatar.selected && avatar.rotationDegrees != 0.0f)
 			{
-				// The rotation belongs to the selected character only.
-				ApplyTransform(avatar);
+				// The rotation belongs to the selected character: a deselected one turns back to its
+				// facing over a moment instead of snapping (see UpdateRotationReturn).
+				avatar.rotationReturning = true;
+				avatar.rotationReturnStart = avatar.rotationDegrees;
+				avatar.rotationReturnElapsed = 0.0f;
+			}
+			else if (avatar.selected)
+			{
+				// Selected again while turning back: Rotate continues from where it is.
+				avatar.rotationReturning = false;
 			}
 
 			if (target == nullptr)
@@ -312,6 +315,8 @@ namespace mmo
 
 		Avatar& avatar = *m_avatars[orderIndex];
 		avatar.selected = false;
+		avatar.rotationDegrees = 0.0f;
+		avatar.rotationReturning = false;
 
 		if (!IsLeaving(avatar.guid))
 		{
@@ -328,15 +333,22 @@ namespace mmo
 
 	void PlazaAvatars::Rotate(const float degrees)
 	{
-		m_selectedRotationDegrees += degrees;
-
 		for (const auto& avatar : m_avatars)
 		{
-			if (avatar->selected)
+			if (avatar->selected && !avatar->walking)
 			{
+				avatar->rotationReturning = false;
+				avatar->rotationDegrees += degrees;
 				ApplyTransform(*avatar);
 			}
 		}
+	}
+
+	bool PlazaAvatars::ConsumeArrival()
+	{
+		const bool arrived = m_arrived;
+		m_arrived = false;
+		return arrived;
 	}
 
 	int32 PlazaAvatars::Pick(const Ray& ray) const
@@ -426,9 +438,13 @@ namespace mmo
 		{
 			if (avatar->walking)
 			{
-				UpdateWalk(*avatar, deltaSeconds);
+				if (UpdateWalk(*avatar, deltaSeconds) && avatar->visible)
+				{
+					m_arrived = true;
+				}
 			}
 
+			UpdateRotationReturn(*avatar, deltaSeconds);
 			UpdateHover(*avatar, deltaSeconds, cameraPosition);
 
 			if (avatar->visible && avatar->animationState)
@@ -524,6 +540,10 @@ namespace mmo
 		avatar.arrivalPose = from.arrivalPose;
 		avatar.hideOnArrival = from.hideOnArrival;
 		avatar.selected = from.selected;
+		avatar.rotationDegrees = from.rotationDegrees;
+		avatar.rotationReturning = from.rotationReturning;
+		avatar.rotationReturnStart = from.rotationReturnStart;
+		avatar.rotationReturnElapsed = from.rotationReturnElapsed;
 		avatar.pose = from.pose;
 		ApplyTransform(avatar);
 
@@ -566,6 +586,10 @@ namespace mmo
 	{
 		// Hover never interrupts a run, and a running character does not react.
 		ResetHover(avatar);
+
+		// A run turns the character anyway; it arrives facing the way its place wants.
+		avatar.rotationDegrees = 0.0f;
+		avatar.rotationReturning = false;
 
 		avatar.walkTarget = target;
 		avatar.arrivalFacingDegrees = arrivalFacingDegrees;
@@ -682,11 +706,7 @@ namespace mmo
 		float yaw = avatar.facingDegrees;
 		if (!avatar.walking)
 		{
-			if (avatar.selected)
-			{
-				yaw += m_selectedRotationDegrees;
-			}
-
+			yaw += avatar.rotationDegrees;
 			yaw += avatar.hoverTurnDegrees * avatar.hover.GetTurn();
 		}
 
@@ -708,11 +728,7 @@ namespace mmo
 		if (entered)
 		{
 			// The turn is fixed for this hover: a rotation while hovered still turns the character.
-			float yaw = avatar.facingDegrees;
-			if (avatar.selected)
-			{
-				yaw += m_selectedRotationDegrees;
-			}
+			const float yaw = avatar.facingDegrees + avatar.rotationDegrees;
 
 			avatar.hoverTurnDegrees = seated ? 0.0f : PlazaTurnTowardsDegrees(yaw, avatar.position, cameraPosition, hoverMaxTurnDegrees);
 			if (!seated)
@@ -729,10 +745,36 @@ namespace mmo
 		{
 			ApplyGlow(avatar, glow);
 		}
-		else if (avatar.hover.IsIdle())
+		else
 		{
+			// The glow is over even while the turn still eases back: put the materials back now,
+			// so the last faint tint does not linger until the turn is done.
 			RestoreMaterials(avatar);
+		}
+
+		if (avatar.hover.IsIdle())
+		{
 			avatar.hoverTurnDegrees = 0.0f;
+		}
+	}
+
+	void PlazaAvatars::UpdateRotationReturn(Avatar& avatar, const float deltaSeconds)
+	{
+		if (!avatar.rotationReturning)
+		{
+			return;
+		}
+
+		avatar.rotationReturnElapsed += deltaSeconds;
+		avatar.rotationDegrees = PlazaRotationReturnDegrees(avatar.rotationReturnStart, avatar.rotationReturnElapsed, rotationReturnSeconds);
+		if (avatar.rotationDegrees == 0.0f)
+		{
+			avatar.rotationReturning = false;
+		}
+
+		if (avatar.node)
+		{
+			ApplyTransform(avatar);
 		}
 	}
 

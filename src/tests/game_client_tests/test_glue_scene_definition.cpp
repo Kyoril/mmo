@@ -70,3 +70,18 @@ TEST_CASE("A glue scene definition without exactly five spots is rejected", "[gl
 	CHECK_FALSE(ParseGlueSceneDefinition("not json").has_value());
 	CHECK_FALSE(ParseGlueSceneDefinition("{}").has_value());
 }
+
+TEST_CASE("The fly-out duration is optional", "[glue_scene]")
+{
+	const auto withoutFlyOut = ParseGlueSceneDefinition(makeJson(5, false));
+	REQUIRE(withoutFlyOut.has_value());
+	CHECK(withoutFlyOut->flyOutSeconds == 0.0f);
+
+	String json = makeJson(5, false);
+	const size_t at = json.find("\"flightSeconds\"");
+	REQUIRE(at != String::npos);
+	json.insert(at, "\"flyOutSeconds\": 2.5, ");
+	const auto withFlyOut = ParseGlueSceneDefinition(json);
+	REQUIRE(withFlyOut.has_value());
+	CHECK(withFlyOut->flyOutSeconds == Approx(2.5f));
+}

@@ -92,6 +92,16 @@ namespace mmo
 		return std::clamp(std::min(in, out), 0.0f, 1.0f);
 	}
 
+	float PlazaRotationReturnDegrees(const float startDegrees, const float elapsedSeconds, const float durationSeconds)
+	{
+		if (durationSeconds <= 0.0f || elapsedSeconds >= durationSeconds)
+		{
+			return 0.0f;
+		}
+
+		return startDegrees * (1.0f - smoothStep(elapsedSeconds / durationSeconds));
+	}
+
 	bool IsPlazaSeatedPose(const String& pose)
 	{
 		return containsNoCase(pose, "sit") || containsNoCase(pose, "sleep") || containsNoCase(pose, "kneel");

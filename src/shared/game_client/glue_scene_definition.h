@@ -50,6 +50,10 @@ namespace mmo
 		/// Duration of a full flight in seconds.
 		float flightSeconds = 0.0f;
 
+		/// Duration of a full flight back out to the gate in seconds; 0 (optional, absent) uses
+		/// flightSeconds.
+		float flyOutSeconds = 0.0f;
+
 		/// The visitor spot, where a selected character from beyond the plaza spots stands.
 		GlueSpot front;
 

@@ -54,11 +54,12 @@ namespace mmo
 		/// @param deltaSeconds Real time since the last update.
 		void Update(float deltaSeconds);
 
-		/// Whether the gate pages and every entity on them are loaded, or loading them took longer
-		/// than the readiness timeout (8 s), so no fade waits for the gate forever.
+		/// Whether every page's terrain is loaded and every world model the gate camera sees was
+		/// created (see HasPendingGateContent), or loading took longer than the readiness timeout
+		/// (8 s), so no fade waits for the gate forever.
 		[[nodiscard]] bool IsGateReady() const { return m_gateReady; }
 
-		/// Whether the plaza pages (after the gate pages) and every entity on them are loaded, or
+		/// Whether, after the gate, every entity of every page is loaded, or
 		/// loading them took longer than the readiness timeout (8 s after the gate became ready),
 		/// so neither a held fade nor the flight input lock lasts forever.
 		[[nodiscard]] bool IsPlazaReady() const { return m_plazaReady; }
@@ -144,8 +145,14 @@ namespace mmo
 		/// the plaza, ready when loading it took longer than the timeout.
 		void ApplyReadinessTimeout();
 
-		/// Marks the gate ready and starts the plaza's readiness clock.
+		/// Marks the gate ready, logs how long its terrain and its world models took, and starts the
+		/// plaza's readiness clock.
 		void MarkGateReady();
+
+		/// Whether content the gate camera sees is still loading: an entity or foliage file not
+		/// handled yet, or a world model in the gate camera's frustum still being prepared. Once the
+		/// camera left the gate, anything still loading counts. Requires the world instance.
+		[[nodiscard]] bool HasPendingGateContent() const;
 
 		/// Synchronously prepares and loads one terrain page, then starts loading its entities.
 		void LoadPage(uint8 x, uint8 y);
@@ -177,7 +184,6 @@ namespace mmo
 		/// Gate pages first, then plaza pages.
 		std::vector<std::pair<uint8, uint8>> m_pageQueue;
 		size_t m_nextPage = 0;
-		size_t m_gatePageCount = 0;
 		bool m_gateReady = false;
 		bool m_plazaReady = false;
 
@@ -189,6 +195,9 @@ namespace mmo
 
 		/// When loading the plaza pages began (the gate became ready), in GetAsyncTimeMs milliseconds.
 		GameTime m_plazaLoadStartMs = 0;
+
+		/// When the last page's terrain was loaded, in GetAsyncTimeMs milliseconds; 0 until then.
+		GameTime m_terrainLoadedMs = 0;
 
 		/// The gxExposure cvar, once it is registered (the renderer registers it).
 		const ConsoleVar* m_exposureVar = nullptr;

@@ -15,6 +15,7 @@
 #include "net/realm_connector.h"
 #include "char_creation/char_select.h"
 #include "glue/glue_scene.h"
+#include "glue/plaza_avatars.h"
 #include "game_client/plaza_roster.h"
 #include "ui/world_renderer.h"
 
@@ -154,6 +155,13 @@ namespace mmo
 			{
 				TryEnterWorld();
 			}
+		}
+
+		if (m_glueScene->GetPlazaAvatars().ConsumeArrival())
+		{
+			// A character stopped running: the cursor may rest on it without moving, so the
+			// character screen looks again at what is under it.
+			FrameManager::Get().TriggerLuaEvent("GLUE_PLAZA_ARRIVAL");
 		}
 
 		if (m_glueScene->ConsumePushInFinished())

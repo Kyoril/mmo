@@ -55,8 +55,9 @@ namespace mmo
 		return result;
 	}
 
-	GlueCameraDirector::GlueCameraDirector(float flightSeconds)
+	GlueCameraDirector::GlueCameraDirector(float flightSeconds, float flyOutSeconds)
 		: m_flightSeconds(std::max(flightSeconds, 0.001f))
+		, m_flyOutSeconds(flyOutSeconds > 0.0f ? std::max(flyOutSeconds, 0.001f) : std::max(flightSeconds, 0.001f))
 	{
 	}
 
@@ -110,11 +111,11 @@ namespace mmo
 
 	void GlueCameraDirector::Update(float deltaSeconds)
 	{
-		const float step = std::max(deltaSeconds, 0.0f) / m_flightSeconds;
+		const float elapsed = std::max(deltaSeconds, 0.0f);
 
 		if (m_mode == GlueCameraMode::FlyingIn)
 		{
-			m_t += step;
+			m_t += elapsed / m_flightSeconds;
 			if (m_t >= 1.0f)
 			{
 				m_t = 1.0f;
@@ -124,7 +125,7 @@ namespace mmo
 		}
 		else if (m_mode == GlueCameraMode::FlyingOut)
 		{
-			m_t -= step;
+			m_t -= elapsed / m_flyOutSeconds;
 			if (m_t <= 0.0f)
 			{
 				m_t = 0.0f;

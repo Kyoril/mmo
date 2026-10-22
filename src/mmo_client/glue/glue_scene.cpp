@@ -33,6 +33,11 @@ namespace mmo
 		/// Milliseconds of queued streaming work finished per frame.
 		constexpr double dispatchBudgetMs = 4.0;
 
+		/// Milliseconds of queued streaming work finished per frame while a fade covers the scene
+		/// (before the gate view is ready, or while an arrival waits for the plaza). Nothing moving
+		/// is visible then, and the world models (hundreds of steps for the town) arrive sooner.
+		constexpr double coveredDispatchBudgetMs = 25.0;
+
 		/// Half the width of the idle drift at the gate, in metres.
 		constexpr float driftAmplitude = 0.3f;
 
@@ -59,7 +64,7 @@ namespace mmo
 	GlueScene::GlueScene(const proto_client::Project& project, GlueSceneDefinition definition, SoundEntryPlayer& soundEntryPlayer, IAudio& audio)
 		: m_project(project)
 		, m_definition(std::move(definition))
-		, m_director(m_definition.flightSeconds)
+		, m_director(m_definition.flightSeconds, m_definition.flyOutSeconds)
 		, m_environmentProfiles(project.environmentProfiles)
 		, m_ambientSounds(soundEntryPlayer, audio)
 	{
@@ -112,14 +117,12 @@ namespace mmo
 
 		m_pageQueue = m_definition.gatePages;
 		m_pageQueue.insert(m_pageQueue.end(), m_definition.plazaPages.begin(), m_definition.plazaPages.end());
-		m_gatePageCount = m_definition.gatePages.size();
 
 		if (!LoadWorld())
 		{
 			// Nothing will ever load: an empty queue reports both views ready, so the screens are not
 			// left behind a fade forever.
 			m_pageQueue.clear();
-			m_gatePageCount = 0;
 		}
 
 		UpdateCamera(0.0f);
@@ -304,10 +307,13 @@ namespace mmo
 		{
 			PROFILE_SCOPE("GlueScene::StreamingDispatch");
 
+			const bool covered = !m_gateReady || (m_pendingArrival != PendingArrival::None && !m_plazaReady);
+			const double budgetMs = covered ? coveredDispatchBudgetMs : dispatchBudgetMs;
+
 			const auto start = std::chrono::steady_clock::now();
 			while (m_dispatcher.poll_one())
 			{
-				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= dispatchBudgetMs)
+				if (std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() >= budgetMs)
 				{
 					break;
 				}
@@ -377,11 +383,23 @@ namespace mmo
 	{
 		ApplyReadinessTimeout();
 
-		// The gate becomes ready before any plaza page starts, so the plaza's entities cannot hold
-		// back the gate view.
-		if (!m_gateReady && m_nextPage >= m_gatePageCount)
+		// Every page (gate pages first) is loaded before the gate counts as ready: the gate camera
+		// looks across the plaza pages too, and the world models it sees there must not pop in
+		// after the fade lifted. One page per update; their entities load in the background.
+		if (m_nextPage < m_pageQueue.size())
 		{
-			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
+			const auto [x, y] = m_pageQueue[m_nextPage++];
+			LoadPage(x, y);
+			if (m_nextPage >= m_pageQueue.size())
+			{
+				m_terrainLoadedMs = GetAsyncTimeMs();
+			}
+			return;
+		}
+
+		if (!m_gateReady)
+		{
+			if (!m_worldInstance || !HasPendingGateContent())
 			{
 				MarkGateReady();
 			}
@@ -389,14 +407,7 @@ namespace mmo
 			return;
 		}
 
-		if (m_nextPage < m_pageQueue.size())
-		{
-			const auto [x, y] = m_pageQueue[m_nextPage++];
-			LoadPage(x, y);
-			return;
-		}
-
-		if (!m_plazaReady && m_gateReady)
+		if (!m_plazaReady)
 		{
 			if (!m_worldInstance || !m_worldInstance->HasPendingEntityLoads())
 			{
@@ -440,8 +451,30 @@ namespace mmo
 	void GlueScene::MarkGateReady()
 	{
 		m_gateReady = true;
-		m_plazaLoadStartMs = GetAsyncTimeMs();
-		DLOG("Glue scene: gate pages loaded after " << (m_plazaLoadStartMs - m_gateLoadStartMs) << " ms");
+
+		const GameTime now = GetAsyncTimeMs();
+		m_plazaLoadStartMs = now;
+
+		// Terrain: until the last page was loaded (entity files still reading in the background).
+		// Models: from then until the world models the gate camera sees were created.
+		const GameTime terrainDoneMs = m_terrainLoadedMs != 0 ? m_terrainLoadedMs : now;
+		ILOG("Glue scene: gate ready after " << (now - m_gateLoadStartMs) << " ms (terrain "
+			<< (terrainDoneMs - m_gateLoadStartMs) << " ms, models " << (now - terrainDoneMs) << " ms)");
+	}
+
+	bool GlueScene::HasPendingGateContent() const
+	{
+		if (m_director.GetMode() != GlueCameraMode::Gate)
+		{
+			// Only the gate camera's view can be tested: anything still loading may show.
+			return m_worldInstance->HasPendingEntityLoads();
+		}
+
+		const Camera& camera = *m_camera;
+		return m_worldInstance->HasPendingWorldModels([&camera](const AABB& bounds)
+			{
+				return camera.IsVisible(bounds);
+			});
 	}
 
 	void GlueScene::LoadPage(const uint8 x, const uint8 y)

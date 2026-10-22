@@ -8,6 +8,7 @@
 #include <asio/io_service.hpp>
 
 #include "base/id_generator.h"
+#include "math/aabb.h"
 #include "math/quaternion.h"
 #include "math/vector3.h"
 #include "paging/page.h"
@@ -65,7 +66,14 @@ namespace mmo
 		/// @details World models are created over several dispatcher steps, so a caller that must see
 		///          the finished world (the loading screen) keeps pumping the work queue and dispatcher
 		///          until this returns false.
-		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingWorldModels > 0; }
+		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0 || m_pendingWorldModels > 0; }
+
+		/// @brief Whether content that may pass a bounds test is still on its way: an entity or
+		///        foliage file not handled yet (where its content lands is not known), or a world
+		///        model placement still being prepared whose bounds pass the test. A placement whose
+		///        own model is not loaded yet always counts.
+		/// @param isRelevant Tests a placement's world-space bounds, e.g. against a camera frustum.
+		bool HasPendingWorldModels(const std::function<bool(const AABB&)>& isRelevant) const;
 
 		/// @brief Sets where placements register the looping sounds of their meshes, or null for none.
 		/// @details Placements created from then on register; unloading a placement removes its
@@ -147,8 +155,14 @@ namespace mmo
 		/// @brief Entity files posted to the work queue whose result has not been handled on the main thread yet.
 		std::atomic<uint32> m_pendingEntityFiles{ 0 };
 
+		/// @brief Foliage files posted to the work queue whose result has not been handled on the main thread yet.
+		std::atomic<uint32> m_pendingFoliageFiles{ 0 };
+
 		/// @brief World model preparations that have neither created their instance nor been dropped yet.
 		uint32 m_pendingWorldModels = 0;
+
+		/// @brief The preparations counted by m_pendingWorldModels, for HasPendingWorldModels.
+		std::map<const WorldModelPreparation*, std::weak_ptr<WorldModelPreparation>> m_preparations;
 
 		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
 		std::unique_ptr<InstancedFoliage> m_foliage;

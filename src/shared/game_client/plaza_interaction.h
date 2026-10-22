@@ -44,6 +44,13 @@ namespace mmo
 	/// @return The weight in [0, 1]; 0 outside the clip.
 	[[nodiscard]] float PlazaGreetingWeight(float elapsedSeconds, float lengthSeconds, float fadeInSeconds, float fadeOutSeconds);
 
+	/// The manual rotation of a character that was deselected, easing back to none.
+	/// @param startDegrees The rotation when the character was deselected.
+	/// @param elapsedSeconds Time since it was deselected.
+	/// @param durationSeconds How long the return takes. 0 or less returns at once.
+	/// @return The rotation now, in degrees: startDegrees at 0 s, 0 from durationSeconds on.
+	[[nodiscard]] float PlazaRotationReturnDegrees(float startDegrees, float elapsedSeconds, float durationSeconds);
+
 	/// Whether a pose has the character seated, lying or kneeling, so it neither greets nor turns
 	/// (a standing clip over it would pull the character up).
 	/// @param pose The pose's clip name.

@@ -5,8 +5,10 @@
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "game/character_view.h"
+#include "game_client/plaza_nameplate_layout.h"
 #include "math/vector3.h"
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -118,7 +120,33 @@ namespace mmo
 		/// Gets the name of a character's zone, or an empty string.
 		String GetCharacterZoneName(int32 index) const;
 
+		/// Places the nameplates set with SetPlazaNameplateBox over their characters and moves
+		/// overlapping ones apart (see PlazaNameplateDeclutter).
+		/// @param deltaSeconds Time since the last layout, for the easing.
+		void LayoutNameplates(float deltaSeconds);
+
 	private:
+		/// A nameplate of the character screen, as Lua describes it, and where the layout put it.
+		struct NameplateSlot
+		{
+			/// Order index of the character it shows, or -1 for none.
+			int32 index = -1;
+
+			/// Size of the plate's frame in UI units.
+			float width = 0.0f;
+			float height = 0.0f;
+
+			/// Empty space at the bottom of the frame (an empty last line), in UI units.
+			float inset = 0.0f;
+
+			/// Bottom centre of the frame in UI units, and whether it is on screen.
+			float x = 0.0f;
+			float y = 0.0f;
+			bool visible = false;
+		};
+
+		/// Most nameplates the character screen may show at once.
+		static constexpr size_t MaxNameplates = 8;
 		RealmConnector& m_realmConnector;
 		const proto_client::Project& m_project;
 
@@ -137,5 +165,10 @@ namespace mmo
 
 		/// Character guids in local roster order. Rebuilt lazily from the realm connector.
 		mutable std::vector<uint64> m_order;
+
+		/// The nameplates, by plate number - 1.
+		std::array<NameplateSlot, MaxNameplates> m_nameplates;
+
+		PlazaNameplateDeclutter m_nameplateDeclutter;
 	};
 }

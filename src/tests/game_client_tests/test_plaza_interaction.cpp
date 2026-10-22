@@ -109,3 +109,14 @@ TEST_CASE("Hover reaction reset drops everything at once", "[plaza]")
 	CHECK(reaction.GetGlow() == 0.0f);
 	CHECK(reaction.Update(true, 0.01f));
 }
+
+TEST_CASE("A deselected character's rotation eases back to none", "[plaza]")
+{
+	CHECK(PlazaRotationReturnDegrees(60.0f, 0.0f, 0.3f) == Approx(60.0f));
+	CHECK(PlazaRotationReturnDegrees(60.0f, 0.15f, 0.3f) == Approx(30.0f));
+	CHECK(PlazaRotationReturnDegrees(-40.0f, 0.1f, 0.3f) < 0.0f);
+	CHECK(PlazaRotationReturnDegrees(-40.0f, 0.1f, 0.3f) > -40.0f);
+	CHECK(PlazaRotationReturnDegrees(60.0f, 0.3f, 0.3f) == 0.0f);
+	CHECK(PlazaRotationReturnDegrees(60.0f, 1.0f, 0.3f) == 0.0f);
+	CHECK(PlazaRotationReturnDegrees(60.0f, 0.0f, 0.0f) == 0.0f);
+}

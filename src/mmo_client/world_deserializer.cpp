@@ -22,6 +22,8 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
+#include "math/matrix4.h"
+#include "scene_graph/world_model.h"
 #include "scene_graph/world_model_instance.h"
 #include "scene_graph/world_model_manager.h"
 #include "base/profiler.h"
@@ -502,6 +504,7 @@ namespace mmo
 
 		// Released by ContinueWorldModelEntity once the instance exists or the preparation is dropped
 		++m_pendingWorldModels;
+		m_preparations.emplace(preparation.get(), preparation);
 		ContinueWorldModelEntity(preparation);
 	}
 
@@ -525,6 +528,7 @@ namespace mmo
 		if (!m_loadedPages.contains(preparation->pageIndex))
 		{
 			--m_pendingWorldModels;
+			m_preparations.erase(preparation.get());
 			return;
 		}
 
@@ -600,10 +604,50 @@ namespace mmo
 			// Everything is cached now, so this only creates the instances and their entities
 			CreateWorldModelEntity(prep.entity.meshName, prep.entity.position, prep.entity.rotation, prep.entity.scale, prep.entity.uniqueId, prep.entity.kitPaths);
 			--m_pendingWorldModels;
+			m_preparations.erase(preparation.get());
 			return;
 		}
 
 		PostPreparationStep(preparation);
+	}
+
+	bool ClientWorldInstance::HasPendingWorldModels(const std::function<bool(const AABB&)>& isRelevant) const
+	{
+		if (m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0)
+		{
+			return true;
+		}
+
+		for (const auto& [key, weak] : m_preparations)
+		{
+			const std::shared_ptr<WorldModelPreparation> preparation = weak.lock();
+			if (!preparation)
+			{
+				continue;
+			}
+
+			// The placed model is the first one loaded; until then where it shows is unknown
+			if (preparation->models.empty() || !preparation->models.front())
+			{
+				return true;
+			}
+
+			AABB bounds = preparation->models.front()->GetBoundingBox();
+			if (bounds.IsNull())
+			{
+				return true;
+			}
+
+			Matrix4 transform;
+			transform.MakeTransform(preparation->entity.position, preparation->entity.scale, preparation->entity.rotation);
+			bounds.Transform(transform);
+			if (isRelevant(bounds))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void ClientWorldInstance::LoadPageFoliage(const uint8 x, const uint8 y)
@@ -614,6 +658,7 @@ namespace mmo
 		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 
 		std::weak_ptr weak = weak_from_this();
+		++m_pendingFoliageFiles;
 		m_workQueue.post([weak, pageIndex, fileName]()
 			{
 				const auto strong = weak.lock();
@@ -632,6 +677,7 @@ namespace mmo
 		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(filename);
 		if (!filePtr)
 		{
+			--m_pendingFoliageFiles;
 			return;
 		}
 
@@ -641,6 +687,7 @@ namespace mmo
 		if (!loader.Read(reader))
 		{
 			ELOG("Failed to read foliage file " << filename << "!");
+			--m_pendingFoliageFiles;
 			return;
 		}
 
@@ -653,12 +700,14 @@ namespace mmo
 		m_dispatcher.post([weak, pageIndex, instances]()
 			{
 				const auto strong = weak.lock();
-				if (!strong || !strong->m_foliage)
+				if (!strong)
 				{
 					return;
 				}
 
-				if (!strong->m_loadedPages.contains(pageIndex))
+				--strong->m_pendingFoliageFiles;
+
+				if (!strong->m_foliage || !strong->m_loadedPages.contains(pageIndex))
 				{
 					return;
 				}

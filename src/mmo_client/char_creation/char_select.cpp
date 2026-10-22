@@ -35,6 +35,9 @@ namespace mmo
 
 		/// Height above a plaza spot where its "new character" marker hangs, in metres.
 		constexpr float spotMarkerHeight = 1.0f;
+
+		/// Space kept between nameplates moved apart, in UI units.
+		constexpr float nameplateGap = 12.0f;
 	}
 
 	CharSelect::CharSelect(RealmConnector& realmConnector, const proto_client::Project& project)
@@ -105,6 +108,46 @@ namespace mmo
 					{
 						outVisible = ProjectToUi(*anchor, outX, outY);
 					}
+				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+
+			// Describes nameplate `plate` (1-based) for UpdatePlazaNameplates: the character it shows
+			// (-1 for none), its frame size and the empty space at its bottom, all in UI units.
+			luabind::def_lambda("SetPlazaNameplateBox", [this](int32 plate, int32 index, float width, float height, float inset)
+				{
+					if (plate < 1 || plate > static_cast<int32>(MaxNameplates))
+					{
+						return;
+					}
+
+					NameplateSlot& slot = m_nameplates[static_cast<size_t>(plate - 1)];
+					slot.index = index;
+					slot.width = width;
+					slot.height = height;
+					slot.inset = inset;
+				}),
+
+			// Places the nameplates over their characters and moves overlapping ones apart, eased.
+			luabind::def_lambda("UpdatePlazaNameplates", [this](float elapsed)
+				{
+					LayoutNameplates(elapsed);
+				}),
+
+			// x, y in UI units of nameplate `plate`'s bottom centre after UpdatePlazaNameplates, and
+			// whether it is on screen.
+			luabind::def<std::function<void(int32, float&, float&, bool&)>>("GetPlazaNameplateLayout", [this](int32 plate, float& outX, float& outY, bool& outVisible)
+				{
+					outX = 0.0f;
+					outY = 0.0f;
+					outVisible = false;
+					if (plate < 1 || plate > static_cast<int32>(MaxNameplates))
+					{
+						return;
+					}
+
+					const NameplateSlot& slot = m_nameplates[static_cast<size_t>(plate - 1)];
+					outX = slot.x;
+					outY = slot.y;
+					outVisible = slot.visible;
 				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			// x, y in UI units of a point above an empty plaza spot, and whether it is on screen.
@@ -184,6 +227,7 @@ namespace mmo
 		m_glueScene = scene;
 		m_plazaPlaced = false;
 		m_plazaRealmId.reset();
+		m_nameplateDeclutter.Reset();
 	}
 
 	void CharSelect::OnCharacterListUpdated()
@@ -460,6 +504,64 @@ namespace mmo
 		const float x = mouse.x / (uiScale.x * native.width);
 		const float y = mouse.y / (uiScale.y * native.height);
 		return m_glueScene->PickPlazaCharacter(x, y);
+	}
+
+	void CharSelect::LayoutNameplates(const float deltaSeconds)
+	{
+		for (NameplateSlot& slot : m_nameplates)
+		{
+			slot.visible = false;
+		}
+
+		if (!m_glueScene)
+		{
+			m_nameplateDeclutter.Reset();
+			return;
+		}
+
+		const PlazaAvatars& plaza = m_glueScene->GetPlazaAvatars();
+		const Vector3 cameraPosition = m_glueScene->GetCameraPosition();
+
+		std::vector<PlazaNameplateBox> boxes;
+		std::vector<size_t> boxSlots;
+		boxes.reserve(m_nameplates.size());
+		boxSlots.reserve(m_nameplates.size());
+
+		for (size_t i = 0; i < m_nameplates.size(); ++i)
+		{
+			NameplateSlot& slot = m_nameplates[i];
+			if (slot.index < 0)
+			{
+				continue;
+			}
+
+			const std::optional<Vector3> anchor = plaza.GetNameplateAnchor(slot.index);
+			if (!anchor || !ProjectToUi(*anchor, slot.x, slot.y))
+			{
+				continue;
+			}
+
+			// The box covers the lines that show: an empty last line leaves room at the bottom.
+			PlazaNameplateBox box;
+			box.key = slot.index;
+			box.x = slot.x;
+			box.bottom = slot.y - slot.inset;
+			box.width = slot.width;
+			box.height = std::max(slot.height - slot.inset, 0.0f);
+			box.depth = (*anchor - cameraPosition).GetLength();
+			box.priority = slot.index == m_selectedCharacter;
+			boxes.push_back(box);
+			boxSlots.push_back(i);
+		}
+
+		const Size& native = FrameManager::Get().GetNativeResolution();
+		const std::vector<float>& offsets = m_nameplateDeclutter.Update(boxes, deltaSeconds, nameplateGap, 0.0f, native.height);
+		for (size_t i = 0; i < boxSlots.size(); ++i)
+		{
+			NameplateSlot& slot = m_nameplates[boxSlots[i]];
+			slot.y += offsets[i];
+			slot.visible = true;
+		}
 	}
 
 	String CharSelect::GetCharacterZoneName(const int32 index) const

@@ -59,8 +59,8 @@ namespace mmo
 		/// @param ordered The characters in roster order.
 		void SetCharacters(const std::vector<CharacterView>& ordered);
 
-		/// Destroys every avatar, including those walking out, and forgets the selected character's
-		/// rotation, the hover and the characters sent away. Used when the realm changes: guids are only
+		/// Destroys every avatar, including those walking out, and forgets the hover and the
+		/// characters sent away. Used when the realm changes: guids are only
 		/// unique per realm, so no avatar of the previous realm may be reused.
 		void Clear();
 
@@ -106,6 +106,10 @@ namespace mmo
 		/// @return The position, or nullopt for characters not on the plaza.
 		[[nodiscard]] std::optional<Vector3> GetNameplateAnchor(int32 orderIndex) const;
 
+		/// Whether a running character arrived at its place on the plaza since the last call, so
+		/// the cursor may now be over a character that can react, though the cursor did not move.
+		[[nodiscard]] bool ConsumeArrival();
+
 		/// Moves running characters, advances the animations and the hover reaction.
 		/// @param deltaSeconds Real time since the last update.
 		/// @param cameraPosition The camera's position, which a hovered character turns towards.
@@ -149,6 +153,14 @@ namespace mmo
 
 			/// Whether the avatar is the selected character, which Rotate turns.
 			bool selected = false;
+
+			/// Yaw added by Rotate, in degrees. Eases back to 0 once the avatar is deselected.
+			float rotationDegrees = 0.0f;
+
+			/// The rotation when the avatar was deselected, and the time since, while it eases back.
+			bool rotationReturning = false;
+			float rotationReturnStart = 0.0f;
+			float rotationReturnElapsed = 0.0f;
 
 			/// Glow and turn of the hover reaction.
 			PlazaHoverReaction hover;
@@ -225,6 +237,9 @@ namespace mmo
 		/// Ends everything of the hover reaction at once: greeting, turn and glow.
 		void ResetHover(Avatar& avatar);
 
+		/// Eases the rotation of a deselected avatar back to none.
+		void UpdateRotationReturn(Avatar& avatar, float deltaSeconds);
+
 		/// Whether the avatar stands still on the plaza, so it may be picked and react to the cursor.
 		[[nodiscard]] bool IsStandingOnPlaza(const Avatar& avatar) const;
 
@@ -245,9 +260,8 @@ namespace mmo
 		/// Characters sent away with Leave that are still in the roster.
 		std::vector<uint64> m_leavingGuids;
 
-		/// The selected character, so the rotation is reset when it changes. 0 for none.
-		uint64 m_selectedGuid = 0;
-		float m_selectedRotationDegrees = 0.0f;
+		/// Set when a character arrived at its place on the plaza, until ConsumeArrival.
+		bool m_arrived = false;
 
 		/// The character under the cursor. 0 for none.
 		uint64 m_hoveredGuid = 0;
