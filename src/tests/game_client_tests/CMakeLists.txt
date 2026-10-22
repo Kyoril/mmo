@@ -19,6 +19,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_roster.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_camera_director.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_scene_definition.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/class_name_localizer.cpp
 )
 
 # test_console_var.cpp reaches into the client executable's headers; it supplies its own
