@@ -117,7 +117,11 @@ TEST_CASE("river on the left starts one calm voice to the left", "[water_ambienc
 	const auto voices = f.ambience->GetVoices();
 	REQUIRE(voices.size() == 1);
 	CHECK(voices[0].soundEntryId == CalmEntry);
-	CHECK(voices[0].position.x == Approx(-water_ambience::VirtualDistance).margin(0.5f));
+
+	// The direction keeps its magnitude (the focus): no normalisation.
+	const Vector3& direction = f.ambience->GetSmoothedFields()[0].direction;
+	CHECK(voices[0].position.x == Approx(direction.x * water_ambience::VirtualDistance).margin(0.01f));
+	CHECK(voices[0].position.x < -0.5f * water_ambience::VirtualDistance);
 }
 
 TEST_CASE("fast flow crossfades to the fast loop", "[water_ambience]")
@@ -372,6 +376,74 @@ TEST_CASE("a shared bed entry glides between its profiles", "[water_ambience]")
 	CHECK(largestStep < 1.0f);
 	CHECK(lastX > 0.0f);
 	CHECK(std::count(f.audio.playedFiles.begin(), f.audio.playedFiles.end(), String(CalmFile)) == 1);
+}
+
+TEST_CASE("opposite shared beds glide through the ear and widen", "[water_ambience]")
+{
+	Fixture f;
+	WaterAmbienceSounds left = RiverProfile();
+	left.fastSound = 0;
+	WaterAmbienceSounds right = left;
+	right.profile.waterType = 2;
+	f.ambience->SetProfiles({ left, right });
+
+	// Two flat bands, mirror images of each other at the swap's midpoint. The left band
+	// walks out of range while the right band walks in, so the voice crosses from left to
+	// right with the candidates pointing exactly opposite halfway through.
+	constexpr float Width = 12.0f;
+	float blend = 0.0f;
+	const FakeWaterSource source([&blend](const float x, float)
+	{
+		const float leftInner = 10.0f + 35.0f * blend;
+		const float rightInner = 45.0f - 35.0f * blend;
+		if (x < -leftInner && x > -leftInner - Width)
+		{
+			return MakeWater(1, 0.0f);
+		}
+
+		if (x > rightInner && x < rightInner + Width)
+		{
+			return MakeWater(2, 0.0f);
+		}
+
+		return Dry();
+	});
+
+	const Vector3 ear(0.0f, 1.6f, 0.0f);
+	for (int frame = 0; frame < 40; ++frame)
+	{
+		f.ambience->Update(source, ear, false, 0, FrameSeconds);
+	}
+
+	auto voices = f.ambience->GetVoices();
+	REQUIRE(voices.size() == 1);
+	float lastX = voices[0].position.x;
+	CHECK(lastX < 0.0f);
+
+	float largestStep = 0.0f;
+	bool crossedEar = false;
+	constexpr int SwapFrames = 200;
+	for (int frame = 0; frame < SwapFrames + 60; ++frame)
+	{
+		blend = std::min(1.0f, static_cast<float>(frame + 1) / SwapFrames);
+		f.ambience->Update(source, ear, false, 0, FrameSeconds);
+
+		voices = f.ambience->GetVoices();
+		REQUIRE(voices.size() == 1);
+		const float x = voices[0].position.x;
+		largestStep = std::max(largestStep, std::abs(x - lastX));
+		lastX = x;
+
+		if (std::abs(x) < 0.5f)
+		{
+			crossedEar = true;
+			CHECK(voices[0].spread > 250.0f);
+		}
+	}
+
+	CHECK(crossedEar);
+	CHECK(largestStep < 1.0f);
+	CHECK(lastX > 0.0f);
 }
 
 TEST_CASE("no profiles means no work", "[water_ambience]")

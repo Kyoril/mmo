@@ -45,7 +45,8 @@ namespace mmo
 		/// @brief Time constant of the one-pole filter on level, speed and direction, in seconds.
 		constexpr float SmoothingSeconds = 0.5f;
 
-		/// @brief Distance from the ear at which bed voices are placed, and their 3D min distance.
+		/// @brief Distance from the ear at which fully focused bed voices are placed (scaled by the
+		///	focus, so surrounding water places the voice at the ear), and their 3D min distance.
 		constexpr float VirtualDistance = 5.0f;
 
 		/// @brief Seconds a bed voice must stay silent before it is stopped.
@@ -144,7 +145,8 @@ namespace mmo
 		void Smooth(float deltaSeconds);
 
 		/// @brief Collects the target of every bed sound entry. Profiles sharing an entry are
-		///	blended: volume-weighted direction and spread, equal-power summed volume.
+		///	blended: volume-weighted direction, spread from the blended direction's length,
+		///	equal-power summed volume.
 		[[nodiscard]] std::map<uint32, BedTarget> GatherBedTargets(const Vector3& ear) const;
 
 		/// @brief Starts, adjusts and stops the bed voices.

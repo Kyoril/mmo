@@ -16,9 +16,6 @@ namespace mmo
 	{
 		/// Volume at or below which a voice counts as silent.
 		constexpr float SilentVolume = 0.001f;
-
-		/// Direction length below which the water has no usable direction.
-		constexpr float MinDirectionLength = 0.01f;
 	}
 
 	WaterAmbience::WaterAmbience(SoundEntryPlayer& player, IAudio& audio, const uint32 randomSeed)
@@ -159,17 +156,15 @@ namespace mmo
 	{
 		// Two profiles may share a sound entry, but a streamed entry plays on one channel only.
 		// Picking the louder profile would make the voice jump sides whenever the winner flips,
-		// so the candidates are blended: volume-weighted direction and spread, equal-power volume.
+		// so the candidates are blended: volume-weighted direction, equal-power volume.
 		struct Blend
 		{
 			float volumeSum = 0.0f;
 			float volumeSquareSum = 0.0f;
 			Vector3 weightedDirection;
-			float weightedSpread = 0.0f;
 
-			// Unweighted sums, used while every candidate is silent.
+			// Unweighted sum, used while every candidate is silent.
 			Vector3 directionSum;
-			float spreadSum = 0.0f;
 			int count = 0;
 
 			float range = 0.0f;
@@ -177,7 +172,7 @@ namespace mmo
 
 		std::map<uint32, Blend> blends;
 
-		const auto offer = [this, &blends](const uint32 soundId, const float volume, const Vector3& direction, const float spread, const float range)
+		const auto offer = [this, &blends](const uint32 soundId, const float volume, const Vector3& direction, const float range)
 		{
 			if (soundId == 0)
 			{
@@ -190,9 +185,7 @@ namespace mmo
 			blend.volumeSum += entryVolume;
 			blend.volumeSquareSum += entryVolume * entryVolume;
 			blend.weightedDirection += direction * entryVolume;
-			blend.weightedSpread += spread * entryVolume;
 			blend.directionSum += direction;
-			blend.spreadSum += spread;
 			++blend.count;
 			blend.range = std::max(blend.range, range);
 		};
@@ -202,16 +195,13 @@ namespace mmo
 			const WaterAmbienceSounds& sounds = m_profiles[i];
 			const WaterAmbienceField& field = m_smoothedFields[i];
 
-			const float focus = std::clamp(field.GetFocus(), 0.0f, 1.0f);
-			const float spread = water_ambience::MinSpread + (1.0f - focus) * (water_ambience::MaxSpread - water_ambience::MinSpread);
-
 			const float speed = std::clamp(field.speed, 0.0f, 1.0f);
 			const float calmWeight = sounds.fastSound == 0 ? 1.0f : std::cos(speed * HalfPi);
 			const float fastWeight = std::sin(speed * HalfPi);
 			const float baseVolume = sounds.volume * field.level;
 
-			offer(sounds.calmSound, baseVolume * calmWeight, field.direction, spread, sounds.profile.range);
-			offer(sounds.fastSound, baseVolume * fastWeight, field.direction, spread, sounds.profile.range);
+			offer(sounds.calmSound, baseVolume * calmWeight, field.direction, sounds.profile.range);
+			offer(sounds.fastSound, baseVolume * fastWeight, field.direction, sounds.profile.range);
 		}
 
 		std::map<uint32, BedTarget> targets;
@@ -221,23 +211,17 @@ namespace mmo
 			target.range = blend.range;
 			target.volume = std::sqrt(blend.volumeSquareSum);
 
-			// Weighted means: a single candidate keeps its own direction and spread exactly.
-			Vector3 direction;
-			if (blend.volumeSum > 0.0f)
-			{
-				direction = blend.weightedDirection / blend.volumeSum;
-				target.spread = blend.weightedSpread / blend.volumeSum;
-			}
-			else
-			{
-				direction = blend.directionSum / static_cast<float>(blend.count);
-				target.spread = blend.spreadSum / static_cast<float>(blend.count);
-			}
+			// Weighted mean: a single candidate keeps its own direction exactly. Opposite
+			// candidates cancel out, which pulls the voice towards the ear and widens it.
+			const Vector3 direction = blend.volumeSum > 0.0f
+				? blend.weightedDirection / blend.volumeSum
+				: blend.directionSum / static_cast<float>(blend.count);
 
-			const float directionLength = direction.GetLength();
-			target.position = directionLength < MinDirectionLength
-				? ear
-				: ear + direction * (water_ambience::VirtualDistance / directionLength);
+			// The direction is never normalised: its length is the focus, so the voice glides
+			// through the ear as the water spreads around the listener instead of snapping.
+			const float focus = std::clamp(direction.GetLength(), 0.0f, 1.0f);
+			target.spread = water_ambience::MinSpread + (1.0f - focus) * (water_ambience::MaxSpread - water_ambience::MinSpread);
+			target.position = ear + direction * water_ambience::VirtualDistance;
 		}
 
 		return targets;
