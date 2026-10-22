@@ -3,6 +3,8 @@
 #include "catch.hpp"
 
 #include <cmath>
+#include <utility>
+#include <vector>
 
 #include "fake_water_source.h"
 #include "game_client/water_ambience_scan.h"
@@ -249,21 +251,50 @@ TEST_CASE("river and shore aggregate separately", "[water_ambience_scan]")
 
 TEST_CASE("scan points are world-snapped", "[water_ambience_scan]")
 {
-	// A band edge at x = -20 sits between scan columns. With world-snapped points, moving the
-	// ear inside one grid cell keeps the sampled set and only shifts distances slightly.
-	const FakeWaterSource source = RiverBand(-60.0f, -20.0f);
+	// Every sampled position, including the shore neighbour probes, must be a world grid cell
+	// centre no matter where the ear stands inside its cell.
+	std::vector<std::pair<float, float>> sampled;
+	const FakeWaterSource source([&sampled](const float x, const float z)
+	{
+		sampled.emplace_back(x, z);
+		return MakeWater(oceanType, 0.0f);
+	});
 
-	const float cellStart = 0.0f;
-	const Vector3 earA(cellStart + 1.0f, ear.y, 1.0f);
-	const Vector3 earB(cellStart + 2.0f, ear.y, 1.0f);
+	const Vector3 offGridEar(1.3f, 1.6f, 2.7f);
+	const auto fields = ScanWaterAmbience(source, offGridEar, { RiverProfile(), ShoreProfile() });
 
-	const auto fieldsA = ScanWaterAmbience(source, earA, { RiverProfile() });
-	const auto fieldsB = ScanWaterAmbience(source, earB, { RiverProfile() });
+	REQUIRE(fields.size() == 2);
+	REQUIRE_FALSE(sampled.empty());
 
-	REQUIRE(fieldsA.size() == 1);
-	REQUIRE(fieldsB.size() == 1);
-	CHECK(fieldsA[0].level > 0.0f);
-	CHECK(std::abs(fieldsA[0].level - fieldsB[0].level) < 0.05f);
+	const auto isCellCentre = [](const float v)
+	{
+		const float cell = v / water_ambience::GridSpacing - 0.5f;
+		return std::abs(cell - std::round(cell)) < 1e-3f;
+	};
+
+	for (const auto& [x, z] : sampled)
+	{
+		INFO("sampled (" << x << ", " << z << ")");
+		REQUIRE(isCellCentre(x));
+		REQUIRE(isCellCentre(z));
+	}
+}
+
+TEST_CASE("buried water does not contribute", "[water_ambience_scan]")
+{
+	// Water hidden under terrain, e.g. an ocean mask painted below a beach.
+	const FakeWaterSource source([](float, float)
+	{
+		WaterSample sample = MakeWater(riverType, 0.0f);
+		sample.hasGround = true;
+		sample.groundY = 1.0f;
+		return sample;
+	});
+
+	const auto fields = ScanWaterAmbience(source, ear, { RiverProfile() });
+
+	REQUIRE(fields.size() == 1);
+	CHECK(fields[0].level == 0.0f);
 }
 
 TEST_CASE("unloaded page reads as dry", "[water_ambience_scan]")

@@ -90,6 +90,13 @@ namespace mmo
 					continue;
 				}
 
+				// Water hidden under terrain (e.g. an ocean mask painted below a beach) is silent.
+				// As a neighbour it still counts as land for the shore test.
+				if (sample.hasGround && sample.groundY > sample.surfaceY)
+				{
+					continue;
+				}
+
 				const Vector3 toWater(dx, sample.surfaceY - ear.y, dz);
 				const float distance = toWater.GetLength();
 

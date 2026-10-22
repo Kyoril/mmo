@@ -95,7 +95,8 @@ namespace mmo
 	///	Sample points sit at world-snapped grid quad centres within each profile's range around
 	///	the ear, so moving the ear does not make points pop in and out. Every water sample of a
 	///	profile's type gets the weight (1 - d / range)^2, where d is the 3D distance from the
-	///	ear to the water surface.
+	///	ear to the water surface. Buried water (ground above the water surface) contributes
+	///	nothing, but still counts as land when it neighbours a shore sample.
 	/// @param source Source which answers the water samples.
 	/// @param ear World position of the listener.
 	/// @param profiles Profiles to aggregate.
