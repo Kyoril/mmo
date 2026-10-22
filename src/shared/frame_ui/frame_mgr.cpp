@@ -431,6 +431,7 @@ namespace mmo
 					.def("RegisterEvent", &Frame::RegisterEvent)
 					.def("GetName", &Frame::GetName)
 					.def("IsHovered", &Frame::IsHovered)
+					.def("IsMouseClickTarget", &Frame::IsMouseClickTarget)
 					.def("IsVisible", &Frame::Lua_IsVisible)
 					.def("RemoveAllChildren", &Frame::RemoveAllChildren)
 					.def("Clone", &Frame::Clone)
@@ -931,29 +932,43 @@ namespace mmo
 			}
 		}
 
-		// Only works if we have a top frame
-		if (m_topFrame != nullptr)
+		if (const FramePtr clickableFrame = GetClickTargetAt(position))
 		{
-			// Find the child frame at the given position (this may also return the top frame itself).
-			const auto targetFrame = m_topFrame->GetChildFrameAt(position, true);
-			if (targetFrame != nullptr)
-			{
-				Frame* clickableFrame = targetFrame.get();
-				while(clickableFrame && !clickableFrame->IsClickable())
-				{
-					clickableFrame = clickableFrame->GetParent();
-				}
-
-				if (clickableFrame && clickableFrame->IsClickable() && clickableFrame->IsEnabled(false))
-				{
-					m_mouseDownFrames[button] = clickableFrame->shared_from_this();
-					m_pressedButtons |= static_cast<int32>(button);
-					consumed = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
-				}
-			}
+			m_mouseDownFrames[button] = clickableFrame;
+			m_pressedButtons |= static_cast<int32>(button);
+			consumed = clickableFrame->OnMouseDown(button, m_pressedButtons, position);
 		}
-		
+
 		return consumed;
+	}
+
+	FramePtr FrameManager::GetClickTargetAt(const Point& position) const
+	{
+		// Only works if we have a top frame
+		if (m_topFrame == nullptr)
+		{
+			return nullptr;
+		}
+
+		// Find the child frame at the given position (this may also return the top frame itself).
+		const auto targetFrame = m_topFrame->GetChildFrameAt(position, true);
+		if (targetFrame == nullptr)
+		{
+			return nullptr;
+		}
+
+		Frame* clickableFrame = targetFrame.get();
+		while (clickableFrame && !clickableFrame->IsClickable())
+		{
+			clickableFrame = clickableFrame->GetParent();
+		}
+
+		if (clickableFrame && clickableFrame->IsClickable() && clickableFrame->IsEnabled(false))
+		{
+			return clickableFrame->shared_from_this();
+		}
+
+		return nullptr;
 	}
 
 	bool FrameManager::NotifyMouseUp(MouseButton button, const Point & position)

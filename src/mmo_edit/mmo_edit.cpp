@@ -90,6 +90,8 @@
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
 #include "prop_kit_job.h"
+#include "glue_bake/glue_bake_job.h"
+#include "glue_bake/glue_scene_baker.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -347,10 +349,37 @@ int main(int argc, char* arg[])
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
 	// and/or strips named mesh refs from a world model as the job describes, then exits (see
 	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
+	// `--glue-bake-dry-run <GlueScene.json>` opens the glue scene's world, collects what the glue
+	// cameras see and logs the counts to glue_bake_dry_run.log without writing anything (exit code 1
+	// when the definition or world cannot be loaded or nothing visible was found).
+	// `--glue-bake-meshes <GlueScene.json> <outDir>` collects the same and writes the merged chunk
+	// meshes into outDir (asset directory or absolute path), logging the counts to
+	// glue_bake_meshes.log (exit code 1 when loading fails or a file cannot be written).
+	// `--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]` collects the same and writes the
+	// baked terrain into outDir; with compareDir it also renders live vs baked terrain images there
+	// (log in glue_bake_terrain.log, exit code 1 on failure).
+	// `--bake-glue-scene <GlueScene.json>` bakes the glue scene into Interface/GlueUI/GlueBake (merged
+	// meshes, terrain, water and the GlueBake.json manifest), replacing the previous bake's files; the
+	// summary goes to bake_glue_scene.log (exit code 1 on failure, no manifest written then).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
-		for (int i = 1; args && i + 1 < argCount; ++i)
+
+		// A job flag without its arguments fails the run instead of opening the editor, so a
+		// scripted call cannot hang on an interactive window. Call it after the job's log is wired.
+		const auto missingArgs = [&argCount](const int flagIndex, const int count, const char* usage)
+		{
+			if (flagIndex + count < argCount)
+			{
+				return false;
+			}
+
+			ELOG("missing arguments, usage: " << usage);
+			PostQuitMessage(1);
+			return true;
+		};
+
+		for (int i = 1; args && i < argCount; ++i)
 		{
 			if (std::string(args[i]) == "--rebuild-material")
 			{
@@ -738,6 +767,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-terrain-lod <world>"))
+				{
+					break;
+				}
+
 				// Bake right away instead of from the viewport's paint handler, so the job also runs
 				// with the window minimised (a minimised window never paints).
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
@@ -778,6 +812,11 @@ int main(int argc, char* arg[])
 				_CrtSetReportFile(_CRT_ERROR, assertFile);
 #endif
 
+				if (missingArgs(i, 1, "--bake-minimaps <world>"))
+				{
+					break;
+				}
+
 				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
 					bool onlyStale = false;
@@ -810,6 +849,116 @@ int main(int argc, char* arg[])
 					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-dry-run")
+			{
+				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_dry_run.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_dry_run_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 1, "--glue-bake-dry-run <GlueScene.json>"))
+				{
+					break;
+				}
+
+				PostQuitMessage(mmo::RunGlueBakeDryRun(mainWindow, args[i + 1]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-meshes")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_meshes.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_meshes_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 2, "--glue-bake-meshes <GlueScene.json> <outDir>"))
+				{
+					break;
+				}
+
+				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-glue-scene")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("bake_glue_scene.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("bake_glue_scene_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 1, "--bake-glue-scene <GlueScene.json>"))
+				{
+					break;
+				}
+
+				mmo::String summary;
+				PostQuitMessage(mmo::BakeGlueScene(mainWindow, args[i + 1], summary) ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--glue-bake-terrain")
+			{
+				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
+				static std::ofstream bakeLog("glue_bake_terrain.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE assertFile = CreateFileA("glue_bake_terrain_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, assertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+
+				if (missingArgs(i, 2, "--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]"))
+				{
+					break;
+				}
+
+				const std::string compareDir = i + 3 < argCount && std::string(args[i + 3]).rfind("--", 0) != 0 ? args[i + 3] : "";
+				PostQuitMessage(mmo::RunGlueBakeTerrain(mainWindow, args[i + 1], args[i + 2], compareDir) ? 0 : 1);
 				break;
 			}
 		}

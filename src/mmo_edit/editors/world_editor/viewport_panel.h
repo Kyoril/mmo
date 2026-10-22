@@ -39,6 +39,7 @@ namespace mmo
         /// @param renderCallback Callback to trigger rendering.
         /// @param generateMinimapsCallback Callback to generate minimaps.
         /// @param generateTerrainLodCallback Callback to bake the distant-terrain data of stale pages.
+        /// @param bakeGlueSceneCallback Callback to bake the glue scene (the login/character select backdrop) from this world.
         explicit ViewportPanel(
             DeferredRenderer &deferredRenderer,
             WorldGrid &worldGrid,
@@ -54,7 +55,8 @@ namespace mmo
             ImVec2 &lastContentRectMin,
             std::function<void()> renderCallback,
             std::function<void()> generateMinimapsCallback,
-            std::function<void()> generateTerrainLodCallback);
+            std::function<void()> generateTerrainLodCallback,
+            std::function<void()> bakeGlueSceneCallback);
 
         ~ViewportPanel() override = default;
 
@@ -96,6 +98,7 @@ namespace mmo
         std::function<void()> m_renderCallback;
         std::function<void()> m_generateMinimapsCallback;
         std::function<void()> m_generateTerrainLodCallback;
+        std::function<void()> m_bakeGlueSceneCallback;
 
         static Texture *s_translateIcon;
         static Texture *s_rotateIcon;

@@ -722,6 +722,12 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
+	bool Frame::IsMouseClickTarget() const
+	{
+		const FrameManager& frameManager = FrameManager::Get();
+		return this == frameManager.GetClickTargetAt(frameManager.GetMousePosition()).get();
+	}
+
 	void Frame::Invalidate(bool includeLayout)
 	{
 		m_needsRedraw = true;

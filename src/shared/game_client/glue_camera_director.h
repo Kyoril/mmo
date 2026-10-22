@@ -2,23 +2,10 @@
 
 #pragma once
 
-#include "math/vector3.h"
-
-#include <vector>
+#include "game_common/glue_camera_path.h"
 
 namespace mmo
 {
-	/// A camera position and the point it looks at.
-	struct GlueCameraKey
-	{
-		Vector3 position;
-		Vector3 lookAt;
-	};
-
-	/// Evaluates a Catmull-Rom path through the keys. t in [0,1] is clamped and eased with
-	/// smoothstep. An empty list returns a default key, a single key returns that key.
-	GlueCameraKey EvaluateGluePath(const std::vector<GlueCameraKey>& keys, float t);
-
 	/// Current state of the glue camera.
 	enum class GlueCameraMode
 	{
@@ -32,8 +19,9 @@ namespace mmo
 	class GlueCameraDirector final
 	{
 	public:
-		/// @param flightSeconds Duration of a full flight in seconds.
-		explicit GlueCameraDirector(float flightSeconds);
+		/// @param flightSeconds Duration of a full fly-in in seconds.
+		/// @param flyOutSeconds Duration of a full fly-out in seconds; 0 or less uses flightSeconds.
+		explicit GlueCameraDirector(float flightSeconds, float flyOutSeconds = 0.0f);
 
 		/// Starts flying towards the plaza, continuing from the current point.
 		void FlyIn();
@@ -64,6 +52,7 @@ namespace mmo
 
 	private:
 		float m_flightSeconds;
+		float m_flyOutSeconds;
 		GlueCameraMode m_mode = GlueCameraMode::Gate;
 		float m_t = 0.0f;
 		bool m_finished = false;

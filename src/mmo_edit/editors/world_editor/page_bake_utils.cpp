@@ -6,6 +6,7 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/light.h"
 #include "scene_graph/movable_object.h"
 #include "scene_graph/scene_node.h"
 #include "stb_dxt.h"
@@ -86,16 +87,9 @@ namespace mmo
 			return result;
 		}
 
-		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, uint32 size)
+		bool WriteDxt1Texture(std::ostream& out, std::vector<uint8> rgba, uint32 size)
 		{
-			const auto file = AssetRegistry::CreateNewFile(filename);
-			if (!file)
-			{
-				ELOG("Failed to create " << filename);
-				return false;
-			}
-
-			io::StreamSink sink(*file);
+			io::StreamSink sink(out);
 
 			tex::v1_0::Header header(tex::Version_1_0);
 			header.width = static_cast<uint16>(size);
@@ -119,12 +113,47 @@ namespace mmo
 			}
 
 			saver.finish();
-			file->flush();
-			return true;
+			out.flush();
+			return static_cast<bool>(out);
 		}
 
-		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep)
+		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, const uint32 size)
+		{
+			const auto file = AssetRegistry::CreateNewFile(filename);
+			if (!file)
+			{
+				ELOG("Failed to create " << filename);
+				return false;
+			}
+
+			return WriteDxt1Texture(*file, std::move(rgba), size);
+		}
+
+		bool WriteRgba8Texture(std::ostream& out, const void* pixels, const uint32 width, const uint32 height)
+		{
+			io::StreamSink sink(out);
+
+			tex::v1_0::Header header(tex::Version_1_0);
+			header.width = static_cast<uint16>(width);
+			header.height = static_cast<uint16>(height);
+			header.format = tex::v1_0::RGBA;
+			header.hasMips = false;
+
+			tex::v1_0::HeaderSaver saver(sink, header);
+
+			const size_t bytes = static_cast<size_t>(width) * height * 4;
+			header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
+			header.mipmapLengths[0] = static_cast<uint32>(bytes);
+			sink.Write(static_cast<const char*>(pixels), bytes);
+
+			saver.finish();
+			out.flush();
+			return static_cast<bool>(out);
+		}
+
+		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep, const bool keepLights)
 			: m_keep(std::move(keep))
+			, m_keepLights(keepLights)
 		{
 			Hide(root);
 		}
@@ -148,7 +177,7 @@ namespace mmo
 			{
 				// Cameras are never drawn; leave the bake camera (and everyone else's) alone.
 				MovableObject* object = node.GetAttachedObject(i);
-				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object))
+				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object) && !(m_keepLights && dynamic_cast<Light*>(object)))
 				{
 					m_hidden.push_back(object);
 					object->SetVisible(false);

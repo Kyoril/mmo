@@ -179,6 +179,19 @@ namespace mmo
         static constexpr uint32 MaxChildDepth = 8;
 
     public:
+        /// @brief Whether a mesh may be drawn through the instanced path at all.
+        /// @param mesh The mesh to test.
+        /// @return True when every submesh can be instanced.
+        static bool CanBatchMesh(const Mesh& mesh);
+
+        /// @brief Whether a material has a compiled instanced vertex shader variant.
+        /// @details Without one the device warns once and draws nothing at all, so this is checked
+        ///          up front and the affected placements fall back to entities.
+        /// @param material The material to test.
+        /// @return True when the material can be used for an instanced draw.
+        static bool MaterialSupportsInstancing(const MaterialPtr& material);
+
+    public:
         // MovableObject overrides
         
         /// @copydoc MovableObject::GetMovableType
@@ -323,18 +336,6 @@ namespace mmo
 
         /// @brief Whether a group is currently visible according to the last portal culling pass.
         [[nodiscard]] bool IsGroupVisible(int32 groupIndex) const;
-
-        /// @brief Whether a mesh may be drawn through the instanced path at all.
-        /// @param mesh The mesh to test.
-        /// @return True when every submesh can be instanced.
-        static bool CanBatchMesh(const Mesh& mesh);
-
-        /// @brief Whether a material has a compiled instanced vertex shader variant.
-        /// @details Without one the device warns once and draws nothing at all, so this is checked
-        ///          up front and the affected placements fall back to entities.
-        /// @param material The material to test.
-        /// @return True when the material can be used for an instanced draw.
-        static bool MaterialSupportsInstancing(const MaterialPtr& material);
 
         /// @brief Builds the mesh-facts lookup the bucketer uses, backed by the mesh manager.
         [[nodiscard]] WorldModelMeshLookup MakeMeshLookup();
