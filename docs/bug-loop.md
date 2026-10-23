@@ -375,7 +375,13 @@ makes (ship, refix, and a submodule `master` that moved), in this order:
    cleanly came back unchanged; a resolution that also changed text outside the conflicts is
    shown as full diffs against both sides. On 2026-10-23 the full diffs of a much-edited
    `GlueTemplates.xml` were 112 000 characters and the review refused them; its one conflict is
-   9 000. Both protocol version bumps colliding are resolved to one above both, with the
+   9 000.
+   Protocol bumps are the one exception to "conflicted files only": when a protocol file
+   (`game_protocol.h`, `auth_protocol.h`, `protocol_fingerprint.json`, `protocol_versions.md`)
+   conflicts, the resolver may also change the others. Both sides bumping to the same value merges
+   the header cleanly, yet the merge needs a version of its own (b36cdaa3, 2026-10-23). A version
+   header may change only in its `ProtocolVersion` line, and only upwards; the review sees these
+   changes as diffs, and the gate's protocol check verifies the fingerprint. Both protocol version bumps colliding are resolved to one above both, with the
    fingerprint regenerated.
 3. Other binary files (meshes, tiles) changed on both sides stay conflicts.
 

@@ -28,6 +28,10 @@ DATA_SUFFIX = ".data"
 # The review must see every resolution in full; a larger one is left to the maintainer.
 REVIEW_LIMIT = 60000
 MANUAL = "needs a manual merge"
+# Where a protocol version lives, and what changes with it (tools/protocol_version_check.py).
+VERSION_HEADERS = frozenset(("src/shared/game_protocol/game_protocol.h", "src/shared/auth_protocol/auth_protocol.h"))
+PROTOCOL_FILES = VERSION_HEADERS | frozenset(("src/shared/protocol_fingerprint.json", "docs/protocol_versions.md"))
+_VERSION_LINE = re.compile(r"^\s*constexpr\s+uint32\s+ProtocolVersion\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*;\s*$")
 
 
 def _diff(before, after, before_name, after_name):
@@ -36,6 +40,18 @@ def _diff(before, after, before_name, after_name):
 
 def _text(data):
 	return (data or b"").decode("utf-8", "replace")
+
+
+def _only_version_changed(before, after):
+	"""True when `after` differs from `before` only in a higher ProtocolVersion constant."""
+	old, new = before.splitlines(), after.splitlines()
+	if len(old) != len(new):
+		return False
+	changed = [(a, b) for a, b in zip(old, new) if a != b]
+	if len(changed) != 1:
+		return False
+	matches = [_VERSION_LINE.match(line) for line in changed[0]]
+	return all(matches) and int(matches[1].group(1), 0) > int(matches[0].group(1), 0)
 
 
 def _split_marked(marked):
@@ -204,13 +220,30 @@ class ConflictResolver:
 			self._git(repo, "add", "-A", "--", path)
 		if self._git(repo, "ls-files", "-u", "-z").strip("\0"):
 			return "merge conflict in {}: still unmerged after the resolver ({})".format(listed, MANUAL)
+		sections = []
+		companions = []
+		if not prefix and any(path in PROTOCOL_FILES for path in paths):
+			# Both sides bumped the protocol: the merged version must go above both, which touches the
+			# version header even when git merged it cleanly, and the fingerprint and docs with it.
+			for path in sorted(PROTOCOL_FILES - set(paths)):
+				if self.run_git(repo, "diff", "--quiet", "--", path, check=False).returncode == 0:
+					continue
+				staged = _text(self.run_git(repo, "show", ":" + path, check=False, binary=True).stdout)
+				with open(os.path.join(repo, *path.split("/")), "rb") as handle:
+					changed = _text(handle.read())
+				if path in VERSION_HEADERS and not _only_version_changed(staged, changed):
+					return "the merge resolver changed {} beyond its ProtocolVersion constant ({})".format(path, MANUAL)
+				self._git(repo, "add", "--", path)
+				companions.append(path)
+				report["text"].append({"path": path, "protocol_companion": True})
+				sections.append("=== {} (not a conflict: changed to give the merged protocol its own version) ===\n{}".format(
+					path, _diff(staged, changed, "merged/" + path, "resolved/" + path)))
 		after = {path: meta for path, meta in self._index(repo).items() if path not in paths}
-		touched = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+		touched = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path) and path not in companions)
 		status = self._git(repo, "status", "--porcelain", "-z", "--ignore-submodules=all", "--untracked-files=all").split("\0")
 		touched += sorted(entry[3:] for entry in status if len(entry) > 3 and (entry[1] != " " or entry.startswith("??")))
 		if touched:
 			return "the merge resolver changed files outside the conflict: {} ({})".format(", ".join(prefix + path for path in touched[:5]), MANUAL)
-		sections = []
 		for path in paths:
 			stages = stages_of[path]
 			full = os.path.join(repo, *path.split("/"))

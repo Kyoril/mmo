@@ -45,5 +45,21 @@ class ConflictRegionTests(unittest.TestCase):
 		self.assertIsNone(merge_resolve.conflict_regions("just text\n", "just text\n", "f"))
 
 
+class VersionLineTests(unittest.TestCase):
+	HEADER = "namespace game\n{\n\t\tconstexpr uint32 ProtocolVersion = 0x0000001C;\n}\n"
+
+	def test_a_higher_version_is_the_only_allowed_change(self):
+		self.assertTrue(merge_resolve._only_version_changed(self.HEADER, self.HEADER.replace("0x0000001C", "0x0000001D")))
+		self.assertTrue(merge_resolve._only_version_changed(self.HEADER, self.HEADER.replace("0x0000001C", "30")))
+
+	def test_anything_else_is_refused(self):
+		self.assertFalse(merge_resolve._only_version_changed(self.HEADER, self.HEADER))
+		self.assertFalse(merge_resolve._only_version_changed(self.HEADER, self.HEADER.replace("0x0000001C", "0x0000001B")))
+		self.assertFalse(merge_resolve._only_version_changed(self.HEADER, self.HEADER.replace("namespace game", "namespace evil")))
+		self.assertFalse(merge_resolve._only_version_changed(self.HEADER, self.HEADER + "int extra;\n"))
+		self.assertFalse(merge_resolve._only_version_changed(self.HEADER,
+			self.HEADER.replace("0x0000001C;", "0x0000001D; int x = 1;")))
+
+
 if __name__ == "__main__":
 	unittest.main()
