@@ -3,6 +3,7 @@
 #pragma once
 
 #include "ocean_pass.h"
+#include "ocean_shore_distance.h"
 
 #include "math/vector3.h"
 
@@ -88,7 +89,8 @@ namespace mmo
 				float originX = 0.0f;
 				float originZ = 0.0f;
 				terrain->BuildOceanMask(cameraPosition.x, cameraPosition.z, MaskTexelsPerSide, m_texels, originX, originZ);
-				ocean.UploadMask(m_texels, MaskTexelsPerSide);
+				ocean_shore::BuildShaderMask(m_texels, MaskTexelsPerSide, texelSize, m_shaderTexels);
+				ocean.UploadMask(m_shaderTexels, MaskTexelsPerSide);
 
 				m_windowCentreX = cameraPosition.x;
 				m_windowCentreZ = cameraPosition.z;
@@ -110,6 +112,7 @@ namespace mmo
 		float m_maskTexelSize;
 		TTerrain* m_terrain { nullptr };
 		std::vector<uint8> m_texels;
+		std::vector<uint8> m_shaderTexels;
 		float m_windowCentreX { 0.0f };
 		float m_windowCentreZ { 0.0f };
 		bool m_hasWindow { false };

@@ -53,8 +53,9 @@ namespace mmo
 		/// @brief The current surface state.
 		[[nodiscard]] const OceanSurfaceState& GetSurfaceState() const { return m_surface; }
 
-		/// @brief Uploads the ocean mask: texelsPerSide^2 texels of two bytes (R = ocean present,
-		///        G = water depth / OceanMaskDepthRange). An empty buffer disables masking (open sea
+		/// @brief Uploads the ocean mask: texelsPerSide^2 texels of four bytes (R = ocean present,
+		///        G = water depth / OceanMaskDepthRange, B = shore distance / ocean_shore::DistanceRange,
+		///        see ocean_shore::BuildShaderMask). An empty buffer disables masking (open sea
 		///        everywhere).
 		void UploadMask(const std::vector<uint8>& texels, uint32 texelsPerSide);
 

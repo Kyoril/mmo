@@ -3,9 +3,11 @@
 #include "catch.hpp"
 
 #include "deferred_shading/ocean_grid.h"
+#include "deferred_shading/ocean_shore_distance.h"
 #include "deferred_shading/ocean_spectrum.h"
 
 #include <cmath>
+#include <vector>
 
 using namespace mmo;
 using namespace mmo::ocean_spectrum;
@@ -108,4 +110,46 @@ TEST_CASE("Ocean grid is one closed fan of near-square cells", "[ocean]")
 	// Neighbouring rings differ by the angular step, so cells stay square.
 	const float secondRing = grid.vertices[(1 + 64) * 3 + 2];
 	CHECK(secondRing / 1.0f == Approx(1.0f + grid.angularStep).epsilon(1e-4));
+}
+
+TEST_CASE("Ocean shader mask encodes distance to the shore", "[ocean]")
+{
+	// 16 x 16 window: land (R = 0) in column 0, open water elsewhere, one texel = 2 m.
+	constexpr uint32 side = 16;
+	std::vector<uint8> rg(side * side * 2, 255);
+	for (uint32 z = 0; z < side; ++z)
+	{
+		rg[(z * side) * 2] = 0;
+		rg[(z * side) * 2 + 1] = 0;
+	}
+
+	std::vector<uint8> rgba;
+	ocean_shore::BuildShaderMask(rg, side, 2.0f, rgba);
+	REQUIRE(rgba.size() == side * side * 4);
+
+	const auto distanceAt = [&](const uint32 x, const uint32 z)
+	{
+		return rgba[(z * side + x) * 4 + 2] / 255.0f * ocean_shore::DistanceRange;
+	};
+
+	// Presence and depth pass through untouched.
+	CHECK(rgba[0] == 0);
+	CHECK(rgba[(5 * side + 5) * 4] == 255);
+	CHECK(rgba[(5 * side + 5) * 4 + 1] == 255);
+
+	CHECK(distanceAt(0, 8) == 0.0f);
+	CHECK(distanceAt(5, 8) == Approx(10.0f).margin(0.2f));
+	CHECK(distanceAt(15, 8) == Approx(30.0f).margin(0.2f));
+}
+
+TEST_CASE("Ocean shader mask without shore stays at the full range", "[ocean]")
+{
+	constexpr uint32 side = 8;
+	const std::vector<uint8> rg(side * side * 2, 255);
+	std::vector<uint8> rgba;
+	ocean_shore::BuildShaderMask(rg, side, 4.0f, rgba);
+	for (uint32 i = 0; i < side * side; ++i)
+	{
+		CHECK(rgba[i * 4 + 2] == 255);
+	}
 }

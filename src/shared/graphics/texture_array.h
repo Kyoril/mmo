@@ -16,6 +16,9 @@ namespace mmo
 		/// @brief Two unsigned normalized 8-bit channels (masks uploaded from the CPU).
 		RG8,
 
+		/// @brief Four unsigned normalized 8-bit channels (masks uploaded from the CPU).
+		RGBA8,
+
 		/// @brief One 32-bit float channel. The only float format compute shaders can both read and
 		///        write through one unordered access view on every D3D11 device.
 		R32F,

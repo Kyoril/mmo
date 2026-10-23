@@ -16,6 +16,8 @@ namespace mmo
 			{
 			case TextureArrayFormat::RG8:
 				return DXGI_FORMAT_R8G8_UNORM;
+			case TextureArrayFormat::RGBA8:
+				return DXGI_FORMAT_R8G8B8A8_UNORM;
 			case TextureArrayFormat::R32F:
 				return DXGI_FORMAT_R32_FLOAT;
 			case TextureArrayFormat::RGBA16F:
@@ -33,6 +35,8 @@ namespace mmo
 			{
 			case TextureArrayFormat::RG8:
 				return 2u;
+			case TextureArrayFormat::RGBA8:
+				return 4u;
 			case TextureArrayFormat::R32F:
 				return 4u;
 			case TextureArrayFormat::RGBA16F:

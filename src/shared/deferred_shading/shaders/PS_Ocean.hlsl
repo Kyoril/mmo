@@ -31,6 +31,9 @@ struct PixelIn
 
 static const float NO_SCENE_DEPTH = 1.0e6f;
 
+// How much each cascade's foam counts (largest first).
+static const float FOAM_CASCADE_WEIGHT[OCEAN_CASCADES] = { 1.0f, 1.0f, 0.35f };
+
 float LoadSceneDistance(int2 pixel)
 {
     // Radial distance from the camera; 0 where the opaque pass drew nothing (sky).
@@ -84,32 +87,45 @@ float SunSpecular(float3 n, float3 v, float3 l, float roughness)
     return d * g * fresnel / (4.0f * nDotV) ;
 }
 
-float Hash21(float2 p)
+// Foam breakup tiles every FOAM_PATTERN_PERIOD metres. The world position is wrapped into that
+// range before it is scaled, so the lattice coordinates stay small and the hash keeps full float
+// precision anywhere on the map (hashing raw world coordinates degenerated into parallel stripes
+// a few kilometres from the origin). Every octave's lattice repeats exactly over the period, so the
+// wrap leaves no seam.
+static const float FOAM_PATTERN_PERIOD = 256.0f;
+
+float LatticeHash(int2 cell, uint period)
 {
-    p = frac(p * float2(123.34f, 456.21f));
-    p += dot(p, p + 45.32f);
-    return frac(p.x * p.y);
+    // Cells are never negative here (the domain is wrapped to [0, period) first).
+    uint2 q = (uint2)cell % period;
+    uint h = (q.x * 1597334677u) ^ (q.y * 3812015801u);
+    h = (h ^ (h >> 15)) * 2246822519u;
+    h ^= h >> 13;
+    return (float)(h & 0xFFFFFFu) / 16777216.0f;
 }
 
-float ValueNoise(float2 p)
+// Value noise on a lattice that repeats every `period` cells.
+float PeriodicNoise(float2 p, uint period)
 {
-    float2 i = floor(p);
-    float2 f = frac(p);
+    int2 i = (int2)floor(p);
+    float2 f = p - (float2)i;
     float2 u = f * f * (3.0f - 2.0f * f);
-    float a = Hash21(i);
-    float b = Hash21(i + float2(1.0f, 0.0f));
-    float c = Hash21(i + float2(0.0f, 1.0f));
-    float d = Hash21(i + float2(1.0f, 1.0f));
+    float a = LatticeHash(i, period);
+    float b = LatticeHash(i + int2(1, 0), period);
+    float c = LatticeHash(i + int2(0, 1), period);
+    float d = LatticeHash(i + int2(1, 1), period);
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Bubbly foam breakup: a few octaves of value noise, drifting slowly so foam patches churn.
+// Bubbly foam breakup: three octaves of value noise. It needs no drift of its own: callers sample
+// it at the displaced position, so the pattern rides and churns with the waves.
 float FoamPattern(float2 xz)
 {
-    float2 drift = float2(OceanTime * 0.11f, OceanTime * -0.07f);
-    float n = ValueNoise(xz * 1.3f + drift) * 0.45f;
-    n += ValueNoise(xz * 3.7f - drift * 1.7f) * 0.35f;
-    n += ValueNoise(xz * 9.1f + drift * 2.9f) * 0.2f;
+    float2 local = xz - floor(xz / FOAM_PATTERN_PERIOD) * FOAM_PATTERN_PERIOD;
+    // Cells per metre 1.25, 3.75 and 9: whole numbers of cells per period, so the wrap is seamless.
+    float n = PeriodicNoise(local * 1.25f, 320) * 0.45f;
+    n += PeriodicNoise(local * 3.75f + 17.0f, 960) * 0.35f;
+    n += PeriodicNoise(local * 9.0f + 41.0f, 2304) * 0.2f;
     return n;
 }
 
@@ -214,7 +230,8 @@ float4 main(PixelIn input) : SV_Target
         slope += surface.xy * weight;
         // Mip filtering averaged the slopes away; what they averaged over comes back as roughness.
         variance += max(surface.z - dot(surface.xy, surface.xy), 0.0f) * weight * weight;
-        foamAmount += surface.w * weight;
+        // Whitecaps belong to the swell and the chop; the finest ripples barely break.
+        foamAmount += surface.w * weight * FOAM_CASCADE_WEIGHT[cascade];
     }
 
     float3 n = normalize(float3(-slope.x, 1.0f, -slope.y));
@@ -308,21 +325,39 @@ float4 main(PixelIn input) : SV_Target
     float3 color = transmitted * (1.0f - specularWeight) + reflected + sunSpecular;
 
     // --- Foam ----------------------------------------------------------------------------------
-    float verticalDepth = min(input.waterDepth, thickness * max(v.y, 0.05f));
-    float shore = ShoreFoamStrength * pow(1.0f - saturate(verticalDepth / max(ShoreFoamDepth, 0.01f)), 2.0f);
+    // True water depth under this pixel: the seabed is where the view ray meets the opaque scene.
+    // Per pixel, unlike the ocean mask's one value per 4 m quad.
+    float seabedDepth = sceneDistance < NO_SCENE_DEPTH
+        ? max(input.worldPos.y - (CameraPosition.y - v.y * sceneDistance), 0.0f)
+        : 1000.0f;
+
+    // Shore waves: foam bands parallel to the coast, rolling in toward the beach once per
+    // SHORE_WAVE_PERIOD and thickening as they arrive. They follow the distance from the shore
+    // (from the mask), not the depth: on a steep beach depth-driven foam collapses into a line.
+    // The exact waterline gets a lapping fringe from the per-pixel depth.
+    float shoreDistance = SampleOceanMask(input.baseXZ).z;
+    float shoreZone = 1.0f - saturate(shoreDistance / max(ShoreFoamWidth, 0.01f));
+    float shorePhase = shoreDistance / SHORE_WAVE_SPACING + OceanTime / SHORE_WAVE_PERIOD;
+    float shoreLines = smoothstep(0.35f, 0.9f, 0.5f + 0.5f * sin(2.0f * OCEAN_PI * shorePhase));
+    float fringe = smoothstep(0.35f, 0.04f, seabedDepth);
+    float shore = ShoreFoamStrength * (shoreLines * shoreZone * shoreZone * 1.3f + fringe * 1.2f);
+
     // Foam breaks up into lacy patches: the denser the coverage, the more of the noise pattern
     // turns white, with a soft edge so patches never read as flat decals.
-    float pattern = FoamPattern(input.baseXZ + float2(input.worldPos.x - input.baseXZ.x, input.worldPos.z - input.baseXZ.y));
+    float pattern = FoamPattern(input.worldPos.xz);
     float coverage = saturate(foamAmount * 1.2f + shore);
     float foam = smoothstep(1.0f - coverage, 1.35f - coverage, pattern) * saturate(coverage * 3.0f);
     foam *= 0.55f + 0.45f * coverage;
 
-    float nDotL = saturate(dot(n, l) * 0.6f + 0.4f);
-    float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * nDotL * (1.0f / OCEAN_PI) + CameraAmbientColor);
+    // Foam is a rough, bright scatterer lying on the surface: light it like the beach beside it
+    // (albedo / pi, mostly by the sun's elevation), not by the rippled water normal, or it turns
+    // grey next to the sand.
+    float foamNDotL = saturate(l.y) * 0.75f + saturate(dot(n, l)) * 0.25f;
+    float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + CameraAmbientColor);
     color = lerp(color, foamColor, foam);
 
-    // Fade into the (already fogged) scene over the last few centimetres of water, so the waterline
-    // is soft.
+    // Fade into the (already fogged) scene over the last few centimetres of water depth, so the
+    // waterline is soft rather than a hard intersection line.
     float3 straightScene = LoadSceneColor(screenUv);
-    return float4(lerp(straightScene, ApplyAtmosphere(color, input.worldPos), saturate(thickness * 3.0f)), 1.0f);
+    return float4(lerp(straightScene, ApplyAtmosphere(color, input.worldPos), saturate(seabedDepth / 0.03f)), 1.0f);
 }

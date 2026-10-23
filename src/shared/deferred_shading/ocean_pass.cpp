@@ -116,7 +116,7 @@ namespace mmo
 			float sunSpecularStrength;
 			float foamBrightness;
 			float shoreFoamStrength;
-			float shoreFoamDepth;
+			float shoreFoamWidth;
 
 			float crestHeightScale;
 			float oceanTime;
@@ -251,10 +251,10 @@ namespace mmo
 			return;
 		}
 
-		ASSERT(texels.size() == static_cast<size_t>(texelsPerSide) * texelsPerSide * 2);
+		ASSERT(texels.size() == static_cast<size_t>(texelsPerSide) * texelsPerSide * 4);
 		if (!m_mask || m_maskTexelsPerSide != texelsPerSide)
 		{
-			m_mask = m_device.CreateTextureArray(static_cast<uint16>(texelsPerSide), static_cast<uint16>(texelsPerSide), 1, TextureArrayFormat::RG8, false, false);
+			m_mask = m_device.CreateTextureArray(static_cast<uint16>(texelsPerSide), static_cast<uint16>(texelsPerSide), 1, TextureArrayFormat::RGBA8, false, false);
 			m_maskTexelsPerSide = m_mask ? texelsPerSide : 0;
 		}
 
@@ -426,7 +426,7 @@ namespace mmo
 		constants.sunSpecularStrength = m_settings.sunSpecularStrength;
 		constants.foamBrightness = m_settings.foamBrightness;
 		constants.shoreFoamStrength = m_settings.shoreFoamStrength;
-		constants.shoreFoamDepth = m_settings.shoreFoamDepth;
+		constants.shoreFoamWidth = m_settings.shoreFoamWidth;
 		constants.crestHeightScale = 1.0f / std::max(hs * 0.5f, 0.05f);
 		constants.oceanTime = static_cast<float>(m_time);
 		constants.waveFadeStart = waveFadeStart;

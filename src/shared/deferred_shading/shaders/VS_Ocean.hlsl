@@ -34,7 +34,7 @@ VertexOut main(VertexIn input)
     float radius = input.pos.z;
     float2 baseXZ = CameraPosition.xz + direction * radius;
 
-    float2 mask = SampleOceanMask(baseXZ);
+    float3 mask = SampleOceanMask(baseXZ);
 
     float spacing = max(radius * GridAngularStep, 0.02f);
     float distanceFade = 1.0f - saturate((radius - WaveFadeStart) * WaveFadeInverseRange);
@@ -56,6 +56,10 @@ VertexOut main(VertexIn input)
         }
     }
     displacement *= distanceFade;
+
+    // Swash: in the last few metres of depth the surface breathes with the shore waves.
+    float swashZone = 1.0f - saturate(mask.y / 3.0f);
+    displacement.y += SHORE_SWASH_HEIGHT * swashZone * sin(2.0f * OCEAN_PI * (OceanTime / SHORE_WAVE_PERIOD));
 
     float3 worldPos = float3(baseXZ.x, SeaLevel, baseXZ.y) + displacement;
 

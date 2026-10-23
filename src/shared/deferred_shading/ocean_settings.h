@@ -108,13 +108,13 @@ namespace mmo
 		float foamDecay { 0.6f };
 
 		/// @brief Brightness of the foam (linear albedo).
-		float foamBrightness { 0.75f };
+		float foamBrightness { 1.0f };
 
 		/// @brief Strength of the foam band along the shore.
-		float shoreFoamStrength { 0.8f };
+		float shoreFoamStrength { 1.0f };
 
-		/// @brief Water depth (m) over which the shore foam band fades out.
-		float shoreFoamDepth { 1.6f };
+		/// @brief Distance from the shore (m) over which the rolling shore foam bands fade out.
+		float shoreFoamWidth { 14.0f };
 	};
 
 	/// @brief The terrain-side input of the ocean renderer: where the sea is and how deep it is.
