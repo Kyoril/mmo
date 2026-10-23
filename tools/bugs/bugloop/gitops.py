@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 
 from .guard import FileChange
 
@@ -116,6 +117,36 @@ class Worktree:
 		else:
 			self.git("remote", "add", self.sub_remote, url, cwd=sub_dir)
 		self.git("fetch", self.sub_remote, cwd=sub_dir)
+
+	def clear_stale_locks(self, min_age_seconds=60):
+		"""Removes index.lock files a killed loop left in this worktree and its submodules; returns
+		their paths. Only the loop uses its worktree and only one loop runs, so at startup a lock
+		older than a minute belongs to nobody. On 2026-10-23 a restart killed the loop during a
+		submodule checkout, and the lock it left stalled every fix and ship for half an hour."""
+		if not os.path.exists(os.path.join(self.path, ".git")):
+			return []
+		candidates = []
+		git_dir = run_git(self.path, "rev-parse", "--absolute-git-dir", check=False).stdout.strip()
+		if git_dir:
+			candidates.append(os.path.join(git_dir, "index.lock"))
+			for sub in self.submodules:
+				candidates.append(os.path.join(git_dir, "modules", *sub.split("/"), "index.lock"))
+		for sub in self.submodules:
+			sub_dir = self.sub_path(sub)
+			if os.path.exists(os.path.join(sub_dir, ".git")):
+				sub_git = run_git(sub_dir, "rev-parse", "--absolute-git-dir", check=False).stdout.strip()
+				if sub_git:
+					candidates.append(os.path.join(sub_git, "index.lock"))
+		removed = []
+		now = time.time()
+		for path in sorted({os.path.normcase(os.path.normpath(path)) for path in candidates}):
+			try:
+				if now - os.path.getmtime(path) >= min_age_seconds:
+					os.remove(path)
+					removed.append(path)
+			except OSError:
+				continue  # missing, or still held by a process: leave it
+		return removed
 
 	def prepare(self):
 		"""A fresh checkout of origin/develop; returns its commit."""
