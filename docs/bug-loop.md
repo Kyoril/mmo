@@ -510,6 +510,9 @@ hold set on top of the loop's own trip also ends the exemption.
   `git -C data/client pull` / `git -C data/editor pull`, or `git submodule update`). The loop
   never writes into the main checkout's submodules.
 - After changing `prompts/triage.md`, run `tools/bugs/adversarial_check.py` (real model calls).
+- The bug API client falls back to TLS 1.2 for the rest of the process when a request is reset
+  or times out (the handshake), and retries that request once. On 2026-10-23 every TLS 1.3
+  handshake with the API was reset for hours, and the loop could not see any ship decision.
 
 ### What the guard cannot see
 
