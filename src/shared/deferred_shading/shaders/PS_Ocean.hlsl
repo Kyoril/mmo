@@ -35,6 +35,9 @@ static const float NO_SCENE_DEPTH = 1.0e6f;
 // (WoW Forever's ocean preset uses 4.0 * NdotV^2 + 0.5).
 static const float SUBSURFACE_BASE_FRACTION = 0.125f;
 
+// How much brighter foam is than the water under it, at least (luminance ratio).
+static const float FOAM_OVER_WATER_BRIGHTNESS = 1.8f;
+
 // How much each cascade's foam counts (largest first).
 static const float FOAM_CASCADE_WEIGHT[OCEAN_CASCADES] = { 1.0f, 1.0f, 0.35f };
 
@@ -408,9 +411,21 @@ float4 main(PixelIn input) : SV_Target
     // (albedo / pi, mostly by the sun's elevation), not by the rippled water normal, and with a
     // neutral sky term, or it turns grey and lilac next to the sand.
     float foamNDotL = saturate(l.y) * 0.75f + saturate(dot(n, l)) * 0.25f;
-    float ambientLuminance = dot(CameraAmbientColor, float3(0.2126f, 0.7152f, 0.0722f));
-    float3 foamAmbient = lerp(ambientLuminance.xxx, CameraAmbientColor, 0.35f);
+    // Its ambient is the open sky it faces: a white Lambertian surface under a sky of radiance L
+    // reflects about L. The scene's ambient constant alone is far darker than the sky the water
+    // around the foam reflects, so at night (no sun term) foam turned into dark smears on bright,
+    // moonlit water. The sky this very pixel reflects (on-screen sky, scene or gradient) is the best
+    // estimate of that radiance; take whichever is brighter, mostly neutral so the foam stays white.
+    const float3 luminanceWeights = float3(0.2126f, 0.7152f, 0.0722f);
+    float3 skyIrradiance = max(lerp(SkyHorizonLinear, SkyZenithLinear, 0.5f), reflection);
+    float3 ambientIrradiance = max(CameraAmbientColor, skyIrradiance);
+    float3 foamAmbient = lerp(dot(ambientIrradiance, luminanceWeights).xxx, ambientIrradiance, 0.35f);
     float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + foamAmbient);
+
+    // Foam scatters more of whatever light there is than the water it floats on, so it is never
+    // darker than that water. At night the water is lit mostly by what it reflects, which the terms
+    // above barely capture, and the foam would otherwise read as black lace on moonlit water.
+    foamColor = max(foamColor, (dot(color, luminanceWeights) * FOAM_OVER_WATER_BRIGHTNESS * FoamBrightness).xxx);
     color = lerp(color, foamColor, foam);
 
     // Fade into the (already fogged) scene over the last few centimetres of water depth, so the
