@@ -249,6 +249,10 @@ namespace mmo
 			/// @brief Whether this page's water carries river flow data.
 			[[nodiscard]] bool HasWaterFlow() const { return !m_waterFlowUVs.empty(); }
 
+			/// @brief Per-vertex river flow speed, one byte per outer vertex (0 = still, 255 = full).
+			/// @return The speed grid, empty when the page has no flow data.
+			[[nodiscard]] const std::vector<uint8>& GetWaterFlowSpeeds() const { return m_waterFlowSpeeds; }
+
 			/// @brief Replaces this page's river flow. Does not rebuild the water mesh.
 			/// @param uvs OuterVerticesPerPageSide² (u, v) pairs, u downstream and v across the river.
 			/// @param speeds OuterVerticesPerPageSide² flow speeds (0..255).

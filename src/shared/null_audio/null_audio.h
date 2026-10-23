@@ -63,6 +63,7 @@ namespace mmo
 		void SetVolume(float volume) override;
 		float GetVolume() const override;
 		void SetPlaybackPosition(float) override {}
+		void Set3DSpread(float) override {}
 	};
 
 	
@@ -86,6 +87,8 @@ namespace mmo
 		SoundIndex CreateLoopedSound(const String &fileName) override;
 
 		SoundIndex CreateLoopedStream(const String &fileName) override;
+
+		SoundIndex CreateLoopedStream3D(const String &fileName) override;
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
@@ -118,6 +121,8 @@ namespace mmo
 		void SetCategoryMuted(SoundCategory category, bool muted) override;
 
 		void SetLowPassCutoff(float cutoffHz) override;
+
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override;
 
 	private:
 

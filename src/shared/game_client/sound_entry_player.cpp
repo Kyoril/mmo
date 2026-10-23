@@ -26,7 +26,7 @@ namespace mmo
 	{
 	}
 
-	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId)
+	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId, const float priority)
 	{
 		return PlayLoadedEntry(soundId, LoadEntry(soundId));
 	}
@@ -52,7 +52,7 @@ namespace mmo
 		}
 
 		ChannelIndex channel = InvalidChannel;
-		m_audio.PlaySound(sound, &channel, 1.0f, GetCategoryFromEntry(*entry));
+		m_audio.PlaySound(sound, &channel, priority, GetCategoryFromEntry(*entry));
 		ApplyChannelSettings(channel, *entry);
 		return channel;
 	}
@@ -82,6 +82,34 @@ namespace mmo
 			m_audio.PlaySound(sound, &channel, 1.0f, GetCategoryFromEntry(*entry));
 		}
 
+		ApplyChannelSettings(channel, *entry);
+		return channel;
+	}
+
+	ChannelIndex SoundEntryPlayer::PlayEntryPositionedLoop(const uint32 soundId, const Vector3& position, const float minDistance, const float maxDistance, const float priority)
+	{
+		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
+		if (!entry)
+		{
+			WLOG("Unable to play sound entry " << soundId << ": unknown id");
+			return InvalidChannel;
+		}
+
+		if (entry->files_size() == 0)
+		{
+			WLOG("Sound entry " << entry->id() << " (" << entry->name() << ") has no files");
+			return InvalidChannel;
+		}
+
+		const int fileIndex = entry->files_size() > 1 ? NextShuffledFileIndex(*entry) : 0;
+		const SoundIndex sound = m_audio.CreateLoopedStream3D(entry->files(fileIndex));
+		if (sound == InvalidSound)
+		{
+			return InvalidChannel;
+		}
+
+		ChannelIndex channel = InvalidChannel;
+		m_audio.PlaySound3D(sound, &channel, position, minDistance, maxDistance, priority, GetCategoryFromEntry(*entry));
 		ApplyChannelSettings(channel, *entry);
 		return channel;
 	}

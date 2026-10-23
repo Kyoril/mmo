@@ -45,6 +45,7 @@
 
 #include "game_client/net_client.h"
 #include "game_client/ambient_sound_emitters.h"
+#include "game_client/water_ambience.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
@@ -839,6 +840,8 @@ namespace mmo
 		CrossfadingSoundLoop m_zoneAmbience;
 		/// Looping sounds of placed meshes (torches, campfires, portals) near the player.
 		AmbientSoundEmitters m_ambientSounds;
+		/// Water bed and swim loops driven by the terrain water around the player.
+		WaterAmbience m_waterAmbience;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;

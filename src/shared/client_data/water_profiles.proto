@@ -40,6 +40,29 @@ message WaterProfile
 
 	// Screen distortion strength while submerged. 0 disables it.
 	optional float distortion_strength = 10;
+
+	// Looping sound entry played as the calm bed of nearby water of this type. 0 disables the
+	// ambience for this profile.
+	optional uint32 ambient_calm_sound = 11;
+
+	// Looping sound entry crossfaded in as the water flows faster. 0 means no fast bed.
+	optional uint32 ambient_fast_sound = 12;
+
+	// If true, only water bordering land (shorelines) is audible instead of the whole body.
+	optional bool ambient_shore_only = 13;
+
+	// 2D sound entry layered in while the player swims in this liquid. 0 disables it.
+	optional uint32 ambient_swim_sound = 14;
+
+	// Distance in world units within which this liquid is audible.
+	optional float ambient_range = 15 [default = 40];
+
+	// Volume multiplier of the ambience of this liquid.
+	optional float ambient_volume = 16 [default = 1];
+
+	// 2D sound entry looped while the player's head is under water of this liquid. It replaces the
+	// swim sound while submerged. 0 disables it.
+	optional uint32 ambient_underwater_sound = 17;
 }
 
 message WaterProfiles

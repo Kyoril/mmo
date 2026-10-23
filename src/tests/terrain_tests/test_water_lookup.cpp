@@ -180,3 +180,23 @@ TEST_CASE("WaterLookup_Type_Byte_Survives_Erased_Quads", "[water_lookup]")
 	CHECK(TypeAtTile(view, 7, 7) == WaterType::Ocean);
 	CHECK_FALSE(HasWaterAtQuad(view, 7, 7, 0, 0));
 }
+
+TEST_CASE("SampleFlowSpeed interpolates between vertices", "[water_lookup]")
+{
+	std::vector<uint8> s(129 * 129, 0);
+	s[10 + 20 * 129] = 255;
+	s[11 + 20 * 129] = 0;
+	CHECK(water_lookup::SampleFlowSpeed(s, 10.0f, 20.0f) == Approx(1.0f));
+	CHECK(water_lookup::SampleFlowSpeed(s, 10.5f, 20.0f) == Approx(0.5f));
+}
+
+TEST_CASE("SampleFlowSpeed without flow data is still water", "[water_lookup]")
+{
+	CHECK(water_lookup::SampleFlowSpeed({}, 5.0f, 5.0f) == 0.0f);
+}
+
+TEST_CASE("SampleFlowSpeed clamps at the page edge", "[water_lookup]")
+{
+	std::vector<uint8> s(129 * 129, 255);
+	CHECK(water_lookup::SampleFlowSpeed(s, 128.9f, 128.9f) == Approx(1.0f));
+}

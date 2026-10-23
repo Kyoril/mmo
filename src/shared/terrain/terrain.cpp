@@ -2245,6 +2245,31 @@ namespace mmo
 			     + h11 * fx           * fz;
 		}
 
+		float Terrain::GetWaterFlowSpeedAtWorldPos(float x, float z) const
+		{
+			const float halfW = static_cast<float>(m_width  * constants::PageSize) * 0.5f;
+			const float halfH = static_cast<float>(m_height * constants::PageSize) * 0.5f;
+			const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
+			const int32 pageZ = static_cast<int32>(std::floor((z + halfH) / constants::PageSize));
+			if (pageX < 0 || pageZ < 0 || pageX >= static_cast<int32>(m_width) || pageZ >= static_cast<int32>(m_height))
+			{
+				return 0.0f;
+			}
+
+			const Page* page = GetPage(pageX, pageZ);
+			if (!page)
+			{
+				return 0.0f;
+			}
+
+			const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
+			const float pageOriginZ = static_cast<float>((pageZ - 32) * constants::PageSize);
+			constexpr float spacing = static_cast<float>(constants::TileSize) / 8.0f;
+
+			return water_lookup::SampleFlowSpeed(page->GetWaterFlowSpeeds(), (x - pageOriginX) / spacing, (z - pageOriginZ) / spacing);
+		}
+
+
 		namespace
 		{
 			/// Resolves a world position to the page containing it and the sub-quad within that page.

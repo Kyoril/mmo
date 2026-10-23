@@ -190,6 +190,10 @@ namespace mmo
 		m_enterTime = GetAsyncTimeMs();
 		m_glueSceneReadySent = false;
 		m_plazaReadyLogged = false;
+
+		// The world state turns the listener with its camera; the glue screens listen straight ahead.
+		m_audio.SetListenerOrientation(Vector3(0.0f, 0.0f, -1.0f), Vector3::UnitY);
+
 		CreateGlueScene();
 		if (m_glueScene)
 		{
