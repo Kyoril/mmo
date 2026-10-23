@@ -78,12 +78,12 @@ TEST_CASE("Page LOD samples the outer heightmap at the LOD grid", "[terrain_io][
 
 TEST_CASE("Page LOD lifts samples touching water to the water surface", "[terrain_io][page_lod]")
 {
-	// Sea floor at -20, surface at 0. Only the first sub-quad of the first tile carries water: it
+	// Lake floor at -20, surface at 0. Only the first sub-quad of the first tile carries water: it
 	// spans outer vertices (0..1, 0..1), so only LOD vertex (0, 0) touches it.
 	terrain_io::PageData page = MakeFlatPage(-20.0f);
 	page.normals[0] = EncodeNormalSNorm8(1.0f, 0.0f, 0.0f);
 	page.waterQuadMasks[0] = 1ull;
-	page.waterTypes[0] = 2;
+	page.waterTypes[0] = static_cast<uint8>(terrain::WaterType::Water);
 	std::fill(page.waterVertexHeights.begin(), page.waterVertexHeights.end(), 0.0f);
 
 	terrain_io::PageLodData lod;
@@ -96,6 +96,37 @@ TEST_CASE("Page LOD lifts samples touching water to the water surface", "[terrai
 	// The surface is flat, whatever the sea floor's normals did.
 	const Vector3 surfaceNormal = Decode(lod.normals[0]);
 	CHECK(surfaceNormal.y == Approx(1.0f).margin(0.02f));
+}
+
+TEST_CASE("Page LOD does not lift samples touching ocean", "[terrain_io][page_lod]")
+{
+	// The ocean is rendered to the horizon by its own renderer, so the distant terrain keeps the
+	// seabed. Tile 0 is ocean, tile 1 (outer vertices 8..16 along X) is a lake at the same level.
+	terrain_io::PageData page = MakeFlatPage(-20.0f);
+	page.waterQuadMasks[0] = ~0ull;
+	page.waterTypes[0] = static_cast<uint8>(terrain::WaterType::Ocean);
+	page.waterQuadMasks[1] = ~0ull;
+	page.waterTypes[1] = static_cast<uint8>(terrain::WaterType::Water);
+	std::fill(page.waterVertexHeights.begin(), page.waterVertexHeights.end(), 0.0f);
+
+	terrain_io::PageLodData lod;
+	terrain_io::BuildPageLod(terrain_io::MakeLodSource(page), lod);
+
+	// LOD vertices (0, 0) and (1, 0) sit on outer vertices 0 and 4: ocean only.
+	CHECK(lod.heights[0] == -20.0f);
+	CHECK(lod.heights[1] == -20.0f);
+
+	// LOD vertex (2, 0) sits on outer vertex 8, shared by the ocean tile and the lake tile: the lake lifts it.
+	CHECK(lod.heights[2] == 0.0f);
+
+	// LOD vertex (3, 0) sits on outer vertex 12, inside the lake.
+	CHECK(lod.heights[3] == 0.0f);
+
+	// Without type information every water quad lifts, as before.
+	terrain_io::PageLodSource untyped = terrain_io::MakeLodSource(page);
+	untyped.waterTypes = nullptr;
+	terrain_io::BuildPageLod(untyped, lod);
+	CHECK(lod.heights[0] == 0.0f);
 }
 
 TEST_CASE("Page LOD keeps terrain that rises above the water surface", "[terrain_io][page_lod]")

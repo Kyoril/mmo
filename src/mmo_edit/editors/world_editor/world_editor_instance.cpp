@@ -661,6 +661,7 @@ namespace mmo
 		UpdateFarTerrain();
 
 		UpdateUnderwaterPreview(deltaTimeSeconds);
+		UpdateOcean();
 
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f)
 			return;
@@ -1093,9 +1094,12 @@ namespace mmo
 			}
 
 			ChunkWriter terrainWriter(terrainChunk, writer);
+			// The sea level trails the chunk: older readers stop after the material name, and a
+			// chunk without it means sea level 0.
 			writer
 				<< io::write<uint8>(m_hasTerrain)
-				<< io::write_dynamic_range<uint16>(defaultMaterialName);
+				<< io::write_dynamic_range<uint16>(defaultMaterialName)
+				<< io::write<float>(m_terrain->GetSeaLevel());
 			terrainWriter.Finish();
 		}
 
@@ -2170,6 +2174,7 @@ namespace mmo
 				m_skyComponent->Update(frameTime, 0);
 				UpdateEnvironment(frameTime);
 			}
+			UpdateOcean();
 
 			gx.Reset();
 			gx.SetViewport(0, 0, width, height, 0.0f, 1.0f);
@@ -2979,7 +2984,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		terrain::Page* terrainPage = m_terrain->GetPage(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()));
-		if (!terrainPage || !terrainPage->Prepare())
+		if (!terrainPage || !terrainPage->Prepare() || terrainPage->IsOceanPlaceholder())
 		{
 			return nullptr;
 		}
@@ -3527,6 +3532,24 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			m_terrain->SetWaterVisible(effective);
 			m_waterVisibilityApplied = effective;
 		}
+	}
+
+	void WorldEditorInstance::UpdateOcean()
+	{
+		if (!m_deferredRenderer || !m_camera)
+		{
+			return;
+		}
+
+		// The FFT ocean draws the ocean to the horizon from the terrain's ocean mask; while it runs,
+		// the terrain leaves its ocean quads out of the water mesh (lakes and rivers stay meshed, and
+		// the minimap bake keeps drawing ocean through its own water mode). Hidden water hides it too.
+		terrain::Terrain* terrain = (m_terrain && m_terrain->IsWaterVisible()) ? m_terrain.get() : nullptr;
+
+		// Resolved every frame, so edits in the Water Profile editor show up live.
+		const auto* profile = m_editor.GetProject().waterProfiles.getById(static_cast<uint32>(terrain::WaterType::Ocean));
+		const OceanSettings settings = profile != nullptr ? ToOceanSettings(*profile) : OceanSettings();
+		m_oceanFeed.Update(m_deferredRenderer->GetOceanPass(), terrain, m_camera->GetDerivedPosition(), settings);
 	}
 
 	void WorldEditorInstance::UpdateUnderwaterPreview(const float deltaSeconds)
@@ -4721,6 +4744,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		String defaultTerrainMaterial;
 		reader >> io::read<uint8>(m_hasTerrain) >> io::read_container<uint16>(defaultTerrainMaterial);
+
+		// Optional trailing sea level (worlds saved before it existed have their sea at 0).
+		const size_t readSoFar = sizeof(uint8) + sizeof(uint16) + defaultTerrainMaterial.size();
+		if (reader && chunkSize >= readSoFar + sizeof(float))
+		{
+			float seaLevel = terrain::constants::DefaultSeaLevel;
+			if (reader >> io::read<float>(seaLevel))
+			{
+				m_terrain->SetSeaLevel(seaLevel);
+			}
+		}
 
 		if (!defaultTerrainMaterial.empty())
 		{

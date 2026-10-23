@@ -17,6 +17,7 @@
 #include "shared/graphics/structured_buffer.h"
 #include "shared/graphics/occlusion_query.h"
 #include "shared/graphics/volume_texture.h"
+#include "shared/graphics/texture_array.h"
 #include "shared/graphics/sampler_state.h"
 #include "shared/graphics/display_settings.h"
 
@@ -279,6 +280,15 @@ namespace mmo
 		/// @param format Texel format.
 		/// @param writable Whether compute shaders may write it (creates an unordered access view).
 		virtual VolumeTexturePtr CreateVolumeTexture(uint16 width, uint16 height, uint16 depth, VolumeFormat format, bool writable) { return nullptr; }
+
+		/// @brief Creates a 2D texture array. Backends without texture array support return nullptr.
+		/// @param width Width in texels.
+		/// @param height Height in texels.
+		/// @param layers Number of layers.
+		/// @param format Texel format.
+		/// @param writable Whether compute shaders may write mip 0 (creates an unordered access view).
+		/// @param mipmapped Whether the array carries a full mip chain that GenerateMips rebuilds.
+		virtual TextureArrayPtr CreateTextureArray(uint16 width, uint16 height, uint16 layers, TextureArrayFormat format, bool writable, bool mipmapped) { return nullptr; }
 
 		/// @brief Creates a sampler state. Backends without explicit sampler objects return nullptr.
 		virtual SamplerStatePtr CreateSamplerState(const SamplerDesc& desc) { return nullptr; }

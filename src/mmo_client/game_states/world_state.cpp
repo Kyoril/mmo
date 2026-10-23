@@ -1,6 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+
+#include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
@@ -1214,6 +1216,11 @@ namespace mmo
 			UpdateWaterVolume(deltaSeconds);
 		}
 
+		{
+			PROFILE_SCOPE("OnIdle::Ocean");
+			UpdateOcean();
+		}
+
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
@@ -1690,6 +1697,25 @@ namespace mmo
 		}
 
 		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());
+	}
+
+	void WorldState::UpdateOcean()
+	{
+		DeferredRenderer* deferred = GetWorldDeferredRenderer();
+		if (!deferred || !m_playerController)
+		{
+			return;
+		}
+
+		// The FFT ocean draws the ocean to the horizon from the terrain's ocean mask; while it runs,
+		// the terrain leaves its ocean quads out of the water mesh (lakes and rivers stay meshed).
+		terrain::Terrain* terrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain())
+			? m_worldInstance->GetTerrain()
+			: nullptr;
+
+		const auto* profile = m_project.waterProfiles.getById(static_cast<uint32>(terrain::WaterType::Ocean));
+		const OceanSettings settings = profile != nullptr ? ToOceanSettings(*profile) : OceanSettings();
+		m_oceanFeed.Update(deferred->GetOceanPass(), terrain, m_playerController->GetCamera().GetDerivedPosition(), settings);
 	}
 
 	void WorldState::SetupWorldScene()

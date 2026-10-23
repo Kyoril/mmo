@@ -51,6 +51,11 @@ namespace mmo
 			/// @brief Draw the page water as the opaque minimap water. False hides the water so the ground
 			///        under it is rendered.
 			bool water = true;
+
+			/// @brief With water drawn, also draw ocean quads. False (the default, used by the .tlod bake)
+			///        leaves the ocean out so the seabed under it is baked: the ocean renderer draws the
+			///        ocean to the horizon over the distant terrain. Other liquids are drawn either way.
+			bool ocean = false;
 		};
 
 		/// @param pumpStreaming Runs one queued main-thread step of the owner's page streaming and returns
