@@ -1188,23 +1188,27 @@ namespace mmo
 		m_pixelShaderStream << "\tfloat3 viewPos : TEXCOORD" << m_numTexCoordinates + 2 << ";\n";
 		m_pixelShaderStream << "};\n\n";
 
-		// Add texture samplers
+		// Add texture samplers. Each texture and sampler sits in the register the material binds it to
+		// (static textures first, then the texture parameters - see Material::Apply). Left to fxc,
+		// registers go in declaration order to the resources a variant actually USES: a depth-only
+		// variant that samples only the second texture read it from t0, the first texture's slot, and
+		// alpha tested against the wrong image - solid cards in the depth pre-pass, which the G-Buffer
+		// pass then left black.
 		for (size_t i = 0; i < m_textures.size(); ++i)
 		{
 			m_pixelShaderStream << "// " << m_textures[i] << "\n";
-			m_pixelShaderStream << "Texture2D tex" << i << ";\n";
-			m_pixelShaderStream << "SamplerState sampler" << i << ";\n\n";
+			m_pixelShaderStream << "Texture2D tex" << i << " : register(t" << i << ");\n";
+			m_pixelShaderStream << "SamplerState sampler" << i << " : register(s" << i << ");\n\n";
 		}
 
 		// Add texture parameter samplers
 		const auto& textureParams = m_textureParameters;
 		if (!textureParams.empty())
 		{
-			// texparamN is declared without an explicit register, so fxc assigns t0, t1, ... in
-			// declaration order. Overrunning into the reserved scene color/depth registers does
-			// not fail to compile: the deferred renderer binds and unbinds those slots every
-			// frame, so the overflowing textures silently read as black at draw time. That is
-			// almost impossible to diagnose from the image, so say so loudly here.
+			// texparamN sits in register t(static textures + N). Overrunning into the reserved scene
+			// color/depth registers does not fail to compile: the deferred renderer binds and unbinds
+			// those slots every frame, so the overflowing textures silently read as black at draw
+			// time. That is almost impossible to diagnose from the image, so say so loudly here.
 			if (textureParams.size() > kMaxMaterialTextureParameters)
 			{
 				ELOG("Material declares " << textureParams.size() << " texture parameters, but only "
@@ -1218,10 +1222,11 @@ namespace mmo
 			for (size_t i = 0; i < textureParams.size(); ++i)
 			{
 				m_material->AddTextureParameter(textureParams[i].name, textureParams[i].texture);
+				const size_t slot = m_textures.size() + i;
 				m_pixelShaderStream
 					<< "// " << textureParams[i].name << "\n"
-					<< "Texture2D texparam" << i << ";\n"
-					<< "SamplerState paramsampler" << i << ";\n\n";
+					<< "Texture2D texparam" << i << " : register(t" << slot << ");\n"
+					<< "SamplerState paramsampler" << i << " : register(s" << slot << ");\n\n";
 			}
 		}
 

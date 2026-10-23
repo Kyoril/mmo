@@ -45,6 +45,12 @@ namespace mmo
 
 	static ConsoleVar* s_cameraShakeIntensityCVar = nullptr;
 
+	/// Near clip plane of the player camera in metres. The depth buffer resolves roughly
+	/// distance^2 / (near * 2^24), so the old 1 cm near plane left only ~6 cm of depth precision at
+	/// 100 m and ~0.5 m at 300 m: overlapping rock meshes and distant terrain z-fought. At 20 cm
+	/// that error is 20 times smaller, and nothing of the world gets that close to the camera.
+	static constexpr float s_cameraNearClip = 0.2f;
+
 	extern Cursor g_cursor;
 
 	PlayerController::PlayerController(Scene& scene, RealmConnector& connector, LootClient& lootClient, VendorClient& vendorClient, TrainerClient& trainerClient, SpellCast& spellCast, BankClient& bankClient)
@@ -419,7 +425,8 @@ namespace mmo
 
 		if (closestWorldHitDistance < zoom)
 		{
-			const float safetyOffset = 0.1f; // Small offset to prevent clipping
+			// Keep the near plane (and its corners, which reach a little further out) in front of the wall
+			const float safetyOffset = s_cameraNearClip + 0.1f;
 			zoom = std::max(0.0f, closestWorldHitDistance - safetyOffset);
 		}
 
@@ -1301,6 +1308,7 @@ namespace mmo
 	{
 		// Default camera for the player
 		m_defaultCamera = m_scene.CreateCamera("Default");
+		m_defaultCamera->SetNearClipDistance(s_cameraNearClip);
 		
 		// Camera node which will hold the camera but is a child of an anchor node
 		m_cameraNode = &m_scene.CreateSceneNode("DefaultCamera");
