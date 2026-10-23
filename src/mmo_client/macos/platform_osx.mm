@@ -95,6 +95,11 @@ namespace mmo
         return ([NSEvent modifierFlags] & NSEventModifierFlagOption) != 0;
     }
 
+    bool PlatformOsX::IsControlKeyDown()
+    {
+        return ([NSEvent modifierFlags] & NSEventModifierFlagControl) != 0;
+    }
+
     std::pair<int, int> PlatformOsX::GetPrimaryDisplayResolution()
     {
         NSRect frame = [[NSScreen mainScreen] frame];
