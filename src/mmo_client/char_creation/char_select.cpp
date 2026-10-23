@@ -35,9 +35,6 @@ namespace mmo
 		/// Seconds the camera takes to push in on the selected character before entering the world.
 		constexpr float pushInSeconds = 0.5f;
 
-		/// Height above a plaza spot where its "new character" marker hangs, in metres.
-		constexpr float spotMarkerHeight = 1.0f;
-
 		/// Space kept between nameplates moved apart, in UI units.
 		constexpr float nameplateGap = 12.0f;
 	}
@@ -150,21 +147,6 @@ namespace mmo
 					outX = slot.x;
 					outY = slot.y;
 					outVisible = slot.visible;
-				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
-
-			// x, y in UI units of a point above an empty plaza spot, and whether it is on screen.
-			luabind::def<std::function<void(int32, float&, float&, bool&)>>("GetPlazaSpotPosition", [this](int32 spot, float& outX, float& outY, bool& outVisible)
-				{
-					outX = 0.0f;
-					outY = 0.0f;
-					outVisible = false;
-					if (!m_glueScene || spot < 0 || spot >= PlazaSpotCount)
-					{
-						return;
-					}
-
-					const Vector3 position = m_glueScene->GetDefinition().spots[spot].position + Vector3(0.0f, spotMarkerHeight, 0.0f);
-					outVisible = ProjectToUi(position, outX, outY);
 				}, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
 
 			// Returns true if a flight started; GLUE_FLIGHT_FINISHED follows when it ends.
