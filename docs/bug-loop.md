@@ -369,9 +369,19 @@ makes (ship, refix, and a submodule `master` that moved), in this order:
 2. **Text files** go to a Claude merge stage (`prompts/merge.md`, all tools but push, in the loop
    worktree, `merge_max_usd` per run). It edits the conflicted files only; the loop then checks
    without trusting it: HEAD unchanged, no conflict markers, no other file staged, changed or
-   created. A second, read-only stage (`prompts/merge_review.md`) gets each file's changes on
-   both sides and the resolution against both, and must confirm that it keeps both sides and adds
-   nothing else. Both protocol version bumps colliding are resolved to one above both, with the
+   created. A second, read-only stage (`prompts/merge_review.md`) must confirm that the resolution
+   keeps both sides and adds nothing else. It sees only the conflicts (base, OURS, THEIRS, the
+   resolution and a few lines around each), once the loop has checked that everything git merged
+   cleanly came back unchanged; a resolution that also changed text outside the conflicts is
+   shown as full diffs against both sides. On 2026-10-23 the full diffs of a much-edited
+   `GlueTemplates.xml` were 112 000 characters and the review refused them; its one conflict is
+   9 000.
+   Protocol bumps are the one exception to "conflicted files only": when a protocol file
+   (`game_protocol.h`, `auth_protocol.h`, `protocol_fingerprint.json`, `protocol_versions.md`)
+   conflicts, the resolver may also change the others. Both sides bumping to the same value merges
+   the header cleanly, yet the merge needs a version of its own (b36cdaa3, 2026-10-23). A version
+   header may change only in its `ProtocolVersion` line, and only upwards; the review sees these
+   changes as diffs, and the gate's protocol check verifies the fingerprint. Both protocol version bumps colliding are resolved to one above both, with the
    fingerprint regenerated.
 3. Other binary files (meshes, tiles) changed on both sides stay conflicts.
 

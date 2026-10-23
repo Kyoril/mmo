@@ -49,10 +49,13 @@
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
+#include "deferred_shading/ocean_feed.h"
 #include "game_common/fog_volume.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 #include "terrain/far_terrain.h"
+#include "terrain/ocean_mask.h"
+#include "terrain/terrain.h"
 
 #include <map>
 #include <optional>
@@ -725,6 +728,9 @@ namespace mmo
 		///			underwater post-process and the audio low-pass.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
 
+		/// Feeds the FFT ocean (sea level, ocean mask, Ocean water profile) every frame.
+		OceanFeed<terrain::Terrain> m_oceanFeed { static_cast<float>(terrain::ocean_mask::TexelSize) };
+
 		/// @brief Asset name of the caustics texture last handed to the underwater pass, so the
 		///			texture is only looked up again when the liquid in front of the camera changes.
 		String m_underwaterCausticsTexture;
@@ -740,6 +746,9 @@ namespace mmo
 
 		/// @brief Recomputes submersion and pushes it to the renderer and the audio device.
 		void UpdateWaterVolume(float deltaSeconds);
+
+		/// Hands the terrain's sea to the FFT ocean renderer and applies the Ocean water profile.
+		void UpdateOcean();
 
 		/// @brief Gets the deferred renderer behind the world frame, or nullptr when the world
 		///			frame or its renderer does not exist yet.

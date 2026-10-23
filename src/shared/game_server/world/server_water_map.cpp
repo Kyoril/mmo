@@ -26,9 +26,64 @@ namespace mmo
 		constexpr int32 PageCenter = PageGridSize / 2;
 
 		constexpr uint32 OuterVertsPerPage = constants::OuterVerticesPerPageSide; // 129
+
+		// World terrain chunk magic — must match the 'RRET' chunk the world editor writes.
+		const uint32 s_worldTerrainMagic = *MakeChunkMagic('RRET');
+
+		/// Reads the sea level from the world file's terrain chunk (an optional trailing float after
+		/// the has-terrain flag and the default material name). Worlds without it have their sea at 0.
+		float ReadWorldSeaLevel(const std::string& mapName)
+		{
+			const std::string worldFile = "Worlds/" + mapName + "/" + mapName + ".hwld";
+			if (!AssetRegistry::HasFile(worldFile))
+			{
+				return constants::DefaultSeaLevel;
+			}
+
+			auto file = AssetRegistry::OpenFile(worldFile);
+			if (!file)
+			{
+				return constants::DefaultSeaLevel;
+			}
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+			while (reader)
+			{
+				uint32 chunkId = 0, chunkSize = 0;
+				if (!(reader >> io::read<uint32>(chunkId) >> io::read<uint32>(chunkSize)))
+				{
+					break;
+				}
+
+				if (chunkId != s_worldTerrainMagic)
+				{
+					reader >> io::skip(chunkSize);
+					continue;
+				}
+
+				uint8 hasTerrain = 0;
+				std::string defaultMaterial;
+				if (!(reader >> io::read<uint8>(hasTerrain) >> io::read_container<uint16>(defaultMaterial)))
+				{
+					break;
+				}
+
+				float seaLevel = constants::DefaultSeaLevel;
+				if (chunkSize >= sizeof(uint8) + sizeof(uint16) + defaultMaterial.size() + sizeof(float))
+				{
+					reader >> io::read<float>(seaLevel);
+				}
+				return std::isfinite(seaLevel) ? seaLevel : constants::DefaultSeaLevel;
+			}
+
+			return constants::DefaultSeaLevel;
+		}
 	}
 
 	ServerWaterMap::ServerWaterMap(const std::string& mapName)
+		: m_pageFileExists(constants::MaxPagesSquared, false)
+		, m_seaLevel(ReadWorldSeaLevel(mapName))
 	{
 		uint32 pagesWithWater = 0;
 		for (uint32 z = 0; z < constants::MaxPages; ++z)
@@ -42,7 +97,7 @@ namespace mmo
 			}
 		}
 
-		if (pagesWithWater == 0)
+		if (pagesWithWater == 0 && !m_hasTerrain)
 		{
 			WLOG("ServerWaterMap: no water data found for map '" << mapName
 				<< "' — swim validation will reject all start-swim attempts on this map");
@@ -64,6 +119,9 @@ namespace mmo
 		{
 			return false;
 		}
+
+		m_pageFileExists[pageX + pageZ * constants::MaxPages] = true;
+		m_hasTerrain = true;
 
 		auto file = AssetRegistry::OpenFile(pageFile);
 		if (!file)
@@ -153,11 +211,31 @@ namespace mmo
 		return (it != m_pages.end()) ? &it->second : nullptr;
 	}
 
+	bool ServerWaterMap::IsOpenOcean(const int32 pageX, const int32 pageZ) const
+	{
+		if (!m_hasTerrain)
+		{
+			return false;
+		}
+
+		if (pageX < 0 || pageZ < 0 || pageX >= PageGridSize || pageZ >= PageGridSize)
+		{
+			return true;
+		}
+
+		return !m_pageFileExists[static_cast<size_t>(pageX) + static_cast<size_t>(pageZ) * constants::MaxPages];
+	}
+
 	bool ServerWaterMap::HasWater(const float x, const float z) const
 	{
 		const float halfW = static_cast<float>(PageGridSize * constants::PageSize) * 0.5f;
 		const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
 		const int32 pageZ = static_cast<int32>(std::floor((z + halfW) / constants::PageSize));
+		if (IsOpenOcean(pageX, pageZ))
+		{
+			return true;
+		}
+
 		if (pageX < 0 || pageZ < 0 || pageX >= PageGridSize || pageZ >= PageGridSize)
 		{
 			return false;
@@ -205,6 +283,11 @@ namespace mmo
 		const float halfW = static_cast<float>(PageGridSize * constants::PageSize) * 0.5f;
 		const int32 pageX = static_cast<int32>(std::floor((x + halfW) / constants::PageSize));
 		const int32 pageZ = static_cast<int32>(std::floor((z + halfW) / constants::PageSize));
+		if (IsOpenOcean(pageX, pageZ))
+		{
+			outSurfaceY = m_seaLevel;
+			return true;
+		}
 
 		const PageWater* page = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
 		if (!page || page->vertexHeights.empty())

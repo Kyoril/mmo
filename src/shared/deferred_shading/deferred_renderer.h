@@ -9,6 +9,7 @@
 #include "post_process_pass.h"
 #include "tonemap_pass.h"
 #include "volumetric_fog_pass.h"
+#include "ocean_pass.h"
 #include "bloom_pass.h"
 #include "frame_ui/geometry_buffer.h"
 #include "graphics/material_compiler.h"
@@ -281,6 +282,11 @@ namespace mmo
         /// @brief Sets how strongly point and spot lights scatter in the volumetric fog, clamped to [0, 8].
         void SetFogLightScattering(float strength) { m_volumetricFogPass->GetSettings().SetLightScatterStrength(strength); }
 
+        /// @brief The FFT ocean. Feed it the sea's surface state, mask and settings; it simulates and
+        ///        draws itself each frame while active. Check OceanPass::IsSupported before handing the
+        ///        terrain's ocean over to it.
+        [[nodiscard]] OceanPass& GetOceanPass() { return *m_oceanPass; }
+
         /// @brief Sets this frame's local fog volumes (already selected and time-of-day scaled). Call each
         ///        frame; an empty vector clears them. Entries beyond fog_volume::MaxVolumesPerFrame are ignored.
         /// @param volumes The selected fog volume instances.
@@ -387,6 +393,7 @@ namespace mmo
 
         /// @brief Froxel volumetric fog and light shafts. Runs after lighting, before the forward pass.
         std::unique_ptr<VolumetricFogPass> m_volumetricFogPass;
+        std::unique_ptr<OceanPass> m_oceanPass;
 
         /// @brief Bloom over the finished linear HDR scene, added by the TonemapPass.
         std::unique_ptr<BloomPass> m_bloomPass;

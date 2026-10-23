@@ -404,7 +404,8 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(gated, [True])
 		self.assertEqual(len(runner.agent_inputs), 1)
 		self.assertIn("src/a.cpp", runner.agent_inputs[0])
-		self.assertIn("+int b = 1;", runner.review_inputs[0])
+		self.assertIn("--- RESOLUTION\nint a = 2;\nint b = 1;\n", runner.review_inputs[0])
+		self.assertEqual(self.wt.resolutions[0]["text"][0]["review"], "conflicts")
 		self.assertEqual(git(self.origin, "show", "develop:src/a.cpp"), "int a = 2;\nint b = 1;")
 		message = git(self.origin, "log", "-1", "--format=%B", "develop")
 		self.assertIn("Conflicts with origin/develop resolved by the bug loop in: src/a.cpp", message)
@@ -501,6 +502,46 @@ class GitopsTests(unittest.TestCase):
 		shipped = gitops.run_git(self.sub_origin, "show", "master:items.data", binary=True).stdout
 		self.assertEqual(shipped, entry(1, 11) + entry(2, 22))
 		self.assertEqual(self.wt.resolutions[0]["data"], ["data/client/items.data"])
+
+	HEADER = "namespace game\n{\n\tconstexpr uint32 ProtocolVersion = 0x00000001;\n}\n"
+
+	def protocol_conflict(self):
+		"""Both sides bump the protocol to the same version: git merges the header cleanly and only
+		the docs conflict (bug b36cdaa3, 2026-10-23)."""
+		self.move_develop_file("src/shared/game_protocol/game_protocol.h", self.HEADER)
+		self.move_develop_file("docs/protocol_versions.md", "| 1 | base |\n")
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		write(os.path.join(self.wt.path, "src", "shared", "game_protocol", "game_protocol.h"), self.HEADER.replace("01;", "02;"))
+		write(os.path.join(self.wt.path, "docs", "protocol_versions.md"), "| 1 | base |\n| 2 | fix |\n")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "fix bumps the protocol")
+		head = self.wt.head()
+		write(os.path.join(self.main, "src", "shared", "game_protocol", "game_protocol.h"), self.HEADER.replace("01;", "02;"))
+		self.move_develop_file("docs/protocol_versions.md", "| 1 | base |\n| 2 | develop |\n")
+		return head
+
+	def resolve_protocol(self, header):
+		def edit(root):
+			write(os.path.join(root, "docs", "protocol_versions.md"), "| 1 | base |\n| 2 | develop |\n| 3 | fix |\n")
+			write(os.path.join(root, "src", "shared", "game_protocol", "game_protocol.h"), header)
+		return self.resolver(edit=edit)
+
+	def test_ship_lets_the_resolver_raise_a_cleanly_merged_protocol_version(self):
+		head = self.protocol_conflict()
+		runner = self.resolve_protocol(self.HEADER.replace("01;", "03;"))
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertTrue(result.ok, result.reason)
+		self.assertIn("0x00000003", git(self.origin, "show", "develop:src/shared/game_protocol/game_protocol.h"))
+		self.assertIn("not a conflict", runner.review_inputs[0])
+		self.assertIn("+\tconstexpr uint32 ProtocolVersion = 0x00000003;", runner.review_inputs[0])
+
+	def test_ship_refuses_other_header_changes_next_to_the_version(self):
+		head = self.protocol_conflict()
+		self.resolve_protocol(self.HEADER.replace("01;", "03;").replace("namespace game", "namespace other"))
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "beyond its ProtocolVersion")
 
 	def test_resume_branch_resolves_a_text_conflict(self):
 		self.make_fix()

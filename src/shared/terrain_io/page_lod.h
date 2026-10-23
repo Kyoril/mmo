@@ -61,6 +61,12 @@ namespace mmo
 
 			/// @brief Water surface heights, OuterVerticesPerPageSide² floats. Required if waterQuadMasks is set.
 			const float *waterVertexHeights = nullptr;
+
+			/// @brief Per-tile liquid types (terrain::WaterType), TilesPerPage² entries. May be null, in
+			///	       which case every water quad counts as a liquid that lifts the LOD.
+			/// @remark Ocean quads never lift the LOD: the ocean is drawn to the horizon by its own
+			///	        renderer, so the distant terrain has to show the seabed underneath it.
+			const uint8 *waterTypes = nullptr;
 		};
 
 		/// @brief Builds a LOD source referencing an owning PageData instance.
@@ -68,9 +74,10 @@ namespace mmo
 
 		/// @brief Derives a page's LOD from its full-resolution data.
 		/// @details Heights are point-sampled at the LOD grid so the border vertices coincide with the
-		///	         full-resolution page and with neighbouring LOD pages. A sample touching a water quad is
-		///	         raised to the water surface (never lowered), so distant seas show their surface rather
-		///	         than their floor, and gets an upward normal. All other normals are the normalised mean
+		///	         full-resolution page and with neighbouring LOD pages. A sample touching a non-ocean water
+		///	         quad is raised to the water surface (never lowered), so distant lakes show their surface
+		///	         rather than their floor, and gets an upward normal. Ocean quads keep the seabed, because
+		///	         the ocean is rendered to the horizon separately. All other normals are the normalised mean
 		///	         of the full-resolution normals within half a LOD cell, which keeps the lighting of
 		///	         rough terrain from aliasing.
 		void BuildPageLod(const PageLodSource &source, PageLodData &out);
