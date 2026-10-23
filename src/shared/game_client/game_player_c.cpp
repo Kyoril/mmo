@@ -1,9 +1,11 @@
 #include "game_player_c.h"
 
 #include "floor_surface_query.h"
+#include "footstep_audio.h"
 #include "net_client.h"
 #include "object_mgr.h"
 #include "sound_entry_player.h"
+#include "unit_movement.h"
 #include "client_data/project.h"
 #include "game/emote_defs.h"
 #include "game/item.h"
@@ -433,6 +435,9 @@ namespace mmo
 
 	void GamePlayerC::OnFootstep(const AnimationNotify& notify)
 	{
+		const Vector3 soundPosition = GetFootstepSoundPosition(GetPosition(),
+			m_unitMovement ? m_unitMovement->GetVelocity() : Vector3::Zero, IsControlledByLocalPlayer());
+
 		// Resolve the surface type of the floor under the player and play its assigned
 		// footstep sound entry. Anything unresolved falls back to the legacy sounds so
 		// footsteps keep working while content is not authored yet.
@@ -449,14 +454,18 @@ namespace mmo
 
 		if (footstepSoundId != 0 && m_soundEntryPlayer)
 		{
-			m_soundEntryPlayer->PlayEntry(footstepSoundId, GetPosition());
+			const ChannelIndex channel = m_soundEntryPlayer->PlayEntry(footstepSoundId, soundPosition);
+			if (m_audio)
+			{
+				ConfigureFootstepChannel(*m_audio, channel, soundPosition - GetPosition(), IsControlledByLocalPlayer());
+			}
 			return;
 		}
 
-		PlayLegacyFootstepSound();
+		PlayLegacyFootstepSound(soundPosition);
 	}
 
-	void GamePlayerC::PlayLegacyFootstepSound()
+	void GamePlayerC::PlayLegacyFootstepSound(const Vector3& soundPosition)
 	{
 		if (!m_audio)
 		{
@@ -493,13 +502,14 @@ namespace mmo
 			// Play the sound at the player's position; footsteps further away than the max
 			// distance are culled entirely so distant units don't produce audible noise.
 			ChannelIndex channelIndex = InvalidChannel;
-			m_audio->PlaySound3D(soundIndex, &channelIndex, GetPosition(), 1.0f, 12.0f, 0.8f);
+			m_audio->PlaySound3D(soundIndex, &channelIndex, soundPosition, 1.0f, 12.0f, 0.8f);
 			IChannelInstance* channel = m_audio->GetChannelInstance(channelIndex);
 			if (channel)
 			{
 				std::uniform_real_distribution pitchDistribution(0.7f, 1.3f);
 				channel->SetPitch(pitchDistribution(gen));
 				channel->SetVolume(0.35f);
+				ConfigureFootstepChannel(*m_audio, channelIndex, soundPosition - GetPosition(), IsControlledByLocalPlayer());
 			}
 		}
 	}

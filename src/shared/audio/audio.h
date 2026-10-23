@@ -87,6 +87,9 @@ namespace mmo
 		virtual void Create() = 0;
 		virtual void Destroy() = 0;
 		virtual void Update(const Vector3& listenerPosition, float time) = 0;
+		/// Sets the listener's world-space facing and up vectors, matching the viewing camera.
+		/// Audio backends without spatial output may leave this as a no-op.
+		virtual void SetListenerOrientation(const Vector3&, const Vector3&) {}
 		virtual SoundIndex CreateSound(const String& fileName) = 0;
 		virtual SoundIndex CreateStream(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedSound(const String& fileName) = 0;
@@ -103,6 +106,9 @@ namespace mmo
 		virtual SoundIndex FindSound(const String& fileName, SoundType type) = 0;
 		virtual void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) = 0;
 		virtual void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) = 0;
+		/// Places a sound at an offset from the listener and keeps it attached as the listener moves.
+		/// The offset is supplied in world directions and converted to listener space at this call.
+		virtual void Set3DListenerRelativePosition(ChannelIndex, const Vector3&) {}
 		virtual float GetSoundLength(SoundIndex sound) = 0;
 		/// Whether a sound is still being opened in the background. Streams (SoundLooped2D) open
 		/// without blocking the caller; playing one before it is ready waits for the open to finish,

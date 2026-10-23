@@ -113,6 +113,9 @@ namespace mmo
 
 		void Update(const Vector3& listenerPosition, float time) override;
 
+		/// @copydoc IAudio::SetListenerOrientation
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override;
+
 		SoundIndex CreateSound(const String &fileName) override;
 
 		SoundIndex CreateStream(const String &fileName) override;
@@ -136,6 +139,9 @@ namespace mmo
 		void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) override;
 
 		void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) override;
+
+		/// @copydoc IAudio::Set3DListenerRelativePosition
+		void Set3DListenerRelativePosition(ChannelIndex channelIndex, const Vector3& offset) override;
 
 		float GetSoundLength(SoundIndex sound) override;
 
@@ -163,6 +169,8 @@ namespace mmo
 		SoundIndex m_nextSoundInstanceIndex;
 		FMOD::System *m_system;
 		Vector3	m_prevListenerPosition;
+		Vector3 m_listenerForward = Vector3::NegativeUnitZ;
+		Vector3 m_listenerUp = Vector3::UnitY;
 		SoundInstanceVector m_soundInstanceVector;
 		FMODChannelInstance m_channelArray[MaximumSoundChannels];
 
