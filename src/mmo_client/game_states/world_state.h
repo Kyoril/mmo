@@ -434,6 +434,8 @@ namespace mmo
 		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
 
 		PacketParseResult OnTradeSkills(game::IncomingPacket &packet);
+		/// Handles private duel state and updates the participants' temporary hostility.
+		PacketParseResult OnDuelUpdate(game::IncomingPacket& packet);
 
 		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket &packet);
 
@@ -597,6 +599,9 @@ namespace mmo
 		void Command_TargetInfo(const std::string &cmd, const std::string &args) const;
 
 		void Command_Morph(const std::string &cmd, const std::string &args) const;
+
+		/// Validates the faction alias (0 or 1) before requesting a server-side change.
+		void Command_Faction(const std::string &cmd, const std::string &args) const;
 
 		void Command_Kill(const std::string &cmd, const std::string &args) const;
 

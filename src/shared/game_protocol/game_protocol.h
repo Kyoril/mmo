@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000001C;
+		constexpr uint32 ProtocolVersion = 0x0000001E;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -482,6 +482,13 @@ namespace mmo
 				/// character of the account exactly once. Handled by the realm.
 				/// Payload: uint8 count, then count uint64 character guids in the desired order.
 				SetCharacterOrder,
+
+				/// Duel request: uint64 target; response: uint8 accept (0 declines/cancels).
+				DuelRequest,
+				DuelResponse,
+
+				/// GM faction alias: uint8 (0 = Alias 1, 1 = Alias 2), selected player or self.
+				CheatFaction,
 
 				/// Counter constant
 				Count_,
@@ -894,6 +901,9 @@ namespace mmo
 
 				/// Tells the loot master why a MasterLootItem request was refused. Payload: uint8 loot_error.
 				MasterLootResult,
+
+				/// Private duel event: uint8 event/detail, uint64 opponent, string name, float x/y/z.
+				DuelUpdate,
 
 				/// Counter constant
 				Count_,

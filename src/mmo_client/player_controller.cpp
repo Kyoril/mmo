@@ -622,7 +622,13 @@ namespace mmo
 	void PlayerController::OnHoveredObjectChanged(const ObjectGuid previousHoveredObjectGuid)
 	{
 		const auto hoveredObject = GetHoveredObject();
-		if (hoveredObject)
+		const auto hoverFrame = FrameManager::Get().GetHoveredFrame();
+		if (hoverFrame && !hoverFrame->GetHoverUnit().empty())
+		{
+			// Unit-frame portraits and bars use the UI pointer, even for hostile units.
+			g_cursor.SetCursorType(CursorType::Pointer);
+		}
+		else if (hoveredObject)
 		{
 			if(hoveredObject->CanBeLooted())
 			{
@@ -891,7 +897,7 @@ namespace mmo
 		else if (const std::string hoverUnit = hoverFrame ? hoverFrame->GetHoverUnit() : std::string(); !hoverUnit.empty())
 		{
 			// Unit frames (player frame, target frame) count as hovering the unit they show, just
-			// like nameplates: the unit's tooltip, cursor and hover ring follow the frame.
+			// like nameplates: the unit's tooltip and hover ring follow the frame.
 			const ObjectGuid previousHoveredObjectGuid = m_hoveredObjectGuid;
 			std::shared_ptr<GameUnitC> hoveredUnit;
 			if (hoverUnit == "player")

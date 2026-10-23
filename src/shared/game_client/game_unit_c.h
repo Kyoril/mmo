@@ -801,8 +801,14 @@ namespace mmo
 
 		bool IsFriendlyTo(const GameUnitC &other) const;
 
+		/// Applies server-confirmed duel relations for the local player only.
+		void SetDuelPartner(uint64 guid, bool active) { m_duelPartner = guid; m_duelActive = active; }
+
 		bool IsHostileTo(const GameUnitC &other) const;
 
+	private:
+		uint64 m_duelPartner{0};
+		bool m_duelActive{false};
 	protected:
 		virtual void OnDisplayIdChanged();
 

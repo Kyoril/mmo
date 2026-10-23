@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "game/player_faction.h"
 #include "character_name.h"
 #include "character_order.h"
 #include "character_spell_cache.h"
@@ -911,6 +912,7 @@ namespace mmo
 		case game::client_realm_packet::CheatWorldPort:
 		case game::client_realm_packet::CheatTeleportToPlayer:
 		case game::client_realm_packet::CheatMorph:
+		case game::client_realm_packet::CheatFaction:
 		case game::client_realm_packet::CheatKill:
 		case game::client_realm_packet::CheatRevive:
 			// Require GM level 1 (basic GM)
@@ -1107,6 +1109,12 @@ namespace mmo
 						<< io::write<uint8>(0);
 					outPacket.Finish();
 				});
+				return PacketParseResult::Pass;
+			}
+
+			if (!CanInteractWithPlayer(*target))
+			{
+				SendSystemMessage("You cannot whisper players of another faction.");
 				return PacketParseResult::Pass;
 			}
 
@@ -1436,6 +1444,12 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
+		if (!CanInteractWithPlayer(*player))
+		{
+			SendPartyOperationResult(party_operation::Invite, party_result::TargetUnfriendly, playerName);
+			return PacketParseResult::Pass;
+		}
+
 		if (player->GetGroup() != nullptr)
 		{
 			WLOG("Unable to invite player: Player " << playerName << " is already a member of a group");
@@ -1537,6 +1551,13 @@ namespace mmo
 		}
 
 		DLOG("Player accepted group invite");
+		const auto inviter = m_manager.GetPlayerByCharacterGuid(m_inviterGuid);
+		if (!inviter || !CanInteractWithPlayer(*inviter))
+		{
+			SendPartyOperationResult(party_operation::Invite, party_result::TargetUnfriendly, "");
+			DeclineGroupInvite();
+			return PacketParseResult::Pass;
+		}
 
 		auto result = m_group->AddMember(m_characterData->characterId, m_characterData->name);
 		if (result != party_result::Ok)
@@ -2940,6 +2961,24 @@ namespace mmo
 	}
 #endif
 
+	void Player::SetLiveFactionTemplate(const uint32 factionTemplateId)
+	{
+		if (m_project.factionTemplates.getById(factionTemplateId))
+		{
+			m_liveFactionTemplate = factionTemplateId;
+		}
+	}
+
+	bool Player::CanInteractWithPlayer(const Player& other) const
+	{
+		if (!m_liveFactionTemplate || !other.m_liveFactionTemplate)
+		{
+			return false;
+		}
+		return CanPlayerFactionsInteract(m_project.factionTemplates.getById(*m_liveFactionTemplate),
+			m_project.factionTemplates.getById(*other.m_liveFactionTemplate));
+	}
+
 	void Player::SendSystemMessage(const String &message)
 	{
 		m_connection->sendSinglePacket([&message](game::OutgoingPacket &outPacket)
@@ -3734,6 +3773,8 @@ namespace mmo
 
 			// Trade packet handlers (proxied to world node)
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInitiate, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::DuelRequest, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::DuelResponse, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeCancelRequest, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeAddItem, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeRemoveItem, *this, &Player::OnProxyPacket);
@@ -3784,6 +3825,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSpeed, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCheckLineOfSight, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatMorph, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatFaction, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatKill, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRevive, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatAcceptQuest, *this, &Player::OnProxyPacket);
@@ -4141,6 +4183,7 @@ namespace mmo
 		}
 
 		m_characterData = characterData;
+		m_liveFactionTemplate.reset();
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 		m_characterData->gmFlags = SanitizeGmFlags(m_characterData->gmFlags, m_gmLevel);
 

@@ -356,6 +356,7 @@ namespace mmo
 						strongThis->m_sessionKey = K;
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PropagateMapList, *strongThis, &World::OnPropagateMapList);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoined, *strongThis, &World::OnPlayerCharacterJoined);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerFactionUpdate, *strongThis, &World::OnPlayerFactionUpdate);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterJoinFailed, *strongThis, &World::OnPlayerCharacterJoinFailed);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::PlayerCharacterLeft, *strongThis, &World::OnPlayerCharacterLeft);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::InstanceCreated, *strongThis, &World::OnInstanceCreated);
@@ -693,6 +694,21 @@ namespace mmo
 		DLOG("Player character " << log_hex_digit(characterGuid) << " successfully joined world instance!");
 		ConsumeOnCharacterJoinedCallback(characterGuid, true, instanceId);
 		
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnPlayerFactionUpdate(auth::IncomingPacket& packet)
+	{
+		uint64 guid = 0;
+		uint32 factionTemplate = 0;
+		if (!(packet >> io::read<uint64>(guid) >> io::read<uint32>(factionTemplate)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		if (const auto player = m_playerManager.GetPlayerByCharacterGuid(guid); player && player->GetWorld().get() == this)
+		{
+			player->SetLiveFactionTemplate(factionTemplate);
+		}
 		return PacketParseResult::Pass;
 	}
 

@@ -327,6 +327,9 @@ namespace mmo
 		/// @param displayId The display model id to apply.
 		void Morph(uint32 displayId);
 
+		/// Requests a GM faction change on the selected player, or self when no target is selected.
+		void SetFaction(uint8 alias);
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Instantly kills the selected unit (or the player if nothing is targeted).
 		void KillTarget();
 
@@ -616,6 +619,10 @@ namespace mmo
 
 		/// Sends a trade initiation request targeting the player with the given GUID.
 		void InitiateTrade(uint64 targetGuid);
+		/// Requests a duel with the targeted player.
+		void RequestDuel(uint64 targetGuid);
+		/// Accepts, declines or cancels the current duel invitation.
+		void RespondToDuel(bool accept);
 
 		/// Sends a trade invite acceptance.
 		void AcceptTradeInvite();

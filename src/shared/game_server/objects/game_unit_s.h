@@ -925,6 +925,17 @@ namespace mmo
 		/// @brief Whether this unit currently ignores all incoming damage.
 		bool IsGodmode() const { return m_godmode; }
 
+		/// Sets this unit's private duel partner; hostility starts only after the countdown.
+		void SetDuelPartner(uint64 guid, bool active);
+		/// Current duel partner, including the invitation/countdown phase.
+		uint64 GetDuelPartner() const { return m_duelPartner; }
+		/// Whether this unit is currently fighting its duel partner.
+		bool IsDuelActive() const { return m_duelActive; }
+		/// Fired before a duel hit could reduce this unit below one percent health.
+		signal<void()> duelDefeated;
+		/// Removes only harmful effects applied by the former duel opponent.
+		void RemoveHarmfulAurasFromCaster(uint64 casterGuid);
+
 		/// @brief Enables or disables game master invisibility. While enabled the unit's visibility
 		///        is forced to unit_visibility::Off regardless of stealth or invisibility auras, so it
 		///        is hidden from players and creatures and only other game masters see it.
@@ -1987,6 +1998,10 @@ public:
 		std::map<uint8, float> m_baseSpeeds;
 
 		uint32 m_regeneration = regeneration_flags::None;
+		uint64 m_duelPartner{0};
+		uint64 m_finishedDuelPartner{0};
+		GameTime m_duelDamageBlockedUntil{0};
+		bool m_duelActive{false};
 
 		UnitVisibility m_visibility = UnitVisibility::On;
 

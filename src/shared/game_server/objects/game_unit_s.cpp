@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_unit_s.h"
+#include "game/duel.h"
 
 #include "game_server/cc_movement_controller.h"
 #include "game_server/emote_utils.h"
@@ -974,6 +975,11 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
+		if (instigator && ((m_duelPartner != 0 && m_duelPartner == instigator->GetGuid() && !m_duelActive)
+			|| (m_finishedDuelPartner != 0 && m_finishedDuelPartner == instigator->GetGuid() && GetAsyncTimeMs() < m_duelDamageBlockedUntil)))
+		{
+			return 0;
+		}
 		// Developer/test cheat: absorb everything without touching health, threat or procs.
 		// Placed at the top of Damage() deliberately: this is the single choke point every
 		// damage source funnels through (auto-attacks, periodic auras, spell effects), so one
@@ -1012,6 +1018,15 @@ namespace mmo
 			instigator->SetInCombat(true, true);
 		}
 
+		// Clamp before any death/proc callbacks. Large hits and periodic effects use this path too.
+		const uint32 duelFloor = DuelHealthFloor(GetMaxHealth());
+		const bool defeated = m_duelActive && damage > 0 && (health <= duelFloor || damage >= health - duelFloor);
+		if (defeated)
+		{
+			damage = health > duelFloor ? health - duelFloor : 0;
+			health = std::max(health, duelFloor);
+		}
+
 		RaiseTrigger(trigger_event::OnDamaged, instigator);
 
 		if (health < damage)
@@ -1025,6 +1040,7 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health);
+		if (defeated) { duelDefeated(); }
 		takenDamage(instigator, school, damageType);
 		damageTakenAmount(instigator, damage, school);
 		if (instigator)
@@ -1188,6 +1204,12 @@ namespace mmo
 	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer> &&aura)
 	{
 		ASSERT(aura);
+		// An impact may finish the duel before that same spell applies its secondary aura.
+		if (aura->GetCasterId() == m_finishedDuelPartner && GetAsyncTimeMs() < m_duelDamageBlockedUntil
+			&& aura->IsHostileTargetAura())
+		{
+			return;
+		}
 
 		// Dead units carry no auras: OnKilled removed them, and a spell whose own damage killed
 		// the target applies its auras afterwards (e.g. a damage-over-time on the corpse).
@@ -1329,6 +1351,28 @@ namespace mmo
 				++it;
 			}
 		}
+	}
+
+	void GameUnitS::SetDuelPartner(const uint64 guid, const bool active)
+	{
+		if (guid == 0 && m_duelPartner != 0)
+		{
+			m_finishedDuelPartner = m_duelPartner;
+			m_duelDamageBlockedUntil = GetAsyncTimeMs() + 10000;
+		}
+		m_duelPartner = guid;
+		m_duelActive = active && guid != 0;
+		if (guid != 0) { m_finishedDuelPartner = 0; }
+	}
+
+	void GameUnitS::RemoveHarmfulAurasFromCaster(const uint64 casterGuid)
+	{
+		std::vector<std::shared_ptr<AuraContainer>> remove;
+		for (const auto& aura : m_auras)
+		{
+			if (aura->GetCasterId() == casterGuid && aura->IsHostileTargetAura()) { remove.push_back(aura); }
+		}
+		for (const auto& aura : remove) { aura->SetApplied(false); RemoveAura(aura); }
 	}
 
 	void GameUnitS::RemoveAllAurasFromCaster(const uint64 casterGuid, uint32 spellId)
@@ -3460,6 +3504,7 @@ namespace mmo
 
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
+		if (m_duelPartner != 0 && m_duelPartner == other.GetGuid()) { return m_duelActive; }
 		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
@@ -3502,6 +3547,7 @@ namespace mmo
 
 	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
 	{
+		if (m_duelPartner != 0 && m_duelPartner == other.GetGuid()) { return !m_duelActive; }
 		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 

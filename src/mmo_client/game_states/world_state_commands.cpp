@@ -11,6 +11,7 @@
 #include "game/time_of_day.h"
 #include "game/subsystem.h"
 #include "game/shutdown_countdown.h"
+#include "game/dev_faction.h"
 
 #include <algorithm>
 #include <cctype>
@@ -472,6 +473,19 @@ namespace mmo
 		}
 
 		m_realmConnector.Morph(displayId);
+	}
+
+	void WorldState::Command_Faction(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		uint32 alias = 0;
+		if (tokens.size() != 1 || !ParseUInt(tokens[0], alias) || alias >= DevFactionTemplates.size())
+		{
+			ELOG("Usage: faction <0|1> (0 = Alias 1, 1 = Alias 2)");
+			return;
+		}
+		m_realmConnector.SetFaction(static_cast<uint8>(alias));
+		ILOG("Requested faction " << alias << " (" << DevFactionNames[alias] << ") on the selected player, or yourself if no target is selected.");
 	}
 
 	void WorldState::Command_Kill(const std::string &cmd, const std::string &args) const

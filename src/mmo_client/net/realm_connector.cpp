@@ -701,6 +701,16 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SetFaction(const uint8 alias)
+	{
+		sendSinglePacket([alias](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::CheatFaction);
+			packet << io::write<uint8>(alias);
+			packet.Finish();
+		});
+	}
+
 	void RealmConnector::KillTarget()
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
@@ -1515,11 +1525,31 @@ namespace mmo
 	void RealmConnector::InitiateTrade(const uint64 targetGuid)
 	{
 		sendSinglePacket([targetGuid](game::OutgoingPacket& packet)
-			{
-				packet.Start(game::client_realm_packet::TradeInitiate);
-				packet << io::write<uint64>(targetGuid);
-				packet.Finish();
-			});
+		{
+			packet.Start(game::client_realm_packet::TradeInitiate);
+			packet << io::write<uint64>(targetGuid);
+			packet.Finish();
+		});
+	}
+
+	void RealmConnector::RequestDuel(const uint64 targetGuid)
+	{
+		sendSinglePacket([targetGuid](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::DuelRequest);
+			packet << io::write<uint64>(targetGuid);
+			packet.Finish();
+		});
+	}
+
+	void RealmConnector::RespondToDuel(const bool accept)
+	{
+		sendSinglePacket([accept](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::DuelResponse);
+			packet << io::write<uint8>(accept ? 1 : 0);
+			packet.Finish();
+		});
 	}
 
 	void RealmConnector::AcceptTradeInvite()

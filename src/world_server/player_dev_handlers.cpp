@@ -12,6 +12,7 @@
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
+#include "game/dev_faction.h"
 
 namespace mmo
 {
@@ -787,6 +788,44 @@ namespace mmo
 			unit->Set<uint32>(object_fields::Mana, unit->Get<uint32>(object_fields::MaxMana));
 		}
 		unit->StartRegeneration();
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatFaction(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 alias = 0;
+		if (size != sizeof(alias) || !(contentReader >> io::read<uint8>(alias)) || alias >= DevFactionTemplates.size())
+		{
+			WLOG("CheatFaction: expected alias 0 or 1");
+			return;
+		}
+		auto* unit = GetCheatTargetUnit("CheatFaction");
+		if (!unit || !unit->IsPlayer())
+		{
+			WLOG("CheatFaction: select a player, or clear the target to change yourself");
+			return;
+		}
+		if (unit->GetDuelPartner() != 0)
+		{
+			WLOG("CheatFaction: finish or cancel the duel before changing faction");
+			return;
+		}
+		const uint32 templateId = DevFactionTemplates[alias];
+		if (!m_project.factionTemplates.getById(templateId))
+		{
+			ELOG("CheatFaction: faction template " << templateId << " is missing");
+			return;
+		}
+		unit->StopAttack();
+		unit->CancelCast(spell_interrupt_flags::Any);
+		unit->Set<uint32>(object_fields::FactionTemplate, templateId);
+		m_connector.SendPlayerFaction(unit->GetGuid(), templateId);
+		if (const auto player = m_manager.GetPlayerByCharacterGuid(unit->GetGuid()); player && player->IsTrading())
+		{
+			player->CancelTradeSession(static_cast<uint8>(game::trade_close_reason::Cancelled));
+		}
+		DLOG("Faction " << static_cast<uint32>(alias) << " (" << DevFactionNames[alias] << ") applied to " << unit->GetName());
 	}
 #endif
 

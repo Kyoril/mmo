@@ -48,7 +48,8 @@ namespace mmo
 
 		void Bind(const String& keyName, const String& command);
 
-		bool ExecuteKey(const String& keyName, BindingKeyState keyState);
+		/// Executes a key, preferring its Shift chord when bound and preserving it through release.
+		bool ExecuteKey(const String& keyName, BindingKeyState keyState, bool shiftDown = false);
 
 		bool HasBinding(const String& name) const;
 
@@ -116,6 +117,8 @@ namespace mmo
 	private:
 		std::map<String, Binding> m_bindings;
 		std::map<String, String> m_inputActionBindings;
+		/// Physical key -> chord selected on key down, so releasing Shift first still sends the matching Up.
+		std::map<String, String> m_pressedKeyBindings;
 		/// Keys bound only because they are a runtime binding's default (key -> action); not saved.
 		std::map<String, String> m_runtimeDefaultKeys;
 		IInputControl* m_inputControl{ nullptr };

@@ -94,3 +94,7 @@ dev/
 
 # Screenshot staging runtime (tools/showcase)
 tools/showcase/runtime/
+
+# Local development controls and documentation
+/docs/local-development.md
+/tools/local/local.ps1

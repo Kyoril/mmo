@@ -192,6 +192,7 @@ namespace mmo
 	void Bindings::Unload()
 	{
 		m_inputActionBindings.clear();
+		m_pressedKeyBindings.clear();
 		m_runtimeDefaultKeys.clear();
 		m_bindings.clear();
 	}
@@ -208,25 +209,51 @@ namespace mmo
 		m_runtimeDefaultKeys.erase(keyName);
 	}
 
-	bool Bindings::ExecuteKey(const String& keyName, BindingKeyState keyState)
+	bool Bindings::ExecuteKey(const String& keyName, BindingKeyState keyState, const bool shiftDown)
 	{
+		const String chord = shiftDown && keyName != "SHIFT" && keyName != "ESCAPE" ? "SHIFT-" + keyName : keyName;
 		// Key-capture mode: intercept the first Down event and deliver it to the callback.
 		if (m_capturePending && keyState == BindingKeyState::Down)
 		{
+			// Wait for the key following Shift instead of capturing the modifier alone.
+			if (keyName == "SHIFT")
+			{
+				return true;
+			}
 			m_capturePending = false;
 			if (m_captureCallback)
 			{
 				KeyCaptureCallback cb = std::move(m_captureCallback);
 				m_captureCallback = nullptr;
-				cb(keyName);
+				cb(chord);
 			}
 			return true;
 		}
 
-		const auto it = m_inputActionBindings.find(keyName);
+		String bindingKey = chord;
+		const auto pressed = m_pressedKeyBindings.find(keyName);
+		if (keyState != BindingKeyState::Down && pressed != m_pressedKeyBindings.end())
+		{
+			bindingKey = pressed->second;
+		}
+		else if (!m_inputActionBindings.contains(bindingKey))
+		{
+			// Shift only changes actions that have an explicit chord binding.
+			bindingKey = keyName;
+		}
+		if (keyState == BindingKeyState::Up)
+		{
+			m_pressedKeyBindings.erase(keyName);
+		}
+
+		const auto it = m_inputActionBindings.find(bindingKey);
 		if (it == m_inputActionBindings.end())
 		{
 			return false;
+		}
+		if (keyState == BindingKeyState::Down)
+		{
+			m_pressedKeyBindings[keyName] = bindingKey;
 		}
 
 		const auto bindingIt = m_bindings.find(it->second);
@@ -260,7 +287,7 @@ namespace mmo
 
 		try
 		{
-			bindingIt->second.script(keyName, keyStateString);
+			bindingIt->second.script(bindingKey, keyStateString);
 		}
 		catch(const luabind::error& e)
 		{

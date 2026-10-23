@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+#include "platform.h"
 #include "client_context.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
@@ -12,6 +13,7 @@
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
 #include "systems/trade_client.h"
+#include "game/duel.h"
 
 #include <cstring>
 #include <thread>
@@ -1023,7 +1025,7 @@ namespace mmo
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down, Platform::IsShiftKeyDown()))
 		{
 			return true;
 		}
@@ -1034,7 +1036,7 @@ namespace mmo
 
 	bool WorldState::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Up))
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Up, Platform::IsShiftKeyDown()))
 		{
 			return true;
 		}
@@ -1051,7 +1053,7 @@ namespace mmo
 
 	bool WorldState::OnKeyDown(const int32 key, bool repeat)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down))
+		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down, Platform::IsShiftKeyDown()))
 		{
 			return true;
 		}
@@ -1061,7 +1063,7 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up))
+		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up, Platform::IsShiftKeyDown()))
 		{
 			return true;
 		}
@@ -1981,6 +1983,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DuelUpdate, *this, &WorldState::OnDuelUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
@@ -2141,6 +2144,13 @@ namespace mmo
 								 { Command_TargetInfo(cmd, args); }, ConsoleCommandCategory::Gm, "Prints GUID, entry, level, health and position of the selected target.");
 		Console::RegisterCommand("morph", [this](const std::string &cmd, const std::string &args)
 								 { Command_Morph(cmd, args); }, ConsoleCommandCategory::Gm, "Changes the display model of the selected unit (or yourself) to the given display id.");
+		for (const auto* name : { "faction", "Faction" })
+		{
+			Console::RegisterCommand(name, [this](const std::string &cmd, const std::string &args)
+			{
+				Command_Faction(cmd, args);
+			}, ConsoleCommandCategory::Gm, "Sets the selected player's faction (or your own): faction 0 = Alias 1, faction 1 = Alias 2. Opposing factions fight to death.");
+		}
 		Console::RegisterCommand("kill", [this](const std::string &cmd, const std::string &args)
 								 { Command_Kill(cmd, args); }, ConsoleCommandCategory::Gm, "Instantly kills the selected target (or yourself if nothing is selected).");
 		Console::RegisterCommand("revive", [this](const std::string &cmd, const std::string &args)
@@ -2188,6 +2198,8 @@ namespace mmo
 		Console::UnregisterCommand("pos");
 		Console::UnregisterCommand("targetinfo");
 		Console::UnregisterCommand("morph");
+		Console::UnregisterCommand("faction");
+		Console::UnregisterCommand("Faction");
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
@@ -2945,6 +2957,7 @@ namespace mmo
 				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
 				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
 				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+				const uint32 oldFaction = isUnit ? obj->Get<uint32>(object_fields::FactionTemplate) : 0;
 
 				obj->Deserialize(packet, creation);
 				if (!packet)
@@ -2956,6 +2969,10 @@ namespace mmo
 				if (isUnit)
 				{
 					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
+					if (oldFaction != obj->Get<uint32>(object_fields::FactionTemplate))
+					{
+						FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+					}
 				}
 
 				// Check if this was an item update for the active player
@@ -3389,6 +3406,31 @@ namespace mmo
 			}
 		}
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnDuelUpdate(game::IncomingPacket& packet)
+	{
+		uint8 event, detail;
+		uint64 opponent;
+		String name;
+		Vector3 position;
+		if (!(packet >> io::read<uint8>(event) >> io::read<uint8>(detail) >> io::read<uint64>(opponent)
+			>> io::read_string(name) >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		if (event > static_cast<uint8>(DuelEvent::Error)) { return PacketParseResult::Disconnect; }
+		const auto state = static_cast<DuelEvent>(event);
+		if (state != DuelEvent::Error)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				player->SetDuelPartner(state == DuelEvent::Finished ? 0 : opponent, state == DuelEvent::Active);
+			}
+			FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+		}
+		FrameManager::Get().TriggerLuaEvent("DUEL_UPDATE", static_cast<int32>(event), static_cast<int32>(detail), name);
 		return PacketParseResult::Pass;
 	}
 
@@ -4931,9 +4973,6 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Adjust position
-		unit->GetSceneNode()->SetPosition(movementInfo.position);
-
 		MovementType type = movement_type::Run;
 		switch (packet.GetId())
 		{
@@ -4964,6 +5003,17 @@ namespace mmo
 		}
 
 		unit->SetSpeed(type, speed);
+		if (unit->IsPlayer() && !unit->IsControlledByLocalPlayer())
+		{
+			// The speed packet carries an authoritative movement snapshot too.
+			// Rebase prediction instead of moving just the scene node, which would
+			// be overwritten by the renderer's old position on the following frame.
+			unit->EnqueueRemoteMovement(movementInfo);
+		}
+		else
+		{
+			unit->GetSceneNode()->SetPosition(movementInfo.position);
+		}
 
 		return PacketParseResult::Pass;
 	}

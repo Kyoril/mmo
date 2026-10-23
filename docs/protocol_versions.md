@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 11 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 28 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 12 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 30 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 12 | 2026-10-23 | World-to-realm `PlayerFactionUpdate`: uint64 character GUID and uint32 live faction template, reported after joining and after GM faction changes for social restrictions |
 | 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 9 | 2026-10-13 | Instance reset: realm→world `ResetInstance` request |
@@ -120,6 +121,8 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 30 | 2026-10-23 | GM `CheatFaction` client opcode: uint8 alias, 0 = Alias 1, 1 = Alias 2; targets the selected player or self |
+| 29 | 2026-10-23 | Player duels: `DuelRequest`/`DuelResponse` client opcodes and private `DuelUpdate` state notifications |
 | 28 | 2026-10-21 | Character order: `SetCharacterOrder` client opcode, `CharEnum` gains trailing uint64 realm time of day |
 | 27 | 2026-10-19 | GM observation: client `CheatInvisible` (uint8 enable), handled by the realm (persisted) and forwarded to the world node; client `CheatGhost` (uint8-length target name, empty = stop), handled by the realm |
 | 26 | 2026-10-19 | Casting mana regeneration: unit field `ManaRegenCasting` (mana per five seconds within five seconds after spending mana) is appended to `object_fields::UnitFields` after `ManaRegen`, renumbering every player field after it |

@@ -45,10 +45,12 @@ namespace mmo
 		, m_timeSyncTimer(instance.GetUniverse().GetTimers())
 		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
 		, m_tradeDistanceCheckTimer(instance.GetUniverse().GetTimers())
+		, m_duelTimer(instance.GetUniverse().GetTimers())
 		, m_pendingReviveTimeout(instance.GetUniverse().GetTimers())
 	{
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
+		m_duelTimer.ended.connect(this, &Player::TickDuel);
 
 		// Inventory change signals
 		auto& inventory = m_character->GetInventory();
@@ -257,6 +259,7 @@ namespace mmo
 
 	Player::~Player()
 	{
+		if (m_duelSession) { m_duelSession->Cancel(m_character->GetGuid()); }
 		// Save inventory on logout if dirty
 		if (m_character && m_inventoryRepo)
 		{
@@ -905,6 +908,9 @@ namespace mmo
 		case game::client_realm_packet::CheatMorph:
 			OnCheatMorph(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatFaction:
+			OnCheatFaction(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatKill:
 			OnCheatKill(opCode, buffer.size(), reader);
 			break;
@@ -1135,6 +1141,12 @@ namespace mmo
 
 		case game::client_realm_packet::TradeInitiate:
 			OnTradeInitiate(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::DuelRequest:
+			OnDuelRequest(reader);
+			break;
+		case game::client_realm_packet::DuelResponse:
+			OnDuelResponse(reader);
 			break;
 		case game::client_realm_packet::TradeCancelRequest:
 			OnTradeCancelRequest(opCode, buffer.size(), reader);
@@ -1705,6 +1717,8 @@ namespace mmo
 
 	void Player::OnDespawned(GameObjectS& object)
 	{
+		if (m_duelSession) { m_duelSession->Cancel(m_character->GetGuid()); m_duelSession.reset(); }
+		m_duelTimer.Cancel();
 		m_spawned = false;
 
 		// Cancel any active trade session so the other player is notified
@@ -2775,12 +2789,6 @@ namespace mmo
 					continue;
 				}
 
-				// Watcher not synched yet, skip it
-				if (!watcher->HasReceivedTimeSyncResponse())
-				{
-					continue;
-				}
-
 				// Never leak movement of units the watcher's client currently can't see (stealth)
 				if (watcher->IsObjectHiddenForClient(characterGuid))
 				{
@@ -2796,7 +2804,9 @@ namespace mmo
 					continue;
 				}
 
-				// Info is a copy here so we can modify it per watcher without any issues
+				// Deliver state transitions even before the observer's first clock sync.
+				// Dropping a login landing packet leaves its known player falling forever
+				// while idle. ServerToClientTime uses server time until the offset is known.
 				copy.timestamp = watcher->ServerToClientTime(info.timestamp);
 
 				std::vector<char> buffer;

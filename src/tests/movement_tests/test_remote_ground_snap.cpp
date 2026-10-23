@@ -148,4 +148,29 @@ namespace mmo
 		INFO("owner Y = " << ownerY << ", recovered Y = " << remoteY);
 		CHECK(remoteY == Approx(ownerY).margin(0.01f));
 	}
+
+	TEST_CASE("an idle remote player keeps the owner's landing height while geometry streams in", "[remote_ground_snap][remote_spawn]")
+	{
+		proto_client::Project project;
+		TestScene scene;
+		TestNetClient net;
+		TriangleCollidable ground;
+		AddGroundQuad(ground, 0.0f);
+		scene.SetCollidables({ &ground });
+
+		// The observing client currently has only a lower surface loaded. The owner
+		// has already landed on the complete geometry and reported their resting height.
+		constexpr float ownerY = 0.32f;
+		const auto remote = CreateUnit(scene, net, project, Vector3(0.0f, ownerY, 0.0f));
+		scene.GetRootSceneNode().AddChild(*remote->GetSceneNode());
+		MovementInfo landed;
+		landed.position = Vector3(0.0f, ownerY, 0.0f);
+		landed.movementFlags = movement_flags::None;
+		remote->EnqueueRemoteMovement(landed);
+		for (int frame = 0; frame < 120; ++frame)
+		{
+			remote->UpdateRemoteMovement(1.0f / 60.0f);
+		}
+		CHECK(remote->GetPosition().y == Approx(ownerY).margin(0.01f));
+	}
 }

@@ -12,6 +12,53 @@
 
 using namespace mmo;
 
+TEST_CASE("RemoteMovementRenderer: high-speed travel does not periodically snap at background frame rates", "[remote_movement_renderer][admin_speed]")
+{
+	for (const float dt : { 1.0f / 30.0f, 1.0f / 45.0f, 1.0f / 60.0f })
+	{
+		RemoteMovementRenderer renderer;
+		MovementInfo info;
+		info.timestamp = 1000;
+		info.position = Vector3::Zero;
+		info.facing = Radian(0.0f);
+		info.movementFlags = movement_flags::Forward;
+		renderer.OnAuthoritativeUpdate(info, false);
+		Vector3 previous = Vector3::Zero;
+		for (int frame = 0; frame < 120; ++frame)
+		{
+			RemoteMovementState state;
+			REQUIRE(renderer.Sample(dt, 50.0f, 4.5f, 2.5f, 3.14f, state));
+			const Vector3 rendered = state.position + state.desiredDelta;
+			INFO("frame=" << frame << " dt=" << dt);
+			CHECK((rendered - previous).GetLength() == Approx(50.0f * dt).margin(0.01f));
+			previous = rendered;
+		}
+	}
+}
+
+TEST_CASE("RemoteMovementRenderer: a short admin-speed tap accelerates from rest", "[remote_movement_renderer][admin_speed]")
+{
+	RemoteMovementRenderer renderer;
+	MovementInfo info;
+	info.timestamp = 1000;
+	info.position = Vector3::Zero;
+	info.facing = Radian(0.0f);
+	info.movementFlags = movement_flags::None;
+	renderer.OnAuthoritativeUpdate(info, false);
+	info.timestamp += 100;
+	info.movementFlags = movement_flags::Forward;
+	renderer.OnAuthoritativeUpdate(info, false);
+	RemoteMovementState state;
+	for (int frame = 0; frame < 12; ++frame)
+	{
+		REQUIRE(renderer.Sample(1.0f / 60.0f, 50.0f, 4.5f, 2.5f, 3.14f, state));
+	}
+	// Local movement accelerates at 40.48 units/s^2, so a 0.2-second tap travels
+	// less than one yard rather than immediately travelling ten yards at the cap.
+	CHECK(renderer.GetRenderedPos().x < 1.0f);
+	CHECK((state.position + state.desiredDelta).x < 1.0f);
+}
+
 namespace
 {
 	MovementInfo MakeStandingSnapshot(const Vector3& position)
