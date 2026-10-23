@@ -56,6 +56,14 @@ namespace mmo
 			///        leaves the ocean out so the seabed under it is baked: the ocean renderer draws the
 			///        ocean to the horizon over the distant terrain. Other liquids are drawn either way.
 			bool ocean = false;
+
+			/// @brief Store the albedo alone in RGB and 1 - emissive / albedo in alpha (255 = no emissive).
+			///        The far terrain material (Models/Terrain/FarTerrain.hmat) lights the albedo and adds
+			///        albedo * (1 - alpha) as emissive, so a glowing material such as the desert sand shades
+			///        the same near and far. Folding the emissive into the colour instead lit it a second
+			///        time and clipped bright sand at 1, turning the distance darker and greener.
+			///        False stores saturate(albedo + emissive) with alpha 255.
+			bool emissiveRatioInAlpha = false;
 		};
 
 		/// @param pumpStreaming Runs one queued main-thread step of the owner's page streaming and returns
