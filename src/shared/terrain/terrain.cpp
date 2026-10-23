@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "math/noise.h"
+#include "ocean_mask.h"
 #include "page.h"
 #include "terrain_raycast.h"
 #include "tile.h"
@@ -205,9 +206,13 @@ namespace mmo
 			GetPageAndLocalPixel(z, pageY, localVertexY);
 
 			// Retrieve the page at (pageX, pageY)
-			Page *page = GetPage(pageX, pageY); // Implement GetPage accordingly
+			Page *page = GetPage(pageX, pageY);
+			if (!page)
+			{
+				return 0;
+			}
 
-			// Retrieve the height at the local vertex within the page
+			// Retrieve the layers at the local pixel within the page
 			return page->GetLayersAt(localVertexX, localVertexY);
 		}
 
@@ -304,6 +309,12 @@ namespace mmo
 
 			const Page* page = GetPage(pageX, pageY);
 			if (!page || !page->IsPrepared())
+			{
+				return false;
+			}
+
+			// Open ocean has no ground at all.
+			if (page->IsOceanPlaceholder())
 			{
 				return false;
 			}
@@ -484,6 +495,118 @@ namespace mmo
 		void Terrain::SetWireframeVisible(const bool visible)
 		{
 			m_showWireframe = visible;
+		}
+
+		void Terrain::SetSeaLevel(const float seaLevel)
+		{
+			if (m_seaLevel == seaLevel)
+			{
+				return;
+			}
+
+			m_seaLevel = seaLevel;
+			NotifyOceanMaskChanged();
+		}
+
+		void Terrain::SetOceanRenderedExternally(const bool external)
+		{
+			if (m_oceanRenderedExternally == external)
+			{
+				return;
+			}
+
+			m_oceanRenderedExternally = external;
+
+			// Pages streamed in later pick the switch up when they build their water; the ones
+			// already resident rebuild now.
+			for (uint32 x = 0; x < m_width; ++x)
+			{
+				for (uint32 z = 0; z < m_height; ++z)
+				{
+					if (Page* page = m_pages(x, z).get(); page && page->IsLoaded())
+					{
+						page->RebuildWaterMesh();
+					}
+				}
+			}
+		}
+
+		void Terrain::BuildOceanMask(const float centerX, const float centerZ, const uint32 texelsPerSide, std::vector<uint8>& outRG, float& outOriginX, float& outOriginZ) const
+		{
+			const auto resolvePage = [this](const uint32 pageX, const uint32 pageZ)
+			{
+				ocean_mask::PageSource source;
+
+				const Page* page = GetPage(pageX, pageZ);
+				if (!page || !page->IsPrepared())
+				{
+					// Not streamed in (yet): open ocean, hidden under land by the distant terrain.
+					return source;
+				}
+
+				if (page->IsOceanPlaceholder())
+				{
+					source.state = ocean_mask::PageState::OceanPlaceholder;
+					return source;
+				}
+
+				source.state = ocean_mask::PageState::Prepared;
+				source.water = page->GetWaterView();
+				source.heights = page->GetOuterHeights();
+				return source;
+			};
+
+			ocean_mask::Build(centerX, centerZ, texelsPerSide, m_width, m_height, m_seaLevel, resolvePage, outRG, outOriginX, outOriginZ);
+		}
+
+		void Terrain::MaterializeOceanPages(const float minX, const float minZ, const float maxX, const float maxZ) const
+		{
+			const double halfWidth = static_cast<double>(m_width) * constants::PageSize * 0.5;
+			const double halfHeight = static_cast<double>(m_height) * constants::PageSize * 0.5;
+
+			MaterializeOceanPagesInRange(
+				static_cast<int32>(std::floor((static_cast<double>(minX) + halfWidth) / constants::PageSize)),
+				static_cast<int32>(std::floor((static_cast<double>(minZ) + halfHeight) / constants::PageSize)),
+				static_cast<int32>(std::floor((static_cast<double>(maxX) + halfWidth) / constants::PageSize)),
+				static_cast<int32>(std::floor((static_cast<double>(maxZ) + halfHeight) / constants::PageSize)));
+		}
+
+		void Terrain::MaterializeOceanPagesForGrid(const int32 minX, const int32 minZ, const int32 maxX, const int32 maxZ, const int32 cellsPerPage) const
+		{
+			if (cellsPerPage <= 0 || maxX < minX || maxZ < minZ)
+			{
+				return;
+			}
+
+			// A sample on a page seam belongs to both pages, and the edit methods write it into both,
+			// so the page before a seam sample counts as touched too.
+			MaterializeOceanPagesInRange(
+				std::max(0, minX - 1) / cellsPerPage,
+				std::max(0, minZ - 1) / cellsPerPage,
+				std::max(0, maxX) / cellsPerPage,
+				std::max(0, maxZ) / cellsPerPage);
+		}
+
+		void Terrain::MaterializeOceanPagesInRange(int32 minPageX, int32 minPageZ, int32 maxPageX, int32 maxPageZ) const
+		{
+			minPageX = std::max(minPageX, 0);
+			minPageZ = std::max(minPageZ, 0);
+			maxPageX = std::min(maxPageX, static_cast<int32>(m_width) - 1);
+			maxPageZ = std::min(maxPageZ, static_cast<int32>(m_height) - 1);
+
+			const float seabedHeight = m_seaLevel - constants::OceanSeabedDepth;
+
+			for (int32 pageZ = minPageZ; pageZ <= maxPageZ; ++pageZ)
+			{
+				for (int32 pageX = minPageX; pageX <= maxPageX; ++pageX)
+				{
+					Page* page = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+					if (page && page->MaterializeOceanPlaceholder(seabedHeight, m_seaLevel))
+					{
+						ILOG("Terrain page " << pageX << "x" << pageZ << " was open ocean and is now editable terrain (seabed at " << seabedHeight << ")");
+					}
+				}
+			}
 		}
 
 		void Terrain::SetWaterVisible(const bool visible)
@@ -713,6 +836,7 @@ namespace mmo
 			int32 cachedPageX = -1;
 			int32 cachedPageZ = -1;
 			bool cachedPageUsable = false;
+			bool cachedPageIsOcean = false;
 
 			const auto sampler = [&](const int32 cellX, const int32 cellZ, raycast::CellHeights &out)
 			{
@@ -724,13 +848,23 @@ namespace mmo
 					cachedPageX = pageX;
 					cachedPageZ = pageZ;
 					cachedPage = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+					cachedPageIsOcean = cachedPage && cachedPage->IsOceanPlaceholder();
 					cachedPageUsable = cachedPage && cachedPage->IsPrepared() &&
-						ray.IntersectsAABB(cachedPage->GetBoundingBox()).first;
+						(cachedPageIsOcean || ray.IntersectsAABB(cachedPage->GetBoundingBox()).first);
 				}
 
 				if (!cachedPageUsable)
 				{
 					return false;
+				}
+
+				// Open ocean is picked at its surface, so editor brushes and placement can aim at it.
+				// The hit carries no tile.
+				if (cachedPageIsOcean)
+				{
+					out.corners[0] = out.corners[1] = out.corners[2] = out.corners[3] = m_seaLevel;
+					out.inner = m_seaLevel;
+					return true;
 				}
 
 				// Read page-local rather than through the global vertex grid. A page stores
@@ -1187,6 +1321,8 @@ namespace mmo
 				return false;
 			}
 
+			MaterializeOceanPagesInRange(pageX, pageZ, pageX, pageZ);
+
 			Page *page = GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
 			if (!page || !page->IsPrepared())
 			{
@@ -1492,6 +1628,11 @@ namespace mmo
 			const int32 sx = snap.rect.sizeX;
 			const int32 sz = snap.rect.sizeZ;
 
+			// Captures are taken before region edits so they can be undone. Over open ocean the edit
+			// is about to materialise the pages anyway; doing it first means the snapshot holds the
+			// seabed that undo should restore rather than the placeholder's empty answers.
+			MaterializeOceanPagesForGrid(vx0, vz0, vx0 + sx, vz0 + sz, static_cast<int32>(constants::OuterVerticesPerPageSide - 1));
+
 			// Outer vertices: heights + colors.
 			snap.outerHeights.resize(static_cast<size_t>(sx + 1) * (sz + 1));
 			snap.outerColors.resize(snap.outerHeights.size());
@@ -1579,6 +1720,11 @@ namespace mmo
 			const int32 sz = snap.rect.sizeZ;
 			const int32 maxVertX = static_cast<int32>(m_width) * region_math::CellsPerPage;
 			const int32 maxVertZ = static_cast<int32>(m_height) * region_math::CellsPerPage;
+
+			MaterializeOceanPagesForGrid(
+				std::max(0, destMinVertX), std::max(0, destMinVertZ),
+				std::min(destMinVertX + sx, maxVertX), std::min(destMinVertZ + sz, maxVertZ),
+				static_cast<int32>(constants::OuterVerticesPerPageSide - 1));
 
 			// Outer vertices (SetHeightAt / SetColorAt clip out-of-range indices themselves,
 			// but skip early to avoid pointless page lookups).
@@ -1702,6 +1848,8 @@ namespace mmo
 			const int32 vz0 = r.minZ;
 			const int32 sx = r.sizeX;
 			const int32 sz = r.sizeZ;
+
+			MaterializeOceanPagesForGrid(vx0, vz0, vx0 + sx, vz0 + sz, static_cast<int32>(constants::OuterVerticesPerPageSide - 1));
 
 			// Copy the border heights first — they are the interpolation source and stay fixed.
 			std::vector<float> top(sx + 1), bottom(sx + 1), left(sz + 1), right(sz + 1);
@@ -1876,6 +2024,8 @@ namespace mmo
 			const uint32 pageX = globalTileX / constants::TilesPerPage;
 			const uint32 pageY = globalTileY / constants::TilesPerPage;
 
+			MaterializeOceanPagesInRange(static_cast<int32>(pageX), static_cast<int32>(pageY), static_cast<int32>(pageX), static_cast<int32>(pageY));
+
 			Page *page = GetPage(pageX, pageY);
 			if (!page || !page->IsPrepared())
 			{
@@ -2014,6 +2164,11 @@ namespace mmo
 				return true; // Page not loaded - treat as hole
 			}
 
+			if (page->IsOceanPlaceholder())
+			{
+				return true; // Open ocean has no ground
+			}
+
 			// Calculate local position within page
 			const float pageOriginX = pageX * constants::PageSize - halfTerrainWidth;
 			const float pageOriginZ = pageZ * constants::PageSize - halfTerrainHeight;
@@ -2053,13 +2208,15 @@ namespace mmo
 			const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((minZ + halfTerrainHeight) / constants::PageSize)));
 			const int32 maxPageZ = std::min(static_cast<int32>(m_height) - 1, static_cast<int32>(std::floor((maxZ + halfTerrainHeight) / constants::PageSize)));
 
+			MaterializeOceanPagesInRange(minPageX, minPageZ, maxPageX, maxPageZ);
+
 			// Process each affected page
 			for (int32 pageZ = minPageZ; pageZ <= maxPageZ; ++pageZ)
 			{
 				for (int32 pageX = minPageX; pageX <= maxPageX; ++pageX)
 				{
 					Page *page = GetPage(pageX, pageZ);
-					if (!page)
+					if (!page || !page->IsPrepared())
 					{
 						continue;
 					}
@@ -2119,6 +2276,9 @@ namespace mmo
 				constexpr float quadSizeF = tileSizeF / 8.0f;
 				const float radiusSq = radius * radius;
 
+				// Editing water over open ocean turns the placeholder pages into real ones first.
+				terrain.MaterializeOceanPages(cx - radius, cz - radius, cx + radius, cz + radius);
+
 				for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
 				{
 					for (int32 px = minPageX; px <= maxPageX; ++px)
@@ -2174,6 +2334,9 @@ namespace mmo
 				constexpr uint32 pvSide = constants::OuterVerticesPerPageSide;
 				const float radiusSq = radius * radius;
 
+				// Editing water over open ocean turns the placeholder pages into real ones first.
+				terrain.MaterializeOceanPages(cx - radius, cz - radius, cx + radius, cz + radius);
+
 				for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
 				{
 					for (int32 px = minPageX; px <= maxPageX; ++px)
@@ -2220,6 +2383,12 @@ namespace mmo
 			if (!page)
 			{
 				return 0.0f;
+			}
+
+			// Open ocean: the surface is the sea level everywhere.
+			if (page->IsOceanPlaceholder())
+			{
+				return m_seaLevel;
 			}
 
 			const float pageOriginX = static_cast<float>((pageX - 32) * constants::PageSize);
@@ -2322,6 +2491,12 @@ namespace mmo
 				return false;
 			}
 
+			// Open ocean is water everywhere.
+			if (hit.page->IsOceanPlaceholder())
+			{
+				return true;
+			}
+
 			return water_lookup::HasWaterAtQuad(hit.page->GetWaterView(),
 				hit.quad.tileX, hit.quad.tileZ, hit.quad.qx, hit.quad.qz);
 		}
@@ -2332,6 +2507,11 @@ namespace mmo
 			if (!hit.IsValid())
 			{
 				return WaterType::None;
+			}
+
+			if (hit.page->IsOceanPlaceholder())
+			{
+				return WaterType::Ocean;
 			}
 
 			const water_lookup::PageWaterView view = hit.page->GetWaterView();
@@ -2518,12 +2698,14 @@ namespace mmo
 			const int32 minPageZ = std::max(0, static_cast<int32>(std::floor((minZ + halfH) / constants::PageSize)));
 			const int32 maxPageZ = std::min(static_cast<int32>(m_height) - 1, static_cast<int32>(std::floor((maxZ + halfH) / constants::PageSize)));
 
+			MaterializeOceanPagesInRange(minPageX, minPageZ, maxPageX, maxPageZ);
+
 			for (int32 pageZ = minPageZ; pageZ <= maxPageZ; ++pageZ)
 			{
 				for (int32 pageX = minPageX; pageX <= maxPageX; ++pageX)
 				{
 					Page *page = GetPage(pageX, pageZ);
-					if (!page)
+					if (!page || !page->IsPrepared())
 					{
 						continue;
 					}

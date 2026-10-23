@@ -94,3 +94,9 @@ dev/
 
 # Screenshot staging runtime (tools/showcase)
 tools/showcase/runtime/
+/src/shared/deferred_shading/shaders/CS_OceanSpectrum.h
+/src/shared/deferred_shading/shaders/CS_OceanEvolve.h
+/src/shared/deferred_shading/shaders/CS_OceanFft.h
+/src/shared/deferred_shading/shaders/CS_OceanAssemble.h
+/src/shared/deferred_shading/shaders/VS_Ocean.h
+/src/shared/deferred_shading/shaders/PS_Ocean.h

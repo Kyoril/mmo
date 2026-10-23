@@ -46,6 +46,9 @@
 
 #include "deferred_shading/deferred_renderer.h"
 #include "deferred_shading/water_volume_system.h"
+#include "deferred_shading/ocean_feed.h"
+#include "deferred_shading/ocean_profile.h"
+#include "terrain/ocean_mask.h"
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
@@ -960,12 +963,18 @@ namespace mmo
 		///		   surface previews what a diving player sees, from the same water profiles.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
 
+		/// Feeds the FFT ocean (sea level, ocean mask, Ocean water profile) every frame.
+		OceanFeed<terrain::Terrain> m_oceanFeed { static_cast<float>(terrain::ocean_mask::TexelSize) };
+
 		/// @brief Asset name of the caustics texture last handed to the underwater pass.
 		String m_underwaterCausticsTexture;
 
 		/// @brief Recomputes camera submersion and pushes the underwater state and caustics texture
 		///		   to the renderer.
 		void UpdateUnderwaterPreview(float deltaSeconds);
+
+		/// Hands the terrain's sea to the FFT ocean renderer and applies the Ocean water profile.
+		void UpdateOcean();
 
 		std::unique_ptr<DetailsPanel> m_detailsPanel;
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;

@@ -196,9 +196,10 @@ namespace mmo
 
 		// The page water is translucent and samples scene depth/refraction; the opaque minimap
 		// variant lands in the G-buffer instead. Without water the ground under it is rendered.
+		// Ocean is left out unless asked for: the ocean renderer covers the distant seabed.
 		if (options.water)
 		{
-			page.SetMinimapWaterMode(true);
+			page.SetMinimapWaterMode(true, options.ocean);
 		}
 		else
 		{

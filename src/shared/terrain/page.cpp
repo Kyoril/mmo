@@ -6,6 +6,7 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 
+#include <algorithm>
 #include <sstream>
 
 #include "tile.h"
@@ -161,33 +162,24 @@ namespace mmo
 
 			m_pendingMaterialNames.clear();
 			m_materialChunkParsed = false;
-
-			// Page stores only outer vertices (shared between tiles)
-			// Inner vertices are derived by tiles during rendering
-			const size_t outerVertexCount = constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide;
-			m_heightmap.resize(outerVertexCount);
-			m_normals.resize(outerVertexCount);
-			m_materials.resize(constants::TilesPerPage * constants::TilesPerPage, nullptr);
-			m_layers.resize(constants::PixelsPerPage * constants::PixelsPerPage, 0x000000FF);
-			m_tileZones.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
-			m_colors.resize(outerVertexCount, 0xffffffff);
-			// Initialize hole map (one 64-bit value per tile, all zeros = no holes)
-			m_holeMap.resize(constants::TilesPerPage * constants::TilesPerPage, 0);
-
-			// Initialize water data (one entry per tile, defaults = no water)
-			const size_t tileCount = constants::TilesPerPage * constants::TilesPerPage;
-			m_waterQuadMasks.assign(tileCount, 0ULL);
-			m_waterVertexHeights.assign(constants::OuterVerticesPerPageSide * constants::OuterVerticesPerPageSide, 0.0f);
-			m_waterTypes.assign(tileCount, static_cast<uint8>(WaterType::None));
-
-			// Allocate inner arrays for editor precision (8*TilesPerPage per side)
-			const size_t innerVertexCount = constants::InnerVerticesPerPageSide * constants::InnerVerticesPerPageSide;
-			m_innerHeightmap.resize(innerVertexCount);
-			m_innerNormals.resize(innerVertexCount);
-			m_innerColors.resize(innerVertexCount, 0xffffffff);
+			m_innerHeightmapFromFile = false;
+			m_innerColorsFromFile = false;
 
 			const String pageFileName = m_terrain.GetBaseFileName() + "/" + std::to_string(m_x) + "_" + std::to_string(m_z) + ".tile";
-			if (AssetRegistry::HasFile(pageFileName))
+			if (!AssetRegistry::HasFile(pageFileName))
+			{
+				// No page file: open ocean. Nothing is allocated (a blank page used to cost several
+				// megabytes, the splat layers alone 4 MB), nothing is marked changed, and nothing is
+				// saved. The editor materialises it into real terrain when a brush first touches it.
+				ReleaseTerrainArrays();
+				m_waterMaterialName.clear();
+				m_oceanPlaceholder = true;
+				return true;
+			}
+
+			m_oceanPlaceholder = false;
+			AllocateTerrainArrays();
+
 			{
 				std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(pageFileName);
 				ASSERT(file);
@@ -262,16 +254,103 @@ namespace mmo
 					m_changed = true;
 				}
 			}
-			else
-			{
-				EncodedNormal8 encoded = EncodeNormalSNorm8(0.0f, 1.0f, 0.0f);
-				for (size_t i = 0; i < m_normals.size(); ++i)
-				{
-					m_normals[i] = encoded;
-				}
 
-				WLOG("Terrain page file '" << pageFileName << "' is missing, page will be initialized as blank tile");
-				m_changed = true;
+			return true;
+		}
+
+		void Page::AllocateTerrainArrays()
+		{
+			constexpr size_t outerVertexCount = static_cast<size_t>(constants::OuterVerticesPerPageSide) * constants::OuterVerticesPerPageSide;
+			constexpr size_t innerVertexCount = static_cast<size_t>(constants::InnerVerticesPerPageSide) * constants::InnerVerticesPerPageSide;
+			constexpr size_t tileCount = static_cast<size_t>(constants::TilesPerPage) * constants::TilesPerPage;
+			const EncodedNormal8 up = EncodeNormalSNorm8(0.0f, 1.0f, 0.0f);
+
+			// Page stores only outer vertices (shared between tiles) plus the inner (cell-centre)
+			// vertices for full editor precision.
+			m_heightmap.assign(outerVertexCount, 0.0f);
+			m_normals.assign(outerVertexCount, up);
+			m_materials.assign(tileCount, nullptr);
+			m_layers.assign(static_cast<size_t>(constants::PixelsPerPage) * constants::PixelsPerPage, 0x000000FF);
+			m_tileZones.assign(tileCount, 0);
+			m_colors.assign(outerVertexCount, 0xffffffff);
+
+			// One 64-bit value per tile, all zeros = no holes
+			m_holeMap.assign(tileCount, 0);
+
+			// One entry per tile, defaults = no water
+			m_waterQuadMasks.assign(tileCount, 0ULL);
+			m_waterVertexHeights.assign(outerVertexCount, 0.0f);
+			m_waterTypes.assign(tileCount, static_cast<uint8>(WaterType::None));
+
+			m_innerHeightmap.assign(innerVertexCount, 0.0f);
+			m_innerNormals.assign(innerVertexCount, up);
+			m_innerColors.assign(innerVertexCount, 0xffffffff);
+		}
+
+		void Page::ReleaseTerrainArrays()
+		{
+			// Release the storage, not just the contents: page objects live as long as the world, so
+			// clear() kept every page ever streamed in at its full size.
+			const auto release = [](auto &container)
+			{
+				std::remove_reference_t<decltype(container)>().swap(container);
+			};
+			release(m_heightmap);
+			release(m_normals);
+			release(m_innerHeightmap);
+			release(m_innerNormals);
+			release(m_innerColors);
+			release(m_materials);
+			release(m_layers);
+			release(m_tileZones);
+			release(m_colors);
+			release(m_holeMap);
+			release(m_waterQuadMasks);
+			release(m_waterVertexHeights);
+			release(m_waterTypes);
+			release(m_waterFlowUVs);
+			release(m_waterFlowSpeeds);
+		}
+
+		void Page::NotifyOceanMaskChanged()
+		{
+			m_terrain.NotifyOceanMaskChanged();
+		}
+
+		bool Page::IsOceanPlaceholder() const
+		{
+			return m_oceanPlaceholder && IsPrepared();
+		}
+
+		bool Page::MaterializeOceanPlaceholder(const float seabedHeight, const float seaLevel)
+		{
+			if (!IsOceanPlaceholder())
+			{
+				return false;
+			}
+
+			AllocateTerrainArrays();
+
+			std::fill(m_heightmap.begin(), m_heightmap.end(), seabedHeight);
+			std::fill(m_innerHeightmap.begin(), m_innerHeightmap.end(), seabedHeight);
+			std::fill(m_waterQuadMasks.begin(), m_waterQuadMasks.end(), ~0ULL);
+			std::fill(m_waterTypes.begin(), m_waterTypes.end(), static_cast<uint8>(WaterType::Ocean));
+			std::fill(m_waterVertexHeights.begin(), m_waterVertexHeights.end(), seaLevel);
+
+			m_oceanPlaceholder = false;
+			m_changed = true;
+			NotifyOceanMaskChanged();
+
+			// A loaded placeholder has no tiles yet: build them now so the stroke that triggered this
+			// shows up at once. Load() creates one tile per call and finishes with the water mesh.
+			if (m_loaded)
+			{
+				m_loaded = false;
+				m_unloadRequested = false;
+				m_Tiles.clear();
+				while (!Load())
+				{
+				}
 			}
 
 			return true;
@@ -309,6 +388,8 @@ namespace mmo
 			m_prepared = true;
 			m_preparing = false;
 
+			NotifyOceanMaskChanged();
+
 			return true;
 		}
 
@@ -334,6 +415,14 @@ namespace mmo
 			if (!IsLoadable())
 			{
 				return m_loaded;
+			}
+
+			// An ocean placeholder has nothing to build: no tiles, no water render object (the ocean
+			// renderer draws it). It still counts as loaded so streaming moves on.
+			if (IsOceanPlaceholder())
+			{
+				m_loaded = true;
+				return true;
 			}
 
 			// Build file name
@@ -601,23 +690,18 @@ namespace mmo
 			// Unload all loaded data so we will have to reload it again later. Release the storage, not
 			// just the contents: page objects live as long as the world, so clear() kept every page ever
 			// streamed in at its full size (the splat layers alone are 4 MB per page).
-			const auto release = [](auto &container)
-			{
-				std::remove_reference_t<decltype(container)>().swap(container);
-			};
-			release(m_heightmap);
-			release(m_normals);
-			release(m_materials);
-			release(m_layers);
-			release(m_waterQuadMasks);
-			release(m_waterVertexHeights);
-			release(m_waterTypes);
-			release(m_waterMaterialName);
-			release(m_waterFlowUVs);
-			release(m_waterFlowSpeeds);
+			const bool wasPrepared = IsPrepared();
+			ReleaseTerrainArrays();
+			String().swap(m_waterMaterialName);
 
 			m_prepared = false;
 			m_preparing = false;
+			m_oceanPlaceholder = false;
+
+			if (wasPrepared)
+			{
+				NotifyOceanMaskChanged();
+			}
 		}
 
 		Tile *Page::GetTile(const uint32 x, const uint32 y)
@@ -668,7 +752,7 @@ namespace mmo
 
 		float Page::GetHeightAt(const size_t x, const size_t y) const
 		{
-			if (!IsPrepared())
+			if (!IsPrepared() || m_heightmap.empty())
 			{
 				return 0.0f;
 			}
@@ -684,7 +768,7 @@ namespace mmo
 
 		uint32 Page::GetColorAt(size_t x, size_t y) const
 		{
-			if (!IsPrepared())
+			if (!IsPrepared() || m_colors.empty())
 			{
 				return 0xffffffff;
 			}
@@ -711,7 +795,7 @@ namespace mmo
 
 		uint32 Page::GetLayersAt(const size_t x, const size_t y) const
 		{
-			if (!IsPrepared())
+			if (!IsPrepared() || m_layers.empty())
 			{
 				return 0;
 			}
@@ -951,6 +1035,11 @@ namespace mmo
 		Vector3 Page::GetNormalAt(const uint32 x, const uint32 z) const
 		{
 			ASSERT(x < constants::OuterVerticesPerPageSide && z < constants::OuterVerticesPerPageSide);
+			if (m_normals.empty() || x >= constants::OuterVerticesPerPageSide || z >= constants::OuterVerticesPerPageSide)
+			{
+				// No terrain (unprepared page or ocean placeholder): flat.
+				return Vector3::UnitY;
+			}
 
 			Vector3 normal;
 			DecodeNormalSNorm8(m_normals[x + z * constants::OuterVerticesPerPageSide], normal.x, normal.y, normal.z);
@@ -960,12 +1049,22 @@ namespace mmo
 		float Page::GetInnerHeightAt(size_t x, size_t y) const
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerHeightmap.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return 0.0f;
+			}
+
 			return m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide];
 		}
 
 		void Page::SetInnerHeightAt(size_t x, size_t y, float value)
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerHeightmap.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return;
+			}
+
 			m_innerHeightmap[x + y * constants::InnerVerticesPerPageSide] = value;
 
 			// Recalculate inner normal by averaging surrounding outer normals
@@ -983,12 +1082,22 @@ namespace mmo
 		uint32 Page::GetInnerColorAt(size_t x, size_t y) const
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerColors.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return 0xffffffff;
+			}
+
 			return m_innerColors[x + y * constants::InnerVerticesPerPageSide];
 		}
 
 		void Page::SetInnerColorAt(size_t x, size_t y, uint32 color)
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerColors.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return;
+			}
+
 			m_innerColors[x + y * constants::InnerVerticesPerPageSide] = color;
 			m_changed = true;
 		}
@@ -996,6 +1105,11 @@ namespace mmo
 		Vector3 Page::GetInnerNormalAt(size_t x, size_t y) const
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerNormals.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return Vector3::UnitY;
+			}
+
 			Vector3 normal;
 			DecodeNormalSNorm8(m_innerNormals[x + y * constants::InnerVerticesPerPageSide], normal.x, normal.y, normal.z);
 			return normal;
@@ -1004,6 +1118,11 @@ namespace mmo
 		void Page::SetInnerNormalAt(size_t x, size_t y, const Vector3 &normal)
 		{
 			ASSERT(x < constants::InnerVerticesPerPageSide && y < constants::InnerVerticesPerPageSide);
+			if (m_innerNormals.empty() || x >= constants::InnerVerticesPerPageSide || y >= constants::InnerVerticesPerPageSide)
+			{
+				return;
+			}
+
 			m_innerNormals[x + y * constants::InnerVerticesPerPageSide] = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
 			m_changed = true;
 		}
@@ -1037,6 +1156,11 @@ namespace mmo
 			// Cross product of tangent vectors gives the normal
 			Vector3 norm(-dx, 1.0f, -dz);
 			norm.Normalize();
+
+			if (m_normals.empty() || x >= constants::OuterVerticesPerPageSide || z >= constants::OuterVerticesPerPageSide)
+			{
+				return norm;
+			}
 
 			m_normals[x + z * constants::OuterVerticesPerPageSide] = EncodeNormalSNorm8(norm.x, norm.y, norm.z);
 			return norm;
@@ -1095,12 +1219,28 @@ namespace mmo
 		{
 			for (const auto &tile : m_Tiles)
 			{
-				tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+				if (tile)
+				{
+					tile->SetQueryFlags(m_terrain.GetTileSceneQueryFlags());
+				}
 			}
 		}
 
 		bool Page::Save()
 		{
+			if (m_heightmap.empty())
+			{
+				// An ocean placeholder (or an unprepared page) has no terrain to write. Writing one
+				// would turn open ocean into a blank page file at height 0.
+				if (!IsOceanPlaceholder())
+				{
+					WLOG("Not saving terrain page " << m_x << "x" << m_z << ": it holds no terrain data");
+				}
+
+				m_changed = false;
+				return true;
+			}
+
 			auto file = AssetRegistry::CreateNewFile(GetPageFilename());
 			if (!file)
 			{
@@ -1402,11 +1542,20 @@ namespace mmo
 		{
 			ASSERT(IsPrepared());
 
+			if (m_heightmap.empty() || m_normals.empty())
+			{
+				// Ocean placeholder: there is no terrain to derive a LOD from. Callers skip placeholders;
+				// this only keeps a stray call from crashing.
+				out.Reset();
+				return;
+			}
+
 			terrain_io::PageLodSource source;
 			source.heightmap = m_heightmap.data();
 			source.normals = m_normals.data();
 			source.waterQuadMasks = m_waterQuadMasks.empty() ? nullptr : m_waterQuadMasks.data();
 			source.waterVertexHeights = m_waterVertexHeights.empty() ? nullptr : m_waterVertexHeights.data();
+			source.waterTypes = m_waterTypes.size() == m_waterQuadMasks.size() && !m_waterTypes.empty() ? m_waterTypes.data() : nullptr;
 			terrain_io::BuildPageLod(source, out);
 		}
 
@@ -1423,9 +1572,14 @@ namespace mmo
 			}
 
 			const uint32 tileIndex = x + y * constants::TilesPerPage;
-			ASSERT(tileIndex < m_materials.size());
+			Tile* tile = GetTile(x, y);
+			if (tile == nullptr || tileIndex >= m_materials.size())
+			{
+				// An ocean placeholder has no tiles and no material table.
+				return;
+			}
 
-			MaterialPtr material = m_Tiles(x, y)->GetBaseMaterial();
+			MaterialPtr material = tile->GetBaseMaterial();
 			if (material == m_terrain.GetDefaultMaterial())
 			{
 				// Default terrain material does not need to be set explicitly!
@@ -1441,12 +1595,13 @@ namespace mmo
 
 		void Page::SetHeightAt(const unsigned int x, const unsigned int z, const float value)
 		{
-			if (x >= constants::OuterVerticesPerPageSide || z >= constants::OuterVerticesPerPageSide)
+			if (m_heightmap.empty() || x >= constants::OuterVerticesPerPageSide || z >= constants::OuterVerticesPerPageSide)
 			{
 				return;
 			}
 
 			m_heightmap[x + z * constants::OuterVerticesPerPageSide] = value;
+			NotifyOceanMaskChanged();
 
 			// Recalculate normal at this vertex since height changed
 			CalculateNormalAt(x, z);
@@ -1473,7 +1628,7 @@ namespace mmo
 
 		void Page::SetColorAt(size_t x, size_t y, uint32 color)
 		{
-			if (x >= constants::OuterVerticesPerPageSide || y >= constants::OuterVerticesPerPageSide)
+			if (m_colors.empty() || x >= constants::OuterVerticesPerPageSide || y >= constants::OuterVerticesPerPageSide)
 			{
 				return;
 			}
@@ -1484,7 +1639,7 @@ namespace mmo
 
 		void Page::SetLayerAt(const unsigned int x, const unsigned int z, const uint8 layer, const float value)
 		{
-			if (x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
+			if (m_layers.empty() || x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
 			{
 				return;
 			}
@@ -1553,7 +1708,7 @@ namespace mmo
 
 		uint32 Page::GetArea(uint32 localTileX, uint32 localTileY) const
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_tileZones.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return 0;
 			}
@@ -1563,7 +1718,7 @@ namespace mmo
 
 		void Page::SetArea(uint32 localTileX, uint32 localTileY, uint32 area)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_tileZones.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return;
 			}
@@ -1579,7 +1734,7 @@ namespace mmo
 
 		bool Page::IsHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY) const
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+			if (m_holeMap.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
 				innerX >= constants::InnerVerticesPerTileSide || innerY >= constants::InnerVerticesPerTileSide)
 			{
 				return false;
@@ -1594,7 +1749,7 @@ namespace mmo
 
 		void Page::SetHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY, bool isHole)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+			if (m_holeMap.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
 				innerX >= constants::InnerVerticesPerTileSide || innerY >= constants::InnerVerticesPerTileSide)
 			{
 				return;
@@ -1624,7 +1779,7 @@ namespace mmo
 
 		uint64 Page::GetTileHoleMap(uint32 localTileX, uint32 localTileY) const
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_holeMap.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return 0;
 			}
@@ -1634,7 +1789,7 @@ namespace mmo
 
 		uint64 Page::GetWaterQuadMask(uint32 localTileX, uint32 localTileY) const
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_waterQuadMasks.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return 0;
 			}
@@ -1643,17 +1798,18 @@ namespace mmo
 
 		void Page::SetWaterQuadMask(uint32 localTileX, uint32 localTileY, uint64 mask)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_waterQuadMasks.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return;
 			}
 			m_waterQuadMasks[localTileX + localTileY * constants::TilesPerPage] = mask;
 			m_changed = true;
+			NotifyOceanMaskChanged();
 		}
 
 		void Page::SetWaterQuadBit(uint32 localTileX, uint32 localTileY, uint32 qx, uint32 qz, bool hasWater)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
+			if (m_waterQuadMasks.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage ||
 				qx >= 8 || qz >= 8)
 			{
 				return;
@@ -1672,11 +1828,12 @@ namespace mmo
 			}
 
 			m_changed = true;
+			NotifyOceanMaskChanged();
 		}
 
 		float Page::GetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ) const
 		{
-			if (pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
+			if (m_waterVertexHeights.empty() || pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
 			{
 				return 0.0f;
 			}
@@ -1685,7 +1842,7 @@ namespace mmo
 
 		void Page::SetWaterVertexHeight(uint32 pageVertX, uint32 pageVertZ, float height)
 		{
-			if (pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
+			if (m_waterVertexHeights.empty() || pageVertX >= constants::OuterVerticesPerPageSide || pageVertZ >= constants::OuterVerticesPerPageSide)
 			{
 				return;
 			}
@@ -1695,7 +1852,7 @@ namespace mmo
 
 		WaterType Page::GetWaterType(uint32 localTileX, uint32 localTileY) const
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_waterTypes.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return WaterType::None;
 			}
@@ -1704,12 +1861,13 @@ namespace mmo
 
 		void Page::SetWaterType(uint32 localTileX, uint32 localTileY, WaterType type)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_waterTypes.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return;
 			}
 			m_waterTypes[localTileX + localTileY * constants::TilesPerPage] = static_cast<uint8>(type);
 			m_changed = true;
+			NotifyOceanMaskChanged();
 		}
 
 		bool Page::HasWater(uint32 localTileX, uint32 localTileY) const
@@ -1719,7 +1877,7 @@ namespace mmo
 
 		void Page::ClearWater(uint32 localTileX, uint32 localTileY)
 		{
-			if (localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
+			if (m_waterQuadMasks.empty() || m_waterTypes.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)
 			{
 				return;
 			}
@@ -1727,6 +1885,7 @@ namespace mmo
 			m_waterQuadMasks[idx] = 0;
 			m_waterTypes[idx] = static_cast<uint8>(WaterType::None);
 			m_changed = true;
+			NotifyOceanMaskChanged();
 		}
 
 		std::function<String(WaterType)> Page::ms_waterMaterialResolver;
@@ -1748,12 +1907,23 @@ namespace mmo
 
 		void Page::SetWaterMaterialName(const String& name)
 		{
+			if (IsOceanPlaceholder())
+			{
+				// Nothing to save it into: the placeholder has no page file and draws no water mesh.
+				return;
+			}
+
 			m_waterMaterialName = name;
 			m_changed = true;
 		}
 
 		void Page::SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds)
 		{
+			if (IsOceanPlaceholder())
+			{
+				return;
+			}
+
 			constexpr size_t vertexCount = static_cast<size_t>(constants::OuterVerticesPerPageSide) * constants::OuterVerticesPerPageSide;
 			if (uvs.size() != vertexCount * 2 || speeds.size() != vertexCount)
 			{
@@ -1806,7 +1976,20 @@ namespace mmo
 			// renders each with its own material. Empty pages and tiles whose quads were all
 			// erased yield no batches at all, which matters because ManualTriangleListOperation
 			// asserts if an operation is finished with no triangles.
-			const std::vector<water_mesh::TypeBatch> batches = water_mesh::BucketQuadsByType(GetWaterView());
+			std::vector<water_mesh::TypeBatch> batches = water_mesh::BucketQuadsByType(GetWaterView());
+
+			// Ocean quads are left out where the ocean is drawn to the horizon by its own renderer, and
+			// in a minimap-mode bake that asked to leave them out (the distant-terrain colour bake
+			// shows the seabed under the ocean). The minimap itself keeps them.
+			const bool skipOcean = m_minimapWaterMode ? !m_minimapIncludesOcean : m_terrain.IsOceanRenderedExternally();
+			if (skipOcean)
+			{
+				batches.erase(std::remove_if(batches.begin(), batches.end(), [](const water_mesh::TypeBatch& batch)
+					{
+						return batch.type == WaterType::Ocean;
+					}), batches.end());
+			}
+
 			if (batches.empty())
 			{
 				return;
@@ -2012,14 +2195,16 @@ namespace mmo
 			}
 		}
 
-		void Page::SetMinimapWaterMode(bool enabled)
+		void Page::SetMinimapWaterMode(const bool enabled, const bool includeOcean)
 		{
-			if (m_minimapWaterMode == enabled)
+			const bool includesOcean = enabled ? includeOcean : true;
+			if (m_minimapWaterMode == enabled && m_minimapIncludesOcean == includesOcean)
 			{
 				return;
 			}
 
 			m_minimapWaterMode = enabled;
+			m_minimapIncludesOcean = includesOcean;
 
 			// Rebuild so the water geometry picks up the minimap (or normal) material and colour.
 			RebuildWaterMesh();

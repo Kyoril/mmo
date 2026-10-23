@@ -157,6 +157,17 @@ namespace mmo
                     ImGui::SetTooltip("Render the procedural grass and ground cover of the terrain materials, as in the game client. Placed trees are always shown.");
                 }
 
+                float seaLevel = m_terrain.GetSeaLevel();
+                if (ImGui::DragFloat("Sea Level", &seaLevel, 0.05f, -500.0f, 500.0f, "%.2f"))
+                {
+                    m_terrain.SetSeaLevel(seaLevel);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Height of the open ocean. Pages without terrain are ocean at this height, and the\n"
+                        "ocean renderer draws the sea here out to the horizon. Saved with the world.");
+                }
+
                 // Water rendering — visible by default. Note that water is always shown while
                 // the water edit mode is active, regardless of this setting.
                 bool showWater = m_showWater;
