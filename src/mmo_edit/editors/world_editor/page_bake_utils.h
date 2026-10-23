@@ -33,6 +33,12 @@ namespace mmo
 		/// @brief Writes a square RGBA8 image as a DXT1 .htex with a mip chain down to 4x4 into a seekable stream.
 		bool WriteDxt1Texture(std::ostream& out, std::vector<uint8> rgba, uint32 size);
 
+		/// @brief Like WriteDxt1Texture, but DXT5: the alpha channel is kept (smoothly, 8 bits).
+		bool WriteDxt5Texture(const String& filename, std::vector<uint8> rgba, uint32 size);
+
+		/// @brief Like WriteDxt1Texture, but DXT5: the alpha channel is kept (smoothly, 8 bits).
+		bool WriteDxt5Texture(std::ostream& out, std::vector<uint8> rgba, uint32 size);
+
 		/// @brief Writes an uncompressed RGBA8 .htex without mips (the layout of a manual R8G8B8A8
 		///        texture filled with LoadRaw) into a seekable stream.
 		/// @param pixels width * height texels, 4 bytes each, row by row.

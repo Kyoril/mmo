@@ -6433,9 +6433,11 @@ namespace mmo
 			return;
 		}
 
-		// A generic lit albedo + normal material; the per-page instances only swap in the baked colour.
-		// The flat normal map leaves the (baked, filtered) vertex normals in charge of the lighting.
-		const MaterialPtr parent = MaterialManager::Get().Load("Models/AlbedoNormal_Opaque_Base.hmat");
+		// Lit albedo + normal material; the per-page instances only swap in the baked colour. The bake
+		// stores the albedo with 1 - emissive / albedo in alpha, and the material adds the emissive back
+		// unlit, so glowing terrain (the desert sand) shades the same in the distance. The flat normal map leaves
+		// the (baked, filtered) vertex normals in charge of the lighting.
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/Terrain/FarTerrain.hmat");
 		if (!parent)
 		{
 			WLOG("Distant terrain disabled: its material could not be loaded");
