@@ -70,19 +70,19 @@ namespace mmo
 		Vector3 absorption { 0.42f, 0.11f, 0.075f };
 
 		/// @brief Scattering albedo in wave troughs (linear).
-		Vector3 troughColor { 0.006f, 0.055f, 0.060f };
+		Vector3 troughColor { 0.065f, 0.402f, 0.434f };
 
 		/// @brief Scattering albedo at wave crests, where light passes through thin water (linear).
-		Vector3 crestColor { 0.020f, 0.260f, 0.180f };
+		Vector3 crestColor { 0.451f, 0.708f, 0.565f };
 
 		/// @brief Strength of sunlight scattered through wave crests toward the viewer.
-		float subsurfaceStrength { 3.5f };
+		float subsurfaceStrength { 4.0f };
 
 		/// @brief Forward-scattering anisotropy of the subsurface glow (Henyey-Greenstein g).
-		float subsurfaceAnisotropy { 0.55f };
+		float subsurfaceAnisotropy { 0.75f };
 
 		/// @brief Strength of the isotropic in-scattering of sun and sky light (the body colour).
-		float ambientScatter { 1.6f };
+		float ambientScatter { 1.2f };
 
 		/// @brief Base surface roughness for reflections and the sun highlight.
 		float roughness { 0.12f };
@@ -99,13 +99,13 @@ namespace mmo
 		// --- Foam ------------------------------------------------------------------------------
 
 		/// @brief How readily folding crests turn white (Jacobian threshold offset). Higher = more foam.
-		float foamCoverage { 0.34f };
+		float foamCoverage { 0.21f };
 
 		/// @brief Rate at which foam builds up on breaking crests, per second.
-		float foamGrowth { 6.0f };
+		float foamGrowth { 12.0f };
 
 		/// @brief Rate at which foam dissolves, per second.
-		float foamDecay { 0.6f };
+		float foamDecay { 0.9f };
 
 		/// @brief Brightness of the foam (linear albedo).
 		float foamBrightness { 1.0f };

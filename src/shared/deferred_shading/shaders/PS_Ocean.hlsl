@@ -31,6 +31,10 @@ struct PixelIn
 
 static const float NO_SCENE_DEPTH = 1.0e6f;
 
+// Share of the crest glow that does not depend on the view angle, relative to SubsurfaceStrength
+// (WoW Forever's ocean preset uses 4.0 * NdotV^2 + 0.5).
+static const float SUBSURFACE_BASE_FRACTION = 0.125f;
+
 // How much each cascade's foam counts (largest first).
 static const float FOAM_CASCADE_WEIGHT[OCEAN_CASCADES] = { 1.0f, 1.0f, 0.35f };
 
@@ -117,16 +121,54 @@ float PeriodicNoise(float2 p, uint period)
     return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Bubbly foam breakup: three octaves of value noise. It needs no drift of its own: callers sample
-// it at the displaced position, so the pattern rides and churns with the waves.
+// Feature point of a Worley cell, in [0, 1)^2 inside the cell; repeats every `period` cells.
+float2 CellPoint(int2 cell, uint period)
+{
+    return float2(LatticeHash(cell, period), LatticeHash(cell + int2(7919, 104729), period));
+}
+
+// Sea-foam lace: 1 along the borders between Worley cells, falling to 0 inside them. Foam on
+// water gathers into exactly such a web of bubble filaments around clear patches.
+float FoamLace(float2 p, uint period)
+{
+    int2 base = (int2)floor(p);
+    float nearest = 8.0f;
+    float second = 8.0f;
+    [unroll]
+    for (int z = -1; z <= 1; ++z)
+    {
+        [unroll]
+        for (int x = -1; x <= 1; ++x)
+        {
+            int2 cell = base + int2(x, z);
+            float2 offset = (float2)cell + CellPoint(cell, period) - p;
+            float d = dot(offset, offset);
+            if (d < nearest)
+            {
+                second = nearest;
+                nearest = d;
+            }
+            else if (d < second)
+            {
+                second = d;
+            }
+        }
+    }
+
+    return 1.0f - saturate((sqrt(second) - sqrt(nearest)) * 1.6f);
+}
+
+// Foam pattern in [0, 1]: two octaves of lace, with value noise varying the strands' thickness.
+// Light coverage shows only the brightest strands, heavy coverage fills the cells in. It needs no
+// drift of its own: callers sample it at the displaced position, so it rides and churns with the
+// waves.
 float FoamPattern(float2 xz)
 {
     float2 local = xz - floor(xz / FOAM_PATTERN_PERIOD) * FOAM_PATTERN_PERIOD;
-    // Cells per metre 1.25, 3.75 and 9: whole numbers of cells per period, so the wrap is seamless.
-    float n = PeriodicNoise(local * 1.25f, 320) * 0.45f;
-    n += PeriodicNoise(local * 3.75f + 17.0f, 960) * 0.35f;
-    n += PeriodicNoise(local * 9.0f + 41.0f, 2304) * 0.2f;
-    return n;
+    // Cells per metre 0.75 and 2.25: whole numbers of cells per period, so the wrap is seamless.
+    float lace = FoamLace(local * 0.75f, 192) * 0.6f + FoamLace(local * 2.25f + 13.0f, 576) * 0.4f;
+    float variation = PeriodicNoise(local * 1.25f, 320);
+    return saturate(lace * (0.75f + 0.5f * variation));
 }
 
 bool ProjectToScreen(float3 worldPos, float2 targetSize, out float2 uv, out float radialDistance)
@@ -220,6 +262,7 @@ float4 main(PixelIn input) : SV_Target
 
     // --- Surface normal from the cascades' slopes ---------------------------------------------
     float2 slope = float2(0.0f, 0.0f);
+    float2 swellSlope = float2(0.0f, 0.0f);
     float variance = 0.0f;
     float foamAmount = 0.0f;
     [unroll]
@@ -228,6 +271,10 @@ float4 main(PixelIn input) : SV_Target
         float weight = ShallowWaveWeight(cascade, input.waterDepth);
         float4 surface = OceanSurface.Sample(OceanWrapSampler, float3(input.baseXZ / CascadeSize[cascade], (float)cascade));
         slope += surface.xy * weight;
+        if (cascade + 1 < OCEAN_CASCADES)
+        {
+            swellSlope += surface.xy * weight;
+        }
         // Mip filtering averaged the slopes away; what they averaged over comes back as roughness.
         variance += max(surface.z - dot(surface.xy, surface.xy), 0.0f) * weight * weight;
         // Whitecaps belong to the swell and the chop; the finest ripples barely break.
@@ -274,14 +321,22 @@ float4 main(PixelIn input) : SV_Target
     float crest = saturate(input.waveHeight * CrestHeightScale + 0.5f);
     float3 albedo = lerp(TroughColor, CrestColor, crest);
 
-    float steepness = saturate(length(slope) * 1.6f);
+    // Sunlight scattered through the waves toward the viewer (the crest glow), the way WoW
+    // Forever's PBR water models it: proportional to how steep the swell is (from the slope energy
+    // of the long-wave cascades, s = sqrt(E / (1 + E))), stronger where the wave face looks at the
+    // viewer (NdotV^2), shaped by a forward-scattering Henyey-Greenstein lobe toward the sun, and
+    // clamped so that scattering never creates energy.
+    float swellEnergy = dot(swellSlope, swellSlope);
+    float steepness = sqrt(swellEnergy / (1.0f + swellEnergy));
+    float subsurfaceWeight = steepness * SubsurfaceStrength * (nDotV * nDotV + SUBSURFACE_BASE_FRACTION);
+    float energyClamp = 1.0f / max(1.0f, AmbientScatter + subsurfaceWeight);
     float phase = HenyeyGreenstein(dot(-l, v), SubsurfaceAnisotropy);
     float sunTransmission = 0.98f * (1.0f - pow(1.0f - saturate(l.y), 5.0f));
     float3 sunIn = sunRadiance * sunTransmission * sunAbove;
 
-    float3 subsurface = sunIn * phase * SubsurfaceStrength * (0.25f + steepness) * (0.5f + crest) * (0.6f + 0.4f * nDotV * nDotV);
-    float3 isotropic = (sunIn * (1.0f / (4.0f * OCEAN_PI)) + CameraAmbientColor) * AmbientScatter;
-    float3 inscatter = albedo * (1.0f - transmittance) * (subsurface + isotropic) * 4.0f;
+    float3 subsurface = sunIn * energyClamp * subsurfaceWeight * phase;
+    float3 isotropic = (sunIn * (1.0f / (4.0f * OCEAN_PI)) * exp(-0.005f * viewDistance) + CameraAmbientColor) * AmbientScatter;
+    float3 inscatter = albedo * (1.0f - transmittance) * (subsurface + isotropic);
 
     float3 transmitted = refracted * transmittance + inscatter;
 
@@ -331,29 +386,31 @@ float4 main(PixelIn input) : SV_Target
         ? max(input.worldPos.y - (CameraPosition.y - v.y * sceneDistance), 0.0f)
         : 1000.0f;
 
-    // Shore waves: foam bands parallel to the coast, rolling in toward the beach once per
-    // SHORE_WAVE_PERIOD and thickening as they arrive. They follow the distance from the shore
-    // (from the mask), not the depth: on a steep beach depth-driven foam collapses into a line.
-    // The exact waterline gets a lapping fringe from the per-pixel depth.
+    // Shore: a dense rim of foam where the water laps the sand (per-pixel depth, so it hugs the
+    // waterline exactly) and thin lines rolling in toward it once per SHORE_WAVE_PERIOD. The lines
+    // follow the distance from the shore (from the mask), not the depth: on a steep beach
+    // depth-driven foam collapses into a single line.
     float shoreDistance = SampleOceanMask(input.baseXZ).z;
     float shoreZone = 1.0f - saturate(shoreDistance / max(ShoreFoamWidth, 0.01f));
     float shorePhase = shoreDistance / SHORE_WAVE_SPACING + OceanTime / SHORE_WAVE_PERIOD;
-    float shoreLines = smoothstep(0.35f, 0.9f, 0.5f + 0.5f * sin(2.0f * OCEAN_PI * shorePhase));
-    float fringe = smoothstep(0.35f, 0.04f, seabedDepth);
-    float shore = ShoreFoamStrength * (shoreLines * shoreZone * shoreZone * 1.3f + fringe * 1.2f);
+    float shoreLines = smoothstep(0.72f, 0.97f, 0.5f + 0.5f * sin(2.0f * OCEAN_PI * shorePhase));
+    float rim = max(smoothstep(0.6f, 0.05f, seabedDepth), smoothstep(4.5f, 0.5f, shoreDistance) * 0.9f);
+    float shore = ShoreFoamStrength * (shoreLines * shoreZone * shoreZone * 0.45f + rim * 1.1f);
 
-    // Foam breaks up into lacy patches: the denser the coverage, the more of the noise pattern
-    // turns white, with a soft edge so patches never read as flat decals.
+    // Coverage decides how much of the lace turns white: little coverage leaves thin strands,
+    // full coverage a solid sheet. Foam is opaque where it is - a translucent veil of it only
+    // greys the water.
     float pattern = FoamPattern(input.worldPos.xz);
     float coverage = saturate(foamAmount * 1.2f + shore);
-    float foam = smoothstep(1.0f - coverage, 1.35f - coverage, pattern) * saturate(coverage * 3.0f);
-    foam *= 0.55f + 0.45f * coverage;
+    float foam = smoothstep(1.0f - coverage, 1.2f - coverage, pattern) * saturate(coverage * 6.0f);
 
     // Foam is a rough, bright scatterer lying on the surface: light it like the beach beside it
-    // (albedo / pi, mostly by the sun's elevation), not by the rippled water normal, or it turns
-    // grey next to the sand.
+    // (albedo / pi, mostly by the sun's elevation), not by the rippled water normal, and with a
+    // neutral sky term, or it turns grey and lilac next to the sand.
     float foamNDotL = saturate(l.y) * 0.75f + saturate(dot(n, l)) * 0.25f;
-    float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + CameraAmbientColor);
+    float ambientLuminance = dot(CameraAmbientColor, float3(0.2126f, 0.7152f, 0.0722f));
+    float3 foamAmbient = lerp(ambientLuminance.xxx, CameraAmbientColor, 0.35f);
+    float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + foamAmbient);
     color = lerp(color, foamColor, foam);
 
     // Fade into the (already fogged) scene over the last few centimetres of water depth, so the
