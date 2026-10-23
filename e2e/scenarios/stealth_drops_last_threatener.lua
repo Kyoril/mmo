@@ -49,18 +49,31 @@ Assert(banditHealth > 0, "bandit should spawn alive")
 -- swing timer running that would strip the stealth aura a moment later.
 TargetUnit(bandit)
 Assert(CastSpell(FIREBALL, bandit), "Fireball cast request should be accepted")
+
+-- Fireball has a cast time, and the server refuses a second cast while one is in progress.
+-- Waiting for the bandit to lose health is not the same as waiting for this cast: anything
+-- else already fighting the bandit takes it down too, and the stealth request then went out
+-- mid-cast, was refused as "spell in progress" and no aura ever appeared.
+Assert(WaitUntil(function() return LastCastResult() == "ok" end, 15000, "fireball cast finishes"),
+	"Fireball should finish casting, got: " .. LastCastResult())
 Assert(WaitUntil(function() return GetHealth(bandit) < banditHealth end, 15000, "bandit takes the hit"),
 	"bandit should take damage, which puts us on its threat list")
 
 -- A dead creature leaves combat through a different path and would not exercise the bug.
 Assert(IsAlive(bandit), "bandit must survive the pull for this regression")
 
--- Go undetectable while still being its only threatener.
-Assert(CastSpell(STEALTH), "stealth cast request should be accepted")
-Assert(WaitUntil(function() return LastCastResult() == "ok" end, 10000, "stealth cast finishes"),
-	"stealth cast should succeed, got: " .. LastCastResult())
-Assert(WaitUntil(function() return HasAura(me, STEALTH) end, 10000, "stealth applied"),
-	"player should have the stealth aura")
+-- Go undetectable while still being its only threatener. The Fireball's global cooldown may
+-- still have a moment to run and the pulled bandit is already swinging at us, so ask again
+-- until the aura sticks rather than betting the regression on a single try.
+local stealthed = false
+for _ = 1, 10 do
+	Assert(CastSpell(STEALTH), "stealth cast request should be accepted")
+	if WaitUntil(function() return HasAura(me, STEALTH) end, 1000, "stealth applied") then
+		stealthed = true
+		break
+	end
+end
+Assert(stealthed, "player should have the stealth aura, last cast result: " .. LastCastResult())
 
 -- Put real distance between us so detection cannot succeed on any level spread
 -- (detection range is clamped to 25 units at the very most).

@@ -1627,12 +1627,21 @@ namespace mmo
 			return waitForShutdownCountdown("GM.CancelShutdown", previousCounter) == ShutdownCountdownCancelled;
 		}
 
-		void luaGmSetSpeed(const float speed)
+		/// A character's run speed with nothing modifying it, in yards per second - the server's
+		/// default for every unit (GameUnitS::GetBaseSpeed). CheatSpeed carries an absolute base
+		/// speed, so turning the documented multiplier into one needs this.
+		constexpr float DefaultRunSpeed = 7.0f;
+
+		void luaGmSetSpeed(const float multiplier)
 		{
+			// A multiplier of the normal run speed, as e2e/README.md documents it: 1.0 is normal
+			// and 0.5 is half. Passed through as it was, 0.5 meant half a yard per second - a
+			// fourteenth of the normal pace - and a scenario walking fifteen yards timed out.
+			const float speed = multiplier * DefaultRunSpeed;
 			g_runtime->session->GetRealm().CheatSpeed(speed);
 			if (g_runtime->transcript)
 			{
-				g_runtime->transcript->Action("GM.SetSpeed", { { "speed", speed } });
+				g_runtime->transcript->Action("GM.SetSpeed", { { "multiplier", multiplier }, { "speed", speed } });
 			}
 		}
 
