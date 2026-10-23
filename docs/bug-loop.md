@@ -126,6 +126,11 @@ At startup, before the first poll, the loop compiles the game-data schemas of th
 Nothing the fixer writes can change how later diffs are decoded. If protoc or the schemas are
 missing, the loop logs a warning and runs without a decoder: every `.data` change then parks.
 
+Stale git locks: a loop killed during a git operation leaves an `index.lock` in its worktree or a
+submodule's git directory, and every later git command there fails ("File exists"). At startup
+the loop removes such locks if they are older than a minute (it is the only user of its
+worktree, and only one loop runs) and logs each one.
+
 Stale claims: if the loop is killed mid-fix, the next live poll releases the bug as `triaged`
 with an "interrupted" note and the category `needs_info` (see "Needs-info bugs"). An interrupted guided refix goes back to `pr_open`; an interrupted
 feature implement run goes back to `triaged` with the category `design_request` and "decide

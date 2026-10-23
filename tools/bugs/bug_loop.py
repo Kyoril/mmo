@@ -175,6 +175,9 @@ def main(argv=None):
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
 		notifier=make_notifier(os.environ, log), github=gh, nightly=ci.github_nightly(repo))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
+	if not args.dry_run:
+		for path in worktree.clear_stale_locks():
+			log("removed a stale git lock left by an earlier run: " + path)
 	bug_loop._stage("starting")
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	warning = stored_phase_warning(state, gh)
