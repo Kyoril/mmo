@@ -22,7 +22,12 @@ Special cases:
   merged wire format gets its own version. Then run
   `python tools/protocol_version_check.py --update` from the worktree root to regenerate
   `src/shared/protocol_fingerprint.json`, and in `docs/protocol_versions.md` keep both sides'
-  rows, the fix's row under the new number, and set the "Current" column to it.
+  rows, the fix's row under the new number, and set the "Current" column to it. When both
+  sides bumped to the same value, git merges the header without a conflict and only the
+  fingerprint or the docs conflict: the version still has to go one above, so edit the
+  `ProtocolVersion` line in `src/shared/game_protocol/game_protocol.h` or
+  `src/shared/auth_protocol/auth_protocol.h` even though it is not listed. Change nothing else in
+  those headers.
 - **Generated files** (`protocol_fingerprint.json`, lint baselines): regenerate them with
   their tool instead of merging their text, when the tool exists in the repository.
 - **Lists and tables** (localization files, docs tables, registration lists): keep the
@@ -32,8 +37,10 @@ Special cases:
 
 Rules:
 
-- Change only the conflicted files listed (and the protocol fingerprint, when the special case
-  above applies and the fingerprint is listed). Create no other files.
+- Change only the conflicted files listed. The one exception is the protocol version case
+  above: when a protocol file is listed, you may also change the `ProtocolVersion` line of the
+  two version headers, `src/shared/protocol_fingerprint.json` and `docs/protocol_versions.md`.
+  Create no other files.
 - Do not commit, do not stage, do not run `git merge`, `git checkout`, `git reset`,
   `git stash` or `git rebase`: the orchestrator stages, checks and commits your result.
 - Do not build or run tests: the merge result is built and tested by the gate afterwards.
