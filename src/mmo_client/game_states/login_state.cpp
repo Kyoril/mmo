@@ -122,7 +122,7 @@ namespace mmo
 		m_glueScene->Update(deltaSeconds);
 
 		// The 3D listener sits at the camera, so the placed town ambience is heard from there.
-		m_audio.Update(m_glueScene->GetCameraPosition(), deltaSeconds);
+		m_glueScene->UpdateAudioListener(m_audio, deltaSeconds);
 
 		if (!m_glueSceneReadySent && m_glueScene->IsGateReady())
 		{

@@ -97,6 +97,9 @@ namespace mmo
 		/// Gets the camera's current world position, for the audio listener.
 		[[nodiscard]] Vector3 GetCameraPosition() const;
 
+		/// Updates the audio listener to match the glue camera's current position and facing.
+		void UpdateAudioListener(IAudio& audio, float deltaSeconds);
+
 		/// Sets the time of day.
 		/// @param msSinceMidnight Milliseconds since midnight.
 		void SetTimeOfDay(GameTime msSinceMidnight);
