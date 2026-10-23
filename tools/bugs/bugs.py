@@ -30,32 +30,44 @@ def _tls12_context():
 	return context
 
 
-def _handshake_failed(error):
+def _connection_failed(error):
 	reason = getattr(error, "reason", error)
 	return isinstance(reason, (ConnectionResetError, ssl.SSLError, TimeoutError))
 
 
+# Repeating these cannot do harm. A POST can: a claim that went through before the reset comes
+# back 409 on the retry, which the loop takes for "claimed elsewhere".
+RETRYABLE_METHODS = ("GET", "PUT", "PATCH")
+
+
 class TlsFallbackOpener:
-	"""urlopen that falls back to TLS 1.2 when a connection is reset or times out in the handshake.
+	"""urlopen that survives a flaky connection to the bug API: a reset or timed-out request is
+	retried once (GET, PUT and PATCH only), and the first one switches the process to TLS 1.2.
 
 	On 2026-10-23 every TLS 1.3 handshake with the bug API was reset (Windows curl, which ended up
-	on TLS 1.2, still worked), and the bug loop saw no ship decision for nine hours. Once the
-	fallback was needed, it stays on for the process, so a request is retried at most once."""
+	on TLS 1.2, still worked), and the bug loop saw no ship decision for nine hours. Later that day
+	a connection reset in the middle of a status update left a finished fix "interrupted"."""
 
 	def __init__(self, urlopen=urllib.request.urlopen):
 		self.urlopen = urlopen
 		self.context = None
 
-	def __call__(self, request, timeout):
+	def _open(self, request, timeout):
 		if self.context is not None:
 			return self.urlopen(request, timeout=timeout, context=self.context)
+		return self.urlopen(request, timeout=timeout)
+
+	def __call__(self, request, timeout):
 		try:
-			return self.urlopen(request, timeout=timeout)
+			return self._open(request, timeout)
 		except (urllib.error.URLError, OSError) as error:
-			if isinstance(error, urllib.error.HTTPError) or not _handshake_failed(error):
+			if isinstance(error, urllib.error.HTTPError) or not _connection_failed(error):
 				raise
-			self.context = _tls12_context()
-			return self.urlopen(request, timeout=timeout, context=self.context)
+			if self.context is None:
+				self.context = _tls12_context()
+			if request.get_method() not in RETRYABLE_METHODS:
+				raise
+			return self._open(request, timeout)
 
 
 class BugApi:
