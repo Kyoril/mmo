@@ -18,6 +18,7 @@ Binary files other than game data cannot be merged and stay conflicts."""
 import difflib
 import os
 import re
+import tempfile
 
 from . import data_merge
 from .claude import REVIEW_TOOLS, ClaudeError
@@ -35,6 +36,65 @@ def _diff(before, after, before_name, after_name):
 
 def _text(data):
 	return (data or b"").decode("utf-8", "replace")
+
+
+def _split_marked(marked):
+	"""The clean segments and conflict blocks of `git merge-file --diff3` output; None when the
+	markers do not nest as git writes them."""
+	clean, blocks = [[]], []
+	state = block = None
+	for line in marked.splitlines(True):
+		bare = line.rstrip("\r\n")
+		if state is None and line.startswith("<<<<<<< "):
+			state, block = "ours", {"ours": [], "base": [], "theirs": []}
+		elif state == "ours" and line.startswith("||||||| "):
+			state = "base"
+		elif state in ("ours", "base") and bare == "=======":
+			state = "theirs"
+		elif state == "theirs" and line.startswith(">>>>>>> "):
+			blocks.append({side: "".join(lines) for side, lines in block.items()})
+			clean.append([])
+			state = None
+		elif state is None:
+			clean[-1].append(line)
+		else:
+			block[state].append(line)
+	if state is not None or not blocks:
+		return None
+	return ["".join(lines) for lines in clean], blocks
+
+
+def conflict_regions(marked, result, name, context=6):
+	"""The review view of one resolved file: per conflict the base, OURS and THEIRS text, a few
+	lines around it and what the resolution put there. None when the resolution changed anything
+	outside the conflicts (the text git merged cleanly must come back unchanged, in order); the
+	caller then shows full diffs instead."""
+	split = _split_marked(marked)
+	if split is None:
+		return None
+	clean, blocks = split
+	if not result.startswith(clean[0]):
+		return None
+	position = len(clean[0])
+	resolutions = []
+	for index, segment in enumerate(clean[1:], 1):
+		if index == len(clean) - 1:
+			end = len(result) - len(segment)
+			if end < position or not result.endswith(segment):
+				return None
+		else:
+			end = result.find(segment, position) if segment else -1
+			if end < 0:
+				return None
+		resolutions.append(result[position:end])
+		position = end + len(segment)
+	parts = ["=== {} ({} conflict(s); everything else is git's own merge, unchanged) ===".format(name, len(blocks))]
+	for index, (block, resolution) in enumerate(zip(blocks, resolutions)):
+		before = "".join(clean[index].splitlines(True)[-context:])
+		after = "".join(clean[index + 1].splitlines(True)[:context])
+		parts.append("--- conflict {} of {}\n--- context before\n{}--- BASE\n{}--- OURS\n{}--- THEIRS\n{}--- RESOLUTION\n{}"
+			"--- context after\n{}".format(index + 1, len(blocks), before, block["base"], block["ours"], block["theirs"], resolution, after))
+	return "\n".join(parts)
 
 
 class ConflictResolver:
@@ -65,6 +125,19 @@ class ConflictResolver:
 			_, sha, stage = meta.split()
 			stages[int(stage)] = self.run_git(repo, "cat-file", "blob", sha, binary=True).stdout
 		return stages
+
+	def _marked(self, repo, stages):
+		"""git's own merge of the three stages, with diff3 conflict markers."""
+		with tempfile.TemporaryDirectory(prefix="mmo_bugloop_merge_") as folder:
+			files = []
+			for stage in (2, 1, 3):
+				path = os.path.join(folder, str(stage))
+				with open(path, "wb") as handle:
+					handle.write(stages[stage])
+				files.append(path)
+			merged = self.run_git(repo, "merge-file", "-p", "--diff3", "-L", "ours", "-L", "base", "-L", "theirs", *files,
+				check=False, binary=True)
+		return _text(merged.stdout)
 
 	def _index(self, repo):
 		entries = {}
@@ -152,6 +225,13 @@ class ConflictResolver:
 			novel = [line for line in result.splitlines() if line.strip() and line not in kept]
 			report["text"].append({"path": prefix + path, "deleted": resolved is None, "novel_lines": len(novel)})
 			name = prefix + path
+			regions = None
+			if resolved is not None and all(stage in stages for stage in (1, 2, 3)):
+				regions = conflict_regions(self._marked(repo, stages), result, name)
+			report["text"][-1]["review"] = "conflicts" if regions is not None else "full diffs"
+			if regions is not None:
+				sections.append(regions)
+				continue
 			sections.append("=== {} ===\n--- OURS changed (base -> ours)\n{}\n--- THEIRS changed (base -> theirs)\n{}\n"
 				"--- RESOLUTION against ours\n{}\n--- RESOLUTION against theirs\n{}".format(name,
 				_diff(base, ours, "base/" + name, "ours/" + name), _diff(base, theirs, "base/" + name, "theirs/" + name),
