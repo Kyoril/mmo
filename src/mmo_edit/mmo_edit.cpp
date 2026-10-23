@@ -778,7 +778,7 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--capture-view")
 			{
 				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
-				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--fog] [--far-radius <pages>] [--warmup <frames>]
+				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--fog] [--prepass] [--far-radius <pages>] [--warmup <frames>]
 				// Renders each viewpoint of the world into a PNG, for comparing a zone against concept art.
 				static std::ofstream captureLog("capture_view.log", std::ios::out | std::ios::trunc);
 				static std::mutex captureLogMutex;
@@ -808,6 +808,7 @@ int main(int argc, char* arg[])
 				int32 farRadius = -1;
 				bool grass = false;
 				bool fog = false;
+				bool prepass = false;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
@@ -853,6 +854,10 @@ int main(int argc, char* arg[])
 					{
 						fog = true;
 					}
+					else if (arg == "--prepass")
+					{
+						prepass = true;
+					}
 				}
 
 				if (argumentsValid && (views.empty() || views.size() != outputs.size()))
@@ -870,6 +875,10 @@ int main(int argc, char* arg[])
 						world->SetFarTerrainRadius(static_cast<uint32>(farRadius));
 					}
 					world->SetFogEnabled(fog);
+					if (prepass && world->GetDeferredRenderer())
+					{
+						world->GetDeferredRenderer()->SetDepthPrepassEnabled(true);
+					}
 
 					captured = true;
 					for (size_t v = 0; v < views.size(); ++v)
