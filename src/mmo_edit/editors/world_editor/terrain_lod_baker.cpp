@@ -8,6 +8,7 @@
 #include "binary_io/writer.h"
 #include "deferred_shading/deferred_renderer.h"
 #include "graphics/g_buffer.h"
+#include "graphics/global_shader_parameters.h"
 #include "graphics/graphics_device.h"
 #include "graphics/render_texture.h"
 #include "log/default_log_levels.h"
@@ -175,8 +176,10 @@ namespace mmo
 		}
 
 		std::vector<uint8> color;
-		success = success && RenderColor(page, color, ColorOptions{});
-		success = success && page_bake::WriteDxt1Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), m_textureSize);
+		ColorOptions colorOptions;
+		colorOptions.emissiveRatioInAlpha = true;
+		success = success && RenderColor(page, color, colorOptions);
+		success = success && page_bake::WriteDxt5Texture(m_terrain.GetPageLodTextureFilename(x, z), std::move(color), m_textureSize);
 
 		return success;
 	}
@@ -208,6 +211,14 @@ namespace mmo
 		// Twice: freshly loaded tiles build their index buffers in PreRender, which the scene calls
 		// after it has already captured their (still empty) render operation, so a page's first
 		// frame draws nothing.
+		// Bake in daylight: materials fade their emissive with the global NightFactor (the desert
+		// glow), and the far material applies that fade itself at runtime. Baking while the editor
+		// sky is at night would store no emissive at all.
+		GlobalShaderParameters& globals = GlobalShaderParameters::Get();
+		float nightFactor = 0.0f;
+		const bool hasNightFactor = globals.GetScalar("NightFactor", nightFactor);
+		globals.SetScalar("NightFactor", 0.0f);
+
 		auto& gx = GraphicsDevice::Get();
 		for (int pass = 0; pass < 2; ++pass)
 		{
@@ -215,6 +226,11 @@ namespace mmo
 			gx.Reset();
 			gx.SetViewport(0, 0, m_textureSize, m_textureSize, 0.0f, 1.0f);
 			m_renderer->Render(m_scene, *m_camera);
+		}
+
+		if (hasNightFactor)
+		{
+			globals.SetScalar("NightFactor", nightFactor);
 		}
 		if (options.water)
 		{
@@ -249,16 +265,22 @@ namespace mmo
 		double emissiveSum = 0.0;
 		for (uint32 i = 0; i < pixelCount; ++i)
 		{
+			float albedoTotal = 0.0f;
+			float emittedTotal = 0.0f;
 			for (uint32 c = 0; c < 3; ++c)
 			{
-				const float emitted = page_bake::HalfToFloat(emissive[i * 4 + c]);
+				const float emitted = std::max(page_bake::HalfToFloat(emissive[i * 4 + c]), 0.0f);
+				const float reflected = std::max(page_bake::HalfToFloat(albedo[i * 4 + c]), 0.0f);
 				emissiveSum += emitted;
-				const float linear = std::clamp(page_bake::HalfToFloat(albedo[i * 4 + c]) + emitted, 0.0f, 1.0f);
+				albedoTotal += reflected;
+				emittedTotal += emitted;
+				const float linear = std::clamp(options.emissiveRatioInAlpha ? reflected : reflected + emitted, 0.0f, 1.0f);
 				const float encoded = options.srgb ? std::pow(linear, 1.0f / 2.2f) : linear;
 				srgb[i * 4 + c] = static_cast<uint8>(std::lround(encoded * 255.0f));
 			}
 
-			srgb[i * 4 + 3] = 255;
+			const float emissiveRatio = options.emissiveRatioInAlpha && albedoTotal > 1e-4f ? emittedTotal / albedoTotal : 0.0f;
+			srgb[i * 4 + 3] = static_cast<uint8>(std::lround((1.0f - std::clamp(emissiveRatio, 0.0f, 1.0f)) * 255.0f));
 		}
 
 		if (!options.srgb)
@@ -268,7 +290,7 @@ namespace mmo
 
 		// Terrain holes draw nothing and would bake as black spots, while the far mesh has no holes.
 		// The G-buffer albedo alpha is 1 wherever geometry was drawn; give the rest the page's mean colour.
-		uint64 sum[3] = {};
+		uint64 sum[4] = {};
 		uint32 covered = 0;
 		for (uint32 i = 0; i < pixelCount; ++i)
 		{
@@ -277,6 +299,7 @@ namespace mmo
 				sum[0] += srgb[i * 4 + 0];
 				sum[1] += srgb[i * 4 + 1];
 				sum[2] += srgb[i * 4 + 2];
+				sum[3] += srgb[i * 4 + 3];
 				++covered;
 			}
 		}
@@ -287,7 +310,7 @@ namespace mmo
 			{
 				if (page_bake::HalfToFloat(albedo[i * 4 + 3]) <= 0.5f)
 				{
-					for (uint32 c = 0; c < 3; ++c)
+					for (uint32 c = 0; c < 4; ++c)
 					{
 						srgb[i * 4 + c] = static_cast<uint8>(sum[c] / covered);
 					}

@@ -1999,7 +1999,7 @@ namespace mmo
 		}
 
 		// Same material setup as the client's WorldState::CreateFarTerrain, so the distance looks alike.
-		const MaterialPtr parent = MaterialManager::Get().Load("Models/AlbedoNormal_Opaque_Base.hmat");
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/Terrain/FarTerrain.hmat");
 		if (!parent)
 		{
 			WLOG("Distant terrain disabled: its material could not be loaded");
