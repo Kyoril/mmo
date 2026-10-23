@@ -1,12 +1,15 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
-#include "platform.h"
+
+#include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
+#include "game_client/audio_listener.h"
 #include "client_locale.h"
+#include "platform.h"
 #include "perf_capture.h"
 #include "base/localization.h"
 #include "client_data/zone_names.h"
@@ -128,10 +131,41 @@ namespace mmo
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
 		static const char *s_ambientSounds = "AmbientSounds";
+		static const char *s_waterSounds = "waterSounds";
 	}
 
 	namespace
 	{
+		/// Answers the water ambience scan from the streamed client terrain. Without terrain every
+		/// sample is empty.
+		class TerrainWaterAmbienceSource final : public IWaterAmbienceSource
+		{
+		public:
+			explicit TerrainWaterAmbienceSource(terrain::Terrain* terrain)
+				: m_terrain(terrain)
+			{
+			}
+
+			[[nodiscard]] WaterSample Sample(const float x, const float z) const override
+			{
+				WaterSample sample;
+				if (m_terrain == nullptr)
+				{
+					return sample;
+				}
+
+				sample.hasWater = m_terrain->HasWaterAtWorldPos(x, z);
+				sample.waterType = static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+				sample.surfaceY = m_terrain->GetWaterHeightAtWorldPos(x, z);
+				sample.hasGround = m_terrain->TryGetSmoothHeightAt(x, z, sample.groundY);
+				sample.flowSpeed = m_terrain->GetWaterFlowSpeedAtWorldPos(x, z);
+				return sample;
+			}
+
+		private:
+			terrain::Terrain* m_terrain;
+		};
+
 		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
 		void ResetInFlightCacheQueries(ICacheProvider& cache)
 		{
@@ -310,6 +344,39 @@ namespace mmo
 			return {};
 		}
 
+		/// Whether a binding key name is one of the modifier keys themselves.
+		bool IsModifierKeyName(const String& keyName)
+		{
+			return keyName == "CONTROL" || keyName == "SHIFT" || keyName == "ALT";
+		}
+
+		/// Prefixes a binding key name with the modifier keys currently held, in a fixed
+		/// ALT-CTRL-SHIFT- order, so that bindings can tell CTRL-1 apart from 1.
+		String DecorateWithModifiers(const String& keyName)
+		{
+			// A modifier pressed on its own must keep its plain name, or it would decorate itself.
+			if (keyName.empty() || IsModifierKeyName(keyName))
+			{
+				return keyName;
+			}
+
+			String prefix;
+			if (Platform::IsAltKeyDown())
+			{
+				prefix += "ALT-";
+			}
+			if (Platform::IsControlKeyDown())
+			{
+				prefix += "CTRL-";
+			}
+			if (Platform::IsShiftKeyDown())
+			{
+				prefix += "SHIFT-";
+			}
+
+			return prefix + keyName;
+		}
+
 		/// Builds the attacker side of the combat sound context from a live unit.
 		CombatSoundAttacker makeCombatAttacker(const GameUnitC& unit, const bool offhand)
 		{
@@ -345,6 +412,7 @@ namespace mmo
 		, m_zoneMusic(soundEntryPlayer, audio)
 		, m_zoneAmbience(soundEntryPlayer, audio)
 		, m_ambientSounds(soundEntryPlayer, audio)
+		, m_waterAmbience(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -557,6 +625,7 @@ namespace mmo
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
 		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
@@ -1025,7 +1094,7 @@ namespace mmo
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down, Platform::IsShiftKeyDown()))
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
 		{
 			return true;
 		}
@@ -1036,7 +1105,7 @@ namespace mmo
 
 	bool WorldState::OnMouseUp(const MouseButton button, const int32 x, const int32 y)
 	{
-		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Up, Platform::IsShiftKeyDown()))
+		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Up))
 		{
 			return true;
 		}
@@ -1051,23 +1120,64 @@ namespace mmo
 		return true;
 	}
 
-	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	String WorldState::ResolveBindingKeyName(const int32 key) const
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down, Platform::IsShiftKeyDown()))
+		const String baseName = MapBindingKeyCode(key);
+		const String decoratedName = DecorateWithModifiers(baseName);
+		if (decoratedName == baseName)
 		{
-			return true;
+			return baseName;
 		}
 
+		// While the options frame waits for a key, the whole combination is what the player means.
+		if (m_bindings.IsCapturing())
+		{
+			return decoratedName;
+		}
+
+		// Combinations nobody bound fall back to the plain key, so that holding a modifier does not
+		// swallow an existing binding (Ctrl + W keeps moving the character forward).
+		const auto& keyBindings = m_bindings.GetAllKeyBindings();
+		return keyBindings.find(decoratedName) != keyBindings.end() ? decoratedName : baseName;
+	}
+
+	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	{
+		// A pending key capture waits for the key of a combination, not for its modifiers: holding
+		// Ctrl must not end the capture before the player pressed the key they want to bind.
+		if (m_bindings.IsCapturing())
+		{
+			const String baseName = MapBindingKeyCode(key);
+			if (baseName.empty() || IsModifierKeyName(baseName))
+			{
+				return true;
+			}
+		}
+
+		auto it = m_pressedKeyBindings.find(key);
+		if (it == m_pressedKeyBindings.end())
+		{
+			it = m_pressedKeyBindings.emplace(key, ResolveBindingKeyName(key)).first;
+		}
+
+		m_bindings.ExecuteKey(it->second, repeat ? BindingKeyState::Repeat : BindingKeyState::Down);
 		return true;
 	}
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up, Platform::IsShiftKeyDown()))
+		String keyName;
+		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
-			return true;
+			keyName = it->second;
+			m_pressedKeyBindings.erase(it);
+		}
+		else
+		{
+			keyName = ResolveBindingKeyName(key);
 		}
 
+		m_bindings.ExecuteKey(keyName, BindingKeyState::Up);
 		return true;
 	}
 
@@ -1133,16 +1243,37 @@ namespace mmo
 		// Keep hearing distance centered on the player, with left/right matching the camera.
 		if (m_playerController->GetControlledUnit())
 		{
+			// Head height of the listener above the unit's feet; the water beds are placed around it too.
+			const Vector3 earOffset(0.0f, 1.6f, 0.0f);
+
 			{
 				PROFILE_SCOPE("OnIdle::Audio");
-				const Quaternion& cameraOrientation = m_playerController->GetCamera().GetDerivedOrientation();
-				m_audio.SetListenerOrientation(cameraOrientation * Vector3::NegativeUnitZ, cameraOrientation * Vector3::UnitY);
-				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+				m_audio.SetListenerOrientation(audio_listener::FlattenedForward(m_playerController->GetCamera().GetDerivedDirection()), Vector3::UnitY);
+				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition() + earOffset, deltaSeconds);
 			}
 
 			// Mesh sounds are selected around the same position the 3D listener sits at
 			PROFILE_SCOPE("OnIdle::AmbientSounds");
 			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+
+			// Water beds follow the terrain water around the ear; the terrain pointer is refreshed
+			// every frame because the world instance is rebuilt on every world change.
+			{
+				PROFILE_SCOPE("OnIdle::WaterAmbience");
+				terrain::Terrain *waterTerrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain()) ? m_worldInstance->GetTerrain() : nullptr;
+				const TerrainWaterAmbienceSource waterSource(waterTerrain);
+				const GameUnitC &controlledUnit = *m_playerController->GetControlledUnit();
+				const Vector3 unitPosition = controlledUnit.GetPosition();
+				// The water type lookup is horizontal only, so the head (unit + earOffset) shares it.
+				const bool submerged = m_waterVolume != nullptr && m_waterVolume->IsPlayerSubmerged();
+				const uint32 footWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u;
+				const uint32 headWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x + earOffset.x, unitPosition.z + earOffset.z)) : 0u;
+				m_waterAmbience.Update(waterSource, unitPosition + earOffset,
+					controlledUnit.GetMovementInfo().IsSwimming(),
+					footWaterType,
+					submerged, headWaterType,
+					deltaSeconds);
+			}
 		}
 
 		{
@@ -1159,6 +1290,11 @@ namespace mmo
 			// Submersion state for the underwater post-process and the audio low-pass. Runs after the
 			// audio update so the cutoff it sets is not overwritten within the same frame.
 			UpdateWaterVolume(deltaSeconds);
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::Ocean");
+			UpdateOcean();
 		}
 
 		// Only update when world loading is ready
@@ -1639,6 +1775,25 @@ namespace mmo
 		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());
 	}
 
+	void WorldState::UpdateOcean()
+	{
+		DeferredRenderer* deferred = GetWorldDeferredRenderer();
+		if (!deferred || !m_playerController)
+		{
+			return;
+		}
+
+		// The FFT ocean draws the ocean to the horizon from the terrain's ocean mask; while it runs,
+		// the terrain leaves its ocean quads out of the water mesh (lakes and rivers stay meshed).
+		terrain::Terrain* terrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain())
+			? m_worldInstance->GetTerrain()
+			: nullptr;
+
+		const auto* profile = m_project.waterProfiles.getById(static_cast<uint32>(terrain::WaterType::Ocean));
+		const OceanSettings settings = profile != nullptr ? ToOceanSettings(*profile) : OceanSettings();
+		m_oceanFeed.Update(deferred->GetOceanPass(), terrain, m_playerController->GetCamera().GetDerivedPosition(), settings);
+	}
+
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
@@ -1652,6 +1807,29 @@ namespace mmo
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();
 		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
 		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
+
+		// Water ambience: every profile with a calm bed, a swim layer or an underwater layer takes part. WaterAmbience
+		// only scans and plays beds for profiles with a calm sound.
+		std::vector<WaterAmbienceSounds> waterAmbienceProfiles;
+		for (const auto &profile : m_project.waterProfiles.getTemplates().entry())
+		{
+			if (profile.ambient_calm_sound() == 0 && profile.ambient_swim_sound() == 0 && profile.ambient_underwater_sound() == 0)
+			{
+				continue;
+			}
+
+			WaterAmbienceSounds sounds;
+			sounds.profile.waterType = profile.id();
+			sounds.profile.shoreOnly = profile.ambient_shore_only();
+			sounds.profile.range = profile.ambient_range();
+			sounds.calmSound = profile.ambient_calm_sound();
+			sounds.fastSound = profile.ambient_fast_sound();
+			sounds.swimSound = profile.ambient_swim_sound();
+			sounds.underwaterSound = profile.ambient_underwater_sound();
+			sounds.volume = profile.ambient_volume();
+			waterAmbienceProfiles.push_back(sounds);
+		}
+		m_waterAmbience.SetProfiles(std::move(waterAmbienceProfiles));
 
 		// Let terrain pages resolve their surface material from the profile table. A page that
 		// carries an explicit material name still overrides this, so nothing already authored
@@ -2451,6 +2629,20 @@ namespace mmo
 									 }
 								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
 
+		Console::RegisterCommand(command_names::s_waterSounds, [this](const std::string &, const std::string &)
+								 {
+									 const auto &fields = m_waterAmbience.GetSmoothedFields();
+									 ILOG("Water ambience: " << fields.size() << " fields");
+									 for (const auto &field : fields)
+									 {
+										 ILOG("  water type " << field.waterType << ": level " << field.level << ", focus " << field.GetFocus() << ", speed " << field.speed << ", direction " << field.direction);
+									 }
+									 for (const auto &voice : m_waterAmbience.GetVoices())
+									 {
+										 ILOG("  voice sound " << voice.soundEntryId << ": volume " << voice.volume << ", spread " << voice.spread << ", position " << voice.position);
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the water ambience fields and voices.");
+
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
 
@@ -2589,7 +2781,8 @@ namespace mmo
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
 			command_names::s_reload,
-			command_names::s_ambientSounds};
+			command_names::s_ambientSounds,
+			command_names::s_waterSounds};
 
 		for (const auto &command : commandsToRemove)
 		{
@@ -4079,7 +4272,7 @@ namespace mmo
 			{
 				int32 emptySlot = -1;
 
-				for (int32 i = 0; i < MaxActionButtons; ++i)
+				for (int32 i = 0; i < ActionButtonsPerBar; ++i)
 				{
 					// Did we find an empty slot yet?
 					if (emptySlot == -1 && m_actionBar.GetActionButton(i).type == action_button_type::None)
@@ -5922,6 +6115,7 @@ namespace mmo
 
 		// The old world's placements do not remove their mesh sounds when it is destroyed
 		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;

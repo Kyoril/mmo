@@ -28,8 +28,11 @@ namespace mmo
 	public:
 		/// @brief Plays a sound entry as a global (2D) sound. 3D entries are played
 		/// unpositioned as well, so prefer the positional overload for those.
+		/// @param soundId Sound entry to play.
+		/// @param priority Channel priority (see IAudio::PlaySound). Sounds of lower priority
+		///	never steal the channel when all channels are busy.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayEntry(uint32 soundId);
+		ChannelIndex PlayEntry(uint32 soundId, float priority = 1.0f);
 
 		/// @brief Creates the sound of an entry without playing it, picking the file the following
 		/// PlayLoadedEntry plays. Streams keep opening in the background (see IAudio::IsSoundLoading).
@@ -37,13 +40,25 @@ namespace mmo
 		SoundIndex LoadEntry(uint32 soundId);
 
 		/// @brief Plays a sound returned by LoadEntry as a global (2D) sound with the entry's settings.
+		/// @param priority Channel priority; higher-priority channels are not stolen by lower ones.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound);
+		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound, float priority = 1.0f);
 
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntry(uint32 soundId, const Vector3& position);
+
+		/// @brief Plays a sound entry as a streamed, positioned loop (e.g. a river or waterfall).
+		/// The file is picked like for PlayEntry (shuffle bag) but loaded through
+		/// IAudio::CreateLoopedStream3D, regardless of the entry's 2D/3D flag, and played in
+		/// the entry's category with the entry's volume and pitch.
+		/// @remark A stream plays on one channel only, so at most one voice per entry may be
+		///         live at any time. Callers must stop the previous channel first.
+		/// @param priority Channel priority (see IAudio::PlaySound3D). Long-lived loops should use
+		///	a priority above 1.0, or one-shots steal their channel once all channels are busy.
+		/// @return The channel the sound plays on, or InvalidChannel.
+		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f);
 
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;

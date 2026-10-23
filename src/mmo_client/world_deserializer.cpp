@@ -988,6 +988,23 @@ namespace mmo
 			m_world.GetTerrain()->SetDefaultMaterial(MaterialManager::Get().Load(defaultMaterialName));
 		}
 
+		// Optional trailing sea level (worlds saved before it existed have their sea at 0).
+		const size_t readSoFar = sizeof(uint8) + sizeof(uint16) + defaultMaterialName.size();
+		if (chunkSize >= readSoFar + sizeof(float))
+		{
+			float seaLevel = terrain::constants::DefaultSeaLevel;
+			if (!(reader >> io::read<float>(seaLevel)))
+			{
+				ELOG("Failed to read terrain sea level: Unexpected end of file");
+				return false;
+			}
+
+			if (hasTerrain)
+			{
+				m_world.GetTerrain()->SetSeaLevel(seaLevel);
+			}
+		}
+
 		return reader;
 	}
 }

@@ -32,6 +32,9 @@ namespace mmo
 		/// Returns true while either Alt key is held down.
 		static bool IsAltKeyDown();
 
+		/// Returns true while either Control key is held down.
+		static bool IsControlKeyDown();
+
 		/// Returns the primary display resolution in pixels as {width, height}.
 		static std::pair<int, int> GetPrimaryDisplayResolution();
 

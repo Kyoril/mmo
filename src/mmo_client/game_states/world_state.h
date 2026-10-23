@@ -45,13 +45,17 @@
 
 #include "game_client/net_client.h"
 #include "game_client/ambient_sound_emitters.h"
+#include "game_client/water_ambience.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
+#include "deferred_shading/ocean_feed.h"
 #include "game_common/fog_volume.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 #include "terrain/far_terrain.h"
+#include "terrain/ocean_mask.h"
+#include "terrain/terrain.h"
 
 #include <map>
 #include <optional>
@@ -301,6 +305,12 @@ namespace mmo
 		bool OnKeyDown(int32 key, bool repeat);
 
 		bool OnKeyUp(int32 key);
+
+		/// Builds the binding key name for a virtual key code, prefixed with the modifiers currently
+		/// held (ALT-, CTRL-, SHIFT-) when that combination is actually bound or a key capture is
+		/// pending. Unbound combinations keep the plain key name, so holding a modifier never swallows
+		/// an existing binding.
+		[[nodiscard]] String ResolveBindingKeyName(int32 key) const;
 
 		void OnIdle(float deltaSeconds, GameTime timestamp);
 
@@ -729,6 +739,9 @@ namespace mmo
 		///			underwater post-process and the audio low-pass.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
 
+		/// Feeds the FFT ocean (sea level, ocean mask, Ocean water profile) every frame.
+		OceanFeed<terrain::Terrain> m_oceanFeed { static_cast<float>(terrain::ocean_mask::TexelSize) };
+
 		/// @brief Asset name of the caustics texture last handed to the underwater pass, so the
 		///			texture is only looked up again when the liquid in front of the camera changes.
 		String m_underwaterCausticsTexture;
@@ -744,6 +757,9 @@ namespace mmo
 
 		/// @brief Recomputes submersion and pushes it to the renderer and the audio device.
 		void UpdateWaterVolume(float deltaSeconds);
+
+		/// Hands the terrain's sea to the FFT ocean renderer and applies the Ocean water profile.
+		void UpdateOcean();
 
 		/// @brief Gets the deferred renderer behind the world frame, or nullptr when the world
 		///			frame or its renderer does not exist yet.
@@ -784,6 +800,11 @@ namespace mmo
 		uint32 m_attackSwingErrorGeneration{0};
 
 		Bindings m_bindings;
+
+		/// Binding key name a held key was pressed with, by virtual key code. The key up event has to
+		/// reach the same binding as the key down event even if the player let go of a modifier in
+		/// between, or action buttons would stay stuck in their pushed state.
+		std::map<int32, String> m_pressedKeyBindings;
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 
@@ -844,6 +865,8 @@ namespace mmo
 		CrossfadingSoundLoop m_zoneAmbience;
 		/// Looping sounds of placed meshes (torches, campfires, portals) near the player.
 		AmbientSoundEmitters m_ambientSounds;
+		/// Water bed and swim loops driven by the terrain water around the player.
+		WaterAmbience m_waterAmbience;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;

@@ -743,7 +743,7 @@ namespace mmo
 		for (const auto &spell : classInstance->spells())
 		{
 			const proto::SpellEntry *spellEntry = m_project.spells.getById(spell.spell());
-			if (spellEntry && actionButtons.size() < 12 && IsActionBarAbility(*spellEntry))
+			if (spellEntry && actionButtons.size() < ActionButtonsPerBar && IsActionBarAbility(*spellEntry))
 			{
 				actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(spell.spell()), action_button_type::Spell};
 			}
@@ -770,7 +770,7 @@ namespace mmo
 		for (const uint32 racialSpellId : AppendRacialSpells(*raceEntry, m_project.spells, spellIds))
 		{
 			const proto::SpellEntry *spellEntry = m_project.spells.getById(racialSpellId);
-			if (spellEntry && actionButtons.size() < 12 && IsActionBarAbility(*spellEntry))
+			if (spellEntry && actionButtons.size() < ActionButtonsPerBar && IsActionBarAbility(*spellEntry))
 			{
 				actionButtons[actionButtons.size()] = ActionButton{static_cast<uint16>(racialSpellId), action_button_type::Spell};
 			}
@@ -4706,10 +4706,12 @@ namespace mmo
 
 		const uint32 level = m_characterData ? m_characterData->level : 1;
 
+		// Defaults only fill the main bar: the second bar is hidden until the player turns it on in
+		// the interface options, so anything seeded there would be invisible.
 		uint8 slot = 0;
 		for (const auto& classSpell : classEntry->spells())
 		{
-			if (slot >= MaxActionButtons)
+			if (slot >= ActionButtonsPerBar)
 			{
 				break;
 			}
@@ -4742,7 +4744,7 @@ namespace mmo
 			{
 				for (const uint32 racialSpellId : raceEntry->racialspells())
 				{
-					if (slot >= MaxActionButtons)
+					if (slot >= ActionButtonsPerBar)
 					{
 						break;
 					}

@@ -26,7 +26,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, status as loop_status, verification, winlock  # noqa: E402
+from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, merge_resolve, notify, state as loop_state, status as loop_status, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -160,8 +160,11 @@ def main(argv=None):
 	worktree = gitops.Worktree(repo, resolve_worktree(config, repo, os.environ))
 	verifier = verification.Verifier(worktree, os.path.join(repo, "build"), timeout=config.step_timeout_seconds)
 	decoder = make_decoder(RUNTIME_ROOT, repo, log)
-	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}
-	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review")}
+	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review", "merge", "merge_review")}
+	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review", "merge_review")}
+	worktree.resolver = merge_resolve.ConflictResolver(gitops.run_git, runner, prompts, schemas,
+		budget_ok=lambda: state.budget_left(config.invocation_budget_per_day, needed=2),
+		timeout=config.step_timeout_seconds, max_usd=config.merge_max_usd, log=log)
 	if args.dry_run:
 		gh = None
 		log("ci watch: off (dry run)")
@@ -172,6 +175,9 @@ def main(argv=None):
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
 		notifier=make_notifier(os.environ, log), github=gh, nightly=ci.github_nightly(repo))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
+	if not args.dry_run:
+		for path in worktree.clear_stale_locks():
+			log("removed a stale git lock left by an earlier run: " + path)
 	bug_loop._stage("starting")
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	warning = stored_phase_warning(state, gh)

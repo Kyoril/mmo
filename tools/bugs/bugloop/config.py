@@ -25,6 +25,11 @@ class LoopConfig:
 	fix_timeout_seconds: int = 5400
 	fix_max_usd: float = 20.0
 	step_timeout_seconds: int = 3600
+	# The Claude stage that resolves merge conflicts with develop at ship or refix time.
+	merge_max_usd: float = 5.0
+	# Automatic re-applications of a fix on today's develop per bug, after a ship conflict the
+	# resolver could not resolve.
+	max_reapply: int = 2
 	ci_poll_seconds: int = 300
 	ci_push_workflow: str = "ccpp.yml"
 	ci_nightly_workflow: str = "nightly-release.yml"
