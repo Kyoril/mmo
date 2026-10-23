@@ -8,6 +8,7 @@
 #include "binary_io/writer.h"
 #include "deferred_shading/deferred_renderer.h"
 #include "graphics/g_buffer.h"
+#include "graphics/global_shader_parameters.h"
 #include "graphics/graphics_device.h"
 #include "graphics/render_texture.h"
 #include "log/default_log_levels.h"
@@ -210,6 +211,14 @@ namespace mmo
 		// Twice: freshly loaded tiles build their index buffers in PreRender, which the scene calls
 		// after it has already captured their (still empty) render operation, so a page's first
 		// frame draws nothing.
+		// Bake in daylight: materials fade their emissive with the global NightFactor (the desert
+		// glow), and the far material applies that fade itself at runtime. Baking while the editor
+		// sky is at night would store no emissive at all.
+		GlobalShaderParameters& globals = GlobalShaderParameters::Get();
+		float nightFactor = 0.0f;
+		const bool hasNightFactor = globals.GetScalar("NightFactor", nightFactor);
+		globals.SetScalar("NightFactor", 0.0f);
+
 		auto& gx = GraphicsDevice::Get();
 		for (int pass = 0; pass < 2; ++pass)
 		{
@@ -217,6 +226,11 @@ namespace mmo
 			gx.Reset();
 			gx.SetViewport(0, 0, m_textureSize, m_textureSize, 0.0f, 1.0f);
 			m_renderer->Render(m_scene, *m_camera);
+		}
+
+		if (hasNightFactor)
+		{
+			globals.SetScalar("NightFactor", nightFactor);
 		}
 		if (options.water)
 		{
