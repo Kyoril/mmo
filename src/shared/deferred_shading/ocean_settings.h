@@ -70,10 +70,10 @@ namespace mmo
 		Vector3 absorption { 0.42f, 0.11f, 0.075f };
 
 		/// @brief Scattering albedo in wave troughs (linear).
-		Vector3 troughColor { 0.065f, 0.402f, 0.434f };
+		Vector3 troughColor { 0.050f, 0.600f, 0.420f };
 
 		/// @brief Scattering albedo at wave crests, where light passes through thin water (linear).
-		Vector3 crestColor { 0.451f, 0.708f, 0.565f };
+		Vector3 crestColor { 0.250f, 0.950f, 0.650f };
 
 		/// @brief Strength of sunlight scattered through wave crests toward the viewer.
 		float subsurfaceStrength { 4.0f };
