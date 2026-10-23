@@ -1200,6 +1200,18 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::BuyBackItem(uint64 vendorGuid, uint32 buyBackSlot)
+	{
+		sendSinglePacket([vendorGuid, buyBackSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyBackItem);
+			packet
+				<< io::write<uint64>(vendorGuid)
+				<< io::write<uint32>(buyBackSlot)
+				;
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::AddAttributePoint(uint32 attribute)
 	{
 		sendSinglePacket([attribute](game::OutgoingPacket& packet) {

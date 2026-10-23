@@ -502,6 +502,12 @@ namespace mmo
 		///	@param count The amount of stacks to buy (some items can only be bought in stacks of lets say 5, so in this case a value of 2 would actually buy 10 items).
 		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
 
+		/// Sends a packet to the server indicating that the player wants to buy an item back that was sold to a specific vendor npc during this session. The vendor
+		///	must be the current vendor, initiated by either the ListInventory or GossipHello packet.
+		///	@param vendorGuid The guid of the vendor npc.
+		///	@param buyBackSlot The zero based buyback slot index as sent in the BuyBackList packet.
+		void BuyBackItem(uint64 vendorGuid, uint32 buyBackSlot);
+
 		/// Sends a packet to the server to spend attribute points on a specific attribute. The amount of attribute points spent is actually determined by the server
 		///	and the request will fail if the player does not have enough attribute points to spend.
 		///	@param attribute The attribute to spend the point on.
