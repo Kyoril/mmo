@@ -118,6 +118,26 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(self.wt.file_bytes(head, "data/client/data.txt"), b"two\n")
 		self.assertIsNone(self.wt.file_bytes(head, "missing.txt"))
 
+	def test_stale_index_locks_are_cleared_and_fresh_ones_kept(self):
+		# 2026-10-23: a restart killed the loop during a submodule checkout; its index.lock stalled
+		# every fix and ship ("Unable to create .../index.lock: File exists").
+		self.assertEqual(self.wt.clear_stale_locks(), [])  # no worktree yet
+		self.wt.prepare()
+		parent_lock = os.path.join(git(self.wt.path, "rev-parse", "--absolute-git-dir"), "index.lock")
+		sub_lock = os.path.join(git(self.wt.sub_path("data/client"), "rev-parse", "--absolute-git-dir"), "index.lock")
+		for path in (parent_lock, sub_lock):
+			write(path, "")
+		old = os.path.getmtime(parent_lock) - 3600
+		os.utime(sub_lock, (old, old))
+		removed = self.wt.clear_stale_locks()
+		self.assertEqual(removed, [os.path.normcase(os.path.normpath(sub_lock))])
+		self.assertFalse(os.path.exists(sub_lock))
+		self.assertTrue(os.path.exists(parent_lock))
+		os.utime(parent_lock, (old, old))
+		self.wt.clear_stale_locks()
+		self.assertFalse(os.path.exists(parent_lock))
+		git(self.wt.sub_path("data/client"), "status")
+
 	def test_untracked_file_is_not_clean(self):
 		self.make_fix()
 		write(os.path.join(self.wt.path, "stray.txt"), "x")

@@ -9,6 +9,7 @@
 #include "client.h"
 #include "game_client/audio_listener.h"
 #include "client_locale.h"
+#include "platform.h"
 #include "perf_capture.h"
 #include "base/localization.h"
 #include "client_data/zone_names.h"
@@ -340,6 +341,39 @@ namespace mmo
 			}
 
 			return {};
+		}
+
+		/// Whether a binding key name is one of the modifier keys themselves.
+		bool IsModifierKeyName(const String& keyName)
+		{
+			return keyName == "CONTROL" || keyName == "SHIFT" || keyName == "ALT";
+		}
+
+		/// Prefixes a binding key name with the modifier keys currently held, in a fixed
+		/// ALT-CTRL-SHIFT- order, so that bindings can tell CTRL-1 apart from 1.
+		String DecorateWithModifiers(const String& keyName)
+		{
+			// A modifier pressed on its own must keep its plain name, or it would decorate itself.
+			if (keyName.empty() || IsModifierKeyName(keyName))
+			{
+				return keyName;
+			}
+
+			String prefix;
+			if (Platform::IsAltKeyDown())
+			{
+				prefix += "ALT-";
+			}
+			if (Platform::IsControlKeyDown())
+			{
+				prefix += "CTRL-";
+			}
+			if (Platform::IsShiftKeyDown())
+			{
+				prefix += "SHIFT-";
+			}
+
+			return prefix + keyName;
 		}
 
 		/// Builds the attacker side of the combat sound context from a live unit.
@@ -1085,23 +1119,64 @@ namespace mmo
 		return true;
 	}
 
-	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	String WorldState::ResolveBindingKeyName(const int32 key) const
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down))
+		const String baseName = MapBindingKeyCode(key);
+		const String decoratedName = DecorateWithModifiers(baseName);
+		if (decoratedName == baseName)
 		{
-			return true;
+			return baseName;
 		}
 
+		// While the options frame waits for a key, the whole combination is what the player means.
+		if (m_bindings.IsCapturing())
+		{
+			return decoratedName;
+		}
+
+		// Combinations nobody bound fall back to the plain key, so that holding a modifier does not
+		// swallow an existing binding (Ctrl + W keeps moving the character forward).
+		const auto& keyBindings = m_bindings.GetAllKeyBindings();
+		return keyBindings.find(decoratedName) != keyBindings.end() ? decoratedName : baseName;
+	}
+
+	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	{
+		// A pending key capture waits for the key of a combination, not for its modifiers: holding
+		// Ctrl must not end the capture before the player pressed the key they want to bind.
+		if (m_bindings.IsCapturing())
+		{
+			const String baseName = MapBindingKeyCode(key);
+			if (baseName.empty() || IsModifierKeyName(baseName))
+			{
+				return true;
+			}
+		}
+
+		auto it = m_pressedKeyBindings.find(key);
+		if (it == m_pressedKeyBindings.end())
+		{
+			it = m_pressedKeyBindings.emplace(key, ResolveBindingKeyName(key)).first;
+		}
+
+		m_bindings.ExecuteKey(it->second, repeat ? BindingKeyState::Repeat : BindingKeyState::Down);
 		return true;
 	}
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up))
+		String keyName;
+		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
-			return true;
+			keyName = it->second;
+			m_pressedKeyBindings.erase(it);
+		}
+		else
+		{
+			keyName = ResolveBindingKeyName(key);
 		}
 
+		m_bindings.ExecuteKey(keyName, BindingKeyState::Up);
 		return true;
 	}
 
@@ -4156,7 +4231,7 @@ namespace mmo
 			{
 				int32 emptySlot = -1;
 
-				for (int32 i = 0; i < MaxActionButtons; ++i)
+				for (int32 i = 0; i < ActionButtonsPerBar; ++i)
 				{
 					// Did we find an empty slot yet?
 					if (emptySlot == -1 && m_actionBar.GetActionButton(i).type == action_button_type::None)
