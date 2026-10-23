@@ -225,6 +225,13 @@ namespace mmo
 		return m_camera->GetDerivedPosition();
 	}
 
+	void GlueScene::UpdateAudioListener(IAudio& audio, const float deltaSeconds)
+	{
+		const Quaternion& orientation = m_camera->GetDerivedOrientation();
+		audio.SetListenerOrientation(orientation * Vector3::NegativeUnitZ, orientation * Vector3::UnitY);
+		audio.Update(GetCameraPosition(), deltaSeconds);
+	}
+
 	void GlueScene::SetTimeOfDay(const GameTime msSinceMidnight)
 	{
 		const float normalized = static_cast<float>(static_cast<double>(msSinceMidnight % constants::OneDay) / static_cast<double>(constants::OneDay));

@@ -1128,11 +1128,13 @@ namespace mmo
 			UpdateUnitAttachedSounds(deltaSeconds);
 		}
 
-		// Update audio component to simulate 3d audio correctly from the player position
+		// Keep hearing distance centered on the player, with left/right matching the camera.
 		if (m_playerController->GetControlledUnit())
 		{
 			{
 				PROFILE_SCOPE("OnIdle::Audio");
+				const Quaternion& cameraOrientation = m_playerController->GetCamera().GetDerivedOrientation();
+				m_audio.SetListenerOrientation(cameraOrientation * Vector3::NegativeUnitZ, cameraOrientation * Vector3::UnitY);
 				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
 			}
 
@@ -1247,8 +1249,6 @@ namespace mmo
 			// Update spell visualization service (audio fading, etc.)
 			SpellVisualizationService::Get().Update(deltaSeconds);
 
-			// Update pending projectiles (animation notify fallback)
-			UpdatePendingProjectiles();
 		}
 
 		// Update foliage system
@@ -4187,62 +4187,10 @@ namespace mmo
 
 				if (casterUnit && targetUnit && m_projectileManager)
 				{
-					// Check if there's a CastSucceeded animation - if so, defer projectile spawn
-					bool hasCastSucceededAnimation = false;
-					if (visualization)
-					{
-						const uint32 eventKey = static_cast<uint32>(proto_client::CAST_SUCCEEDED);
-						const auto& eventMap = visualization->kits_by_event();
-						auto kitIt = eventMap.find(eventKey);
-						if (kitIt != eventMap.end())
-						{
-							for (const auto& kit : kitIt->second.kits())
-							{
-								if (kit.has_animation_name() && !kit.animation_name().empty())
-								{
-									hasCastSucceededAnimation = true;
-									break;
-								}
-							}
-						}
-					}
-
-					if (hasCastSucceededAnimation)
-					{
-						// Create pending projectile and wait for SpellGo animation notify or animation end
-						auto pending = std::make_unique<PendingProjectile>();
-						pending->spellId = spellId;
-						pending->casterGuid = casterId;
-						pending->targetGuid = unitTargetGuid;
-						pending->visualization = visualization;
-						pending->hasCastSucceededAnimation = true;
-						pending->creationTime = GetAsyncTimeMs();
-						
-						// Capture raw pointer for use in lambdas before moving
-						PendingProjectile* pendingPtr = pending.get();
-
-						// Subscribe to animation notify signals on the caster
-						pending->connections += casterUnit->animationNotifyTriggered.connect(
-							[this, pendingPtr](GameUnitC& unit, const AnimationNotify& notify, const String&, const AnimationState&)
-							{
-								if (notify.GetType() == AnimationNotifyType::SpellGo)
-								{
-									// SpellGo notify triggered - spawn the projectile now
-									SpawnPendingProjectile(pendingPtr);
-								}
-							});
-
-						// Also check if animation ends without SpellGo notify (fallback)
-						// We need to check on Update if the one-shot animation has ended
-						// For simplicity, we'll set a timeout fallback
-
-						m_pendingProjectiles.push_back(std::move(pending));
-					}
-					else
-					{
-						// No animation, spawn immediately
-						m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
-					}
+					// SpellGo starts projectile travel on the server. Launch in the same frame:
+					// waiting for a release animation adds a second cast delay and lets the next
+					// cast change when the previous projectile fires by interrupting that animation.
+					m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
 				}
 			}
 		}
@@ -4323,86 +4271,6 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
-	}
-
-	void WorldState::SpawnPendingProjectile(PendingProjectile* pending)
-	{
-		if (!pending || !m_projectileManager)
-		{
-			return;
-		}
-
-		// Get spell
-		const auto* spell = m_project.spells.getById(pending->spellId);
-		if (!spell)
-		{
-			return;
-		}
-
-		// Get caster and target units
-		auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
-		auto targetUnit = ObjectMgr::Get<GameUnitC>(pending->targetGuid);
-
-		if (casterUnit && targetUnit)
-		{
-			// Calculate how long the projectile was delayed by the animation
-			float animationDelay = 0.0f;
-			if (pending->creationTime > 0)
-			{
-				const GameTime now = GetAsyncTimeMs();
-				if (now > pending->creationTime)
-				{
-					animationDelay = static_cast<float>(now - pending->creationTime) / 1000.0f;
-				}
-			}
-
-			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get(), animationDelay);
-		}
-
-		// Remove this pending projectile from the list
-		auto it = std::find_if(m_pendingProjectiles.begin(), m_pendingProjectiles.end(),
-			[pending](const std::unique_ptr<PendingProjectile>& p)
-			{
-				return p.get() == pending;
-			});
-
-		if (it != m_pendingProjectiles.end())
-		{
-			m_pendingProjectiles.erase(it);
-		}
-	}
-
-	void WorldState::UpdatePendingProjectiles()
-	{
-		// Check pending projectiles for animation end fallback
-		for (auto it = m_pendingProjectiles.begin(); it != m_pendingProjectiles.end(); )
-		{
-			PendingProjectile* pending = it->get();
-			
-			// Get caster unit to check animation state
-			auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
-			if (!casterUnit)
-			{
-				// Caster no longer exists, just remove the pending projectile
-				it = m_pendingProjectiles.erase(it);
-				continue;
-			}
-
-			// Check if one-shot animation has ended
-			// If the unit has no active one-shot animation and we were waiting for SpellGo,
-			// spawn the projectile as fallback
-			if (pending->hasCastSucceededAnimation && !casterUnit->IsPlayingOneShotAnimation())
-			{
-				// Animation ended without SpellGo notify - spawn as fallback
-				SpawnPendingProjectile(pending);
-				// SpawnPendingProjectile removes from the list, so just break to avoid invalidating iterator
-				// Actually, we need to restart iteration since the list was modified
-				it = m_pendingProjectiles.begin();
-				continue;
-			}
-
-			++it;
-		}
 	}
 
 	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket &packet)

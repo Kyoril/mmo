@@ -218,7 +218,7 @@ namespace mmo
 
 		/// @brief Legacy fallback footstep playback (hardcoded ground WAVs) used while
 		///        surface types / footstep sound entries are not authored yet.
-		void PlayLegacyFootstepSound();
+		void PlayLegacyFootstepSound(const Vector3& soundPosition);
 
 	private:
 		/// Item subclass of the equipped main hand weapon. 0 = unarmed.

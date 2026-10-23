@@ -274,7 +274,8 @@ namespace mmo
 			return;
 		}
 
-		result = m_system->init(MaximumSoundChannels, FMOD_INIT_NORMAL, 0);
+		// Scene cameras use a right-handed basis (forward = -Z, up = +Y).
+		result = m_system->init(MaximumSoundChannels, FMOD_INIT_3D_RIGHTHANDED, 0);
 		if (result != FMOD_OK)
 		{
 			m_system->release();
@@ -352,6 +353,12 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::SetListenerOrientation(const Vector3& forward, const Vector3& up)
+	{
+		m_listenerForward = forward.NormalizedCopy();
+		m_listenerUp = up.NormalizedCopy();
+	}
+
 	void FMODAudio::Update(const Vector3& listenerPos, float time)
 	{
 		FMOD_VECTOR listenerPosition;
@@ -376,15 +383,13 @@ namespace mmo
 		listenerPosition.y = listenerPos.y;
 		listenerPosition.z = listenerPos.z;
 		
-		// TODO
-		listenerForward.x = 1.0f;
-		listenerForward.y = 0.0f;
-		listenerForward.z = 0.0f;
+		listenerForward.x = m_listenerForward.x;
+		listenerForward.y = m_listenerForward.y;
+		listenerForward.z = m_listenerForward.z;
 		
-		// TODO
-		listenerUp.x = 0.0f;
-		listenerUp.y = 1.0f;
-		listenerUp.z = 0.0f;
+		listenerUp.x = m_listenerUp.x;
+		listenerUp.y = m_listenerUp.y;
+		listenerUp.z = m_listenerUp.z;
 		
 		listenerVelocity.x = 0.0f;
 		listenerVelocity.y = 0.0f;
@@ -613,7 +618,7 @@ namespace mmo
 		// For 3D sounds, set proper rolloff mode to ensure sounds beyond max distance are inaudible
 		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D)
 		{
-			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
+			channel->setMode(FMOD_3D | FMOD_3D_WORLDRELATIVE | FMOD_3D_LINEARSQUAREROLLOFF);
 			channel->set3DLevel(1.0f);
 
 			// Apply spatial attributes while still paused so the sound never plays a single
@@ -762,6 +767,30 @@ namespace mmo
 			FMOD_VECTOR fmodVel = { 0.0f, 0.0f, 0.0f };  // No velocity for now
 			channel->set3DAttributes(&fmodPos, &fmodVel);
 		}
+	}
+
+	void FMODAudio::Set3DListenerRelativePosition(const ChannelIndex channelIndex, const Vector3& offset)
+	{
+		if (channelIndex == InvalidChannel || !m_system)
+		{
+			return;
+		}
+
+		FMOD::Channel* channel = nullptr;
+		if (m_system->getChannel(channelIndex, &channel) != FMOD_OK || !channel)
+		{
+			return;
+		}
+
+		// Right-handed listener space faces -Z. Head-relative playback prevents the
+		// player from overtaking a footstep and hearing its tail switch to the other ear.
+		const Vector3 right = m_listenerForward.Cross(m_listenerUp).NormalizedCopy();
+		const FMOD_VECTOR position = { offset.Dot(right), offset.Dot(m_listenerUp), -offset.Dot(m_listenerForward) };
+		const FMOD_VECTOR velocity = { 0.0f, 0.0f, 0.0f };
+		FMOD_MODE mode = FMOD_DEFAULT;
+		channel->getMode(&mode);
+		channel->setMode((mode & ~FMOD_3D_WORLDRELATIVE) | FMOD_3D_HEADRELATIVE);
+		channel->set3DAttributes(&position, &velocity);
 	}
 
 	float FMODAudio::GetSoundLength(SoundIndex sound)
