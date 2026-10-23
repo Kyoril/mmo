@@ -28,7 +28,7 @@ namespace mmo
 
 	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId, const float priority)
 	{
-		return PlayLoadedEntry(soundId, LoadEntry(soundId));
+		return PlayLoadedEntry(soundId, LoadEntry(soundId), priority);
 	}
 
 	SoundIndex SoundEntryPlayer::LoadEntry(const uint32 soundId)
@@ -43,7 +43,7 @@ namespace mmo
 		return LoadRandomFile(*entry);
 	}
 
-	ChannelIndex SoundEntryPlayer::PlayLoadedEntry(const uint32 soundId, const SoundIndex sound)
+	ChannelIndex SoundEntryPlayer::PlayLoadedEntry(const uint32 soundId, const SoundIndex sound, const float priority)
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
 		if (!entry || sound == InvalidSound)

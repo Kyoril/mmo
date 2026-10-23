@@ -40,8 +40,9 @@ namespace mmo
 		SoundIndex LoadEntry(uint32 soundId);
 
 		/// @brief Plays a sound returned by LoadEntry as a global (2D) sound with the entry's settings.
+		/// @param priority Channel priority; higher-priority channels are not stolen by lower ones.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound);
+		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound, float priority = 1.0f);
 
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
