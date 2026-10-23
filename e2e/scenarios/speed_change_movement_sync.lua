@@ -1,3 +1,4 @@
+-- e2e-own-character: scm
 -- Regression: a client the server slows down walks at the new speed, and the server goes on
 -- accepting its movement.
 --
