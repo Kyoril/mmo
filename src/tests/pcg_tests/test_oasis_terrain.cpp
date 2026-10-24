@@ -50,13 +50,44 @@ TEST_CASE("Oasis centre is a flooded basin", "[oasis_terrain]")
 	const OasisParams params;
 	REQUIRE(PrepareOasis(MakeCircle(40.0f), 7, params, Flat20, shape) == OasisError::None);
 
+	// Floor 20 - 6 = 14, the water 0.6 below it, the pool bed waterDepth (1.2) below the water.
 	const TerrainTarget t = EvaluateTerrain(shape, 0.0f, 0.0f, 0.0f);
 	CHECK(t.heightWeight == Approx(1.0f));
-	CHECK(t.height == Approx(14.0f).margin(params.floorNoiseAmplitude + 0.001f));
+	CHECK(t.height == Approx(12.2f).margin(params.floorNoiseAmplitude + 0.001f));
 	CHECK(t.waterType != 0);
 	CHECK(t.waterHeight == Approx(t.height + 1.2f).margin(0.5f));
-	CHECK(GetWaterLevel(shape) == Approx(15.2f));
+	CHECK(GetWaterLevel(shape) == Approx(13.4f));
 	CHECK(t.setMaterial);
+}
+
+TEST_CASE("Oasis pool is carved into a dry basin floor", "[oasis_terrain]")
+{
+	OasisShape shape;
+	OasisParams params;
+	params.rimWidth = 8.0f;
+	params.waterInset = 16.0f;
+	REQUIRE(PrepareOasis(MakeCircle(40.0f), 7, params, Flat20, shape) == OasisError::None);
+	const float waterLevel = GetWaterLevel(shape);
+
+	// The land between the rim and the pool edge stays above the water.
+	for (float r = 40.0f - 0.5f; r > 40.0f - params.waterInset; r -= 0.5f)
+	{
+		const TerrainTarget t = EvaluateTerrain(shape, r, 0.0f, 0.0f);
+		CHECK(t.height > waterLevel);
+	}
+
+	// Well inside the pool edge the ground is under water and the quads are water.
+	for (float r = 0.0f; r < 40.0f - params.waterInset - 5.0f; r += 0.5f)
+	{
+		const TerrainTarget t = EvaluateTerrain(shape, r, 0.0f, 0.0f);
+		CHECK(t.height < waterLevel);
+		CHECK(t.waterType != 0);
+		CHECK(t.waterHeight == Approx(waterLevel));
+	}
+
+	// Water quads reach a little past the pool edge, under the dry shore, but not to the rim.
+	CHECK(EvaluateTerrain(shape, 40.0f - params.waterInset + 2.0f, 0.0f, 0.0f).waterType != 0);
+	CHECK(EvaluateTerrain(shape, 40.0f - params.waterInset + 6.0f, 0.0f, 0.0f).waterType == 0);
 }
 
 TEST_CASE("Oasis does not touch terrain beyond the falloff", "[oasis_terrain]")
@@ -90,8 +121,9 @@ TEST_CASE("Oasis rim height uses a percentile, not the maximum", "[oasis_terrain
 
 	const TerrainTarget outside = EvaluateTerrain(shape, 41.0f, 0.0f, 0.0f);
 	CHECK(outside.height == Approx(20.0f));
+	// Pool bed: floor 14, water 0.6 below, bed 1.2 below the water.
 	const TerrainTarget centre = EvaluateTerrain(shape, 0.0f, 0.0f, 0.0f);
-	CHECK(centre.height == Approx(14.0f).margin(0.5f));
+	CHECK(centre.height == Approx(12.2f).margin(0.5f));
 }
 
 TEST_CASE("Oasis terrain is deterministic and seed sensitive", "[oasis_terrain]")

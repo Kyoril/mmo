@@ -28,9 +28,9 @@ namespace mmo::pcg
 		float floorNoiseAmplitude = 0.4f;
 		/// Percentile of loop base heights used as rim height.
 		float rimPercentile = 0.2f;
-		/// Pool edge distance inside the loop.
+		/// Pool edge distance inside the loop. From the edge inward the ground drops into the pool.
 		float waterInset = 10.0f;
-		/// Water surface above the floor.
+		/// Pool bed below the water surface. The surface lies just below the basin floor.
 		float waterDepth = 1.2f;
 		/// Grass (3) to desert grass (2) band inside the rim.
 		float grassBand = 6.0f;
@@ -83,7 +83,9 @@ namespace mmo::pcg
 		uint64 seed = 0;
 		std::shared_ptr<const SampledPath> path;
 		float rimHeight = 0.0f;
+		/// Height of the dry basin floor around the pool.
 		float floorHeight = 0.0f;
+		/// Water surface, slightly below the floor.
 		float waterLevel = 0.0f;
 		WorldRect influence;
 	};

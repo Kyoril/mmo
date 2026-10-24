@@ -51,6 +51,15 @@ namespace mmo::pcg
 			return smoothstep(1.0f - saturate(d / p.outerFalloff));
 		}
 
+		/// The land floor around the pool stays this far above the water surface (more than the
+		/// floor noise), so the shore and the vegetation on it are dry.
+		constexpr float kShoreFreeboard = 0.6f;
+		/// Distance over which the ground drops from the land floor to the pool bed, from the pool edge inward.
+		constexpr float kPoolShoreWidth = 5.0f;
+		/// Water quads reach this far outward past the pool edge. Their blocky outline then lies under
+		/// the dry shore, and the terrain draws the shoreline.
+		constexpr float kWaterQuadMargin = 4.0f;
+
 		constexpr uint64 kRuleRim = 1;
 		constexpr uint64 kRulePalm = 2;
 		constexpr uint64 kRuleBush = 3;
@@ -162,7 +171,7 @@ namespace mmo::pcg
 		out.path = path;
 		out.rimHeight = heights[index];
 		out.floorHeight = out.rimHeight - params.basinDepth;
-		out.waterLevel = out.floorHeight + params.waterDepth;
+		out.waterLevel = out.floorHeight - kShoreFreeboard;
 
 		float minX, minZ, maxX, maxZ;
 		path->GetBounds(minX, minZ, maxX, maxZ);
@@ -205,14 +214,22 @@ namespace mmo::pcg
 			const float profile = Profile(p, t);
 			const float noise = FractalNoise(shape.seed + 101, x, z, 1.0f / 8.0f, 3, 0.5f) * p.floorNoiseAmplitude;
 			target.height = shape.rimHeight + (shape.floorHeight - shape.rimHeight) * profile + noise * t;
+
+			// The pool is carved into the floor: from its edge the ground drops below the water to the bed.
+			if (d < -p.waterInset)
+			{
+				const float poolBed = shape.waterLevel - p.waterDepth;
+				const float u = smoothstep((-d - p.waterInset) / kPoolShoreWidth);
+				target.height += (poolBed - shape.floorHeight) * u;
+			}
 		}
 		else
 		{
 			target.height = shape.rimHeight;
 		}
 
-		// Water.
-		if (d < -p.waterInset)
+		// Water: a little past the pool edge, the dry shore hides the outline of the quads.
+		if (d < 0.0f && d < -p.waterInset + kWaterQuadMargin)
 		{
 			target.waterType = 1;
 			target.waterHeight = shape.waterLevel;
