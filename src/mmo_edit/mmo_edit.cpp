@@ -895,6 +895,92 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-rebuild")
+			{
+				// mmo_edit --pcg-rebuild <world.hwld> [--oasis <id hex>]
+				// Opens the world, rebuilds one or all oases, saves the world and exits (0 = success).
+				static std::ofstream pcgLog("pcg_rebuild.log", std::ios::out | std::ios::trunc);
+				static std::mutex pcgLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ pcgLogMutex };
+					pcgLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE pcgAssertFile = CreateFileA("pcg_rebuild_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
+#endif
+
+				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis <id hex>]"))
+				{
+					break;
+				}
+
+				uint64 oasisId = 0;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
+					{
+						char* end = nullptr;
+						oasisId = std::strtoull(args[++j], &end, 16);
+						if (end == args[j] || *end != '\0' || oasisId == 0)
+						{
+							ELOG("--pcg-rebuild: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							argumentsValid = false;
+						}
+					}
+					else
+					{
+						ELOG("--pcg-rebuild: unknown or incomplete option " << args[j]);
+						argumentsValid = false;
+					}
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				{
+					ELOG("--pcg-rebuild: failed to open " << args[i + 1]);
+				}
+				else
+				{
+					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
+					if (world->GetProceduralOasisCount() == 0)
+					{
+						// Nothing to rebuild: leave the world untouched instead of rewriting it.
+						ILOG("--pcg-rebuild: " << args[i + 1] << " has no oases, nothing to do");
+						succeeded = true;
+					}
+					else
+					{
+						std::string error;
+						if (!world->RebuildProcedural(oasisId, error))
+						{
+							ELOG("--pcg-rebuild: " << error);
+						}
+						else if (!world->Save())
+						{
+							ELOG("--pcg-rebuild: saving the world failed");
+						}
+						else
+						{
+							ILOG("--pcg-rebuild: done");
+							succeeded = true;
+						}
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions
