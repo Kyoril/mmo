@@ -65,8 +65,9 @@ namespace mmo
 		bool IsDragging() const { return m_splineEditor.IsDragging(); }
 
 		/// @brief Loads every *.hpcg record of the folder and the shared recipe
-		///        (Editor/Pcg/OasisRecipe.json). A missing recipe falls back to OasisParams defaults
-		///        and empty asset lists. Replaces the current oases.
+		///        (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to OasisParams
+		///        defaults and empty asset lists, and rebuilds are refused until a valid recipe is
+		///        loaded. Replaces the current oases.
 		/// @param pcgFolder Asset path of the world's folder, e.g. Editor/Pcg/Worlds/Development.
 		void Load(const std::filesystem::path& pcgFolder);
 
@@ -75,12 +76,17 @@ namespace mmo
 		/// @return False if a file could not be written.
 		bool Save(const std::filesystem::path& pcgFolder);
 
-		/// @brief Rebuilds every oasis. Continues after a failure; all errors are joined.
+		/// @brief Whether the recipe was loaded and parsed. Rebuilds are refused otherwise.
+		bool IsRecipeLoaded() const { return m_recipeLoaded; }
+
+		/// @brief Rebuilds every oasis. Continues after a failure; all errors are joined. Refused
+		///        when the recipe is not loaded.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if all oases were rebuilt (also when there are none).
 		bool RebuildAll(String& error);
 
-		/// @brief Rebuilds one oasis. Refused if the loop's influence overlaps another built oasis.
+		/// @brief Rebuilds one oasis. Refused if the recipe is not loaded or the loop's influence
+		///        overlaps another built oasis.
 		/// @param oasisId Id of the oasis.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
@@ -118,6 +124,11 @@ namespace mmo
 		/// @brief Selects an oasis (-1 = none).
 		void SelectOasis(int32 index);
 
+		/// @brief Refuses (status, log, error) when the recipe is not loaded.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the recipe is loaded.
+		bool CheckRecipe(String& error);
+
 		/// @brief Checks the loop's influence against the other built oases.
 		/// @param error Names the oasis in the way when the call returns false.
 		bool CheckOverlap(const Oasis& oasis, String& error) const;
@@ -148,6 +159,8 @@ namespace mmo
 		/// Defaults of the recipe, used for new oases.
 		pcg::OasisParams m_defaultParams;
 		pcg::OasisAssets m_assets;
+		/// Whether the recipe was loaded and parsed.
+		bool m_recipeLoaded = false;
 
 		Vector3 m_brushPosition{};
 		bool m_brushPositionValid = false;

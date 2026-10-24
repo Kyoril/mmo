@@ -209,20 +209,25 @@ namespace mmo
 		m_splineEditor.CancelDrag();
 		m_defaultParams = {};
 		m_assets = {};
+		m_recipeLoaded = false;
 
 		if (const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(RecipeFileName))
 		{
 			const String text((std::istreambuf_iterator<char>(*file)), std::istreambuf_iterator<char>());
-			if (!pcg::ParseOasisRecipe(text, m_defaultParams, m_assets))
+			if (pcg::ParseOasisRecipe(text, m_defaultParams, m_assets))
 			{
-				WLOG("Oasis recipe '" << RecipeFileName << "' is not valid JSON, using defaults and no assets");
+				m_recipeLoaded = true;
+			}
+			else
+			{
+				WLOG("Oasis recipe '" << RecipeFileName << "' is not valid JSON; rebuilding oases is disabled until it is fixed");
 				m_defaultParams = {};
 				m_assets = {};
 			}
 		}
 		else
 		{
-			WLOG("Oasis recipe '" << RecipeFileName << "' not found, using default parameters and no assets");
+			WLOG("Oasis recipe '" << RecipeFileName << "' not found; rebuilding oases is disabled until it exists");
 		}
 
 		const String folder = ToAssetPath(pcgFolder) + "/";
@@ -398,8 +403,29 @@ namespace mmo
 		return stream.str();
 	}
 
+	bool ProceduralEditMode::CheckRecipe(String& error)
+	{
+		if (m_recipeLoaded)
+		{
+			return true;
+		}
+
+		// Without the recipe's asset lists a rebuild would reconcile every owned object away.
+		error = String("Rebuild refused: the oasis recipe '") + RecipeFileName
+			+ "' is missing or not valid JSON, so there are no asset lists. Fix it and reopen the world.";
+		m_status = error;
+		m_statusIsError = true;
+		ELOG(error);
+		return false;
+	}
+
 	bool ProceduralEditMode::Rebuild(const uint64 oasisId, String& error)
 	{
+		if (!CheckRecipe(error))
+		{
+			return false;
+		}
+
 		const int32 index = FindOasis(oasisId);
 		if (index < 0)
 		{
@@ -434,6 +460,11 @@ namespace mmo
 	bool ProceduralEditMode::RebuildAll(String& error)
 	{
 		error.clear();
+		if (!CheckRecipe(error))
+		{
+			return false;
+		}
+
 		std::vector<uint64> ids;
 		for (const Oasis& oasis : m_oases)
 		{
