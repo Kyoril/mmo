@@ -271,3 +271,48 @@ TEST_CASE("RectsOverlap", "[terrain_contribution]")
 	CHECK_FALSE(RectsOverlap({ 0, 0, 10, 10 }, { 11, 0, 20, 10 }));
 	CHECK_FALSE(RectsOverlap({ 0, 0, 10, 10 }, { 0, -20, 10, -1 }));
 }
+
+TEST_CASE("Match ratio is 1 when the terrain carries the contribution", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	TerrainContribution c;
+	CHECK(ContributionMatchRatio(terrain, c) == 1.0f);
+
+	Apply(terrain, FullRect, Bowl, "Grass", c);
+	size_t matching = 0, total = 0;
+	CHECK(ContributionMatchRatio(terrain, c, &matching, &total) == 1.0f);
+	CHECK(total == c.outer.size() + c.inner.size());
+	CHECK(matching == total);
+	CHECK(total > 0);
+}
+
+TEST_CASE("Match ratio is 0 when the terrain was reset to the base", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	const FakeTerrain::Data original = terrain.m_data;
+	TerrainContribution c;
+	Apply(terrain, FullRect, Bowl, "Grass", c);
+
+	terrain.m_data = original;
+	CHECK(ContributionMatchRatio(terrain, c) == 0.0f);
+}
+
+TEST_CASE("Match ratio is in between for partly sculpted terrain", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	TerrainContribution c;
+	Apply(terrain, FullRect, Bowl, "Grass", c);
+	REQUIRE(c.outer.size() >= 4);
+
+	const size_t half = c.outer.size() / 2;
+	for (size_t i = 0; i < half; ++i)
+	{
+		terrain.SetOuterHeight(c.outer[i].x, c.outer[i].z, c.outer[i].written + 1.0f);
+	}
+
+	size_t matching = 0, total = 0;
+	const float ratio = ContributionMatchRatio(terrain, c, &matching, &total);
+	CHECK(ratio > 0.0f);
+	CHECK(ratio < 1.0f);
+	CHECK(matching == total - half);
+}

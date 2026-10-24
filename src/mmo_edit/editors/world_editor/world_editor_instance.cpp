@@ -1116,12 +1116,6 @@ namespace mmo
 			m_waterEditMode->SaveFlowPaths(GetFlowPathsFileName());
 		}
 
-		// Oasis records: only their own files; the content they generated is saved with the pages below.
-		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
-		{
-			ELOG("Some oasis records could not be saved");
-		}
-
 		// Build mesh name index map (only for mesh entities)
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
@@ -1434,6 +1428,14 @@ namespace mmo
 					m_fogVolumesDirty = false;
 				}
 			}
+		}
+
+		// Oasis records last: they hold the base values needed to undo what the oasis generated into the
+		// pages, entities and foliage saved above. A record must never be newer than the data it
+		// describes, or the next rebuild would undo a contribution that was not saved.
+		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
+		{
+			ELOG("Some oasis records could not be saved");
 		}
 
 		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.

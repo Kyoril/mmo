@@ -133,6 +133,24 @@ namespace mmo
 				contribution.splat.size() + contribution.waterQuads.size() + contribution.materials.size());
 		}
 
+		/// Refuses (fills the error) when the recorded contribution is not on the terrain any more:
+		/// Unapply would then shift the heights by minus the recorded delta.
+		bool CheckRecordMatchesTerrain(const EditorTerrainAccess& access, const pcg::TerrainContribution& contribution, String& error)
+		{
+			size_t matching = 0;
+			size_t total = 0;
+			const float ratio = pcg::ContributionMatchRatio(access, contribution, &matching, &total);
+			if (total == 0 || ratio >= pcg::kMinContributionMatchRatio)
+			{
+				return true;
+			}
+
+			error = "The oasis record does not match the terrain (" + std::to_string(matching) + " of " + std::to_string(total)
+				+ " samples match); the world was not changed.";
+			ELOG("PCG: " << error);
+			return false;
+		}
+
 		void ReportTouchedPages(const EditorTerrainAccess& access, OasisBuildReport& report)
 		{
 			report.touchedPages.clear();
@@ -329,6 +347,11 @@ namespace mmo
 		access.SetDefaultWaterMaterial(assets.waterMaterial);
 
 		// 3. Undo the previous contribution (keeps hand sculpting done since as a height delta).
+		if (!CheckRecordMatchesTerrain(access, record.terrain, report.error))
+		{
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
 		pcg::Unapply(access, record.terrain);
 
 		// 4. Prepare on the current ground and write the new contribution.
@@ -475,6 +498,11 @@ namespace mmo
 		if (terrain)
 		{
 			EditorTerrainAccess access(*terrain);
+			if (!CheckRecordMatchesTerrain(access, record.terrain, report.error))
+			{
+				report.milliseconds = MillisecondsSince(start);
+				return report;
+			}
 			pcg::Unapply(access, record.terrain);
 			ReportTouchedPages(access, report);
 		}

@@ -5,6 +5,7 @@
 #include "terrain_access.h"
 
 #include <array>
+#include <cstddef>
 #include <functional>
 #include <vector>
 
@@ -56,6 +57,18 @@ namespace mmo::pcg
 		/// Drops all entries.
 		void Clear();
 	};
+
+	/// Fraction of the recorded outer and inner height entries whose current terrain value still
+	/// equals what was written. 1 when nothing is recorded. A low ratio means the terrain no longer
+	/// carries the contribution (data restored from version control, a failed page save), and
+	/// Unapply would then shift every height by -delta instead of restoring the base.
+	/// @param matching Receives the number of matching entries if not null.
+	/// @param total Receives the number of recorded height entries if not null.
+	float ContributionMatchRatio(const ITerrainAccess& terrain, const TerrainContribution& contribution,
+		size_t* matching = nullptr, size_t* total = nullptr);
+
+	/// Below this match ratio the record is considered not to belong to the terrain any more.
+	constexpr float kMinContributionMatchRatio = 0.5f;
 
 	/// Restores the base where the current value still equals what was written. Heights the user
 	/// changed since keep the user's change: current - (written - base). Other kinds keep current.

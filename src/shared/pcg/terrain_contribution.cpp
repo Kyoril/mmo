@@ -140,6 +140,31 @@ namespace mmo::pcg
 		}
 	}
 
+	float ContributionMatchRatio(const ITerrainAccess& terrain, const TerrainContribution& contribution,
+		size_t* matching, size_t* total)
+	{
+		size_t match = 0;
+		for (const auto& e : contribution.outer)
+		{
+			match += terrain.GetOuterHeight(e.x, e.z) == e.written ? 1 : 0;
+		}
+		for (const auto& e : contribution.inner)
+		{
+			match += terrain.GetInnerHeight(e.x, e.z) == e.written ? 1 : 0;
+		}
+
+		const size_t count = contribution.outer.size() + contribution.inner.size();
+		if (matching)
+		{
+			*matching = match;
+		}
+		if (total)
+		{
+			*total = count;
+		}
+		return count == 0 ? 1.0f : static_cast<float>(match) / static_cast<float>(count);
+	}
+
 	void Unapply(ITerrainAccess& terrain, TerrainContribution& contribution)
 	{
 		const bool any = !contribution.IsEmpty();
