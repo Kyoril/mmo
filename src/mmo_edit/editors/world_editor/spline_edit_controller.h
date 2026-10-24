@@ -38,9 +38,6 @@ namespace mmo
 			/// @brief Whether to draw the width ribbon (both sides offset by the point width).
 			bool drawWidthRibbon = false;
 
-			/// @brief Minimum number of points the spline may be reduced to by deletion.
-			uint32 minPoints = 2;
-
 			/// @brief Whether to draw direction chevrons along linear segments.
 			bool drawDirection = false;
 

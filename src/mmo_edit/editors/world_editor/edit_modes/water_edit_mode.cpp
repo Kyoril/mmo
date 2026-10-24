@@ -1031,7 +1031,6 @@ namespace mmo
 				style.pointColor = IM_COL32(255, 255, 255, 255);
 				style.drawWidthRibbon = true;
 				style.drawDirection = true;
-				style.minPoints = 0;
 				style.label = river.name;
 				styles.push_back(std::move(style));
 			}

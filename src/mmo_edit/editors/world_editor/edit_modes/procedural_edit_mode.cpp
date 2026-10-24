@@ -77,7 +77,7 @@ namespace mmo
 		};
 
 		const FloatRow s_waterRows[] = {
-			{ "Water inset", &pcg::OasisParams::waterInset, 0.1f, 0.0f, 100.0f },
+			{ "Water inset", &pcg::OasisParams::waterInset, 0.1f, 2.0f, 100.0f },
 			{ "Water depth", &pcg::OasisParams::waterDepth, 0.05f, 0.0f, 20.0f },
 		};
 
@@ -676,6 +676,13 @@ namespace mmo
 		ImGui::TextWrapped("Loop: %d points. Drag a handle to move it, Alt+click a segment to add a point, Delete or Ctrl+click removes a point (minimum %u).",
 			static_cast<int>(rec.loop.points.size()), MinLoopPoints);
 
+		if (ImGui::Button("Reset parameters from recipe"))
+		{
+			// Only the parameters; the world is not touched until Rebuild.
+			rec.params = m_defaultParams;
+			current.dirty = true;
+		}
+
 		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			bool changed = false;
@@ -851,7 +858,9 @@ namespace mmo
 		m_overlayViewportSize = viewportSize;
 
 		const ImGuiIO& io = ImGui::GetIO();
-		if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+		// Only while the cursor is over the viewport, so the key cannot also act on something the user
+		// is editing elsewhere (the viewport itself deletes the selected entities on the same key).
+		if (!io.WantTextInput && ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			DeleteSelectedPoint();
 		}
@@ -900,7 +909,6 @@ namespace mmo
 			style.pointColor = IM_COL32(255, 255, 255, 255);
 			style.drawWidthRibbon = false;
 			style.drawDirection = false;
-			style.minPoints = MinLoopPoints;
 			style.label = oasis.record.name;
 			styles.push_back(std::move(style));
 		}
