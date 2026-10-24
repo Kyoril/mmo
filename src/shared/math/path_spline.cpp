@@ -10,11 +10,12 @@ namespace mmo
 {
 	namespace
 	{
-		float catmullRom(float p0, float p1, float p2, float p3, float t)
+		/// Cubic Bezier from p0 with control offsets c1, c2 and end offset e3, all relative to p0 (keeps
+		/// precision at large world coordinates).
+		float bezier(float p0, float c1, float c2, float e3, float t)
 		{
-			const float t2 = t * t;
-			const float t3 = t2 * t;
-			return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 + (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+			const float u = 1.0f - t;
+			return p0 + 3.0f * u * u * t * c1 + 3.0f * u * t * t * c2 + t * t * t * e3;
 		}
 
 		float pointSegmentDistance(float px, float pz, float ax, float az, float bx, float bz)
@@ -49,6 +50,65 @@ namespace mmo
 		}
 	}
 
+	void GetEffectiveTangents(const PathSpline& spline, const size_t index, float& inX, float& inZ, float& outX, float& outZ)
+	{
+		inX = inZ = outX = outZ = 0.0f;
+		const std::vector<SplinePoint>& pts = spline.points;
+		if (index >= pts.size())
+		{
+			return;
+		}
+
+		const SplinePoint& point = pts[index];
+		if (!point.autoTangents)
+		{
+			inX = point.inX;
+			inZ = point.inZ;
+			outX = point.outX;
+			outZ = point.outZ;
+			return;
+		}
+
+		// Same neighbour rule as the sampling: a closed path (three or more points) wraps, an open one
+		// repeats its end points.
+		const size_t n = pts.size();
+		const bool closed = spline.closed && n >= 3;
+		size_t previous = index;
+		size_t next = index;
+		if (closed)
+		{
+			previous = (index + n - 1) % n;
+			next = (index + 1) % n;
+		}
+		else
+		{
+			previous = index > 0 ? index - 1 : 0;
+			next = std::min(index + 1, n - 1);
+		}
+
+		outX = (pts[next].x - pts[previous].x) / 6.0f;
+		outZ = (pts[next].z - pts[previous].z) / 6.0f;
+		inX = -outX;
+		inZ = -outZ;
+	}
+
+	void MakeTangentsManual(PathSpline& spline, const size_t index)
+	{
+		if (index >= spline.points.size())
+		{
+			return;
+		}
+
+		float inX, inZ, outX, outZ;
+		GetEffectiveTangents(spline, index, inX, inZ, outX, outZ);
+		SplinePoint& point = spline.points[index];
+		point.inX = inX;
+		point.inZ = inZ;
+		point.outX = outX;
+		point.outZ = outZ;
+		point.autoTangents = false;
+	}
+
 	SampledPath::SampledPath(const PathSpline& spline, float maxStep)
 		: m_closed(spline.closed)
 	{
@@ -81,12 +141,25 @@ namespace mmo
 			return pts[std::clamp(i, 0, n - 1)];
 		};
 
+		const bool curved = spline.interpolation == SplineInterpolation::CatmullRom;
 		for (int s = 0; s < segmentCount; ++s)
 		{
-			const SplinePoint& p0 = fetch(s - 1);
 			const SplinePoint& p1 = fetch(s);
 			const SplinePoint& p2 = fetch(s + 1);
-			const SplinePoint& p3 = fetch(s + 2);
+
+			// Bezier controls: P1 = p1 + out(p1), P2 = p2 + in(p2); relative to p1.
+			float c1x = 0.0f, c1z = 0.0f, c2x = 0.0f, c2z = 0.0f;
+			const float ex = p2.x - p1.x;
+			const float ez = p2.z - p1.z;
+			if (curved)
+			{
+				float unusedX, unusedZ;
+				GetEffectiveTangents(spline, static_cast<size_t>(s), unusedX, unusedZ, c1x, c1z);
+				float inX, inZ;
+				GetEffectiveTangents(spline, static_cast<size_t>((s + 1) % n), inX, inZ, unusedX, unusedZ);
+				c2x = ex + inX;
+				c2z = ez + inZ;
+			}
 
 			const float cdx = p2.x - p1.x;
 			const float cdz = p2.z - p1.z;
@@ -97,10 +170,10 @@ namespace mmo
 			{
 				const float t = static_cast<float>(k) / static_cast<float>(steps);
 				SplineSample sample{};
-				if (spline.interpolation == SplineInterpolation::CatmullRom)
+				if (curved)
 				{
-					sample.x = catmullRom(p0.x, p1.x, p2.x, p3.x, t);
-					sample.z = catmullRom(p0.z, p1.z, p2.z, p3.z, t);
+					sample.x = bezier(p1.x, c1x, c2x, ex, t);
+					sample.z = bezier(p1.z, c1z, c2z, ez, t);
 				}
 				else
 				{

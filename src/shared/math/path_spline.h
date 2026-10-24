@@ -14,16 +14,35 @@ namespace mmo
 		/// @brief Straight segments between control points.
 		Linear,
 
-		/// @brief Uniform Catmull-Rom (tension 0.5) passing through every control point.
+		/// @brief Curve through every control point, evaluated as one cubic Bezier per segment from the
+		///        points' tangents. Points with automatic tangents get the uniform Catmull-Rom ones
+		///        (tension 0.5), so an all-auto spline has the classic Catmull-Rom shape.
 		CatmullRom
 	};
 
 	/// @brief One control point. `width` is a generic per-point scalar (rivers: channel half width).
+	///        The tangent handles only shape curved (CatmullRom) splines; Linear ones ignore them.
 	struct SplinePoint
 	{
 		float x = 0.0f;
 		float z = 0.0f;
 		float width = 0.0f;
+
+		/// @brief Whether the tangents are computed from the neighbours (Catmull-Rom) instead of
+		///        taken from the stored handles below.
+		bool autoTangents = true;
+
+		/// @brief Arriving handle x, relative to the point (normally points backwards along the curve).
+		float inX = 0.0f;
+
+		/// @brief Arriving handle z, relative to the point.
+		float inZ = 0.0f;
+
+		/// @brief Leaving handle x, relative to the point (normally points forwards along the curve).
+		float outX = 0.0f;
+
+		/// @brief Leaving handle z, relative to the point.
+		float outZ = 0.0f;
 	};
 
 	/// @brief Control point description of a 2D path on the x/z plane.
@@ -33,6 +52,21 @@ namespace mmo
 		bool closed = false;
 		SplineInterpolation interpolation = SplineInterpolation::Linear;
 	};
+
+	/// @brief Gets the tangent handles a point is evaluated with: the stored ones for a manual point,
+	///        the uniform Catmull-Rom ones for an automatic point (out = (next - previous) / 6,
+	///        in = -out; closed splines wrap, open ones repeat their end points).
+	/// @param spline The spline.
+	/// @param index Index of the point; an out of range index yields zero handles.
+	/// @param inX Receives the arriving handle x, relative to the point.
+	/// @param inZ Receives the arriving handle z, relative to the point.
+	/// @param outX Receives the leaving handle x, relative to the point.
+	/// @param outZ Receives the leaving handle z, relative to the point.
+	void GetEffectiveTangents(const PathSpline& spline, size_t index, float& inX, float& inZ, float& outX, float& outZ);
+
+	/// @brief Stores a point's effective tangents and marks it manual, so switching to manual never
+	///        moves the curve. No-op for an out of range index.
+	void MakeTangentsManual(PathSpline& spline, size_t index);
 
 	/// @brief One sample of an evaluated spline; `distance` is the arc length from the first point.
 	struct SplineSample
