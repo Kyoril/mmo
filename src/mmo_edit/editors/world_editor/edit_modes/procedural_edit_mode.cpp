@@ -523,21 +523,23 @@ namespace mmo
 		return true;
 	}
 
-	void ProceduralEditMode::DeleteOasis(const uint64 id)
+	bool ProceduralEditMode::DeleteOasis(const uint64 id, String& error)
 	{
 		const int32 index = FindOasis(id);
 		if (index < 0)
 		{
-			return;
+			error = "No oasis with id " + FormatId(id);
+			return false;
 		}
 
 		Oasis& oasis = m_oases[index];
 		const OasisBuildReport report = DeleteOasisContent(m_worldEditor, oasis.record);
 		if (!report.ok)
 		{
-			m_status = "Delete of '" + oasis.record.name + "' failed: " + report.error;
+			error = "Delete of '" + oasis.record.name + "' failed: " + report.error;
+			m_status = error;
 			m_statusIsError = true;
-			return;
+			return false;
 		}
 
 		m_status = DescribeReport(report, "Deleted '" + oasis.record.name + "'");
@@ -547,6 +549,7 @@ namespace mmo
 		m_deletedIds.push_back(id);
 		m_oases.erase(m_oases.begin() + index);
 		SelectOasis(m_oases.empty() ? -1 : std::min(index, static_cast<int32>(m_oases.size()) - 1));
+		return true;
 	}
 
 	void ProceduralEditMode::DrawDetails()
@@ -621,7 +624,8 @@ namespace mmo
 				pending >= 0 ? m_oases[pending].record.name.c_str() : "?");
 			if (ImGui::Button("Delete"))
 			{
-				DeleteOasis(m_pendingDeleteId);
+				String error;
+				DeleteOasis(m_pendingDeleteId, error);
 				m_pendingDeleteId = 0;
 				ImGui::CloseCurrentPopup();
 			}

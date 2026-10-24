@@ -110,6 +110,13 @@ namespace mmo
 		/// @return True if the oasis was added.
 		bool CreateOasisAt(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
 
+		/// @brief Removes the oasis' content from the world and the oasis from the list (its record
+		///        file is removed on the next save). The "Delete" button uses this.
+		/// @param id Id of the oasis.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the oasis was deleted.
+		bool DeleteOasis(uint64 id, String& error);
+
 		/// @brief Whether a record changed since it was loaded or saved, or an oasis was deleted.
 		bool HasUnsavedChanges() const;
 
@@ -135,9 +142,6 @@ namespace mmo
 
 		/// @brief Adds a default 8 point loop of radius 40 around the viewport's ground hit.
 		void CreateOasisAtViewportCentre();
-
-		/// @brief Removes the oasis' content from the world and the oasis from the list.
-		void DeleteOasis(uint64 id);
 
 		/// @brief Selects an oasis (-1 = none).
 		void SelectOasis(int32 index);

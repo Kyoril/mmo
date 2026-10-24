@@ -1099,6 +1099,91 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-delete")
+			{
+				// mmo_edit --pcg-delete <world.hwld> --oasis <id hex>
+				// Deletes an oasis and everything it generated like the "Delete" button, saves the
+				// world and exits (0 = success).
+				static std::ofstream pcgLog("pcg_delete.log", std::ios::out | std::ios::trunc);
+				static std::mutex pcgLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ pcgLogMutex };
+					pcgLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE pcgAssertFile = CreateFileA("pcg_delete_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
+#endif
+
+				const char* usage = "--pcg-delete <world.hwld> --oasis <id hex>";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 oasisId = 0;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
+					{
+						char* end = nullptr;
+						oasisId = std::strtoull(args[++j], &end, 16);
+						if (end == args[j] || *end != '\0' || oasisId == 0)
+						{
+							ELOG("--pcg-delete: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							argumentsValid = false;
+						}
+					}
+					else
+					{
+						ELOG("--pcg-delete: unknown or incomplete option " << args[j] << ", usage: " << usage);
+						argumentsValid = false;
+					}
+				}
+
+				if (argumentsValid && oasisId == 0)
+				{
+					ELOG("--pcg-delete: --oasis is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				{
+					ELOG("--pcg-delete: failed to open " << args[i + 1]);
+				}
+				else
+				{
+					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
+					std::string error;
+					if (!world->DeleteProceduralOasis(oasisId, error))
+					{
+						ELOG("--pcg-delete: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-delete: saving the world failed");
+					}
+					else
+					{
+						ILOG("--pcg-delete: done");
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions

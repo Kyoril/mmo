@@ -1074,6 +1074,17 @@ namespace mmo
 		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
 	}
 
+	bool WorldEditorInstance::DeleteProceduralOasis(const uint64 id, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->DeleteOasis(id, error);
+	}
+
 	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
 	{
 		id = 0;

@@ -737,6 +737,13 @@ namespace mmo
 		/// @return True if the oasis was added and built.
 		bool CreateProceduralOasis(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
 
+		/// @brief Deletes an oasis and everything it generated like the "Delete" button does, for
+		///        unattended runs. The world is not saved.
+		/// @param id Id of the oasis.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the oasis was deleted.
+		bool DeleteProceduralOasis(uint64 id, String& error);
+
 		/// @brief Number of oases of the world.
 		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
 
