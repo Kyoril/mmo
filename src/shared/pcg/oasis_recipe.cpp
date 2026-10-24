@@ -78,6 +78,7 @@ namespace mmo::pcg
 		PCG_F(cliffWeight); PCG_F(shelfWeight); PCG_F(clumpWeight);
 		PCG_F(palmCell); PCG_F(palmDensity); PCG_F(palmNearWaterBoost); PCG_F(palmScaleMin); PCG_F(palmScaleMax);
 		PCG_F(bushCell); PCG_F(bushDensity); PCG_F(waterPlantBand); PCG_F(waterPlantDensity); PCG_F(maxSlopeDeg);
+		PCG_F(shelfSink); PCG_F(clumpSink);
 #undef PCG_F
 
 		ReadList(a, "cliffs", assets.cliffs);

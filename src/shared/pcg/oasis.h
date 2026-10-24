@@ -44,6 +44,7 @@ namespace mmo::pcg
 		float rockYawJitterDeg = 20.0f;
 		float rockScaleMin = 0.8f;
 		float rockScaleMax = 1.2f;
+		/// Cliff pieces are lowered this far into the ground.
 		float rockSink = 0.5f;
 		float cliffWeight = 0.5f;
 		float shelfWeight = 0.25f;
@@ -61,6 +62,11 @@ namespace mmo::pcg
 		/// Acceptance probability of a water plant cell.
 		float waterPlantDensity = 0.7f;
 		float maxSlopeDeg = 30.0f;
+
+		/// Shelf pieces are lowered this far into the ground (the families differ a lot in size).
+		float shelfSink = 0.5f;
+		/// Clumps are lowered this far into the ground.
+		float clumpSink = 0.5f;
 	};
 
 	/// Asset names the oasis rules pick from.

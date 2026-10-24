@@ -297,7 +297,8 @@ namespace mmo::pcg
 			placement.key = Hash(rimSeed, i, 0, 0);
 			placement.kind = PlacementKind::Entity;
 			placement.asset = PickAsset(HashToUnit(Hash(rimSeed, i, 0, 5)), *family);
-			placement.position = Vector3(px, ground(px, pz) - p.rockSink, pz);
+			const float sink = family == &assets.shelves ? p.shelfSink : (family == &assets.clumps ? p.clumpSink : p.rockSink);
+			placement.position = Vector3(px, ground(px, pz) - sink, pz);
 			placement.rotation = YawRotation(yaw);
 			placement.scale = Vector3(scale, scale, scale);
 			placement.collides = true;

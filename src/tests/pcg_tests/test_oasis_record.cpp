@@ -38,6 +38,8 @@ namespace
 		r.params.terraceSteps = 5;
 		r.params.waterPlantDensity = 0.33f;
 		r.params.maxSlopeDeg = 27.5f;
+		r.params.shelfSink = 3.5f;
+		r.params.clumpSink = 0.25f;
 		r.loop.closed = true;
 		r.loop.interpolation = SplineInterpolation::CatmullRom;
 		r.loop.points = { { 0.0f, 10.0f, 1.0f }, { 10.0f, 0.0f, 2.0f }, { 0.0f, -10.0f, 3.0f }, { -10.0f, 0.0f, 4.0f } };
@@ -89,6 +91,8 @@ TEST_CASE("Oasis record round trips", "[oasis_record]")
 	CHECK(out.params.terraceSteps == 5);
 	CHECK(out.params.waterPlantDensity == 0.33f);
 	CHECK(out.params.maxSlopeDeg == 27.5f);
+	CHECK(out.params.shelfSink == 3.5f);
+	CHECK(out.params.clumpSink == 0.25f);
 	CHECK(out.params.rimWidth == in.params.rimWidth);
 	CHECK(out.loop.closed);
 	CHECK(out.loop.interpolation == SplineInterpolation::CatmullRom);

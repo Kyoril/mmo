@@ -85,6 +85,7 @@ namespace mmo::pcg
 			v(p.cliffWeight); v(p.shelfWeight); v(p.clumpWeight);
 			v(p.palmCell); v(p.palmDensity); v(p.palmNearWaterBoost); v(p.palmScaleMin); v(p.palmScaleMax);
 			v(p.bushCell); v(p.bushDensity); v(p.waterPlantBand); v(p.waterPlantDensity); v(p.maxSlopeDeg);
+			v(p.shelfSink); v(p.clumpSink);
 		}
 
 		struct ParamWriter

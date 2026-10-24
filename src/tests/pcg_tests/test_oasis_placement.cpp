@@ -145,6 +145,47 @@ TEST_CASE("Oasis rim rocks surround the loop", "[oasis_placement]")
 	}
 }
 
+TEST_CASE("Oasis rim rocks sink by family", "[oasis_placement]")
+{
+	OasisParams params;
+	params.rockSink = 6.0f;
+	params.shelfSink = 2.0f;
+	params.clumpSink = 0.25f;
+	OasisShape shape;
+	REQUIRE(PrepareOasis(MakeCircle(40.0f), 11, params, Flat, shape) == OasisError::None);
+	std::vector<Placement> out;
+	BuildPlacements(shape, MakeAssets(), Flat, ZeroSlope, out);
+
+	uint32 seen[3] = { 0, 0, 0 };
+	for (const Placement& p : out)
+	{
+		if (!IsRock(p))
+		{
+			continue;
+		}
+
+		const char family = p.asset[2]; // cl(i)ff, sh(e)lf, cl(u)mp
+		if (family == 'i')
+		{
+			CHECK(p.position.y == Approx(20.0f - 6.0f));
+			++seen[0];
+		}
+		else if (family == 'e')
+		{
+			CHECK(p.position.y == Approx(20.0f - 2.0f));
+			++seen[1];
+		}
+		else
+		{
+			CHECK(p.position.y == Approx(20.0f - 0.25f));
+			++seen[2];
+		}
+	}
+	CHECK(seen[0] > 0);
+	CHECK(seen[1] > 0);
+	CHECK(seen[2] > 0);
+}
+
 TEST_CASE("Oasis vegetation stays dry and inside", "[oasis_placement]")
 {
 	OasisShape shape;
