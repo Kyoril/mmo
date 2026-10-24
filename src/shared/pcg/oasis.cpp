@@ -302,8 +302,9 @@ namespace mmo::pcg
 			{ kRulePlant, p.bushCell, &assets.waterPlants, false, 0.8f, 1.2f }
 		};
 
-		const float bandOuter = -p.rimWidth * 0.5f;
-		const float bandInner = -p.waterInset + 1.0f;
+		// Land band: from 1 m outside the pool edge to 1 m inside the rim line.
+		const float bandOuter = -1.0f;
+		const float bandInner = -(p.waterInset - 1.0f);
 		for (const VegRule& rule : rules)
 		{
 			if (rule.assets->empty() || rule.cell <= 0.0f)
@@ -331,15 +332,15 @@ namespace mmo::pcg
 					float density;
 					if (rule.rule == kRulePlant)
 					{
-						if (std::abs(d + p.waterInset) > p.waterPlantBand)
+						if (d < -p.waterInset || d > -p.waterInset + p.waterPlantBand)
 						{
 							continue;
 						}
-						density = std::min(1.0f, p.bushDensity * 2.0f);
+						density = p.waterPlantDensity;
 					}
 					else
 					{
-						if (!(d < bandOuter && d > bandInner))
+						if (!(d <= bandOuter && d >= bandInner))
 						{
 							continue;
 						}
@@ -358,8 +359,8 @@ namespace mmo::pcg
 					}
 
 					const float y = ground(x, z);
-					// Land plants never stand under water; water plants live at the shoreline.
-					if (rule.rule != kRulePlant && y < shape.waterLevel)
+					// Nothing stands under water.
+					if (y < shape.waterLevel)
 					{
 						continue;
 					}

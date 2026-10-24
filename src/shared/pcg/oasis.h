@@ -56,7 +56,10 @@ namespace mmo::pcg
 		float palmScaleMax = 1.3f;
 		float bushCell = 3.0f;
 		float bushDensity = 0.35f;
+		/// Water plants grow on land within this distance of the pool edge.
 		float waterPlantBand = 3.0f;
+		/// Acceptance probability of a water plant cell.
+		float waterPlantDensity = 0.7f;
 		float maxSlopeDeg = 30.0f;
 	};
 

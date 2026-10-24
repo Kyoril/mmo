@@ -278,3 +278,71 @@ TEST_CASE("Oasis placements are local to the control point that moved", "[oasis_
 	CHECK(checkedVegetation > 0);
 	CHECK(checkedRocks > 0);
 }
+
+TEST_CASE("Oasis water plants grow on the land side of the pool edge", "[oasis_placement]")
+{
+	OasisShape shape;
+	REQUIRE(PrepareOasis(MakeCircle(40.0f), 11, OasisParams(), Flat, shape) == OasisError::None);
+	std::vector<Placement> out;
+	BuildPlacements(shape, MakeAssets(), Flat, ZeroSlope, out);
+
+	const float edge = -shape.params.waterInset;
+	uint32 plants = 0;
+	for (const Placement& p : out)
+	{
+		if (p.asset.rfind("reed", 0) != 0)
+		{
+			continue;
+		}
+		++plants;
+		const float d = shape.path->SignedDistance(p.position.x, p.position.z);
+		CHECK(d >= edge);
+		CHECK(d <= edge + shape.params.waterPlantBand);
+		CHECK(p.position.y >= GetWaterLevel(shape));
+		CHECK(p.kind == PlacementKind::Foliage);
+		CHECK_FALSE(p.collides);
+	}
+	CHECK(plants > 0);
+}
+
+TEST_CASE("Oasis places nothing under water", "[oasis_placement]")
+{
+	OasisShape shape;
+	REQUIRE(PrepareOasis(MakeCircle(40.0f), 11, OasisParams(), Flat, shape) == OasisError::None);
+	const float waterLevel = GetWaterLevel(shape);
+
+	// A trench ring around d = -5 sinks well below the water level.
+	const auto trenchGround = [&shape](float x, float z)
+	{
+		const float d = shape.path->SignedDistance(x, z);
+		return (d > -6.0f && d < -4.0f) ? 10.0f : 20.0f;
+	};
+
+	std::vector<Placement> dry, trench;
+	BuildPlacements(shape, MakeAssets(), Flat, ZeroSlope, dry);
+	BuildPlacements(shape, MakeAssets(), trenchGround, ZeroSlope, trench);
+
+	uint32 inTrenchWithoutIt = 0;
+	for (const Placement& p : dry)
+	{
+		const float d = shape.path->SignedDistance(p.position.x, p.position.z);
+		if (!IsRock(p) && d > -6.0f && d < -4.0f)
+		{
+			++inTrenchWithoutIt;
+		}
+	}
+	REQUIRE(inTrenchWithoutIt > 0);
+
+	uint32 foliage = 0;
+	for (const Placement& p : trench)
+	{
+		if (IsRock(p))
+		{
+			continue;
+		}
+		++foliage;
+		CHECK(trenchGround(p.position.x, p.position.z) >= waterLevel);
+		CHECK(p.position.y >= waterLevel);
+	}
+	CHECK(foliage > 0);
+}
