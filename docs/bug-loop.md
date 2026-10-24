@@ -287,7 +287,10 @@ not parked (see below). The loop consumes decisions before it does anything else
   `upstream` in the loop worktree's submodule, set on every prepare from the URL in the
   committed `.gitmodules`), then `develop` is pushed to origin. Develop therefore never points at
   a data commit GitHub does not have, and a rejected submodule push stops the ship before
-  develop moves. The URL never comes from the main checkout's `.git/config`, which may point a
+  develop moves. A push rejected only because develop (or a submodule `master`) moved while the
+  merge was gated starts the ship over: fetch, merge onto the new tip, gate again, push; at most
+  3 rounds ("develop kept moving: 3 attempts"). On 2026-10-24 a ship parked after losing that race
+  once. The URL never comes from the main checkout's `.git/config`, which may point a
   submodule at the main checkout's own `data/client` (a non-bare repository with `master`
   checked out: pushes there are refused, and nothing downstream fetches from it). The main
   checkout's submodules are not updated; see Known limits. Because they can lag behind, a
