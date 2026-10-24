@@ -628,8 +628,8 @@ namespace mmo
 		/// Uses an item - drinks, eats, reads - on the given targets.
 		void UseItem(uint8 bag, uint8 slot, uint64 itemGuid, const SpellTargetMap& targetMap);
 
-		/// Destroys the given number of items of the stack in a bag slot.
-		void DestroyItem(uint8 bag, uint8 slot, uint8 count);
+		/// Destroys the given stack by instance GUID; zero count removes the entire stack.
+		void DestroyItem(uint64 itemGuid, uint8 count);
 
 		/// Swaps the contents of two slots of the character's own inventory (equipment, backpack and
 		/// bag slots, all relative to Bag_0), e.g. to equip a backpack item into a specific equipment

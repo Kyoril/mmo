@@ -13,6 +13,8 @@
 #include "mmo_client/party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
 
+#include <charconv>
+
 namespace mmo
 {
 	namespace
@@ -170,6 +172,23 @@ namespace mmo
 
 	std::shared_ptr<UnitHandle> ObjectMgr::GetUnitHandleByName(const std::string& unitName)
 	{
+		// GUID tokens keep inspection attached to one player when the current target changes.
+		if (unitName.starts_with("guid:"))
+		{
+			uint64 guid = 0;
+			const auto* begin = unitName.data() + 5;
+			const auto* end = unitName.data() + unitName.size();
+			const auto result = std::from_chars(begin, end, guid);
+			if (result.ec == std::errc() && result.ptr == end)
+			{
+				if (const auto unit = Get<GameUnitC>(guid))
+				{
+					return std::make_shared<UnitHandle>(*unit);
+				}
+			}
+			return nullptr;
+		}
+
 		if (unitName == "player")
 		{
 			if (const auto player = ObjectMgr::GetActivePlayer())

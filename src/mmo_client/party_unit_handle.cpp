@@ -161,13 +161,13 @@ namespace mmo
 
 	bool PartyUnitHandle::IsFriendly() const
 	{
-		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
+		if (const auto unit = GetRealUnit()) { return unit->IsFriendly(); }
 		return true;
 	}
 
 	bool PartyUnitHandle::IsHostile() const
 	{
-		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
+		if (const auto unit = GetRealUnit()) { return unit->IsHostile(); }
 		return false;
 	}
 

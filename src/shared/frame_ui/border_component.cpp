@@ -113,7 +113,7 @@ namespace mmo
 		// Border size
 		const float borderSize = m_borderInset;
 
-		const auto scale = FrameManager::Get().GetUIScale();
+		const auto scale = m_frame->GetLayoutUIScale();
 		const auto scaledBorderSize = Size(borderSize * scale.x, borderSize * scale.y);
 
 		// Calculate final color

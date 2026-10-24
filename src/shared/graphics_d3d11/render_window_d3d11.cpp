@@ -141,6 +141,25 @@ namespace mmo
 		}
 	}
 
+	void RenderWindowD3D11::SetResizable(const bool resizable)
+	{
+		m_resizable = resizable;
+		if (m_ownHandle && m_handle && !m_fullScreen)
+		{
+			LONG_PTR style = ::GetWindowLongPtr(m_handle, GWL_STYLE);
+			if (resizable)
+			{
+				style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
+			}
+			else
+			{
+				style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX);
+			}
+			::SetWindowLongPtr(m_handle, GWL_STYLE, style);
+			::SetWindowPos(m_handle, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+		}
+	}
+
 	void RenderWindowD3D11::SetDisplayMode(const bool fullscreenWindow, const uint32 monitorIndex, const uint16 width, const uint16 height)
 	{
 		// A window handed in from outside (the editor viewport) is laid out by its owner.
@@ -163,6 +182,8 @@ namespace mmo
 		}
 
 		constexpr UINT flags = SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOOWNERZORDER;
+		m_windowedWidth = width;
+		m_windowedHeight = height;
 		if (fullscreenWindow)
 		{
 			::SetWindowLongPtr(m_handle, GWL_STYLE, WS_POPUP | WS_VISIBLE);
@@ -172,7 +193,7 @@ namespace mmo
 		}
 		else
 		{
-			constexpr DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+			const DWORD style = (m_resizable ? WS_OVERLAPPEDWINDOW : (WS_OVERLAPPEDWINDOW & ~(WS_THICKFRAME | WS_MAXIMIZEBOX))) | WS_VISIBLE;
 			::SetWindowLongPtr(m_handle, GWL_STYLE, style);
 
 			const LONG clientWidth = std::max<LONG>(320, width);
@@ -423,11 +444,32 @@ namespace mmo
 			}
 			break;
 		case WM_SYSCOMMAND:
+			if (window && !window->m_resizable && ((WParam & 0xFFF0) == SC_SIZE || (WParam & 0xFFF0) == SC_MAXIMIZE))
+			{
+				return 0;
+			}
 			// Releasing a bare Alt key would enter the window menu's modal loop, which stalls the frame
 			// loop until the next key press. Alt is a game modifier (item comparison), so swallow it.
 			// Alt+Space still opens the window menu, Alt+F4 still closes the window.
 			if ((WParam & 0xFFF0) == SC_KEYMENU && LParam == 0)
 			{
+				return 0;
+			}
+			break;
+		case WM_GETMINMAXINFO:
+			if (window && window->m_ownHandle && !window->m_resizable)
+			{
+				// Windows normally caps a regular window at the desktop's tracking size.
+				// Allow the selected client size plus its actual DPI-scaled decorations.
+				RECT outer{}, client{};
+				if (::GetWindowRect(Wnd, &outer) && ::GetClientRect(Wnd, &client))
+				{
+					auto* limits = reinterpret_cast<MINMAXINFO*>(LParam);
+					limits->ptMaxTrackSize.x = std::max<LONG>(limits->ptMaxTrackSize.x,
+						window->m_windowedWidth + (outer.right - outer.left) - client.right);
+					limits->ptMaxTrackSize.y = std::max<LONG>(limits->ptMaxTrackSize.y,
+						window->m_windowedHeight + (outer.bottom - outer.top) - client.bottom);
+				}
 				return 0;
 			}
 			break;

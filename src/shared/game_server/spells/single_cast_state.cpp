@@ -977,7 +977,7 @@ namespace mmo
 	GameTime SingleCastState::CalculateFinalCooldown() const
 	{
 		// No cooldown for procs
-		if (m_isProc)
+		if (m_isProc || m_cast.GetExecuter().IsNoCooldown())
 		{
 			return 0;
 		}

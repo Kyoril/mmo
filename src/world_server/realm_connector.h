@@ -98,6 +98,9 @@ namespace mmo
 		/// Sends quest data updates to the realm server.
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
 
+		/// Reports a live faction to the realm for party and whisper validation.
+		void SendPlayerFaction(uint64 characterGuid, uint32 factionTemplateId);
+
 		/// Sends a teleport request to the realm server.
 		void SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing);
 

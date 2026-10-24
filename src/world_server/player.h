@@ -23,6 +23,7 @@
 #include "anti_cheat_tracker.h"
 #include "combat_event_log.h"
 #include "trade_session.h"
+#include "game_server/player_duel.h"
 
 #include <algorithm>
 #include <string>
@@ -56,6 +57,12 @@ namespace mmo
 		explicit Player(PlayerManager& manager, RealmConnector& realmConnector, std::shared_ptr<GamePlayerS> characterObject,
 		                CharacterData characterData, const proto::Project& project, WorldInstance& instance, ConditionMgr& conditionMgr);
 		~Player() override;
+
+		/// Validates and handles duel invitations/responses forwarded by the realm.
+		void OnDuelRequest(io::Reader& reader);
+		void OnDuelResponse(io::Reader& reader);
+		/// Advances this player's initiated duel and re-arms its timer while needed.
+		void TickDuel();
 
 	public:
 		/// @brief Sends a network packet directly to the client.
@@ -732,6 +739,9 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatMorph(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles a GM request to set the caller's own faction-template ID outside a duel.
+		void OnCheatFaction(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to instantly kill the selected unit (or the player if nothing is targeted).
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -749,6 +759,12 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to enable or disable their own cooldown bypass.
+		/// @param opCode The packet opcode.
+		/// @param size The payload size in bytes.
+		/// @param contentReader The packet payload reader.
+		void OnCheatNoCooldown(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to toggle game master invisibility on their own character.
 		///	@param opCode The op code of the packet.
@@ -1084,6 +1100,8 @@ namespace mmo
 
 		// Periodic trade distance check (fires every 2 s while trading)
 		Countdown m_tradeDistanceCheckTimer;
+		Countdown m_duelTimer;
+		std::shared_ptr<PlayerDuel> m_duelSession;
 
 		/// @brief Pending revive offer state — set when another player casts a revive spell on
 		/// Guid of the banker npc the player is currently interacting with, or 0 if none.

@@ -59,6 +59,12 @@ namespace mmo
 		/// Gets the number of vertices in the buffer.
 		uint32 GetVertexCount() const;
 
+		/// Gets the queued vertices for inspecting rendered geometry before upload.
+		const std::vector<Vertex>& GetVertices() const
+		{
+			return m_vertices;
+		}
+
 		/// Gets the number of batches in the buffer.
 		uint32 GetBatchCount() const;
 

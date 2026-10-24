@@ -237,7 +237,7 @@ namespace mmo
 				bottomButtonTop = newArea.bottom;
 			}
 
-			const float invScaleY = 1.0f / FrameManager::Get().GetUIScale().y;
+			const float invScaleY = 1.0f / GetLayoutUIScale().y;
 
 			// Calculate the available space for the thumb
 			float minPos = topButtonBottom;
@@ -283,7 +283,7 @@ namespace mmo
 				rightButtonLeft = newArea.right;
 			}
 
-			const float invScaleX = 1.0f / FrameManager::Get().GetUIScale().x;
+			const float invScaleX = 1.0f / GetLayoutUIScale().x;
 
 			// Calculate the available space for the thumb
 			float minPos = leftButtonRight;
@@ -334,7 +334,7 @@ namespace mmo
 		if (m_orientation == ScrollBarOrientation::Vertical)
 		{
 			// Align the thumb horizontally with the up button
-			position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().x);
+			position.x = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().left - GetAbsoluteFrameRect().left : 0.0f) * (1.0f / GetLayoutUIScale().x);
 
 			// Calculate available space for thumb movement
 			float availableSpace = thumb->GetVerticalMax() - thumb->GetVerticalMin() - thumb->GetHeight();
@@ -353,9 +353,9 @@ namespace mmo
 				{
 					position.y = thumb->GetVerticalMin();
 				}
-				else if (position.y > thumb->GetVerticalMax() - thumb->GetHeight() * FrameManager::Get().GetUIScale().y)
+				else if (position.y > thumb->GetVerticalMax() - thumb->GetHeight() * GetLayoutUIScale().y)
 				{
-					position.y = thumb->GetVerticalMax() - thumb->GetHeight() * FrameManager::Get().GetUIScale().y;
+					position.y = thumb->GetVerticalMax() - thumb->GetHeight() * GetLayoutUIScale().y;
 				}
 			}
 		}
@@ -363,7 +363,7 @@ namespace mmo
 		else
 		{
 			// Align the thumb vertically with the left button
-			position.y = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().top - GetAbsoluteFrameRect().top : 0.0f) * (1.0f / FrameManager::Get().GetUIScale().y);
+			position.y = (m_upFrame ? m_upFrame->GetAbsoluteFrameRect().top - GetAbsoluteFrameRect().top : 0.0f) * (1.0f / GetLayoutUIScale().y);
 
 			// Calculate available space for thumb movement
 			float availableSpace = thumb->GetHorizontalMax() - thumb->GetHorizontalMin() - thumb->GetWidth();

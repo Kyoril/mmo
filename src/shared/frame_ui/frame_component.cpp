@@ -26,7 +26,7 @@ namespace mmo
 		// Check anchor points
 		Rect r = area;
 
-		const auto scale = FrameManager::Get().GetUIScale();
+		const auto scale = m_frame->GetLayoutUIScale();
 
 		// Apply inset
 		r.left += m_areaInset.left * scale.x;

@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000B;
+		constexpr uint32 ProtocolVersion = 0x0000000D;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -272,6 +272,9 @@ namespace mmo
 				/// Availability of the world-owned subsystems on this node. The full list after logon, the
 				/// changed entries afterwards. Payload: uint8 count, count x (uint8 subsystem, uint8 status).
 				SubsystemStatus,
+
+				/// Authoritative live faction: uint64 characterGuid, uint32 factionTemplateId.
+				PlayerFactionUpdate,
 			};
 		}
 

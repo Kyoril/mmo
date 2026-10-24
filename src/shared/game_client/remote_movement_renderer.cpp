@@ -25,6 +25,12 @@ namespace mmo
 			return;
 		}
 
+		if ((info.movementFlags & (movement_flags::Forward | movement_flags::Backward |
+			movement_flags::StrafeLeft | movement_flags::StrafeRight)) == 0)
+		{
+			m_lateralSpeed = 0.0f;
+		}
+
 		if (!m_initialized)
 		{
 			// First update — seed all state from the packet.
@@ -111,21 +117,41 @@ namespace mmo
 		const Vector3 right   = orientation * Vector3::UnitZ;
 
 		Vector3 desiredDelta = Vector3::Zero;
+		Vector3 lateralVelocity = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
+		const float targetSpeed = lateralVelocity.GetLength();
+		if (m_lateralSpeed < 0.0f || isFalling)
+		{
+			// An initial moving snapshot describes motion already underway. After an
+			// observed stop, however, mirror the owning client's acceleration ramp.
+			m_lateralSpeed = targetSpeed;
+		}
+		else
+		{
+			m_lateralSpeed = std::min(targetSpeed, m_lateralSpeed + kMaxAcceleration * std::max(deltaTime, 0.0f));
+		}
+		if (targetSpeed > 0.0f)
+		{
+			lateralVelocity *= m_lateralSpeed / targetSpeed;
+		}
 
 		if (isFalling)
 		{
-			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
-			desiredDelta.x = lateral.x * deltaTime;
-			desiredDelta.z = lateral.z * deltaTime;
+			desiredDelta.x = lateralVelocity.x * deltaTime;
+			desiredDelta.z = lateralVelocity.z * deltaTime;
 			StepFallArc(deltaTime);
 			desiredDelta.y = m_fallVelocity.y * deltaTime;
 			m_renderedPos += desiredDelta;
 		}
 		else
 		{
-			desiredDelta = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed) * deltaTime;
+			desiredDelta = lateralVelocity * deltaTime;
 			m_renderedPos += desiredDelta;
 		}
+
+		// Predict ordinary travel on the scene node too. Smoothing only the error
+		// avoids a speed-proportional chase gap that hits the teleport threshold at
+		// admin speeds, especially on observing clients running at 30 fps.
+		m_scenePos += desiredDelta;
 
 		// ── 3. Smooth correction: exponentially decay m_scenePos toward m_renderedPos ─
 		// Use a critically-damped exponential blend rather than constant-speed chase.
@@ -164,7 +190,7 @@ namespace mmo
 		outState.facing        = m_renderedFacing;
 		outState.movementFlags = m_authFlags;
 		outState.isFalling     = isFalling;
-		outState.velocity      = isFalling ? m_fallVelocity : ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
+		outState.velocity      = isFalling ? m_fallVelocity : lateralVelocity;
 
 		return true;
 	}
@@ -175,6 +201,7 @@ namespace mmo
 		m_fallVelocity       = Vector3::Zero;
 		m_fallTimeAccumSec   = 0.0f;
 		m_authFlags          = 0;
+		m_lateralSpeed       = -1.0f;
 	}
 
 	Vector3 RemoteMovementRenderer::ComputeVelocity(const Vector3& forward, const Vector3& right,

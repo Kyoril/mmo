@@ -144,11 +144,18 @@ namespace mmo
 		/// catalog's alias lists. Returns 0 when no emote matches.
 		uint32 GetEmoteFromCommand(const char* command) const;
 
+		/// Cycles through living attackable units within 35 yards.
 		void TargetNearestEnemy();
+
+		/// Cycles through other living friendly players within 35 yards.
+		void TargetNearestFriendlyPlayer();
 
 		void OnLogout();
 
 	private:
+		/// Selects the next nearby unit matching the requested targeting mode.
+		void TargetNearestUnit(bool friendlyPlayers);
+
 		typedef std::unique_ptr<lua_State, LuaStateDeleter> LuaStatePtr;
 
 	private:

@@ -296,7 +296,7 @@ namespace mmo
 		SpellTargetMap targetMap{};
 
 		// Power check — apply spell cost modifiers from server-communicated spell mods
-		if (spell->cost() != 0)
+		if (spell->cost() != 0 && !(unit->IsGodmode() && spell->powertype() == power_type::Mana))
 		{
 			int32 effectiveCost = spell->cost();
 			if (spell->powertype() == unit->GetPowerType())

@@ -9,6 +9,7 @@
 #include "log/default_log_levels.h"
 
 #include <algorithm>
+#include <cmath>
 
 
 namespace mmo
@@ -75,6 +76,7 @@ namespace mmo
 		other.m_visible = m_visible;
 		other.m_clippedByParent = m_clippedByParent;
 		other.m_pixelSize = m_pixelSize;
+		other.m_layoutScale = m_layoutScale;
 		other.m_position = m_position;
 		other.m_text = m_text;
 		other.m_needsLayout = true;
@@ -1493,13 +1495,30 @@ namespace mmo
 		return false;
 	}
 
+	void Frame::SetLayoutScale(const float scale)
+	{
+		if (!std::isfinite(scale) || scale <= 0.0f || m_layoutScale == scale)
+		{
+			return;
+		}
+		m_layoutScale = scale;
+		Invalidate();
+	}
+
+	Point Frame::GetLayoutUIScale() const
+	{
+		const Point parentScale = m_parent ? m_parent->GetLayoutUIScale() : FrameManager::Get().GetUIScale();
+		return Point(parentScale.x * m_layoutScale, parentScale.y * m_layoutScale);
+	}
+
 	Rect Frame::GetRelativeFrameRect(const bool withScale)
 	{
 		// Use the internal size property as the default value
 		Size mySize = GetPixelSize();
 		if (withScale)
 		{
-			mySize *= FrameManager::Get().GetUIScaleSize();
+			const auto scale = GetLayoutUIScale();
+			mySize *= Size(scale.x, scale.y);
 		}
 
 		// Return the rectangle with the calculated size
@@ -1556,13 +1575,14 @@ namespace mmo
 
 		// This rect will contain the absolute parent rectangle
 		const Rect parentRect = GetParentRect();
+		const Point anchorScale = m_parent ? m_parent->GetLayoutUIScale() : FrameManager::Get().GetUIScale();
 		
 		// Add parent rect offset to the relative rect
 		m_absRectCache.Offset(parentRect.GetPosition());
 
 		if (!AnchorsSatisfyPosition())
 		{
-			m_absRectCache.Offset(m_position * FrameManager::Get().GetUIScale());
+			m_absRectCache.Offset(m_position * anchorScale);
 		}
 
 		// Apply anchor points
@@ -1584,7 +1604,7 @@ namespace mmo
 			}
 
 			anchor.second->ApplyToAbsRect(
-				m_absRectCache, anchorParentRect, hasOpposite);
+				m_absRectCache, anchorParentRect, hasOpposite, anchorScale);
 		}
 
 		// Move rectangle

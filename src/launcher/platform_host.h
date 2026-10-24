@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include "base/client_display_settings.h"
 
 namespace mmo
 {
@@ -33,6 +34,16 @@ namespace mmo
 		}
 		/// Persists launcher behavior. Returns false on write failure.
 		virtual bool SaveKeepOpen(bool keepOpen)
+		{
+			return false;
+		}
+		/// Reads the selected game resolution and window mode.
+		virtual ClientDisplaySettings GetDisplaySettings() const
+		{
+			return {};
+		}
+		/// Persists a supported game resolution and window mode.
+		virtual bool SaveDisplaySettings(const ClientDisplaySettings& settings)
 		{
 			return false;
 		}

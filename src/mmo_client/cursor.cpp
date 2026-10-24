@@ -156,6 +156,7 @@ namespace mmo
 	{
 		m_type = CursorItemType::None;
 		m_itemSlot = -1;
+		m_itemDisplayId = 0;
 
 		FrameManager::Get().SetCursorIcon(nullptr, Size(32.0f, 32.0f));
 	}
@@ -173,6 +174,14 @@ namespace mmo
 		m_type = CursorItemType::Spell;
 		m_itemSlot = spell;
 
+		UpdateCursorIcon();
+	}
+
+	void Cursor::SetItemShortcut(const uint32 itemId, const uint32 displayId)
+	{
+		m_type = CursorItemType::ItemShortcut;
+		m_itemSlot = itemId;
+		m_itemDisplayId = displayId;
 		UpdateCursorIcon();
 	}
 
@@ -290,6 +299,14 @@ namespace mmo
 				{
 					iconPath = itemIcon;
 				}
+			}
+		}
+		else if (m_type == CursorItemType::ItemShortcut && m_project)
+		{
+			const auto* display = m_project->itemDisplays.getById(m_itemDisplayId);
+			if (display && !display->icon().empty())
+			{
+				iconPath = display->icon();
 			}
 		}
 		else if (m_type == CursorItemType::Emote && m_project)

@@ -65,11 +65,7 @@ namespace mmo
 
 		Size GetUIScaleSize() const { return Size(m_uiScale.x, m_uiScale.y); }
 
-		/// Uniform scale used for text measurement and rendering. Glyphs are never stretched
-		/// per-axis, so text has to use the smaller of the two axis scales: horizontal layout
-		/// scales with the x scale, and if text were scaled by the (larger) y scale on windows
-		/// narrower than the native 16:9 aspect ratio, it would overflow or wrap inside frames
-		/// that are sized to hold it.
+		/// Uniform scale used for text measurement and rendering, matching frame proportions.
 		float GetTextScale() const { return m_uiScale.x < m_uiScale.y ? m_uiScale.x : m_uiScale.y; }
 
 	public:
@@ -90,6 +86,12 @@ namespace mmo
 		void SetNativeResolution(const Size& nativeResolution);
 
 		const Size& GetNativeResolution() const { return m_nativeResolution; }
+
+		/// Keeps small-window controls readable, limited by the canvas required to fit the UI.
+		void SetMinimumUIScale(float scale, const Size& minimumCanvasSize);
+
+		/// Returns the current screen dimensions in logical UI units (for projection and picking).
+		Size GetLogicalScreenSize() const;
 
 		void SetCursorIcon(TexturePtr cursorIconTexture, const Size size);
 
@@ -267,6 +269,9 @@ namespace mmo
 		const Localization& m_localization;
 
 		Size m_nativeResolution { 3840.0f, 2160.0f };
+		Size m_screenSize;
+		Size m_minimumCanvasSize;
+		float m_minimumUIScale = 0.0f;
 
 		Point m_uiScale { 1.0f, 1.0f };
 

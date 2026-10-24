@@ -52,6 +52,7 @@ namespace mmo
 			switch (msg.message)
 			{
 			case WM_KEYDOWN:
+			case WM_SYSKEYDOWN:
 				{
 					const bool wasKeyPreviouslyDown = (msg.lParam & (1 << 30)) != 0;
 					const int32 virtualKey = static_cast<int32>(msg.wParam);

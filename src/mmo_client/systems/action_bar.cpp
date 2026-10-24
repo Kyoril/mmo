@@ -102,6 +102,11 @@ namespace mmo
 				return true;
 			}
 
+			if (player->IsGodmode() && spell->powertype() == power_type::Mana)
+			{
+				return true;
+			}
+
 			if (spell->powertype() != player->GetPowerType())
 			{
 				return false;
@@ -278,14 +283,10 @@ namespace mmo
 				g_cursor.SetEmote(m_actionButtons[slot].action);
 				break;
 			case action_button_type::Item:
-				uint8 bag, bagSlot;
-				uint64 guid;
-				if (!ObjectMgr::FindItem(m_actionButtons[slot].action, bag, bagSlot, guid))
 				{
-					return;
+					const auto* item = m_items.Get(m_actionButtons[slot].action);
+					g_cursor.SetItemShortcut(m_actionButtons[slot].action, item ? item->displayId : 0);
 				}
-
-				g_cursor.SetItem((static_cast<uint16>(bag) << 8) | bagSlot);
 				break;
 			}
 
@@ -337,6 +338,15 @@ namespace mmo
 				}
 			}
 			break;
+		case CursorItemType::ItemShortcut:
+			{
+				m_actionButtons[slot].type = action_button_type::Item;
+				m_actionButtons[slot].action = static_cast<uint16>(g_cursor.GetCursorItem());
+				EnsureItemData(m_actionButtons[slot].action);
+				ActionButtonChanged(slot);
+				placed = true;
+			}
+			break;
 		case CursorItemType::Spell:
 			{
 				const uint32 spellId = g_cursor.GetCursorItem();
@@ -386,11 +396,9 @@ namespace mmo
 				pickedUpPrevious = true;
 				break;
 			case action_button_type::Item:
-				uint8 bag, bagSlot;
-				uint64 guid;
-				if (ObjectMgr::FindItem(previous.action, bag, bagSlot, guid))
 				{
-					g_cursor.SetItem((static_cast<uint16>(bag) << 8) | bagSlot);
+					const auto* item = m_items.Get(previous.action);
+					g_cursor.SetItemShortcut(previous.action, item ? item->displayId : 0);
 					pickedUpPrevious = true;
 				}
 				break;

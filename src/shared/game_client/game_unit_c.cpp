@@ -815,6 +815,17 @@ namespace mmo
 				m_unitMovement->SetMovementMode(MovementMode::Walking);
 			}
 
+			// An idle player's owning client has already resolved their resting height.
+			// Keep it while local collision geometry is still streaming: settling onto
+			// a lower surface here can sink the copy until its next movement packet.
+			if ((state.movementFlags & (movement_flags::PositionChanging |
+				movement_flags::Swimming | movement_flags::Flying)) == 0)
+			{
+				Vector3 position = GetSceneNode()->GetDerivedPosition();
+				position.y = m_remoteMovementRenderer.GetAuthoritativeY();
+				GetSceneNode()->SetDerivedPosition(position);
+				m_remoteMovementRenderer.SetRenderedY(position.y);
+			}
 			// Snap the scene node to terrain height so remote players don't fall
 			// through the ground when the server navmesh height differs slightly
 			// from the client's collision geometry.
@@ -829,11 +840,12 @@ namespace mmo
 			// dropping the feet onto the surface point below the unit's centre, so
 			// the character stands at the height its own client reports instead of
 			// sinking into slopes, stairs and ledges.
-			if (m_unitMovement->CorrectRemoteGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
+			else if (m_unitMovement->CorrectRemoteGroundHeight(5.0f, m_remoteMovementRenderer.GetAuthoritativeY()))
 			{
 				m_remoteMovementRenderer.SetRenderedY(GetSceneNode()->GetDerivedPosition().y);
 			}
 		}
+		m_movementInfo.position = GetSceneNode()->GetDerivedPosition();
 
 		// Feed the input vector from interpolated movement flags so the animation
 		// system detects that the remote player is moving (run vs idle).
@@ -1177,6 +1189,15 @@ namespace mmo
 		if (m_factionTemplate)
 		{
 			m_faction = m_project.factions.getById(m_factionTemplate->faction());
+		}
+		if (GetGuid() == ObjectMgr::GetActivePlayerGuid())
+		{
+			// Our faction determines the name colors of every nearby unit.
+			ObjectMgr::ForEachUnit([](GameUnitC& unit) { unit.RefreshUnitName(); });
+		}
+		else
+		{
+			RefreshUnitName();
 		}
 	}
 
@@ -2700,6 +2721,10 @@ namespace mmo
 
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
 	{
+		if ((m_duelPartner != 0 && m_duelPartner == other.GetGuid()) || (other.m_duelPartner != 0 && other.m_duelPartner == GetGuid()))
+		{
+			return !(m_duelActive || other.m_duelActive);
+		}
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
 		{
 			return false;
@@ -2727,6 +2752,10 @@ namespace mmo
 
 	bool GameUnitC::IsHostileTo(const GameUnitC &other) const
 	{
+		if ((m_duelPartner != 0 && m_duelPartner == other.GetGuid()) || (other.m_duelPartner != 0 && other.m_duelPartner == GetGuid()))
+		{
+			return m_duelActive || other.m_duelActive;
+		}
 		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
 		{
 			return false;

@@ -179,6 +179,7 @@ namespace mmo
 		
 		// Make the top frame element
 		const auto topFrame = frameMgr.CreateOrRetrieve("Frame", "TopFrame");
+		topFrame->AddProperty("LoginSettings", "true");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);

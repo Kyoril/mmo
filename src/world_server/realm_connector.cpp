@@ -779,6 +779,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		// before the character enters the instance so an invisible observer is never spawned to
 		// other players and never counted as an instance player.
 		characterObject->SetGodmode((characterData.gmFlags & gm_flags::Godmode) != 0);
+		characterObject->SetNoCooldown((characterData.gmFlags & gm_flags::NoCooldown) != 0);
 		characterObject->SetGmInvisible((characterData.gmFlags & gm_flags::Invisible) != 0);
 
 		characterObject->ClearFieldChanges();
@@ -826,7 +827,18 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			outPacket.Finish();
 		});
 		
+		SendPlayerFaction(characterObject->GetGuid(), characterObject->Get<uint32>(object_fields::FactionTemplate));
 		return PacketParseResult::Pass;
+	}
+
+	void RealmConnector::SendPlayerFaction(const uint64 characterGuid, const uint32 factionTemplateId)
+	{
+		sendSinglePacket([characterGuid, factionTemplateId](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::world_realm_packet::PlayerFactionUpdate);
+			packet << io::write<uint64>(characterGuid) << io::write<uint32>(factionTemplateId);
+			packet.Finish();
+		});
 	}
 
 	PacketParseResult RealmConnector::OnPlayerCharacterLeave(auth::IncomingPacket& packet)

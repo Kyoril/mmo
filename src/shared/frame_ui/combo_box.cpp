@@ -26,7 +26,6 @@ namespace mmo
 		const char* PopupFrameName = "ComboBoxDropdownFrame";
 		const char* PopupContainerName = "ComboBoxDropdownContainer";
 		const char* ItemTemplateName = "ComboBoxItemTemplate";
-		const char* GameParentName = "GameParent";
 	}
 
 	const String ComboBox::Type("ComboBox");
@@ -200,7 +199,6 @@ namespace mmo
 		const FramePtr popup = frameMgr.Find(PopupFrameName);
 		const FramePtr container = frameMgr.Find(PopupContainerName);
 		const FramePtr itemTemplate = frameMgr.Find(ItemTemplateName);
-		const FramePtr gameParent = frameMgr.Find(GameParentName);
 		if (!popup || !container || !itemTemplate)
 		{
 			ELOG("ComboBox '" << GetName() << "' cannot open: dropdown popup frames are not loaded");
@@ -262,22 +260,24 @@ namespace mmo
 		}
 
 		// ── Sizing & positioning ──────────────────────────────────
-		// GetX / GetY return screen pixels  → divide by UIScale to get virtual 4K pixels.
-		// GetWidth returns screen pixels (anchor-driven) → divide by UIScale.
-		// GetHeight returns virtual pixels (AbsDimension-driven) → add directly.
+		// Resolve dirty layout before reading bounds: newly built rows may not have been drawn yet.
+		// Popup anchors are relative to their actual parent in both the login and game UI.
 		const Point scale = frameMgr.GetUIScale();
+		const Rect bounds = GetAbsoluteFrameRect();
+		const FramePtr popupParent = popup->GetParent() ? popup->GetParent()->shared_from_this() : nullptr;
+		const Rect parentBounds = popupParent ? popupParent->GetAbsoluteFrameRect() : Rect();
 
 		m_contentHeight = itemCount * ItemHeight;
 		m_viewportHeight = std::min(m_contentHeight, m_maxDropHeight);
 
-		const float virtualX = static_cast<float>(GetX()) / scale.x;
-		const float virtualY = static_cast<float>(GetY()) / scale.y + GetHeight();
-		const float virtualWidth = GetWidth() / scale.x;
+		const float virtualX = (bounds.left - parentBounds.left) / scale.x;
+		const float virtualY = (bounds.bottom - parentBounds.top) / scale.y;
+		const float virtualWidth = bounds.GetWidth() / scale.x;
 		const float popupHeight = m_viewportHeight + BorderPadding * 2.0f;
 
 		popup->ClearAnchors();
-		popup->SetAnchor(AnchorPoint::Top, AnchorPoint::Top, gameParent, virtualY);
-		popup->SetAnchor(AnchorPoint::Left, AnchorPoint::Left, gameParent, virtualX);
+		popup->SetAnchor(AnchorPoint::Top, AnchorPoint::Top, popupParent, virtualY);
+		popup->SetAnchor(AnchorPoint::Left, AnchorPoint::Left, popupParent, virtualX);
 		popup->SetWidth(virtualWidth);
 		popup->SetHeight(popupHeight);
 		popup->BringToFront();

@@ -8,6 +8,9 @@
 #include "base/macros.h"
 #include "graphics/texture_mgr.h"
 
+#include <algorithm>
+#include <array>
+
 
 namespace mmo
 {
@@ -36,6 +39,8 @@ namespace mmo
 		copy->m_tintPropertyName = m_tintPropertyName;
 		copy->m_width = m_width;
 		copy->m_height = m_height;
+		copy->m_relativeInset = m_relativeInset;
+		copy->m_cornerCut = m_cornerCut;
 
 		return copy;
 	}
@@ -64,6 +69,10 @@ namespace mmo
 		finalColor *= color;
 
 		const Rect frameRect = GetArea(area);
+		if (frameRect.GetWidth() <= 0.0f || frameRect.GetHeight() <= 0.0f)
+		{
+			return;
+		}
 
 		// Default source rect encapsulates the whole image area
 		Rect srcRect{ 0.0f, 0.0f, static_cast<float>(m_texture->GetWidth()), static_cast<float>(m_texture->GetHeight())};
@@ -80,6 +89,41 @@ namespace mmo
 		{
 			const float factorY = frameRect.GetHeight() / static_cast<float>(m_texture->GetHeight());
 			srcRect.SetHeight(factorY * srcRect.GetHeight());
+		}
+
+		if (m_cornerCut > 0.0f)
+		{
+			// Clip geometry and interpolate UVs so the artwork keeps its proportions.
+			const float cut = std::min(frameRect.GetWidth(), frameRect.GetHeight()) * m_cornerCut;
+			const std::array<Point, 8> corners = {{
+				{ frameRect.left + cut, frameRect.top },
+				{ frameRect.right - cut, frameRect.top },
+				{ frameRect.right, frameRect.top + cut },
+				{ frameRect.right, frameRect.bottom - cut },
+				{ frameRect.right - cut, frameRect.bottom },
+				{ frameRect.left + cut, frameRect.bottom },
+				{ frameRect.left, frameRect.bottom - cut },
+				{ frameRect.left, frameRect.top + cut }
+			}};
+			const auto vertexAt = [&](const Point& point) -> GeometryBuffer::Vertex
+			{
+				const float u = (point.x - frameRect.left) / frameRect.GetWidth();
+				const float v = (point.y - frameRect.top) / frameRect.GetHeight();
+				return { { point.x, point.y, 0.0f }, finalColor,
+					{ (srcRect.left + u * srcRect.GetWidth()) / m_texture->GetWidth(),
+					  (srcRect.top + v * srcRect.GetHeight()) / m_texture->GetHeight() } };
+			};
+			const auto center = vertexAt(Point(
+				(frameRect.left + frameRect.right) * 0.5f,
+				(frameRect.top + frameRect.bottom) * 0.5f));
+			for (size_t i = 0; i < corners.size(); ++i)
+			{
+				const GeometryBuffer::Vertex triangle[] = {
+					center, vertexAt(corners[i]), vertexAt(corners[(i + 1) % corners.size()])
+				};
+				m_frame->GetGeometryBuffer().AppendGeometry(triangle, 3);
+			}
+			return;
 		}
 
 		// Create the rectangle
@@ -234,18 +278,36 @@ namespace mmo
 		return Size(realWidth, realHeight);
 	}
 
+	void ImageComponent::SetRelativeInset(float inset)
+	{
+		m_relativeInset = std::clamp(inset, 0.0f, 0.49f);
+		m_frame->Invalidate(false);
+	}
+
+	void ImageComponent::SetCornerCut(float cut)
+	{
+		m_cornerCut = std::clamp(cut, 0.0f, 0.5f);
+		m_frame->Invalidate(false);
+	}
+
 	Rect ImageComponent::GetArea(const Rect& area) const
 	{
 		Rect baseArea = FrameComponent::GetArea(area);
 
 		if (m_width != 0 || m_height != 0)
 		{
-			const auto scale = FrameManager::Get().GetUIScale();
+			const auto scale = m_frame->GetLayoutUIScale();
 
 			const auto size = GetSize();
 			baseArea.SetSize(Size(size.width * scale.x, size.height * scale.y));
 		}
 		
+		const float insetX = baseArea.GetWidth() * m_relativeInset;
+		const float insetY = baseArea.GetHeight() * m_relativeInset;
+		baseArea.left += insetX;
+		baseArea.right -= insetX;
+		baseArea.top += insetY;
+		baseArea.bottom -= insetY;
 		return baseArea;
 	}
 
