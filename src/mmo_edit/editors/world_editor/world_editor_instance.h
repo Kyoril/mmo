@@ -56,6 +56,7 @@
 #include "edit_modes/atlas_edit_mode.h"
 #include "edit_modes/water_edit_mode.h"
 #include "edit_modes/foliage_edit_mode.h"
+#include "edit_modes/procedural_edit_mode.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/foliage.h"
 #include "scene_outline_window.h"
@@ -345,6 +346,9 @@ namespace mmo
 
 		/// Asset path of the world's river flow paths (.hflow next to the world file).
 		[[nodiscard]] String GetFlowPathsFileName() const;
+
+		/// @brief Asset path of the folder holding this world's oasis records (.hpcg).
+		[[nodiscard]] String GetPcgFolderName() const;
 
 	private:
 		// UI related methods
@@ -715,6 +719,15 @@ namespace mmo
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
+		/// @brief Rebuilds procedural content (oases) without any UI, for unattended runs.
+		/// @param idOrZero Id of the oasis to rebuild, or 0 for all of them.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if everything requested was rebuilt.
+		bool RebuildProcedural(uint64 idOrZero, String& error);
+
+		/// @brief Number of oases of the world.
+		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
+
 		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
 		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and
 		///        released by ReleaseForcedPages; streaming takes a page over when it arrives.
@@ -936,6 +949,7 @@ namespace mmo
 		std::unique_ptr<FogVolumeEditMode> m_fogVolumeEditMode;
 		std::unique_ptr<AtlasEditMode> m_atlasEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
+		std::unique_ptr<ProceduralEditMode> m_proceduralEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 

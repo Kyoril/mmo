@@ -448,6 +448,7 @@ namespace mmo
 			[this]() -> const proto::MapEntry* { return m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr; });
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
+		m_proceduralEditMode = std::make_unique<ProceduralEditMode>(*this, *m_camera);
 
 		// Brush-based authoring for the instanced foliage created above (m_foliage).
 		m_foliageEditMode = std::make_unique<FoliageEditMode>(*this, *m_foliage, m_terrain.get(), *m_camera);
@@ -516,6 +517,12 @@ namespace mmo
 		if (m_waterEditMode)
 		{
 			m_waterEditMode->LoadFlowPaths(GetFlowPathsFileName());
+		}
+
+		// Oasis control objects (editor-only; the world carries the generated content).
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->Load(GetPcgFolderName());
 		}
 
 		CreateFarTerrain();
@@ -709,7 +716,8 @@ namespace mmo
 			m_fogVolumeEditMode.get(),
 			m_atlasEditMode.get(),
 			m_navigationEditMode.get(),
-			m_skyEditMode.get()};
+			m_skyEditMode.get(),
+			m_proceduralEditMode.get()};
 		m_detailsPanel->Draw(
 			detailsId,
 			m_editMode,
@@ -986,7 +994,8 @@ namespace mmo
 
 			// Skip camera rotation when the spawn editor is actively dragging a waypoint.
 			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint()) ||
-				(m_editMode == m_atlasEditMode.get() && m_atlasEditMode->IsDragging());
+				(m_editMode == m_atlasEditMode.get() && m_atlasEditMode->IsDragging()) ||
+				(m_editMode == m_proceduralEditMode.get() && m_proceduralEditMode->IsDragging());
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
 			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
@@ -1017,6 +1026,18 @@ namespace mmo
 				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 		}
 
+		if (m_proceduralEditMode && m_editMode == m_proceduralEditMode.get() && m_terrain)
+		{
+			// Ground under the cursor, for dragging and inserting loop points.
+			const Ray ray = m_camera->GetCameraToViewportRay(
+				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y, 50000.0f);
+			if (const auto hit = m_terrain->RayIntersects(ray); hit.first)
+			{
+				m_proceduralEditMode->SetBrushPosition(hit.second.position);
+			}
+		}
+
 		if (m_editMode == m_terrainEditMode.get())
 		{
 			if (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Select)
@@ -1037,12 +1058,34 @@ namespace mmo
 		return fileName;
 	}
 
+	String WorldEditorInstance::GetPcgFolderName() const
+	{
+		return "Editor/Pcg/Worlds/" + m_assetPath.stem().string();
+	}
+
+	bool WorldEditorInstance::RebuildProcedural(const uint64 idOrZero, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
+	}
+
 	bool WorldEditorInstance::Save()
 	{
 		// River flow first: a pending flow apply changes terrain pages, which are saved below.
 		if (m_waterEditMode)
 		{
 			m_waterEditMode->SaveFlowPaths(GetFlowPathsFileName());
+		}
+
+		// Oasis records: only their own files; the content they generated is saved with the pages below.
+		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
+		{
+			ELOG("Some oasis records could not be saved");
 		}
 
 		// Build mesh name index map (only for mesh entities)
@@ -3686,6 +3729,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		MapEntity &mapEntity = selectable.GetEntity();
 		
 		ImGui::Text("Unique Id: %llu", mapEntity.GetUniqueId());
+
+		if (mapEntity.GetCategory() == "Pcg")
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.2f, 1.0f));
+			ImGui::TextWrapped("Owned by an oasis (procedural). Hand edits are overwritten when the oasis is rebuilt.");
+			ImGui::PopStyleColor();
+		}
 
 		if (mapEntity.IsWorldModelEntity())
 		{
