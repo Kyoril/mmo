@@ -202,6 +202,10 @@ namespace mmo
 		/// @brief Draws the selected point's tangent tools in the details panel.
 		void DrawPointDetails(Oasis& oasis);
 
+		/// @brief Tells the transform widget that the selected point's tangents changed (its local-space
+		///        orientation follows the out tangent).
+		void NotifyPointRotated();
+
 	private:
 		Camera& m_camera;
 		SplineEditController m_splineEditor;

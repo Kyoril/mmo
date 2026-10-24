@@ -4,23 +4,32 @@
 
 #include "world_editor_instance.h"
 
+#include <cmath>
+
 namespace mmo
 {
 	namespace
 	{
-		/// The yaw part of a rotation: the rotation around world up that turns +X to where the full
-		/// rotation turns it, projected onto the ground. Identity if +X ends up (almost) vertical.
+		/// The yaw part of a rotation: its twist around world up (swing-twist decomposition), i.e. the
+		/// quaternion's w and y components renormalised. Unlike projecting a rotated axis onto the ground
+		/// this does not flip by 180 degrees when roll or pitch exceed 90 degrees (q and -q are the same
+		/// rotation, so the sign a large pitch puts on both components cancels). Identity when the
+		/// rotation is a pure half turn around a horizontal axis (no defined twist).
 		Quaternion YawPart(const Quaternion& rotation)
 		{
-			Vector3 forward = rotation * Vector3::UnitX;
-			forward.y = 0.0f;
-			if (forward.GetSquaredLength() < 1.0e-8f)
+			const float lengthSq = rotation.w * rotation.w + rotation.y * rotation.y;
+			if (lengthSq < 1.0e-8f)
 			{
 				return Quaternion::Identity;
 			}
 
-			forward.Normalize();
-			return Vector3::UnitX.GetRotationTo(forward, Vector3::UnitY);
+			const float inverseLength = 1.0f / std::sqrt(lengthSq);
+			Quaternion twist(rotation.w * inverseLength, 0.0f, rotation.y * inverseLength, 0.0f);
+			if (twist.w < 0.0f)
+			{
+				twist = Quaternion(-twist.w, 0.0f, -twist.y, 0.0f);
+			}
+			return twist;
 		}
 	}
 

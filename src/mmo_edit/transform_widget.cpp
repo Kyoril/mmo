@@ -209,19 +209,28 @@ namespace mmo
 
 	bool TransformWidget::IsModeSupported() const
 	{
+		// Only objects that opt in can hide a mode, and only when none of them supports it; any selection
+		// without such objects keeps the widget exactly as it always behaved.
+		bool anyOptedIn = false;
 		for (const auto& selected : m_selection.GetSelectedObjects())
 		{
+			if (!selected->HidesUnsupportedTransformModes())
+			{
+				continue;
+			}
+
+			anyOptedIn = true;
 			const bool supported =
 				(m_mode == TransformMode::Translate && selected->SupportsTranslate()) ||
 				(m_mode == TransformMode::Rotate && selected->SupportsRotate()) ||
 				(m_mode == TransformMode::Scale && selected->SupportsScale());
-			if (!supported)
+			if (supported)
 			{
-				return false;
+				return true;
 			}
 		}
 
-		return true;
+		return !anyOptedIn;
 	}
 
 	void TransformWidget::OnMouseMoved(const float x, const float y)
@@ -1072,6 +1081,14 @@ namespace mmo
 		{
 			// Connect
 			m_objectMovedCon = m_selection.GetSelectedObjects().back()->positionChanged.connect(this, &TransformWidget::OnPositionChanged);
+			if (m_selection.GetSelectedObjects().back()->HidesUnsupportedTransformModes())
+			{
+				m_objectRotatedCon = m_selection.GetSelectedObjects().back()->rotationChanged.connect(this, &TransformWidget::OnRotationChanged);
+			}
+			else if (m_objectRotatedCon.connected())
+			{
+				m_objectRotatedCon.disconnect();
+			}
 
 			// Get position
 			const auto& pos = m_selection.GetSelectedObjects().back()->GetPosition();
@@ -1097,6 +1114,11 @@ namespace mmo
 				m_objectMovedCon.disconnect();
 			}
 
+			if (m_objectRotatedCon.connected())
+			{
+				m_objectRotatedCon.disconnect();
+			}
+
 			m_widgetNode->SetVisible(false);
 			m_selectedAxis = axis_id::None;
 		}
@@ -1112,6 +1134,12 @@ namespace mmo
 
 	void TransformWidget::OnRotationChanged(const Selectable& object)
 	{
+		// Only connected for objects that opt in (HidesUnsupportedTransformModes). During a drag the
+		// rotation code owns the widget orientation and resets it in FinishRotation.
+		if (!m_active && m_isLocal)
+		{
+			m_widgetNode->SetOrientation(object.GetOrientation());
+		}
 	}
 
 	void TransformWidget::OnScaleChanged(const Selectable& object)

@@ -418,8 +418,9 @@ namespace mmo
 
 	bool SplineEditController::OnMouseDown(const float x, const float y, std::vector<PathSpline*>& splines, const bool alt, const Vector3* worldHit)
 	{
+		// Alt+click is the insert gesture; a handle lying over a segment must not swallow it.
 		TangentHandle handle = TangentHandle::None;
-		if (HitTestTangentHandle(x, y, splines, handle))
+		if (!alt && HitTestTangentHandle(x, y, splines, handle))
 		{
 			BeginHandleDrag(handle);
 			return true;

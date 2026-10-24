@@ -97,6 +97,9 @@ namespace mmo
 		/// @copydoc Selectable::SupportsDuplicate
 		bool SupportsDuplicate() const override { return false; }
 
+		/// @brief The widget hides Scale for spline points and follows tangent rotations.
+		bool HidesUnsupportedTransformModes() const override { return true; }
+
 	public:
 		/// @brief Gets the id of the spline.
 		[[nodiscard]] uint64 GetSplineId() const { return m_splineId; }

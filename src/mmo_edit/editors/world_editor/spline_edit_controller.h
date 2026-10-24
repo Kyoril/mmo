@@ -76,7 +76,7 @@ namespace mmo
 
 		/// @brief Handles a click: grabs a tangent handle of the selected point (curved splines), selects a
 		///	       point (and starts dragging it), or with alt inserts a point into the segment under the
-		///	       cursor (and starts dragging the new point). Handles are tested before points.
+		///	       cursor (and starts dragging the new point). Handles are tested before points, except with alt.
 		/// @param x Screen x of the mouse.
 		/// @param y Screen y of the mouse.
 		/// @param alt Whether the insert modifier is held.

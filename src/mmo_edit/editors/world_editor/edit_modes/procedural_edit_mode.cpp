@@ -842,6 +842,7 @@ namespace mmo
 			if (ImGui::Button("Reset tangents to auto") && SplineEditController::ResetTangents(loop, static_cast<size_t>(point)))
 			{
 				oasis.dirty = true;
+				NotifyPointRotated();
 			}
 			ImGui::EndDisabled();
 			ImGui::SameLine();
@@ -852,8 +853,17 @@ namespace mmo
 		if (ImGui::Button("Reset all tangents") && SplineEditController::ResetAllTangents(loop))
 		{
 			oasis.dirty = true;
+			NotifyPointRotated();
 		}
 		ImGui::EndDisabled();
+	}
+
+	void ProceduralEditMode::NotifyPointRotated()
+	{
+		if (m_pointSelectable)
+		{
+			m_pointSelectable->rotationChanged(*m_pointSelectable);
+		}
 	}
 
 	void ProceduralEditMode::SetBrushPosition(const Vector3& position)
@@ -993,10 +1003,17 @@ namespace mmo
 				m_oases[selected].dirty = true;
 			}
 
-			// The transform widget follows a dragged point.
-			if (m_pointSelectable && m_splineEditor.GetDraggedHandle() == SplineEditController::TangentHandle::None)
+			// The transform widget follows a dragged point, and (in local space) the out tangent's yaw.
+			if (m_pointSelectable)
 			{
-				m_pointSelectable->positionChanged(*m_pointSelectable);
+				if (m_splineEditor.GetDraggedHandle() == SplineEditController::TangentHandle::None)
+				{
+					m_pointSelectable->positionChanged(*m_pointSelectable);
+				}
+				else
+				{
+					m_pointSelectable->rotationChanged(*m_pointSelectable);
+				}
 			}
 		}
 	}
