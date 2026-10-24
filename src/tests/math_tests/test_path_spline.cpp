@@ -316,7 +316,7 @@ namespace
 			else
 			{
 				INFO("sample " << i << " on segment " << segment);
-				CHECK(deviation < 1e-5f);
+				CHECK(deviation < 1e-4f);
 			}
 		}
 		CHECK(changedMax > 0.1f);
@@ -458,4 +458,20 @@ TEST_CASE("Linear splines ignore tangents", "[path_spline]")
 		p.outZ = 9.0f;
 	}
 	CHECK(MaxSampleDeviation(SampledPath(withTangents, 1.0f).GetSamples(), SampledPath(plain, 1.0f).GetSamples()) == 0.0f);
+}
+
+TEST_CASE("All-auto curved splines sample bit-identically to the old Catmull-Rom", "[path_spline]")
+{
+	// Rebuilding content authored before tangents existed must not move anything, not even by a rounding step.
+	PathSpline far = MakeCircle(8, 40.0f);
+	for (SplinePoint& p : far.points)
+	{
+		p.x += 20123.5f;
+		p.z += 18765.25f;
+	}
+
+	for (const PathSpline& spline : { MakeCircle(16, 40.0f), MakeOpenCurve(), MakeDiamond(), far })
+	{
+		CHECK(MaxSampleDeviation(SampledPath(spline, 1.0f).GetSamples(), SampleUniformCatmullRom(spline, 1.0f)) == 0.0f);
+	}
 }

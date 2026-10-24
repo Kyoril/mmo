@@ -10,6 +10,13 @@ namespace mmo
 {
 	namespace
 	{
+		float catmullRom(float p0, float p1, float p2, float p3, float t)
+		{
+			const float t2 = t * t;
+			const float t3 = t2 * t;
+			return 0.5f * ((2.0f * p1) + (-p0 + p2) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 + (-p0 + 3.0f * p1 - 3.0f * p2 + p3) * t3);
+		}
+
 		/// Cubic Bezier from p0 with control offsets c1, c2 and end offset e3, all relative to p0 (keeps
 		/// precision at large world coordinates).
 		float bezier(float p0, float c1, float c2, float e3, float t)
@@ -144,8 +151,15 @@ namespace mmo
 		const bool curved = spline.interpolation == SplineInterpolation::CatmullRom;
 		for (int s = 0; s < segmentCount; ++s)
 		{
+			const SplinePoint& p0 = fetch(s - 1);
 			const SplinePoint& p1 = fetch(s);
 			const SplinePoint& p2 = fetch(s + 1);
+			const SplinePoint& p3 = fetch(s + 2);
+
+			// Between two automatic points the Bezier below is exactly the uniform Catmull-Rom curve;
+			// evaluating it in the Catmull-Rom form keeps the samples bit-identical to splines
+			// authored before tangents existed, so rebuilding old content changes nothing.
+			const bool catmullRomSegment = curved && p1.autoTangents && p2.autoTangents;
 
 			// Bezier controls: P1 = p1 + out(p1), P2 = p2 + in(p2); relative to p1.
 			float c1x = 0.0f, c1z = 0.0f, c2x = 0.0f, c2z = 0.0f;
@@ -170,7 +184,12 @@ namespace mmo
 			{
 				const float t = static_cast<float>(k) / static_cast<float>(steps);
 				SplineSample sample{};
-				if (curved)
+				if (catmullRomSegment)
+				{
+					sample.x = catmullRom(p0.x, p1.x, p2.x, p3.x, t);
+					sample.z = catmullRom(p0.z, p1.z, p2.z, p3.z, t);
+				}
+				else if (curved)
 				{
 					sample.x = bezier(p1.x, c1x, c2x, ex, t);
 					sample.z = bezier(p1.z, c1z, c2z, ez, t);
