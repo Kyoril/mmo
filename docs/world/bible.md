@@ -114,11 +114,11 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - A walled town and major human hub, reached around level 10. It has guards, vendors and class trainers. [E]
 - **Haven lies south-west of Oakenshire, at the end of the river valley.** [E] It is reached by the Haven Road (section 3.11), with the river passing on its east side.
   - The town WMO `Models/Haven/Haven_Town.hwmo` stands at (−689, 1025). Its north gate (z ≈ 950) faces the harbour bridge. [C]
-  - Layout, north to south: the north gate, the **lower court** with four market stalls (z ≈ 976), stairs up to the **upper square** with the brazier (−689, 1020) and the main street between the inn (west) and the Haven Exchange bank (east), the fountain (−689, 1035), a curved terrace, and the Keep (z ≈ 1060+). [C]
+  - Layout, north to south: the north gate, the **lower court** with four market stalls (z ≈ 976), stairs up to the **upper square** with the summoning stone (−689, 1020; the runestone Oakenshire uses, replaced the plaza brazier 2026-10-24) and the main street between the inn (west) and the Haven Exchange bank (east), the fountain (−689, 1035), a curved terrace, and the Keep (z ≈ 1060+). [C]
 - **People of Haven** (populated 2026-10-24): [C]
   - The **Haven Watch** under Watch-Captain Corwin Ashby (u98, gives q73) at the north gate; Haven Guards (u97) at the gate and the Keep stairs, and two patrols.
   - Lower-court market: Tobias Wainwright (General Goods), Hilda Brandt (Weapons), Corin Hale (Mail & Plate), Wenna Thistle (Leather Armor). By day they call out their wares, with voice lines.
-  - Upper square: Magister Calloran, the binder, at the brazier (u25; ends q73, gives q74); Rosalind Tull, innkeeper (food and drink); bankers Osric Penhallow (ends q74) and Ysolde Marrow at the Haven Exchange; Mariana Silkspun (Clothier), moved here from the buried old-Haven site.
+  - Upper square: Magister Calloran, the binder, at the summoning stone (u25; ends q73, gives q74); Rosalind Tull, innkeeper (food and drink); bankers Osric Penhallow (ends q74) and Ysolde Marrow at the Haven Exchange; Mariana Silkspun (Clothier), moved here from the buried old-Haven site.
   - Class trainers on the Keep terrace: Swordmaster Gareth Lowe, Magistra Ilyana Crest, Mother Agatha Brightwell, Duskmaster Edwin Sorrel, Ranger Tamsin Reed (u111–u115).
 - **Day and night** (`Haven - Day/Night Routine`, trigger 116, on map 0's hour event): [C]
   - 06:00–21:00: Herald Aldous Penn, the town crier, at the fountain, and citizens about the courts.
@@ -338,7 +338,7 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder, at the brazier on the upper square | `haven` | 25 | 74 / 73 | [C] |
+| Magister Calloran | Haven binder, at the summoning stone on the upper square | `haven` | 25 | 74 / 73 | [C] |
 | Watch-Captain Corwin Ashby | commands the Haven Watch at the north gate | `haven` | 98 | 73 / – | [C] |
 | Osric Penhallow | banker of the Haven Exchange | `haven` | 104 | – / 74 | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
