@@ -156,6 +156,23 @@ class DataDecoder:
 			raise DecoderUnavailable("protoc failed: " + (completed.stderr or completed.stdout or "")[-1000:])
 		sys.path.insert(0, out_dir)
 
+	def schema(self, file_name):
+		"""The message descriptor of a data file (e.g. "items.data"), or None. Several files are named
+		in the plural while their .proto is singular (item_displays.data, item_display.proto)."""
+		stem = os.path.splitext(os.path.basename(file_name))[0]
+		for candidate in (stem, stem[:-1] if stem.endswith("s") else None):
+			if not candidate:
+				continue
+			proto = os.path.join(self.project_root, "src", "shared", "proto_data", candidate + ".proto")
+			name = message_name(proto) if os.path.exists(proto) else None
+			if name is None:
+				continue
+			try:
+				return getattr(importlib.import_module(candidate + "_pb2"), name).DESCRIPTOR
+			except (ImportError, AttributeError):
+				return None
+		return None
+
 	def decode(self, stem, data):
 		proto = os.path.join(self.project_root, "src", "shared", "proto_data", stem + ".proto")
 		if not os.path.exists(proto):
