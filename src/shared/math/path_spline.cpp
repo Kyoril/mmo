@@ -137,12 +137,15 @@ namespace mmo
 			accumulated += std::sqrt(dx * dx + dz * dz);
 
 			// The shoelace sign gives the winding.
-			float area = 0.0f;
+			// Relative to the first sample and in double, so large world coordinates do not cancel.
+			const double ox = m_samples[0].x;
+			const double oz = m_samples[0].z;
+			double area = 0.0;
 			for (size_t i = 0; i < m_samples.size(); ++i)
 			{
 				const SplineSample& a = m_samples[i];
 				const SplineSample& b = GetSegmentEnd(i);
-				area += a.x * b.z - b.x * a.z;
+				area += (a.x - ox) * (b.z - oz) - (b.x - ox) * (a.z - oz);
 			}
 			m_windingPositive = area >= 0.0f;
 		}

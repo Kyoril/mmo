@@ -144,3 +144,23 @@ TEST_CASE("SampleAtDistance wraps for closed paths", "[path_spline]")
 	CHECK(a.x == Approx(b.x).margin(1e-4));
 	CHECK(a.z == Approx(b.z).margin(1e-4));
 }
+
+TEST_CASE("Winding and normal are stable at large world coordinates", "[path_spline]")
+{
+	for (const bool reversed : { false, true })
+	{
+		PathSpline spline = MakeSquare(reversed);
+		for (SplinePoint& p : spline.points)
+		{
+			p.x += 20000.0f;
+			p.z += 20000.0f;
+		}
+
+		const SampledPath path(spline, 1.0f);
+		float nx = 0.0f, nz = 0.0f;
+		path.NormalAtDistance(5.0f, nx, nz);
+		CHECK(nx == Approx(0.0f).margin(1e-4));
+		CHECK(nz == Approx(-1.0f).margin(1e-4));
+		CHECK(path.SignedDistance(20005.0f, 20005.0f) == Approx(-5.0f).margin(1e-3));
+	}
+}
