@@ -352,10 +352,31 @@ float4 main(PixelIn input) : SV_Target
     // reflected ray leaves the screen through a sky pixel; the gradient only fills in elsewhere.
     float3 reflection = SkyRadiance(r);
     {
+        // Looking down at the sea the reflected ray points above the top of the screen, so the
+        // authored gradient would fill nearly all of it - unfogged, and far more saturated than the
+        // hazy sky actually drawn (a deep red sea under a pale dawn sky). The sky low over the
+        // horizon in the same direction is almost always on screen then; use it instead.
         float2 skyUv;
         float skyDistance;
-        if (ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance)
-            && LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH)
+        bool skyOnScreen = ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance)
+            && LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH;
+        if (!skyOnScreen)
+        {
+            // Off the side of the screen, the nearest column of that horizon sky stands in.
+            float3 low = normalize(float3(r.x, min(r.y, 0.06f), r.z));
+            float4 clipPos = mul(mul(float4(CameraPosition + low * 20000.0f, 1.0f), matView), matProj);
+            if (clipPos.w > 1e-4f)
+            {
+                float2 ndc = clipPos.xy / clipPos.w;
+                if (abs(ndc.y) <= 1.0f)
+                {
+                    ndc.x = clamp(ndc.x, -0.85f, 0.85f);
+                    skyUv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
+                    skyOnScreen = LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH;
+                }
+            }
+        }
+        if (skyOnScreen)
         {
             // A rough surface reflects a blurred sky: five taps spread by the roughness.
             float2 spread = roughness * float2(0.06f, 0.035f);

@@ -2,6 +2,8 @@
 
 #include "ocean_pass.h"
 
+#include "atmosphere_math.h"
+
 #include "ocean_grid.h"
 #include "ocean_spectrum.h"
 
@@ -137,26 +139,16 @@ namespace mmo
 			destination[2] = source.z;
 		}
 
-		/// @brief CPU twin of InverseTonemap in the generated forward shaders: brings a display-referred
-		///        colour (the sky gradient the environment authors) into the linear HDR scene.
+		/// @brief Brings a display-referred colour (the sky gradient the environment authors) into the
+		///        linear HDR scene. Hue-preserving, unlike the per-channel InverseTonemap of the forward
+		///        materials: the water scales this by Fresnel before the tonemap, and a per-channel
+		///        inverse turned the Korash dawn horizon into deep red reflections.
 		Vector3 inverseTonemap(const Vector4& display, const float exposure)
 		{
-			const auto channel = [exposure](const float value)
-			{
-				constexpr float a = 2.51f;
-				constexpr float b = 0.03f;
-				constexpr float c = 2.43f;
-				constexpr float d = 0.59f;
-				constexpr float e = 0.14f;
-				const float y = std::pow(std::clamp(value, 0.0f, 0.999f), 2.2f);
-				const float qa = y * c - a;
-				const float qb = y * d - b;
-				const float qc = y * e;
-				const float x = (-qb - std::sqrt(std::max(qb * qb - 4.0f * qa * qc, 0.0f))) / (2.0f * qa);
-				return x / std::max(exposure, 1e-4f);
-			};
-
-			return Vector3(channel(display.x), channel(display.y), channel(display.z));
+			float linear[3];
+			atmosphere::InverseTonemapPreservingHue(display.x, display.y, display.z, linear);
+			const float invExposure = 1.0f / std::max(exposure, 1e-4f);
+			return Vector3(linear[0], linear[1], linear[2]) * invExposure;
 		}
 
 		bool sameWaves(const OceanSettings& a, const OceanSettings& b)
