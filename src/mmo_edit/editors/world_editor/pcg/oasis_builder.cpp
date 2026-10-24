@@ -154,6 +154,23 @@ namespace mmo
 			ILOG("PCG: terrain pages changed (their .tlod bake is stale, run --bake-terrain-lod):" << pages.str());
 		}
 
+		/// Loads every page the rect touches, widened by two vertex spacings so that seam copies of
+		/// vertices and pixels on the rect border (which live in the neighbour page) are loaded too.
+		/// On failure the report gets the error (naming the pages) and nothing may be applied.
+		bool LoadPagesOrFail(IWorldEditor& editor, const pcg::WorldRect& rect, OasisBuildReport& report)
+		{
+			const auto margin = static_cast<float>(2.0 * terrain::constants::PageSize / static_cast<double>(terrain::constants::OuterVerticesPerPageSide - 1));
+			String error;
+			if (editor.EnsurePagesLoaded(rect.minX - margin, rect.minZ - margin, rect.maxX + margin, rect.maxZ + margin, error))
+			{
+				return true;
+			}
+
+			report.error = "Refused, the world was not changed: " + error;
+			ELOG("PCG: " << report.error);
+			return false;
+		}
+
 		bool FoliageExists(const InstancedFoliage& foliage, const uint64 uniqueId)
 		{
 			InstancedFoliageInstance instance;
@@ -298,7 +315,11 @@ namespace mmo
 			bool any = true;
 			Include(loadRect, any, oldRect);
 		}
-		editor.EnsurePagesLoaded(loadRect.minX, loadRect.minZ, loadRect.maxX, loadRect.maxZ);
+		if (!LoadPagesOrFail(editor, loadRect, report))
+		{
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
 
 		// The terrain brushes turn ocean placeholder pages into real terrain before writing; do the
 		// same so no write of the contribution is silently dropped.
@@ -444,7 +465,12 @@ namespace mmo
 			return report;
 		}
 
-		editor.EnsurePagesLoaded(contentRect.minX, contentRect.minZ, contentRect.maxX, contentRect.maxZ);
+		// Without a terrain there are no pages to load (and no contribution, checked above).
+		if (terrain && !LoadPagesOrFail(editor, contentRect, report))
+		{
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
 
 		if (terrain)
 		{

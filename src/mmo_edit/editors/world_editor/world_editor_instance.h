@@ -507,7 +507,7 @@ namespace mmo
 		uint64 GenerateFoliageUniqueId() override;
 
 		/// @copydoc IWorldEditor::EnsurePagesLoaded
-		void EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ) override;
+		bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String &error) override;
 
 	public:
 		// In-place furnishing: editing prop kits of placed world models

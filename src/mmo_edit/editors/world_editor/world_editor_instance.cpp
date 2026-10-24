@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <set>
+#include <sstream>
 #include "editor_host.h"
 #include "icon_font.h"
 #include "scene_graph/prop_kit_manager.h"
@@ -5158,11 +5159,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return FoliageEditMode::GenerateInstanceId();
 	}
 
-	void WorldEditorInstance::EnsurePagesLoaded(const float minX, const float minZ, const float maxX, const float maxZ)
+	bool WorldEditorInstance::EnsurePagesLoaded(const float minX, const float minZ, const float maxX, const float maxZ, String &error)
 	{
+		error.clear();
 		if (!m_terrain)
 		{
-			return;
+			error = "The world has no terrain";
+			return false;
 		}
 
 		// Page index convention of OnMapEntityRemoved / FoliageEditMode::PageIndexFromPosition:
@@ -5175,6 +5178,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		const int32 maxPageZ = std::min(height - 1, static_cast<int32>(std::floor(std::max(minZ, maxZ) / terrain::constants::PageSize)) + height / 2);
 
 		std::vector<PagePosition> pages;
+		std::ostringstream failed;
+		bool allReady = true;
 		for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
 		{
 			for (int32 px = minPageX; px <= maxPageX; ++px)
@@ -5182,13 +5187,20 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				terrain::Page *page = m_terrain->GetPage(static_cast<uint32>(px), static_cast<uint32>(pz));
 				if (!page)
 				{
+					failed << " " << px << "x" << pz << " (missing)";
+					allReady = false;
 					continue;
 				}
 
-				// Synchronous prepare (no-op if prepared; also clears a stale unload request).
+				// Synchronous prepare (no-op if prepared; also clears a stale unload request). Prepare
+				// also returns without preparing while another preparation of the page is in flight,
+				// so the result is checked rather than trusted.
 				page->Prepare();
 				if (!page->IsPrepared())
 				{
+					WLOG("Terrain page " << px << "x" << pz << " could not be prepared");
+					failed << " " << px << "x" << pz << " (not prepared)";
+					allReady = false;
 					continue;
 				}
 
@@ -5204,6 +5216,8 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					if (!page->IsLoaded())
 					{
 						WLOG("Terrain page " << px << "x" << pz << " could not be loaded");
+						failed << " " << px << "x" << pz << " (not loaded)";
+						allReady = false;
 						continue;
 					}
 
@@ -5217,6 +5231,14 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// Entities and authored foliage of pages streaming has not loaded yet; streaming takes them
 		// over when the pages become available.
 		ForceLoadPages(pages);
+
+		if (!allReady)
+		{
+			error = "Terrain pages not ready:" + failed.str();
+			return false;
+		}
+
+		return true;
 	}
 
 	PropKitPtr WorldEditorInstance::ResolveKit(const String &kitPath) const

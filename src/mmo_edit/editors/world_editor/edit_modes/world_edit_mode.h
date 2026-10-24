@@ -205,7 +205,10 @@ namespace mmo
 		/// @param minZ Minimum world Z.
 		/// @param maxX Maximum world X.
 		/// @param maxZ Maximum world Z.
-		virtual void EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ) = 0;
+		/// @param error Receives the pages that are not ready when the call fails.
+		/// @return True only if every page intersecting the rect (inside the terrain) is prepared and
+		///         loaded afterwards. Callers must not edit the terrain there otherwise.
+		virtual bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String& error) = 0;
 	};
 
 	class WorldEditMode : public NonCopyable
