@@ -120,9 +120,81 @@ namespace mmo::pcg
 		}
 	}
 
-	OasisError PrepareOasis(const PathSpline& loop, uint64 seed, const OasisParams& params,
+	void SanitizeParams(OasisParams& params)
+	{
+		// Same ranges as the rows of the Procedural mode details panel (procedural_edit_mode.cpp).
+		struct Range
+		{
+			float OasisParams::* member;
+			float min;
+			float max;
+		};
+
+		static const Range ranges[] = {
+			{ &OasisParams::basinDepth, 0.0f, 60.0f },
+			{ &OasisParams::rimWidth, 0.5f, 100.0f },
+			{ &OasisParams::outerFalloff, 0.5f, 100.0f },
+			{ &OasisParams::terraceSharpness, 0.0f, 1.0f },
+			{ &OasisParams::floorNoiseAmplitude, 0.0f, 10.0f },
+			{ &OasisParams::rimPercentile, 0.0f, 1.0f },
+			{ &OasisParams::waterInset, 2.0f, 100.0f },
+			{ &OasisParams::waterDepth, 0.0f, 20.0f },
+			{ &OasisParams::grassBand, 0.0f, 100.0f },
+			{ &OasisParams::dirtBand, 0.0f, 100.0f },
+			{ &OasisParams::bandNoiseAmplitude, 0.0f, 20.0f },
+			{ &OasisParams::rockSpacing, 1.0f, 100.0f },
+			{ &OasisParams::rockOffset, -20.0f, 20.0f },
+			{ &OasisParams::rockOffsetJitter, 0.0f, 20.0f },
+			{ &OasisParams::rockYawJitterDeg, 0.0f, 180.0f },
+			{ &OasisParams::rockScaleMin, 0.1f, 10.0f },
+			{ &OasisParams::rockScaleMax, 0.1f, 10.0f },
+			{ &OasisParams::rockSink, 0.0f, 30.0f },
+			{ &OasisParams::shelfSink, 0.0f, 30.0f },
+			{ &OasisParams::clumpSink, 0.0f, 30.0f },
+			{ &OasisParams::cliffWeight, 0.0f, 10.0f },
+			{ &OasisParams::shelfWeight, 0.0f, 10.0f },
+			{ &OasisParams::clumpWeight, 0.0f, 10.0f },
+			{ &OasisParams::palmCell, 1.0f, 50.0f },
+			{ &OasisParams::palmDensity, 0.0f, 1.0f },
+			{ &OasisParams::palmNearWaterBoost, 0.0f, 10.0f },
+			{ &OasisParams::palmScaleMin, 0.1f, 10.0f },
+			{ &OasisParams::palmScaleMax, 0.1f, 10.0f },
+			{ &OasisParams::bushCell, 1.0f, 50.0f },
+			{ &OasisParams::bushDensity, 0.0f, 1.0f },
+			{ &OasisParams::waterPlantBand, 0.0f, 50.0f },
+			{ &OasisParams::waterPlantDensity, 0.0f, 1.0f },
+			{ &OasisParams::maxSlopeDeg, 0.0f, 90.0f },
+		};
+
+		const OasisParams defaults;
+		for (const Range& range : ranges)
+		{
+			float& value = params.*range.member;
+			if (!std::isfinite(value))
+			{
+				value = defaults.*range.member;
+			}
+			value = std::min(range.max, std::max(range.min, value));
+		}
+
+		params.terraceSteps = std::min<uint32>(params.terraceSteps, 16);
+
+		if (params.rockScaleMin > params.rockScaleMax)
+		{
+			std::swap(params.rockScaleMin, params.rockScaleMax);
+		}
+		if (params.palmScaleMin > params.palmScaleMax)
+		{
+			std::swap(params.palmScaleMin, params.palmScaleMax);
+		}
+	}
+
+	OasisError PrepareOasis(const PathSpline& loop, uint64 seed, const OasisParams& requestedParams,
 		const std::function<float(float, float)>& baseHeight, OasisShape& out)
 	{
+		OasisParams params = requestedParams;
+		SanitizeParams(params);
+
 		if (loop.points.size() < 3)
 		{
 			return OasisError::TooFewPoints;
@@ -231,7 +303,7 @@ namespace mmo::pcg
 		// Water: a little past the pool edge, the dry shore hides the outline of the quads.
 		if (d < 0.0f && d < -p.waterInset + kWaterQuadMargin)
 		{
-			target.waterType = 1;
+			target.waterType = kWaterTypeWater;
 			target.waterHeight = shape.waterLevel;
 		}
 

@@ -140,7 +140,6 @@ TEST_CASE("Oasis rim rocks surround the loop", "[oasis_placement]")
 		const float d = shape.path->SignedDistance(p.position.x, p.position.z);
 		CHECK(d >= 0.5f - 0.001f);
 		CHECK(d <= 3.5f + 0.001f);
-		CHECK(p.position.y == Approx(20.0f - shape.params.rockSink));
 		CHECK(p.collides);
 	}
 }

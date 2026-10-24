@@ -69,6 +69,16 @@ namespace mmo::pcg
 		float clumpSink = 0.5f;
 	};
 
+	/// Clamps every parameter to the range the Procedural mode UI offers, replaces non finite values
+	/// by the defaults, orders inverted min/max pairs (rock and palm scale) and keeps the spacings,
+	/// widths and cells above a sane minimum, so no parameter set (hand edited recipe, corrupt
+	/// record) can stall or crash the generator. Idempotent.
+	void SanitizeParams(OasisParams& params);
+
+	/// Water type of pool quads. Mirrors terrain::WaterType::Water; pcg does not depend on the terrain
+	/// library, the editor adapter stores the value as is.
+	constexpr uint8 kWaterTypeWater = 1;
+
 	/// Asset names the oasis rules pick from.
 	struct OasisAssets
 	{

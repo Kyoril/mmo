@@ -4,18 +4,24 @@
 
 #include "nlohmann/json.hpp"
 
+#include <algorithm>
+
 namespace mmo::pcg
 {
 	namespace
 	{
 		using Json = nlohmann::json;
 
+		constexpr double kFloatLimit = 3.0e38;
+
 		void ReadFloat(const Json& obj, const char* key, float& out)
 		{
 			const auto it = obj.find(key);
 			if (it != obj.end() && it->is_number())
 			{
-				out = it->get<float>();
+				// Clamped before the cast: a double beyond the float range would be undefined behaviour.
+				const double value = it->get<double>();
+				out = static_cast<float>(std::max(-kFloatLimit, std::min(kFloatLimit, value)));
 			}
 		}
 
@@ -24,7 +30,7 @@ namespace mmo::pcg
 			const auto it = obj.find(key);
 			if (it != obj.end() && it->is_number() && it->get<double>() >= 0.0)
 			{
-				out = static_cast<uint32>(it->get<double>());
+				out = static_cast<uint32>(std::min(it->get<double>(), 4.0e9));
 			}
 		}
 
@@ -89,6 +95,7 @@ namespace mmo::pcg
 		ReadList(a, "waterPlants", assets.waterPlants);
 		ReadString(a, "terrainMaterial", assets.terrainMaterial);
 		ReadString(a, "waterMaterial", assets.waterMaterial);
+		SanitizeParams(params);
 		return true;
 	}
 }

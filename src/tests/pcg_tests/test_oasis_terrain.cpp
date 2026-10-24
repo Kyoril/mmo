@@ -54,7 +54,7 @@ TEST_CASE("Oasis centre is a flooded basin", "[oasis_terrain]")
 	const TerrainTarget t = EvaluateTerrain(shape, 0.0f, 0.0f, 0.0f);
 	CHECK(t.heightWeight == Approx(1.0f));
 	CHECK(t.height == Approx(12.2f).margin(params.floorNoiseAmplitude + 0.001f));
-	CHECK(t.waterType != 0);
+	CHECK(t.waterType == kWaterTypeWater);
 	CHECK(t.waterHeight == Approx(t.height + 1.2f).margin(0.5f));
 	CHECK(GetWaterLevel(shape) == Approx(13.4f));
 	CHECK(t.setMaterial);
@@ -81,12 +81,12 @@ TEST_CASE("Oasis pool is carved into a dry basin floor", "[oasis_terrain]")
 	{
 		const TerrainTarget t = EvaluateTerrain(shape, r, 0.0f, 0.0f);
 		CHECK(t.height < waterLevel);
-		CHECK(t.waterType != 0);
+		CHECK(t.waterType == kWaterTypeWater);
 		CHECK(t.waterHeight == Approx(waterLevel));
 	}
 
 	// Water quads reach a little past the pool edge, under the dry shore, but not to the rim.
-	CHECK(EvaluateTerrain(shape, 40.0f - params.waterInset + 2.0f, 0.0f, 0.0f).waterType != 0);
+	CHECK(EvaluateTerrain(shape, 40.0f - params.waterInset + 2.0f, 0.0f, 0.0f).waterType == kWaterTypeWater);
 	CHECK(EvaluateTerrain(shape, 40.0f - params.waterInset + 6.0f, 0.0f, 0.0f).waterType == 0);
 }
 
