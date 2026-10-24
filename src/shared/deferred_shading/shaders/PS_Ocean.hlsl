@@ -55,6 +55,31 @@ float3 LoadSceneColor(float2 uv)
     return any((asuint(color) & 0x7fffffffu) >= 0x7f800000u) ? float3(0.0f, 0.0f, 0.0f) : min(color, 1e4f);
 }
 
+// The on-screen sky around uv, blurred by a rough surface: five taps spread by the roughness, each
+// counted only where it hits sky. A tap on a distant dune or headland would otherwise mix sand into
+// the reflection and outline every wave facet that straddles the horizon. rgb = sky colour,
+// a = how much of the footprint was sky, faded out toward the screen edges.
+float4 LoadScreenSky(float2 uv, float2 spread, float2 targetSize)
+{
+    const float2 offsets[5] = { float2(0.0f, 0.0f), float2(spread.x, 0.0f), float2(-spread.x, 0.0f), float2(0.0f, spread.y), float2(0.0f, -spread.y) };
+    const float weights[5] = { 0.4f, 0.15f, 0.15f, 0.15f, 0.15f };
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    float coverage = 0.0f;
+    [unroll]
+    for (int i = 0; i < 5; ++i)
+    {
+        float2 tapUv = saturate(uv + offsets[i]);
+        if (LoadSceneDistance(int2(tapUv * (targetSize - 1.0f))) >= NO_SCENE_DEPTH)
+        {
+            color += LoadSceneColor(tapUv) * weights[i];
+            coverage += weights[i];
+        }
+    }
+
+    float2 edge = saturate((1.0f - abs(uv * 2.0f - 1.0f)) * 8.0f);
+    return float4(color / max(coverage, 1e-4f), coverage * edge.x * edge.y);
+}
+
 // Display colour to linear HDR, inverting only the brightest channel and keeping the hue. Twin of
 // atmosphere::InverseTonemapPreservingHue: the water scales this by Fresnel before the tonemap, and a
 // per-channel inverse blows saturated colours near 1.0 apart (a dawn horizon came out red 30x green).
@@ -87,12 +112,20 @@ float3 SkyGradient(float t)
     return InverseTonemapPreservingHue(lerp(SkyHorizonDisplay, SkyZenithDisplay, t)) * InverseExposure;
 }
 
-// The sky gradient as PS_FogComposite draws it: the distance fog covers it up to the sky band, so a
-// hazy dawn shows a pale horizon although the authored horizon colour is a saturated orange.
+// Distance PS_FogComposite fogs sky pixels over (VolumetricFogSettings::SkyDistance).
+static const float OCEAN_SKY_FOG_DISTANCE = 2000.0f;
+
+// The sky gradient as PS_FogComposite draws it: height fog and sun haze over the whole sky, then the
+// distance fog up to the sky band. A hazy dawn sky is drawn pale cream from the horizon up although
+// its authored colours are saturated orange; without the fog the water reflected orange-brown
+// wherever no sky was on screen to sample (looking down at the sea).
 float3 SkyRadiance(float3 direction)
 {
     float up = saturate(direction.y);
-    return ApplyDistanceFog(SkyGradient(pow(up, 0.45f)), DistanceFogSkyAmount(up));
+    float3 sky = SkyGradient(pow(up, 0.45f));
+    float transmittance = exp(-FogOpticalDepth(CameraPosition.y, up, OCEAN_SKY_FOG_DISTANCE));
+    sky = sky * transmittance + FogSource(dot(direction, SunDirection), 1.0f) * (1.0f - transmittance);
+    return ApplyDistanceFog(sky, DistanceFogSkyAmount(up));
 }
 
 // Karis' analytic fit of the split-sum environment BRDF.
@@ -388,40 +421,43 @@ float4 main(PixelIn input) : SV_Target
     {
         // Looking down at the sea the reflected ray points above the top of the screen, so the
         // authored gradient would fill nearly all of it - unfogged, and far more saturated than the
-        // hazy sky actually drawn (a deep red sea under a pale dawn sky). The sky low over the
-        // horizon in the same direction is almost always on screen then; use it instead.
+        // hazy sky actually drawn. The sky low over the horizon in the same direction is almost
+        // always on screen then (off the side of the screen, its nearest column stands in); a few
+        // heights are tried, since the lowest one may sit behind a distant dune.
+        float4 sky = float4(0.0f, 0.0f, 0.0f, 0.0f);
         float2 skyUv;
         float skyDistance;
-        bool skyOnScreen = ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance)
-            && LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH;
-        if (!skyOnScreen)
+        float2 spread = roughness * float2(0.06f, 0.035f);
+        if (ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance))
         {
-            // Off the side of the screen, the nearest column of that horizon sky stands in.
-            float3 low = normalize(float3(r.x, min(r.y, 0.06f), r.z));
-            float4 clipPos = mul(mul(float4(CameraPosition + low * 20000.0f, 1.0f), matView), matProj);
-            if (clipPos.w > 1e-4f)
+            sky = LoadScreenSky(skyUv, spread, targetSize);
+        }
+
+        const float lowHeights[3] = { 0.06f, 0.12f, 0.2f };
+        [unroll]
+        for (int i = 0; i < 3; ++i)
+        {
+            if (sky.a < 0.99f)
             {
-                float2 ndc = clipPos.xy / clipPos.w;
-                if (abs(ndc.y) <= 1.0f)
+                float3 low = normalize(float3(r.x, min(r.y, lowHeights[i]), r.z));
+                float4 clipPos = mul(mul(float4(CameraPosition + low * 20000.0f, 1.0f), matView), matProj);
+                if (clipPos.w > 1e-4f)
                 {
-                    ndc.x = clamp(ndc.x, -0.85f, 0.85f);
-                    skyUv = float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f);
-                    skyOnScreen = LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH;
+                    float2 ndc = clipPos.xy / clipPos.w;
+                    if (abs(ndc.y) <= 0.95f)
+                    {
+                        ndc.x = clamp(ndc.x, -0.85f, 0.85f);
+                        float4 candidate = LoadScreenSky(float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f), spread, targetSize);
+                        if (candidate.a > sky.a)
+                        {
+                            sky = candidate;
+                        }
+                    }
                 }
             }
         }
-        if (skyOnScreen)
-        {
-            // A rough surface reflects a blurred sky: five taps spread by the roughness.
-            float2 spread = roughness * float2(0.06f, 0.035f);
-            float3 sky = LoadSceneColor(skyUv) * 0.4f;
-            sky += LoadSceneColor(skyUv + float2(spread.x, 0.0f)) * 0.15f;
-            sky += LoadSceneColor(skyUv - float2(spread.x, 0.0f)) * 0.15f;
-            sky += LoadSceneColor(skyUv + float2(0.0f, spread.y)) * 0.15f;
-            sky += LoadSceneColor(skyUv - float2(0.0f, spread.y)) * 0.15f;
-            float2 edge = saturate((1.0f - abs(skyUv * 2.0f - 1.0f)) * 8.0f);
-            reflection = lerp(reflection, sky, edge.x * edge.y);
-        }
+
+        reflection = lerp(reflection, sky.rgb, sky.a);
     }
     if (viewDistance < 600.0f && ReflectionStrength > 0.0f)
     {
