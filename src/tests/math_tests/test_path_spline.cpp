@@ -164,3 +164,31 @@ TEST_CASE("Winding and normal are stable at large world coordinates", "[path_spl
 		CHECK(path.SignedDistance(20005.0f, 20005.0f) == Approx(-5.0f).margin(1e-3));
 	}
 }
+
+TEST_CASE("Winding of a 2x2 square far from the origin", "[path_spline]")
+{
+	// The enclosed area (4) is tiny against the products of the absolute coordinates (4e8), so a
+	// shoelace sum in float loses the sign of the winding here.
+	for (const bool reversed : { false, true })
+	{
+		PathSpline spline;
+		spline.closed = true;
+		spline.interpolation = SplineInterpolation::Linear;
+		spline.points = reversed
+			? std::vector<SplinePoint>{ { 20002.0f, 20000.0f, 0.0f }, { 20000.0f, 20000.0f, 0.0f }, { 20000.0f, 20002.0f, 0.0f }, { 20002.0f, 20002.0f, 0.0f } }
+			: std::vector<SplinePoint>{ { 20000.0f, 20000.0f, 0.0f }, { 20002.0f, 20000.0f, 0.0f }, { 20002.0f, 20002.0f, 0.0f }, { 20000.0f, 20002.0f, 0.0f } };
+
+		const SampledPath path(spline, 0.5f);
+
+		// Distance 1 lies on the edge z = 20000 in both windings; outward is -Z.
+		float nx = 0.0f, nz = 0.0f;
+		path.NormalAtDistance(1.0f, nx, nz);
+		CHECK(nx == Approx(0.0f).margin(1e-4));
+		CHECK(nz == Approx(-1.0f).margin(1e-4));
+
+		CHECK(path.SignedDistance(20001.0f, 20001.0f) == Approx(-1.0f).margin(1e-3));
+		CHECK(path.SignedDistance(20001.0f, 19998.0f) == Approx(2.0f).margin(1e-3));
+		CHECK(path.Contains(20001.0f, 20001.0f));
+		CHECK_FALSE(path.Contains(20001.0f, 19998.0f));
+	}
+}
