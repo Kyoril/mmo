@@ -185,7 +185,7 @@ namespace mmo
 		}
 		
 		// Don't update the looks of the widget if nothing is selected or the user is flying around
-		if (!m_selection.IsEmpty())
+		if (!m_selection.IsEmpty() && IsModeSupported())
 		{
 			switch (m_mode)
 			{
@@ -207,9 +207,31 @@ namespace mmo
 		m_relativeWidgetPos = m_widgetNode->GetPosition() - m_camera.GetDerivedPosition();
 	}
 
+	bool TransformWidget::IsModeSupported() const
+	{
+		for (const auto& selected : m_selection.GetSelectedObjects())
+		{
+			const bool supported =
+				(m_mode == TransformMode::Translate && selected->SupportsTranslate()) ||
+				(m_mode == TransformMode::Rotate && selected->SupportsRotate()) ||
+				(m_mode == TransformMode::Scale && selected->SupportsScale());
+			if (!supported)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	void TransformWidget::OnMouseMoved(const float x, const float y)
 	{
-		if (!m_selection.IsEmpty() &&
+		if (!IsModeSupported())
+		{
+			// Nothing to grab: no axis may stay highlighted from before.
+			m_selectedAxis = axis_id::None;
+		}
+		else if (!m_selection.IsEmpty() &&
 			!m_sleep &&
 			m_visible)
 		{
@@ -246,7 +268,7 @@ namespace mmo
 	{
 		if (buttons == 0)
 		{
-			if (m_selectedAxis != axis_id::None && !m_sleep && m_visible)
+			if (m_selectedAxis != axis_id::None && !m_sleep && m_visible && IsModeSupported())
 			{
 				m_active = true;
 
@@ -908,7 +930,7 @@ namespace mmo
 
 	void TransformWidget::SetVisibility()
 	{
-		if (!m_visible)
+		if (!m_visible || !IsModeSupported())
 		{
 			m_translationNode->SetVisible(false);
 			m_rotationNode->SetVisible(false);

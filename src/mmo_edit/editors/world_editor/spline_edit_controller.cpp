@@ -18,6 +18,15 @@ namespace mmo
 		/// Maximum polyline step when drawing curved splines, in world units.
 		constexpr float CurveDrawStep = 4.0f;
 
+		/// Screen radius of a tangent handle.
+		constexpr float HandleRadius = 5.0f;
+
+		/// Arriving handle colour (orange).
+		constexpr ImU32 InHandleColor = IM_COL32(255, 150, 40, 255);
+
+		/// Leaving handle colour (green).
+		constexpr ImU32 OutHandleColor = IM_COL32(90, 230, 90, 255);
+
 		float DistanceToSegment(const ImVec2& p, const ImVec2& a, const ImVec2& b)
 		{
 			const float dx = b.x - a.x;
@@ -60,6 +69,126 @@ namespace mmo
 	bool SplineEditController::ProjectPlanePoint(const float x, const float z, ImVec2& screenPosition) const
 	{
 		return ProjectToScreen(Vector3(x, m_height ? m_height(x, z) : 0.0f, z), screenPosition);
+	}
+
+	bool SplineEditController::ProjectHandle(const SplinePoint& point, const float offsetX, const float offsetZ, ImVec2& screenPosition) const
+	{
+		// At the point's height: that is the plane a handle is dragged on.
+		const float height = m_height ? m_height(point.x, point.z) : 0.0f;
+		return ProjectToScreen(Vector3(point.x + offsetX, height, point.z + offsetZ), screenPosition);
+	}
+
+	const SplinePoint* SplineEditController::GetSelectedCurvePoint(const std::vector<PathSpline*>& splines) const
+	{
+		if (m_selectedSpline < 0 || m_selectedSpline >= static_cast<int32>(splines.size()))
+		{
+			return nullptr;
+		}
+
+		const PathSpline& spline = *splines[m_selectedSpline];
+		if (!HasTangents(spline) || m_selectedPoint < 0 || m_selectedPoint >= static_cast<int32>(spline.points.size()))
+		{
+			return nullptr;
+		}
+
+		return &spline.points[m_selectedPoint];
+	}
+
+	bool SplineEditController::HitTestTangentHandle(const float x, const float y, const std::vector<PathSpline*>& splines, TangentHandle& handle) const
+	{
+		const SplinePoint* point = GetSelectedCurvePoint(splines);
+		if (!point)
+		{
+			return false;
+		}
+
+		ImVec2 pointScreen;
+		if (!ProjectPlanePoint(point->x, point->z, pointScreen))
+		{
+			return false;
+		}
+
+		float inX, inZ, outX, outZ;
+		GetEffectiveTangents(*splines[m_selectedSpline], static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+
+		float best = PointPickRadius;
+		bool found = false;
+		const struct { TangentHandle which; float dx; float dz; } candidates[] = {
+			{ TangentHandle::In, inX, inZ },
+			{ TangentHandle::Out, outX, outZ },
+		};
+		for (const auto& candidate : candidates)
+		{
+			ImVec2 screen;
+			if (!ProjectHandle(*point, candidate.dx, candidate.dz, screen))
+			{
+				continue;
+			}
+
+			// A handle on top of its point would make the point ungrabbable.
+			if (std::hypot(screen.x - pointScreen.x, screen.y - pointScreen.y) < PointPickRadius)
+			{
+				continue;
+			}
+
+			const float distance = std::hypot(screen.x - x, screen.y - y);
+			if (distance < best)
+			{
+				best = distance;
+				handle = candidate.which;
+				found = true;
+			}
+		}
+		return found;
+	}
+
+	bool SplineEditController::GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& z) const
+	{
+		if (m_selectedSpline < 0 || m_selectedSpline >= static_cast<int32>(splines.size()))
+		{
+			return false;
+		}
+
+		const PathSpline& spline = *splines[m_selectedSpline];
+		if (m_selectedPoint < 0 || m_selectedPoint >= static_cast<int32>(spline.points.size()))
+		{
+			return false;
+		}
+
+		const SplinePoint& point = spline.points[m_selectedPoint];
+		x = point.x;
+		z = point.z;
+		if (m_dragHandle != TangentHandle::None)
+		{
+			float inX, inZ, outX, outZ;
+			GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+			x += m_dragHandle == TangentHandle::In ? inX : outX;
+			z += m_dragHandle == TangentHandle::In ? inZ : outZ;
+		}
+		return true;
+	}
+
+	bool SplineEditController::ResetTangents(PathSpline& spline, const size_t pointIndex)
+	{
+		if (pointIndex >= spline.points.size() || spline.points[pointIndex].autoTangents)
+		{
+			return false;
+		}
+
+		SplinePoint& point = spline.points[pointIndex];
+		point.autoTangents = true;
+		point.inX = point.inZ = point.outX = point.outZ = 0.0f;
+		return true;
+	}
+
+	bool SplineEditController::ResetAllTangents(PathSpline& spline)
+	{
+		bool changed = false;
+		for (size_t i = 0; i < spline.points.size(); ++i)
+		{
+			changed = ResetTangents(spline, i) || changed;
+		}
+		return changed;
 	}
 
 	void SplineEditController::Draw(ImDrawList& drawList, const ImVec2& viewportMin, const ImVec2& viewportSize,
@@ -183,6 +312,44 @@ namespace mmo
 					drawList.AddText(ImVec2(screen.x + 8.0f, screen.y - 8.0f), mainColor, style.label.c_str());
 				}
 			}
+
+			// Tangent handles of the selected point: a line from the point to each handle; a manual
+			// point's handles are filled, an automatic point's hollow.
+			if (selectedSpline && HasTangents(spline) && m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(points.size()))
+			{
+				const SplinePoint& point = points[m_selectedPoint];
+				float inX, inZ, outX, outZ;
+				GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+
+				ImVec2 pointScreen;
+				if (ProjectPlanePoint(point.x, point.z, pointScreen))
+				{
+					const struct { float dx; float dz; ImU32 color; } handles[] = {
+						{ inX, inZ, InHandleColor },
+						{ outX, outZ, OutHandleColor },
+					};
+					for (const auto& handle : handles)
+					{
+						ImVec2 handleScreen;
+						if (!ProjectHandle(point, handle.dx, handle.dz, handleScreen))
+						{
+							continue;
+						}
+
+						drawList.AddLine(pointScreen, handleScreen, handle.color, 1.5f);
+						if (point.autoTangents)
+						{
+							drawList.AddCircleFilled(handleScreen, HandleRadius, IM_COL32(0, 0, 0, 160));
+							drawList.AddCircle(handleScreen, HandleRadius, handle.color, 0, 2.0f);
+						}
+						else
+						{
+							drawList.AddCircleFilled(handleScreen, HandleRadius, handle.color);
+							drawList.AddCircle(handleScreen, HandleRadius, IM_COL32(0, 0, 0, 200), 0, 1.5f);
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -251,6 +418,13 @@ namespace mmo
 
 	bool SplineEditController::OnMouseDown(const float x, const float y, std::vector<PathSpline*>& splines, const bool alt, const Vector3* worldHit)
 	{
+		TangentHandle handle = TangentHandle::None;
+		if (HitTestTangentHandle(x, y, splines, handle))
+		{
+			BeginHandleDrag(handle);
+			return true;
+		}
+
 		int32 splineIndex = -1;
 		int32 pointIndex = -1;
 		if (HitTestPoint(x, y, splines, splineIndex, pointIndex))
@@ -298,6 +472,39 @@ namespace mmo
 		}
 
 		SplinePoint& point = points[m_selectedPoint];
+		if (m_dragHandle != TangentHandle::None)
+		{
+			if (!HasTangents(*splines[m_selectedSpline]))
+			{
+				return false;
+			}
+
+			const float offsetX = x - point.x;
+			const float offsetZ = y - point.z;
+			float inX, inZ, outX, outZ;
+			GetEffectiveTangents(*splines[m_selectedSpline], static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+			const bool isIn = m_dragHandle == TangentHandle::In;
+			if ((isIn ? inX : outX) == offsetX && (isIn ? inZ : outZ) == offsetZ)
+			{
+				return false;
+			}
+
+			// Materialise the current tangents first, so the other handle stays where it is.
+			MakeTangentsManual(*splines[m_selectedSpline], static_cast<size_t>(m_selectedPoint));
+			if (isIn)
+			{
+				point.inX = offsetX;
+				point.inZ = offsetZ;
+			}
+			else
+			{
+				point.outX = offsetX;
+				point.outZ = offsetZ;
+			}
+			m_dragMoved = true;
+			return true;
+		}
+
 		if (point.x == x && point.z == y)
 		{
 			return false;
@@ -313,6 +520,7 @@ namespace mmo
 	{
 		m_dragging = false;
 		m_dragMoved = false;
+		m_dragHandle = TangentHandle::None;
 	}
 
 	bool SplineEditController::DeleteSelectedPoint(std::vector<PathSpline*>& splines, const uint32 minPoints)
@@ -336,6 +544,7 @@ namespace mmo
 		points.erase(points.begin() + m_selectedPoint);
 		m_selectedPoint = points.empty() ? -1 : std::min(m_selectedPoint, static_cast<int32>(points.size()) - 1);
 		m_dragging = false;
+		m_dragHandle = TangentHandle::None;
 		return true;
 	}
 }

@@ -302,6 +302,7 @@ namespace mmo
 	};
 
 	class SelectedKitProp;
+	class SelectedSplinePoint;
 
 	class SelectableVisitor
 	{
@@ -322,6 +323,9 @@ namespace mmo
 		virtual void Visit(SelectedAreaTrigger &selectable) = 0;
 
 		virtual void Visit(SelectedFogVolume &selectable) = 0;
+
+		/// @brief Visits a control point of an editor spline (e.g. an oasis loop).
+		virtual void Visit(SelectedSplinePoint &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -398,6 +402,9 @@ namespace mmo
 
 		void Visit(SelectedFogVolume &selectable) override;
 
+		/// @brief Draws the details of a selected spline point.
+		void Visit(SelectedSplinePoint &selectable) override;
+
 	private:
 		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
 		void DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable);
@@ -418,6 +425,9 @@ namespace mmo
 
 	public:
 		void ClearSelection() override;
+
+		/// @copydoc IWorldEditor::AddToSelection
+		void AddToSelection(std::unique_ptr<Selectable> selectable) override;
 
 		void RemoveAllUnitSpawns() override;
 

@@ -182,6 +182,7 @@ namespace mmo
 	{
 		m_selected = index;
 		m_splineEditor.CancelDrag();
+		ClearPointSelection();
 		m_splineEditor.Select(index, -1);
 	}
 
@@ -189,7 +190,102 @@ namespace mmo
 	{
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
+		// A point selection is meaningless outside this mode (no handles, no overlay).
+		ClearPointSelection();
 		m_brushPositionValid = false;
+	}
+
+	void ProceduralEditMode::SelectPointInEditor(const int32 oasisIndex, const int32 pointIndex)
+	{
+		// Forget the old handle first: its Deselect() must not reset the point that was just picked.
+		m_pointSelectable = nullptr;
+		m_worldEditor.ClearSelection();
+		m_splineEditor.Select(oasisIndex, pointIndex);
+
+		if (oasisIndex < 0 || oasisIndex >= static_cast<int32>(m_oases.size()) ||
+			pointIndex < 0 || pointIndex >= static_cast<int32>(m_oases[oasisIndex].record.loop.points.size()))
+		{
+			return;
+		}
+
+		auto selectable = std::make_unique<SelectedSplinePoint>(*this, m_oases[oasisIndex].record.id, static_cast<size_t>(pointIndex));
+		m_pointSelectable = selectable.get();
+		m_worldEditor.AddToSelection(std::move(selectable));
+	}
+
+	void ProceduralEditMode::ClearPointSelection()
+	{
+		if (m_pointSelectable)
+		{
+			m_pointSelectable = nullptr;
+			m_worldEditor.ClearSelection();
+		}
+
+		m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), -1);
+	}
+
+	PathSpline* ProceduralEditMode::FindSelectableSpline(const uint64 splineId)
+	{
+		const int32 index = FindOasis(splineId);
+		return index >= 0 ? &m_oases[index].record.loop : nullptr;
+	}
+
+	float ProceduralEditMode::GetSplinePointGroundHeight(const float x, const float z) const
+	{
+		return m_worldEditor.HasTerrain() ? m_worldEditor.GetTerrain()->GetSmoothHeightAt(x, z) : 0.0f;
+	}
+
+	void ProceduralEditMode::OnSplinePointEdited(const uint64 splineId)
+	{
+		const int32 index = FindOasis(splineId);
+		if (index >= 0)
+		{
+			m_oases[index].dirty = true;
+		}
+	}
+
+	bool ProceduralEditMode::RemoveSplinePoint(const uint64 splineId, const size_t pointIndex)
+	{
+		const int32 index = FindOasis(splineId);
+		if (index < 0)
+		{
+			return false;
+		}
+
+		auto& points = m_oases[index].record.loop.points;
+		if (pointIndex >= points.size())
+		{
+			return false;
+		}
+
+		if (points.size() <= MinLoopPoints)
+		{
+			m_status = "An oasis loop keeps at least " + std::to_string(MinLoopPoints) + " points.";
+			m_statusIsError = true;
+			return false;
+		}
+
+		points.erase(points.begin() + static_cast<std::ptrdiff_t>(pointIndex));
+		m_oases[index].dirty = true;
+		m_splineEditor.CancelDrag();
+		if (m_splineEditor.GetSelectedSpline() == index)
+		{
+			// Indices behind the deleted point shifted; nothing stays selected.
+			m_splineEditor.Select(index, -1);
+		}
+		return true;
+	}
+
+	void ProceduralEditMode::OnSplinePointDeselected(const SelectedSplinePoint& selectable)
+	{
+		if (&selectable != m_pointSelectable)
+		{
+			return;
+		}
+
+		m_pointSelectable = nullptr;
+		m_splineEditor.CancelDrag();
+		m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), -1);
 	}
 
 	bool ProceduralEditMode::HasUnsavedChanges() const
@@ -204,6 +300,7 @@ namespace mmo
 
 	void ProceduralEditMode::Load(const std::filesystem::path& pcgFolder)
 	{
+		ClearPointSelection();
 		m_oases.clear();
 		m_deletedIds.clear();
 		m_selected = -1;
@@ -673,8 +770,10 @@ namespace mmo
 			current.dirty = true;
 		}
 
-		ImGui::TextWrapped("Loop: %d points. Drag a handle to move it, Alt+click a segment to add a point, Delete or Ctrl+click removes a point (minimum %u).",
+		ImGui::TextWrapped("Loop: %d points. Click a point to select it (the gizmo moves it; Rotate turns its tangents) or drag it, Alt+click a segment to add a point, Delete or Ctrl+click removes a point (minimum %u).",
 			static_cast<int>(rec.loop.points.size()), MinLoopPoints);
+
+		DrawPointDetails(current);
 
 		if (ImGui::Button("Reset parameters from recipe"))
 		{
@@ -725,6 +824,38 @@ namespace mmo
 		}
 	}
 
+	void ProceduralEditMode::DrawPointDetails(Oasis& oasis)
+	{
+		PathSpline& loop = oasis.record.loop;
+		if (!SplineEditController::HasTangents(loop))
+		{
+			return;
+		}
+
+		const int32 point = m_splineEditor.GetSelectedSpline() == m_selected ? m_splineEditor.GetSelectedPoint() : -1;
+		if (point >= 0 && point < static_cast<int32>(loop.points.size()))
+		{
+			const bool isAuto = loop.points[point].autoTangents;
+			ImGui::Text("Selected point: %d, tangents %s", point, isAuto ? "automatic" : "manual");
+			ImGui::TextDisabled("Drag the orange (in) or green (out) handle; hollow = automatic, filled = manual.");
+			ImGui::BeginDisabled(isAuto);
+			if (ImGui::Button("Reset tangents to auto") && SplineEditController::ResetTangents(loop, static_cast<size_t>(point)))
+			{
+				oasis.dirty = true;
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+		}
+
+		const bool anyManual = std::any_of(loop.points.begin(), loop.points.end(), [](const SplinePoint& p) { return !p.autoTangents; });
+		ImGui::BeginDisabled(!anyManual);
+		if (ImGui::Button("Reset all tangents") && SplineEditController::ResetAllTangents(loop))
+		{
+			oasis.dirty = true;
+		}
+		ImGui::EndDisabled();
+	}
+
 	void ProceduralEditMode::SetBrushPosition(const Vector3& position)
 	{
 		m_brushPosition = position;
@@ -752,17 +883,22 @@ namespace mmo
 			return;
 		}
 
-		// Keep the grab offset, so the point does not snap its centre to the cursor.
+		// Keep the grab offset, so the point (or handle) does not snap its centre to the cursor. A
+		// tangent handle moves on the same plane as its point: the one through the point's ground.
 		const SplinePoint& grabbed = points[point];
-		m_dragPlaneY = m_worldEditor.HasTerrain() ? m_worldEditor.GetTerrain()->GetSmoothHeightAt(grabbed.x, grabbed.z) : 0.0f;
+		m_dragPlaneY = GetSplinePointGroundHeight(grabbed.x, grabbed.z);
 		m_dragOffsetX = 0.0f;
 		m_dragOffsetZ = 0.0f;
+
+		float anchorX = grabbed.x;
+		float anchorZ = grabbed.z;
+		m_splineEditor.GetDragAnchor(GetSplines(), anchorX, anchorZ);
 
 		Vector3 hit;
 		if (m_cursorRayValid && IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
 		{
-			m_dragOffsetX = grabbed.x - hit.x;
-			m_dragOffsetZ = grabbed.z - hit.z;
+			m_dragOffsetX = anchorX - hit.x;
+			m_dragOffsetZ = anchorZ - hit.z;
 		}
 	}
 
@@ -791,6 +927,12 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseDown(x, y);
 
+		// The transform widget took the click (it sees the button first).
+		if (m_worldEditor.IsTransforming())
+		{
+			return;
+		}
+
 		const ImGuiIO& io = ImGui::GetIO();
 		auto splines = GetSplines();
 
@@ -808,16 +950,27 @@ namespace mmo
 		if (m_splineEditor.OnMouseDown(io.MousePos.x, io.MousePos.y, splines, io.KeyAlt, worldHit))
 		{
 			m_selected = m_splineEditor.GetSelectedSpline();
-			if (m_selected >= 0 && m_selected < static_cast<int32>(m_oases.size()) && io.KeyAlt)
+			if (m_selected >= 0 && m_selected < static_cast<int32>(m_oases.size()) && m_splineEditor.DragMoved())
 			{
 				// An inserted point is a change right away.
 				m_oases[m_selected].dirty = true;
+			}
+
+			// A grabbed tangent handle belongs to the point that is already selected.
+			if (m_splineEditor.GetDraggedHandle() == SplineEditController::TangentHandle::None)
+			{
+				SelectPointInEditor(m_selected, m_splineEditor.GetSelectedPoint());
 			}
 
 			if (m_splineEditor.IsDragging())
 			{
 				BeginPlaneDrag();
 			}
+		}
+		else if (m_splineEditor.GetSelectedPoint() >= 0 || m_pointSelectable)
+		{
+			// A click next to the loop deselects the point (the oasis stays selected).
+			ClearPointSelection();
 		}
 	}
 
@@ -838,6 +991,12 @@ namespace mmo
 			if (selected >= 0 && selected < static_cast<int32>(m_oases.size()))
 			{
 				m_oases[selected].dirty = true;
+			}
+
+			// The transform widget follows a dragged point.
+			if (m_pointSelectable && m_splineEditor.GetDraggedHandle() == SplineEditController::TangentHandle::None)
+			{
+				m_pointSelectable->positionChanged(*m_pointSelectable);
 			}
 		}
 	}
@@ -869,10 +1028,23 @@ namespace mmo
 	{
 		auto splines = GetSplines();
 		const int32 selected = m_splineEditor.GetSelectedSpline();
-		if (m_splineEditor.DeleteSelectedPoint(splines, MinLoopPoints) && selected >= 0 && selected < static_cast<int32>(m_oases.size()))
+		const int32 point = m_splineEditor.GetSelectedPoint();
+		if (selected < 0 || selected >= static_cast<int32>(m_oases.size()) || point < 0)
 		{
-			m_oases[selected].dirty = true;
+			return;
 		}
+
+		if (!m_splineEditor.DeleteSelectedPoint(splines, MinLoopPoints))
+		{
+			m_status = "An oasis loop keeps at least " + std::to_string(MinLoopPoints) + " points.";
+			m_statusIsError = true;
+			return;
+		}
+
+		m_oases[selected].dirty = true;
+		// Indices behind the deleted point shifted; nothing stays selected. This also keeps the same
+		// Delete key press, which the viewport applies to the editor selection, from deleting again.
+		ClearPointSelection();
 	}
 
 	bool ProceduralEditMode::ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const
@@ -905,6 +1077,12 @@ namespace mmo
 		if (!io.WantTextInput && ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			DeleteSelectedPoint();
+		}
+
+		// The selection must not outlive its point (e.g. after an oasis was deleted).
+		if (m_pointSelectable && !m_pointSelectable->IsValid())
+		{
+			ClearPointSelection();
 		}
 
 		drawList->PushClipRect(viewportMin, ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y), true);

@@ -9,6 +9,7 @@
 #include "math/vector3.h"
 #include "pcg/oasis.h"
 #include "pcg/oasis_record.h"
+#include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
 #include "../pcg/oasis_builder.h"
 
@@ -24,7 +25,9 @@ namespace mmo
 	/// @brief Edit mode for procedurally generated content. An oasis is a control object: a closed
 	///        spline, a seed and parameters. Rebuilding writes terrain, paint, water and placed
 	///        objects into the world; the record is persisted next to the world as .hpcg.
-	class ProceduralEditMode final : public WorldEditMode
+	///        A clicked loop point becomes the editor selection (SelectedSplinePoint), so the transform
+	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport.
+	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner
 	{
 	public:
 		/// @brief Creates the mode.
@@ -131,6 +134,23 @@ namespace mmo
 		/// @brief One-line summary of the last operation, for logs.
 		const String& GetStatus() const { return m_status; }
 
+	public:
+		/// @brief Gets the loop of the oasis with the id, or null.
+		PathSpline* FindSelectableSpline(uint64 splineId) override;
+
+		/// @brief Gets the terrain height at x/z (zero without terrain).
+		float GetSplinePointGroundHeight(float x, float z) const override;
+
+		/// @brief Marks the oasis changed.
+		void OnSplinePointEdited(uint64 splineId) override;
+
+		/// @brief Deletes a loop point, keeping at least the minimum point count. Does not touch the
+		///        editor selection.
+		bool RemoveSplinePoint(uint64 splineId, size_t pointIndex) override;
+
+		/// @brief Drops the point selection when the editor selection drops the point.
+		void OnSplinePointDeselected(const SelectedSplinePoint& selectable) override;
+
 	private:
 		/// @brief An oasis in the list and whether it must be written on the next save.
 		struct Oasis
@@ -170,6 +190,18 @@ namespace mmo
 		/// @brief Deletes the selected spline point (keeps at least 3 points).
 		void DeleteSelectedPoint();
 
+		/// @brief Makes a loop point the editor selection (replacing whatever was selected).
+		/// @param oasisIndex Index of the oasis in the list.
+		/// @param pointIndex Index of the point in its loop.
+		void SelectPointInEditor(int32 oasisIndex, int32 pointIndex);
+
+		/// @brief Deselects the loop point: in the spline editor, and in the editor selection if the
+		///        selection holds it.
+		void ClearPointSelection();
+
+		/// @brief Draws the selected point's tangent tools in the details panel.
+		void DrawPointDetails(Oasis& oasis);
+
 	private:
 		Camera& m_camera;
 		SplineEditController m_splineEditor;
@@ -177,6 +209,10 @@ namespace mmo
 		std::vector<Oasis> m_oases;
 		std::vector<uint64> m_deletedIds;
 		int32 m_selected = -1;
+
+		/// The selected point's handle while the editor selection holds it (owned by the selection;
+		/// reset through OnSplinePointDeselected when the selection drops it).
+		SelectedSplinePoint* m_pointSelectable = nullptr;
 
 		/// Defaults of the recipe, used for new oases.
 		pcg::OasisParams m_defaultParams;
@@ -190,7 +226,8 @@ namespace mmo
 		// A dragged point moves on the horizontal plane through its ground height, not along the
 		// terrain under the cursor: rim rocks hide the ground, so a terrain pick behind them
 		// would make the point jump tens of metres.
-		/// Records the grabbed point's ground height and grab offset when a drag starts.
+		/// Records the grabbed point's ground height and the grab offset of the point or tangent
+		/// handle when a drag starts. Handles move on the plane through their point's ground height.
 		void BeginPlaneDrag();
 
 		Ray m_cursorRay;

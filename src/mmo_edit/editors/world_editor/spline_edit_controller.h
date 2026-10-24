@@ -48,19 +48,35 @@ namespace mmo
 		/// @brief Returns the height to draw a point at for a world x/z.
 		using HeightFunction = std::function<float(float x, float z)>;
 
+		/// @brief A tangent handle of the selected point (curved splines only).
+		enum class TangentHandle : uint8
+		{
+			/// @brief No handle.
+			None,
+
+			/// @brief The arriving handle.
+			In,
+
+			/// @brief The leaving handle.
+			Out
+		};
+
 	public:
 		/// @param camera Camera used to project world positions to the viewport.
 		/// @param height Height used to lift handles and lines onto the terrain or water.
 		SplineEditController(Camera& camera, HeightFunction height);
 
 	public:
-		/// @brief Draws all splines; the selected one with handles. Remembers the viewport for hit tests.
+		/// @brief Draws all splines; the selected one with handles, and the tangent handles of the selected
+		///	       point of a curved spline (in and out in distinct colours; filled = manual, hollow = auto).
+		///	       Remembers the viewport for hit tests.
 		/// @param styles One style per spline (same order as splines).
 		void Draw(ImDrawList& drawList, const ImVec2& viewportMin, const ImVec2& viewportSize,
 			const std::vector<const PathSpline*>& splines, const std::vector<Style>& styles);
 
-		/// @brief Handles a click: selects a point (and starts dragging it), or with alt inserts a point into
-		///	       the segment under the cursor (and starts dragging the new point).
+		/// @brief Handles a click: grabs a tangent handle of the selected point (curved splines), selects a
+		///	       point (and starts dragging it), or with alt inserts a point into the segment under the
+		///	       cursor (and starts dragging the new point). Handles are tested before points.
 		/// @param x Screen x of the mouse.
 		/// @param y Screen y of the mouse.
 		/// @param alt Whether the insert modifier is held.
@@ -68,10 +84,12 @@ namespace mmo
 		/// @return True if the click was consumed.
 		bool OnMouseDown(float x, float y, std::vector<PathSpline*>& splines, bool alt, const Vector3* worldHit = nullptr);
 
-		/// @brief Drags the selected point.
-		/// @param x World x the point is dragged to.
-		/// @param y World z the point is dragged to.
-		/// @return True if a point moved.
+		/// @brief Drags the selected point, or the grabbed tangent handle. The first move of a handle makes
+		///	       the point's tangents manual (keeping the other handle where it is); only the dragged handle
+		///	       changes.
+		/// @param x World x the point or handle is dragged to.
+		/// @param y World z the point or handle is dragged to.
+		/// @return True if anything moved.
 		bool OnMouseMoved(float x, float y, std::vector<PathSpline*>& splines);
 
 		/// @brief Ends a drag.
@@ -87,6 +105,29 @@ namespace mmo
 		/// @brief Finds the segment under the screen position (reports its first point).
 		bool HitTestSegment(float x, float y, const std::vector<PathSpline*>& splines, int32& splineIndex, int32& pointIndex) const;
 
+		/// @brief Finds the tangent handle of the selected point under the screen position. Only curved
+		///	       splines have handles; a handle lying on its point is left to the point.
+		/// @param handle Receives the handle when the call returns true.
+		bool HitTestTangentHandle(float x, float y, const std::vector<PathSpline*>& splines, TangentHandle& handle) const;
+
+		/// @brief Gets the world x/z of what is being dragged (the point or the grabbed handle).
+		/// @return False when nothing valid is being dragged.
+		bool GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& z) const;
+
+		/// @brief The tangent handle being dragged, or None while dragging a point (or not dragging).
+		TangentHandle GetDraggedHandle() const { return m_dragHandle; }
+
+		/// @brief Whether a spline shows and uses tangent handles (curved splines only).
+		static bool HasTangents(const PathSpline& spline) { return spline.interpolation != SplineInterpolation::Linear; }
+
+		/// @brief Switches one point back to automatic tangents.
+		/// @return True if the point had manual tangents.
+		static bool ResetTangents(PathSpline& spline, size_t pointIndex);
+
+		/// @brief Switches every point of the spline back to automatic tangents.
+		/// @return True if any point had manual tangents.
+		static bool ResetAllTangents(PathSpline& spline);
+
 		/// @brief Selected spline index or -1.
 		int32 GetSelectedSpline() const { return m_selectedSpline; }
 
@@ -98,7 +139,10 @@ namespace mmo
 
 		/// @brief Starts dragging the selected point.
 		/// @param moved Whether the drag counts as a change already (e.g. for a freshly added point).
-		void BeginDrag(bool moved) { m_dragging = true; m_dragMoved = moved; }
+		void BeginDrag(bool moved) { m_dragging = true; m_dragMoved = moved; m_dragHandle = TangentHandle::None; }
+
+		/// @brief Starts dragging a tangent handle of the selected point.
+		void BeginHandleDrag(TangentHandle handle) { m_dragging = true; m_dragMoved = false; m_dragHandle = handle; }
 
 		/// @brief Whether a point is being dragged.
 		bool IsDragging() const { return m_dragging; }
@@ -107,10 +151,16 @@ namespace mmo
 		bool DragMoved() const { return m_dragMoved; }
 
 		/// @brief Aborts a drag without changing the selection.
-		void CancelDrag() { m_dragging = false; m_dragMoved = false; }
+		void CancelDrag() { m_dragging = false; m_dragMoved = false; m_dragHandle = TangentHandle::None; }
 
 	private:
 		bool ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const;
+
+		/// @brief The selected point of a curved selected spline, or null.
+		const SplinePoint* GetSelectedCurvePoint(const std::vector<PathSpline*>& splines) const;
+
+		/// @brief Projects a tangent handle of a point; handles are drawn at the point's height.
+		bool ProjectHandle(const SplinePoint& point, float offsetX, float offsetZ, ImVec2& screenPosition) const;
 
 		/// @brief Projects a point of the x/z plane, lifted by the height function.
 		bool ProjectPlanePoint(float x, float z, ImVec2& screenPosition) const;
@@ -126,6 +176,7 @@ namespace mmo
 		int32 m_selectedPoint = -1;
 		bool m_dragging = false;
 		bool m_dragMoved = false;
+		TangentHandle m_dragHandle = TangentHandle::None;
 
 		Matrix4 m_viewProj = Matrix4::Identity;
 		ImVec2 m_viewportMin{};

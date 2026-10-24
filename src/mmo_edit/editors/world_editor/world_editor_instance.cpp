@@ -14,6 +14,7 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "selected_kit_prop.h"
+#include "selected_spline_point.h"
 #include "editors/world_model_editor/panels/world_model_properties_panel.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 #include "binary_io/writer.h"
@@ -1982,6 +1983,7 @@ namespace mmo
 			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedAreaTrigger&) override {}
 			void Visit(SelectedFogVolume&) override {}
+			void Visit(SelectedSplinePoint&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -4536,6 +4538,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::Visit(SelectedSplinePoint &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected spline point no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Spline Point #%zu", selectable.GetPointIndex());
+		ImGui::TextDisabled("Translate moves it on the ground, Rotate turns its tangents. Tangent tools are in the mode panel.");
+	}
+
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)
 	{
 		if (ImGui::CollapsingHeader("Fog Volume", ImGuiTreeNodeFlags_DefaultOpen))
@@ -4897,6 +4911,14 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		if (m_spawnEditMode)
 		{
 			m_spawnEditMode->SetSelectedSpawn(nullptr);
+		}
+	}
+
+	void WorldEditorInstance::AddToSelection(std::unique_ptr<Selectable> selectable)
+	{
+		if (selectable)
+		{
+			m_selection.AddSelectable(std::move(selectable));
 		}
 	}
 

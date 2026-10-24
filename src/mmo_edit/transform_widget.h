@@ -90,6 +90,10 @@ namespace mmo
 		[[nodiscard]] bool IsUsingLocalTransform() const { return m_isLocal; }
 
 	private:
+		/// Whether every selected object supports the current mode (Selectable::SupportsTranslate,
+		/// SupportsRotate, SupportsScale). The widget hides and ignores the mouse otherwise.
+		[[nodiscard]] bool IsModeSupported() const;
+
 		void UpdateTanslationAxisLines();
 
 		void SetupTranslation();

@@ -9,6 +9,7 @@
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
 
+#include <memory>
 #include <vector>
 
 // Forward-declare ImGui types so we don't drag imgui.h into every translation unit.
@@ -28,6 +29,7 @@ namespace mmo
 	class Camera;
 	class WorldModelInstance;
 	class InstancedFoliage;
+	class Selectable;
 
 	namespace proto
 	{
@@ -45,6 +47,10 @@ namespace mmo
 		virtual const std::filesystem::path GetWorldPath() const = 0;
 
 		virtual void ClearSelection() = 0;
+
+		/// @brief Adds an object to the editor selection (the transform widget then acts on it). Does not
+		///        clear the selection first; call ClearSelection() for an exclusive selection.
+		virtual void AddToSelection(std::unique_ptr<Selectable> selectable) = 0;
 
 		virtual void RemoveAllUnitSpawns() = 0;
 
