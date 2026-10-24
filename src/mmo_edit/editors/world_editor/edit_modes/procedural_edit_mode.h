@@ -79,6 +79,11 @@ namespace mmo
 		/// @brief Whether the recipe was loaded and parsed. Rebuilds are refused otherwise.
 		bool IsRecipeLoaded() const { return m_recipeLoaded; }
 
+		/// @brief Refuses (status, log, error) when the recipe is not loaded.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the recipe is loaded.
+		bool CheckRecipe(String& error);
+
 		/// @brief Rebuilds every oasis. Continues after a failure; all errors are joined. Refused
 		///        when the recipe is not loaded.
 		/// @param error Receives the reason when the call returns false.
@@ -91,6 +96,19 @@ namespace mmo
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
 		bool Rebuild(uint64 oasisId, String& error);
+
+		/// @brief Adds an oasis with the recipe's default parameters: a closed 8 point Catmull-Rom
+		///        loop of the given radius around (x, z). Does not build it. The "New Oasis" button
+		///        uses this with the viewport centre, radius 40 and seed 1.
+		/// @param x World X of the centre.
+		/// @param z World Z of the centre.
+		/// @param radius Loop radius in world units, must be positive.
+		/// @param seed Seed of the oasis.
+		/// @param name Name of the oasis; empty picks "Oasis <n>".
+		/// @param id Receives the id of the new oasis.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the oasis was added.
+		bool CreateOasisAt(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
 
 		/// @brief Whether a record changed since it was loaded or saved, or an oasis was deleted.
 		bool HasUnsavedChanges() const;
@@ -116,18 +134,13 @@ namespace mmo
 		int32 FindOasis(uint64 id) const;
 
 		/// @brief Adds a default 8 point loop of radius 40 around the viewport's ground hit.
-		void CreateOasis();
+		void CreateOasisAtViewportCentre();
 
 		/// @brief Removes the oasis' content from the world and the oasis from the list.
 		void DeleteOasis(uint64 id);
 
 		/// @brief Selects an oasis (-1 = none).
 		void SelectOasis(int32 index);
-
-		/// @brief Refuses (status, log, error) when the recipe is not loaded.
-		/// @param error Receives the reason when the call returns false.
-		/// @return True if the recipe is loaded.
-		bool CheckRecipe(String& error);
 
 		/// @brief Checks the loop's influence against the other built oases.
 		/// @param error Names the oasis in the way when the call returns false.

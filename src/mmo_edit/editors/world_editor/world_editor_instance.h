@@ -725,6 +725,18 @@ namespace mmo
 		/// @return True if everything requested was rebuilt.
 		bool RebuildProcedural(uint64 idOrZero, String& error);
 
+		/// @brief Adds an oasis like the "New Oasis" button does, centred on (x, z), and builds it,
+		///        for unattended runs. The world is not saved.
+		/// @param x World X of the centre.
+		/// @param z World Z of the centre.
+		/// @param radius Loop radius.
+		/// @param seed Seed of the oasis.
+		/// @param name Name of the oasis; empty picks the default name.
+		/// @param id Receives the id of the new oasis (also when only the build failed).
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the oasis was added and built.
+		bool CreateProceduralOasis(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
+
 		/// @brief Number of oases of the world.
 		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
 

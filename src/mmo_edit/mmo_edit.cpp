@@ -23,6 +23,10 @@
 #include "null_audio/null_audio.h"
 #endif
 
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
 #include "preview_providers/material_preview_provider.h"
@@ -974,6 +978,120 @@ int main(int argc, char* arg[])
 							ILOG("--pcg-rebuild: done");
 							succeeded = true;
 						}
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-new-oasis")
+			{
+				// mmo_edit --pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]
+				// Adds an oasis like the "New Oasis" button (8 point loop around X Z), builds it, saves
+				// the world and logs the new id (0 = success).
+				static std::ofstream pcgLog("pcg_new_oasis.log", std::ios::out | std::ios::trunc);
+				static std::mutex pcgLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ pcgLogMutex };
+					pcgLog << entry.message << std::endl;
+				});
+#ifdef _DEBUG
+				static HANDLE pcgAssertFile = CreateFileA("pcg_new_oasis_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
+				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
+#endif
+
+				const char* usage = "--pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				const auto parseFloat = [](const char* text, float& out)
+				{
+					char* end = nullptr;
+					out = std::strtof(text, &end);
+					return end != text && *end == '\0' && std::isfinite(out);
+				};
+
+				float x = 0.0f, z = 0.0f, radius = 40.0f;
+				uint64 seed = 1;
+				std::string name;
+				bool hasCentre = false;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--at" && j + 2 < argCount)
+					{
+						argumentsValid = parseFloat(args[j + 1], x) && parseFloat(args[j + 2], z);
+						hasCentre = argumentsValid;
+						j += 2;
+					}
+					else if (option == "--radius" && j + 1 < argCount)
+					{
+						argumentsValid = parseFloat(args[++j], radius) && radius > 0.0f;
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						char* end = nullptr;
+						seed = std::strtoull(args[++j], &end, 10);
+						argumentsValid = end != args[j] && *end == '\0';
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-oasis: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && !hasCentre)
+				{
+					ELOG("--pcg-new-oasis: --at X Z is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				{
+					ELOG("--pcg-new-oasis: failed to open " << args[i + 1]);
+				}
+				else
+				{
+					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralOasis(x, z, radius, seed, name, id, error))
+					{
+						// The world is not saved: a failed build leaves no record behind.
+						ELOG("--pcg-new-oasis: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-oasis: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-oasis: created oasis " << idText);
+						succeeded = true;
 					}
 				}
 

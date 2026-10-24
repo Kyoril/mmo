@@ -310,7 +310,7 @@ namespace mmo
 		return success;
 	}
 
-	void ProceduralEditMode::CreateOasis()
+	void ProceduralEditMode::CreateOasisAtViewportCentre()
 	{
 		if (!m_worldEditor.HasTerrain())
 		{
@@ -329,11 +329,34 @@ namespace mmo
 			return;
 		}
 
+		String error;
+		uint64 id = 0;
+		CreateOasisAt(hit.second.position.x, hit.second.position.z, DefaultRadius, 1, "", id, error);
+	}
+
+	bool ProceduralEditMode::CreateOasisAt(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
+	{
+		if (!m_worldEditor.HasTerrain())
+		{
+			error = "This world has no terrain.";
+			m_status = error;
+			m_statusIsError = true;
+			return false;
+		}
+
+		if (!(radius > 0.0f))
+		{
+			error = "The oasis radius must be positive.";
+			m_status = error;
+			m_statusIsError = true;
+			return false;
+		}
+
 		Oasis oasis;
 		oasis.dirty = true;
 		oasis.record.id = m_worldEditor.GenerateEntityUniqueId();
-		oasis.record.name = "Oasis " + std::to_string(m_oases.size() + 1);
-		oasis.record.seed = 1;
+		oasis.record.name = name.empty() ? "Oasis " + std::to_string(m_oases.size() + 1) : name;
+		oasis.record.seed = seed;
 		oasis.record.params = m_defaultParams;
 		oasis.record.loop.closed = true;
 		oasis.record.loop.interpolation = SplineInterpolation::CatmullRom;
@@ -341,15 +364,18 @@ namespace mmo
 		{
 			const float angle = 2.0f * PiValue * static_cast<float>(i) / static_cast<float>(DefaultPointCount);
 			SplinePoint point;
-			point.x = hit.second.position.x + DefaultRadius * std::cos(angle);
-			point.z = hit.second.position.z + DefaultRadius * std::sin(angle);
+			point.x = x + radius * std::cos(angle);
+			point.z = z + radius * std::sin(angle);
 			oasis.record.loop.points.push_back(point);
 		}
 
+		id = oasis.record.id;
 		m_oases.push_back(std::move(oasis));
 		SelectOasis(static_cast<int32>(m_oases.size()) - 1);
-		m_status = "Created '" + m_oases.back().record.name + "'. Edit the loop, then Rebuild.";
+		m_status = "Created '" + m_oases.back().record.name + "' (" + FormatId(id) + "). Edit the loop, then Rebuild.";
 		m_statusIsError = false;
+		ILOG(m_status);
+		return true;
 	}
 
 	bool ProceduralEditMode::CheckOverlap(const Oasis& oasis, String& error) const
@@ -530,7 +556,7 @@ namespace mmo
 
 		if (ImGui::Button("New Oasis"))
 		{
-			CreateOasis();
+			CreateOasisAtViewportCentre();
 		}
 		ImGui::SameLine();
 		ImGui::BeginDisabled(m_oases.empty());

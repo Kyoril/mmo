@@ -1074,6 +1074,29 @@ namespace mmo
 		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
 	}
 
+	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Checked before adding, so a refused run leaves no unbuilt record behind.
+		if (!m_proceduralEditMode->CheckRecipe(error))
+		{
+			return false;
+		}
+
+		if (!m_proceduralEditMode->CreateOasisAt(x, z, radius, seed, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->Rebuild(id, error);
+	}
+
 	bool WorldEditorInstance::Save()
 	{
 		// River flow first: a pending flow apply changes terrain pages, which are saved below.
