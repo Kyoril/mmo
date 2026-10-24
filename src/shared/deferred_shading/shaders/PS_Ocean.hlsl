@@ -55,10 +55,44 @@ float3 LoadSceneColor(float2 uv)
     return any((asuint(color) & 0x7fffffffu) >= 0x7f800000u) ? float3(0.0f, 0.0f, 0.0f) : min(color, 1e4f);
 }
 
+// Display colour to linear HDR, inverting only the brightest channel and keeping the hue. Twin of
+// atmosphere::InverseTonemapPreservingHue: the water scales this by Fresnel before the tonemap, and a
+// per-channel inverse blows saturated colours near 1.0 apart (a dawn horizon came out red 30x green).
+float3 InverseTonemapPreservingHue(float3 display)
+{
+    float peak = max(max(display.r, display.g), max(display.b, 0.0f));
+    if (peak <= 0.0f)
+    {
+        return float3(0.0f, 0.0f, 0.0f);
+    }
+
+    float y = pow(min(peak, 0.999f), 2.2f);
+    const float a = 2.51f;
+    const float b = 0.03f;
+    const float c = 2.43f;
+    const float d = 0.59f;
+    const float e = 0.14f;
+    float qa = y * c - a;
+    float qb = y * d - b;
+    float qc = y * e;
+    float linearPeak = (-qb - sqrt(max(qb * qb - 4.0f * qa * qc, 0.0f))) / (2.0f * qa);
+    return pow(saturate(display / peak), 2.2f) * linearPeak;
+}
+
+// Linear HDR sky along the authored gradient at blend t (0 = horizon, 1 = zenith). Blended in display
+// space and inverted after, as the sky material does: blending HDR colours let a dawn horizon at
+// display 1.0, far brighter in HDR than the zenith, turn every reflected direction gold.
+float3 SkyGradient(float t)
+{
+    return InverseTonemapPreservingHue(lerp(SkyHorizonDisplay, SkyZenithDisplay, t)) * InverseExposure;
+}
+
+// The sky gradient as PS_FogComposite draws it: the distance fog covers it up to the sky band, so a
+// hazy dawn shows a pale horizon although the authored horizon colour is a saturated orange.
 float3 SkyRadiance(float3 direction)
 {
     float up = saturate(direction.y);
-    return lerp(SkyHorizonLinear, SkyZenithLinear, pow(up, 0.45f));
+    return ApplyDistanceFog(SkyGradient(pow(up, 0.45f)), DistanceFogSkyAmount(up));
 }
 
 // Karis' analytic fit of the split-sum environment BRDF.
@@ -438,7 +472,7 @@ float4 main(PixelIn input) : SV_Target
     // moonlit water. The sky this very pixel reflects (on-screen sky, scene or gradient) is the best
     // estimate of that radiance; take whichever is brighter, mostly neutral so the foam stays white.
     const float3 luminanceWeights = float3(0.2126f, 0.7152f, 0.0722f);
-    float3 skyIrradiance = max(lerp(SkyHorizonLinear, SkyZenithLinear, 0.5f), reflection);
+    float3 skyIrradiance = max(SkyGradient(0.5f), reflection);
     float3 ambientIrradiance = max(CameraAmbientColor, skyIrradiance);
     float3 foamAmbient = lerp(dot(ambientIrradiance, luminanceWeights).xxx, ambientIrradiance, 0.35f);
     float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + foamAmbient);

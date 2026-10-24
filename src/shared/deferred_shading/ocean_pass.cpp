@@ -2,8 +2,6 @@
 
 #include "ocean_pass.h"
 
-#include "atmosphere_math.h"
-
 #include "ocean_grid.h"
 #include "ocean_spectrum.h"
 
@@ -124,8 +122,11 @@ namespace mmo
 			float oceanTime;
 			float waveFadeStart;
 			float waveFadeInverseRange;
+
+			float inverseExposure;
+			float renderPadding[3];
 		};
-		static_assert(sizeof(OceanRenderConstants) == 176, "OceanRenderConstants must match OceanRenderCommon.hlsli");
+		static_assert(sizeof(OceanRenderConstants) == 192, "OceanRenderConstants must match OceanRenderCommon.hlsli");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -137,18 +138,6 @@ namespace mmo
 			destination[0] = source.x;
 			destination[1] = source.y;
 			destination[2] = source.z;
-		}
-
-		/// @brief Brings a display-referred colour (the sky gradient the environment authors) into the
-		///        linear HDR scene. Hue-preserving, unlike the per-channel InverseTonemap of the forward
-		///        materials: the water scales this by Fresnel before the tonemap, and a per-channel
-		///        inverse turned the Korash dawn horizon into deep red reflections.
-		Vector3 inverseTonemap(const Vector4& display, const float exposure)
-		{
-			float linear[3];
-			atmosphere::InverseTonemapPreservingHue(display.x, display.y, display.z, linear);
-			const float invExposure = 1.0f / std::max(exposure, 1e-4f);
-			return Vector3(linear[0], linear[1], linear[2]) * invExposure;
 		}
 
 		bool sameWaves(const OceanSettings& a, const OceanSettings& b)
@@ -410,8 +399,12 @@ namespace mmo
 		Vector4 zenith(0.24f, 0.45f, 0.82f, 1.0f);
 		globals.GetVector("SkyHorizonColor", horizon);
 		globals.GetVector("SkyZenithColor", zenith);
-		copyVector(inverseTonemap(horizon, exposure), constants.skyHorizon);
-		copyVector(inverseTonemap(zenith, exposure), constants.skyZenith);
+		// Display-referred: the shader blends the gradient first and inverts the tonemap after, as
+		// the sky material does. Blending inverted colours let a dawn horizon at display 1.0 (about
+		// 100x brighter in HDR than the zenith) turn the whole reflected sky gold.
+		copyVector(Vector3(std::clamp(horizon.x, 0.0f, 1.0f), std::clamp(horizon.y, 0.0f, 1.0f), std::clamp(horizon.z, 0.0f, 1.0f)), constants.skyHorizon);
+		copyVector(Vector3(std::clamp(zenith.x, 0.0f, 1.0f), std::clamp(zenith.y, 0.0f, 1.0f), std::clamp(zenith.z, 0.0f, 1.0f)), constants.skyZenith);
+		constants.inverseExposure = 1.0f / std::max(exposure, 1e-4f);
 
 		constants.roughness = m_settings.roughness;
 		constants.reflectionStrength = m_settings.reflectionStrength;
