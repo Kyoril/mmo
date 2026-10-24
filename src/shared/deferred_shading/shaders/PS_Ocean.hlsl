@@ -18,6 +18,7 @@
 
 Texture2D SceneColorTex : register(t30);   // kSceneColorTextureSlot
 Texture2D SceneDepthTex : register(t31);   // kSceneDepthTextureSlot
+Texture2DArray<float4> OceanSkyMap : register(t3); // sky as drawn, by azimuth x elevation (CS_OceanSkyCapture)
 
 struct PixelIn
 {
@@ -126,6 +127,20 @@ float3 SkyRadiance(float3 direction)
     float transmittance = exp(-FogOpticalDepth(CameraPosition.y, up, OCEAN_SKY_FOG_DISTANCE));
     sky = sky * transmittance + FogSource(dot(direction, SunDirection), 1.0f) * (1.0f - transmittance);
     return ApplyDistanceFog(sky, DistanceFogSkyAmount(up));
+}
+
+// The sky the water reflects in a direction: as it was last drawn on screen (CS_OceanSkyCapture), and
+// the authored gradient only where that direction has not been seen yet. The drawn sky is mostly fog
+// and sun haze; the gradient alone made the sea change colour with the camera pitch, as soon as the
+// reflected rays left the screen.
+float3 ReflectedSky(float3 direction)
+{
+    float u = atan2(direction.z, direction.x) / (2.0f * OCEAN_PI) + 0.5f;
+    float v = clamp(sqrt(saturate(direction.y)), 0.5f / 16.0f, 1.0f - 0.5f / 16.0f);
+    // rgb is zero where a is: rgb / a averages only the texels that hold sky.
+    float4 captured = OceanSkyMap.SampleLevel(OceanWrapSampler, float3(u, v, 0.0f), 0.0f);
+    float coverage = saturate(captured.a);
+    return lerp(SkyRadiance(direction), captured.rgb / max(captured.a, 1e-4f), coverage);
 }
 
 // Karis' analytic fit of the split-sum environment BRDF.
@@ -417,7 +432,7 @@ float4 main(PixelIn input) : SV_Target
 
     // Reflect the sky that is actually on screen (clouds, sun haze, the fogged horizon) where the
     // reflected ray leaves the screen through a sky pixel; the gradient only fills in elsewhere.
-    float3 reflection = SkyRadiance(r);
+    float3 reflection = ReflectedSky(r);
     {
         // Looking down at the sea the reflected ray points above the top of the screen, so the
         // authored gradient would fill nearly all of it - unfogged, and far more saturated than the

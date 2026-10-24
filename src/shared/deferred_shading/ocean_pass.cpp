@@ -7,6 +7,7 @@
 
 #include "graphics/global_shader_parameters.h"
 #include "log/default_log_levels.h"
+#include "graphics/texture.h"
 #include "scene_graph/camera.h"
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 #	include "shaders/CS_OceanEvolve.h"
 #	include "shaders/CS_OceanFft.h"
 #	include "shaders/CS_OceanAssemble.h"
+#	include "shaders/CS_OceanSkyCapture.h"
 #	include "shaders/VS_Ocean.h"
 #	include "shaders/PS_Ocean.h"
 #	define MMO_OCEAN_SHADER(name) g_##name, std::size(g_##name)
@@ -128,6 +130,29 @@ namespace mmo
 		};
 		static_assert(sizeof(OceanRenderConstants) == 192, "OceanRenderConstants must match OceanRenderCommon.hlsli");
 
+		/// Layout of OceanSkyCaptureConstants in CS_OceanSkyCapture.hlsl.
+		struct OceanSkyCaptureConstants
+		{
+			Matrix4 viewProj;
+			float cameraPosition[3];
+			float blendWeight;
+			float maxRadiance;
+			float padding[3];
+		};
+		static_assert(sizeof(OceanSkyCaptureConstants) == 96, "OceanSkyCaptureConstants must match CS_OceanSkyCapture.hlsl");
+
+		/// Size of the captured sky map; SKY_MAP_WIDTH / SKY_MAP_HEIGHT in the shaders.
+		constexpr uint16 skyMapWidth = 64;
+		constexpr uint16 skyMapHeight = 16;
+
+		/// Share of a new sky observation per frame: settles within a second without flickering with
+		/// every passing cloud edge.
+		constexpr float skyCaptureBlend = 0.1f;
+
+		/// Brightest a captured sky sample may be (linear HDR), so the sun disc does not light a whole
+		/// texel of the map; the sun's own highlight on the water is drawn separately.
+		constexpr float skyCaptureMaxRadiance = 6.0f;
+
 		uint32 groupCount(const uint32 cells)
 		{
 			return (cells + threadGroupSize - 1) / threadGroupSize;
@@ -170,11 +195,13 @@ namespace mmo
 		m_evolveCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_OCEAN_SHADER(CS_OceanEvolve));
 		m_fftCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_OCEAN_SHADER(CS_OceanFft));
 		m_assembleCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_OCEAN_SHADER(CS_OceanAssemble));
+		m_skyCaptureCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_OCEAN_SHADER(CS_OceanSkyCapture));
 		m_surfaceVs = m_device.CreateShader(ShaderType::VertexShader, MMO_OCEAN_SHADER(VS_Ocean));
 		m_surfacePs = m_device.CreateShader(ShaderType::PixelShader, MMO_OCEAN_SHADER(PS_Ocean));
 
 		m_simulationBuffer = m_device.CreateConstantBuffer(sizeof(OceanSimConstants), nullptr);
 		m_renderBuffer = m_device.CreateConstantBuffer(sizeof(OceanRenderConstants), nullptr);
+		m_skyCaptureBuffer = m_device.CreateConstantBuffer(sizeof(OceanSkyCaptureConstants), nullptr);
 
 		constexpr uint16 n = OceanFftResolution;
 		constexpr uint16 cascades = OceanCascadeCount;
@@ -184,6 +211,17 @@ namespace mmo
 		m_displacement = m_device.CreateTextureArray(n, n, cascades, TextureArrayFormat::RGBA16F, true, false);
 		m_surfaceTexture = m_device.CreateTextureArray(n, n, cascades, TextureArrayFormat::RGBA16F, true, true);
 		m_foamState = m_device.CreateTextureArray(n, n, cascades, TextureArrayFormat::R32F, true, false);
+
+		// Both start empty (a = 0: nothing seen yet, the shader falls back to the authored gradient).
+		const std::vector<uint8> emptySky(static_cast<size_t>(skyMapWidth) * skyMapHeight * 8, 0);
+		for (TextureArrayPtr& skyMap : m_skyMaps)
+		{
+			skyMap = m_device.CreateTextureArray(skyMapWidth, skyMapHeight, 1, TextureArrayFormat::RGBA16F, true, false);
+			if (skyMap)
+			{
+				skyMap->Upload(0, emptySky.data(), emptySky.size());
+			}
+		}
 
 		SamplerDesc wrap;
 		wrap.filter = SamplerFilter::Anisotropic;
@@ -361,6 +399,40 @@ namespace mmo
 		m_device.EndGpuScope();
 	}
 
+	void OceanPass::CaptureSky(Camera& camera, Texture& sceneColor, Texture& sceneDepth)
+	{
+		if (!IsActive() || !m_skyMaps[0] || !m_skyMaps[1])
+		{
+			return;
+		}
+
+		m_device.BeginGpuScope("GPU: Ocean sky capture");
+
+		OceanSkyCaptureConstants constants {};
+		constants.viewProj = camera.GetProjectionMatrix() * camera.GetViewMatrix();
+		const Vector3 position = camera.GetDerivedPosition();
+		constants.cameraPosition[0] = position.x;
+		constants.cameraPosition[1] = position.y;
+		constants.cameraPosition[2] = position.z;
+		constants.blendWeight = skyCaptureBlend;
+		constants.maxRadiance = skyCaptureMaxRadiance;
+		m_skyCaptureBuffer->Update(&constants);
+
+		const uint32 previous = m_skyMapIndex;
+		m_skyMapIndex = 1 - m_skyMapIndex;
+
+		m_skyCaptureCs->Set();
+		m_skyCaptureBuffer->BindToStage(ShaderType::ComputeShader, 0);
+		m_skyMaps[previous]->Bind(ShaderType::ComputeShader, 0);
+		sceneColor.Bind(ShaderType::ComputeShader, 1);
+		sceneDepth.Bind(ShaderType::ComputeShader, 2);
+		m_skyMaps[m_skyMapIndex]->BindWritable(0);
+		m_device.Dispatch(1, 1, 1);
+		m_device.ClearComputeBindings();
+
+		m_device.EndGpuScope();
+	}
+
 	void OceanPass::Render(Camera& camera, ConstantBuffer& cameraBuffer, const float exposure)
 	{
 		if (!IsActive())
@@ -442,6 +514,10 @@ namespace mmo
 
 		m_displacement->Bind(ShaderType::VertexShader, 0);
 		m_surfaceTexture->Bind(ShaderType::PixelShader, 2);
+		if (m_skyMaps[m_skyMapIndex])
+		{
+			m_skyMaps[m_skyMapIndex]->Bind(ShaderType::PixelShader, 3);
+		}
 		if (masked)
 		{
 			m_mask->Bind(ShaderType::VertexShader, 1);
@@ -460,6 +536,10 @@ namespace mmo
 		// The displacement and surface arrays are compute targets next frame.
 		m_displacement->Unbind(ShaderType::VertexShader, 0);
 		m_surfaceTexture->Unbind(ShaderType::PixelShader, 2);
+		if (m_skyMaps[m_skyMapIndex])
+		{
+			m_skyMaps[m_skyMapIndex]->Unbind(ShaderType::PixelShader, 3);
+		}
 
 		// The ocean replaced textures, samplers and constant buffers a material may consider its own;
 		// make the next material draw rebind everything.

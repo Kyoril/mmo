@@ -7,12 +7,14 @@
 #include "base/non_copyable.h"
 #include "graphics/graphics_device.h"
 
+#include <array>
 #include <chrono>
 #include <vector>
 
 namespace mmo
 {
 	class Camera;
+	class Texture;
 
 	/// @brief The FFT ocean: simulates the sea surface on the GPU and draws it, from the camera out to
 	///        the horizon, over the lit opaque scene.
@@ -63,6 +65,14 @@ namespace mmo
 		///        Render, while no scene targets are bound to the compute stage.
 		void Simulate();
 
+		/// @brief Records the sky drawn on screen into the map the surface reflects where the
+		///        reflected ray leaves the screen. Call after the sky and fog are composited into
+		///        sceneColor and before Render.
+		/// @param camera The camera the scene was drawn with.
+		/// @param sceneColor Copy of the lit, fogged scene colour (linear HDR).
+		/// @param sceneDepth G-buffer target with radial depth in alpha (0 = sky).
+		void CaptureSky(Camera& camera, Texture& sceneColor, Texture& sceneDepth);
+
 		/// @brief Draws the surface into the currently bound HDR colour target and scene depth.
 		/// @param camera The camera to draw for.
 		/// @param cameraBuffer The scene's camera constant buffer (b1).
@@ -86,11 +96,13 @@ namespace mmo
 		ShaderPtr m_evolveCs;
 		ShaderPtr m_fftCs;
 		ShaderPtr m_assembleCs;
+		ShaderPtr m_skyCaptureCs;
 		ShaderPtr m_surfaceVs;
 		ShaderPtr m_surfacePs;
 
 		ConstantBufferPtr m_simulationBuffer;
 		ConstantBufferPtr m_renderBuffer;
+		ConstantBufferPtr m_skyCaptureBuffer;
 
 		TextureArrayPtr m_spectrum;
 		TextureArrayPtr m_fftPing;
@@ -99,6 +111,10 @@ namespace mmo
 		TextureArrayPtr m_surfaceTexture;
 		TextureArrayPtr m_foamState;
 		TextureArrayPtr m_mask;
+		/// Sky as drawn, by azimuth and elevation (CS_OceanSkyCapture). Ping-pong, since typed UAV
+		/// loads of RGBA16F are not available everywhere.
+		std::array<TextureArrayPtr, 2> m_skyMaps;
+		uint32 m_skyMapIndex { 0 };
 		uint32 m_maskTexelsPerSide { 0 };
 
 		SamplerStatePtr m_wrapSampler;
