@@ -188,6 +188,62 @@ namespace mmo
 			ILOG("Migrated " << fixedCount << " locale-based asset path(s) to their locale-relative form");
 		}
 	}
+
+	/// @brief Prepares an unattended command line job: the log goes to <name>.log (truncated) and, in
+	///        debug builds, failed CRT assertions go to <name>_asserts.log instead of a message box
+	///        nobody can answer. Each job runs alone in its process, so this is called once.
+	/// @param name Base name of the log files, e.g. "pcg_rebuild".
+	void RedirectUnattendedLog(const std::string& name)
+	{
+		static std::ofstream logFile;
+		static std::mutex logMutex;
+		if (logFile.is_open())
+		{
+			return;
+		}
+
+		logFile.open(name + ".log", std::ios::out | std::ios::trunc);
+		g_DefaultLog.signal().connect([](const LogEntry& entry)
+		{
+			std::scoped_lock lock{ logMutex };
+			logFile << entry.message << std::endl;
+		});
+
+#ifdef _DEBUG
+		static HANDLE assertFile = CreateFileA((name + "_asserts.log").c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ASSERT, assertFile);
+		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+	}
+
+	/// @brief Opens a world for an unattended job.
+	/// @param mainWindow The editor's main window.
+	/// @param flag The command line flag, for the error message.
+	/// @param worldPath Asset path of the .hwld file.
+	/// @return The world editor instance, or null after logging an error.
+	WorldEditorInstance* OpenWorldForJob(MainWindow& mainWindow, const char* flag, const char* worldPath)
+	{
+		if (!mainWindow.OpenAsset(worldPath) || !WorldEditorInstance::GetLastCreated())
+		{
+			ELOG(flag << ": failed to open " << worldPath);
+			return nullptr;
+		}
+
+		return WorldEditorInstance::GetLastCreated();
+	}
+
+	/// @brief Parses an oasis id: the whole text is a non-zero hexadecimal number.
+	/// @param text The command line argument.
+	/// @param id Receives the id.
+	/// @return True if the text is a valid id.
+	bool ParseOasisId(const char* text, uint64& id)
+	{
+		char* end = nullptr;
+		id = std::strtoull(text, &end, 16);
+		return end != text && *end == '\0' && id != 0;
+	}
 }
 
 #ifdef _WIN32
@@ -903,20 +959,7 @@ int main(int argc, char* arg[])
 			{
 				// mmo_edit --pcg-rebuild <world.hwld> [--oasis <id hex>]
 				// Opens the world, rebuilds one or all oases, saves the world and exits (0 = success).
-				static std::ofstream pcgLog("pcg_rebuild.log", std::ios::out | std::ios::trunc);
-				static std::mutex pcgLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ pcgLogMutex };
-					pcgLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE pcgAssertFile = CreateFileA("pcg_rebuild_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
-#endif
+				mmo::RedirectUnattendedLog("pcg_rebuild");
 
 				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis <id hex>]"))
 				{
@@ -929,9 +972,7 @@ int main(int argc, char* arg[])
 				{
 					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
 					{
-						char* end = nullptr;
-						oasisId = std::strtoull(args[++j], &end, 16);
-						if (end == args[j] || *end != '\0' || oasisId == 0)
+						if (!mmo::ParseOasisId(args[++j], oasisId))
 						{
 							ELOG("--pcg-rebuild: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
 							argumentsValid = false;
@@ -949,13 +990,8 @@ int main(int argc, char* arg[])
 				{
 					// Already logged.
 				}
-				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-rebuild", args[i + 1]))
 				{
-					ELOG("--pcg-rebuild: failed to open " << args[i + 1]);
-				}
-				else
-				{
-					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
 					if (world->GetProceduralOasisCount() == 0)
 					{
 						// Nothing to rebuild: leave the world untouched instead of rewriting it.
@@ -990,20 +1026,7 @@ int main(int argc, char* arg[])
 				// mmo_edit --pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]
 				// Adds an oasis like the "New Oasis" button (8 point loop around X Z), builds it, saves
 				// the world and logs the new id (0 = success).
-				static std::ofstream pcgLog("pcg_new_oasis.log", std::ios::out | std::ios::trunc);
-				static std::mutex pcgLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ pcgLogMutex };
-					pcgLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE pcgAssertFile = CreateFileA("pcg_new_oasis_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
-#endif
+				mmo::RedirectUnattendedLog("pcg_new_oasis");
 
 				const char* usage = "--pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]";
 				if (missingArgs(i, 1, usage))
@@ -1068,13 +1091,8 @@ int main(int argc, char* arg[])
 				{
 					// Already logged.
 				}
-				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-oasis", args[i + 1]))
 				{
-					ELOG("--pcg-new-oasis: failed to open " << args[i + 1]);
-				}
-				else
-				{
-					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
 					uint64 id = 0;
 					std::string error;
 					if (!world->CreateProceduralOasis(x, z, radius, seed, name, id, error))
@@ -1104,20 +1122,7 @@ int main(int argc, char* arg[])
 				// mmo_edit --pcg-delete <world.hwld> --oasis <id hex>
 				// Deletes an oasis and everything it generated like the "Delete" button, saves the
 				// world and exits (0 = success).
-				static std::ofstream pcgLog("pcg_delete.log", std::ios::out | std::ios::trunc);
-				static std::mutex pcgLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ pcgLogMutex };
-					pcgLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE pcgAssertFile = CreateFileA("pcg_delete_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, pcgAssertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, pcgAssertFile);
-#endif
+				mmo::RedirectUnattendedLog("pcg_delete");
 
 				const char* usage = "--pcg-delete <world.hwld> --oasis <id hex>";
 				if (missingArgs(i, 1, usage))
@@ -1131,9 +1136,7 @@ int main(int argc, char* arg[])
 				{
 					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
 					{
-						char* end = nullptr;
-						oasisId = std::strtoull(args[++j], &end, 16);
-						if (end == args[j] || *end != '\0' || oasisId == 0)
+						if (!mmo::ParseOasisId(args[++j], oasisId))
 						{
 							ELOG("--pcg-delete: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
 							argumentsValid = false;
@@ -1157,13 +1160,8 @@ int main(int argc, char* arg[])
 				{
 					// Already logged.
 				}
-				else if (!mainWindow.OpenAsset(args[i + 1]) || !mmo::WorldEditorInstance::GetLastCreated())
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-delete", args[i + 1]))
 				{
-					ELOG("--pcg-delete: failed to open " << args[i + 1]);
-				}
-				else
-				{
-					mmo::WorldEditorInstance* world = mmo::WorldEditorInstance::GetLastCreated();
 					std::string error;
 					if (!world->DeleteProceduralOasis(oasisId, error))
 					{
