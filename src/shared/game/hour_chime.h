@@ -7,13 +7,21 @@
 
 namespace mmo
 {
+	/// Hour of the given time of day on a 24-hour clock.
+	/// @param timeOfDay Time of day in milliseconds since midnight. Values past one day wrap.
+	/// @returns A value in [0, 23].
+	inline uint32 GetHourOfDay(const GameTime timeOfDay)
+	{
+		return static_cast<uint32>((timeOfDay % constants::OneDay) / constants::OneHour);
+	}
+
 	/// Number of times a clock strikes at the given time of day: once at 1 o'clock, twelve times at
 	/// noon and midnight (12-hour clock, as church bells count).
 	/// @param timeOfDay Time of day in milliseconds since midnight. Values past one day wrap.
 	/// @returns A value in [1, 12].
 	inline uint32 GetClockStrikeCount(const GameTime timeOfDay)
 	{
-		const uint32 hour = static_cast<uint32>((timeOfDay % constants::OneDay) / constants::OneHour);
+		const uint32 hour = GetHourOfDay(timeOfDay);
 		return (hour + 11) % 12 + 1;
 	}
 
@@ -23,7 +31,7 @@ namespace mmo
 	/// @returns A value in [1, 24].
 	inline uint32 GetHourOfDayEventValue(const GameTime timeOfDay)
 	{
-		const uint32 hour = static_cast<uint32>((timeOfDay % constants::OneDay) / constants::OneHour);
+		const uint32 hour = GetHourOfDay(timeOfDay);
 		return hour == 0 ? 24 : hour;
 	}
 

@@ -106,7 +106,7 @@ namespace mmo
 		"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 		"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
 		"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-		"PlaySpellVisual", "PlaySound"
+		"PlaySpellVisual", "PlaySound", "RandomTrigger"
 	};
 
 	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
@@ -475,6 +475,9 @@ namespace mmo
 			{
 			case trigger_actions::Trigger:
 				return "-> " + DescribeEntryRef(project.triggers, GetActionDataValue(action, 0));
+			case trigger_actions::RandomTrigger:
+				snprintf(buffer, sizeof(buffer), "-> one of %d triggers", action.data_size());
+				return buffer;
 			case trigger_actions::Say:
 			case trigger_actions::Yell:
 			case trigger_actions::Emote:
@@ -863,7 +866,7 @@ namespace mmo
 			case trigger_actions::SetSpawnState:
 			case trigger_actions::SetRespawnState:
 			{
-				// Data: <0/1>
+				// Data: <0/1>, SetSpawnState: [<DESPAWN:0/1>]
 				int state = (action.data_size() > 0) ? action.data(0) : 0;
 				bool enabled = (state != 0);
 				if (ImGui::Checkbox("Enabled##SpawnState", &enabled))
@@ -876,6 +879,17 @@ namespace mmo
 				}
 				ImGui::SameLine();
 				ImGui::Text("Spawn/Respawn Enabled");
+
+				if (action.action() == trigger_actions::SetSpawnState && !enabled)
+				{
+					bool despawn = GetActionDataValue(action, 1) != 0;
+					if (ImGui::Checkbox("Despawn current creatures##SpawnStateDespawn", &despawn))
+					{
+						SetActionDataValue(action, 1, despawn ? 1 : 0);
+					}
+					ImGui::SameLine();
+					DrawHelpMarker("Deactivating only stops further spawns. Tick this to also remove the creatures the spawner has out right now (those in combat stay until they die or reset).");
+				}
 				break;
 			}
 			case trigger_actions::CastSpell:
@@ -1270,6 +1284,29 @@ namespace mmo
 						"Time between two starts. Every repetition looks for listeners again, so players entering the radius late still hear the rest.");
 					break;
 				}
+				case trigger_actions::RandomTrigger:
+				{
+					// Data: <TRIGGER-ID>, [<TRIGGER-ID>...]
+					for (int i = 0; i < action.data_size(); ++i)
+					{
+						ImGui::PushID(i);
+						DrawActionDataPicker(action, i, "##RandomTriggerId", "Trigger", project.triggers);
+						ImGui::SameLine();
+						if (ImGui::SmallButton("Remove"))
+						{
+							action.mutable_data()->erase(action.mutable_data()->begin() + i);
+							ImGui::PopID();
+							break;
+						}
+						ImGui::PopID();
+					}
+					if (ImGui::Button("Add Trigger##RandomTriggerAdd"))
+					{
+						action.add_data(0);
+					}
+					ImGui::TextDisabled("Runs one of these triggers, picked at random with equal chance.");
+					break;
+				}
 				default:
 			{
 				ImGui::TextDisabled("Unknown action type.");
@@ -1335,6 +1372,7 @@ namespace mmo
 			{ proto::RandomValue,         "RandomValue",         "Max",        { "Min", "Max" } },
 			{ proto::InstanceVariable,    "InstanceVariable",    "Key",        { nullptr, nullptr } },
 			{ proto::LivingCreatureCount, "LivingCreatureCount", "Unit Entry", { nullptr, nullptr } },
+			{ proto::HourOfDay,           "HourOfDay",           nullptr,      { nullptr, nullptr } },
 		};
 
 		// The guard that keeps this from drifting again: adding a TriggerFunction without listing it
