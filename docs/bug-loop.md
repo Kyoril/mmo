@@ -365,12 +365,19 @@ decision nor a refix could get past it. Now the loop resolves them itself, at ev
 makes (ship, refix, and a submodule `master` that moved), in this order:
 
 1. **Game data** (`*.data` in `data/editor` and `data/client`) is merged by entry
-   (`bugloop/data_merge.py`), without a model: entries are matched by id, fields by number,
-   lists without ids as sequences. Two changes to different entries, or different fields of one
-   entry, merge; the same value changed differently on both sides stays a conflict
-   (`entry[id=0].5[123].5 changed differently on both sides`). git never merges these files
-   itself during the loop's merges (`*.data -merge`), because a line merge of protobuf bytes that
-   happen to contain no NUL byte would corrupt them silently.
+   (`bugloop/data_merge.py`), without a model: entries are matched by id, fields by number, and
+   lists without ids as sequences, where edits apply unless they overlap (spawns appended next to
+   re-snapped heights both apply). With the schema the loop compiles at startup, two edits to
+   different words of one string merge (one side turns "20 to 22" into "$s0", the other "40%"
+   into "$s1%"), and a spawn one side moved keeps its height over develop's height re-snap.
+   What stays a conflict: the same value changed differently on both sides, and an id both sides
+   added for different entries ("an id collision"). Those go to the re-apply (see below), where
+   the fixer redoes the change on today's develop and picks a free id. Replayed against the 62
+   historical merges in both data repositories where the two sides changed one `.data` file, 54
+   come out as the humans merged them; the other 8 are 7 id collisions and one sentence written
+   differently on both sides. git never merges these files itself during the loop's merges
+   (`*.data -merge`), because a line merge of protobuf bytes that happen to contain no NUL byte
+   would corrupt them silently.
 2. **Text files** go to a Claude merge stage (`prompts/merge.md`, all tools but push, in the loop
    worktree, `merge_max_usd` per run). It edits the conflicted files only; the loop then checks
    without trusting it: HEAD unchanged, no conflict markers, no other file staged, changed or

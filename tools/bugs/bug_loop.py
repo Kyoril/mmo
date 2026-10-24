@@ -164,7 +164,7 @@ def main(argv=None):
 	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review", "merge_review")}
 	worktree.resolver = merge_resolve.ConflictResolver(gitops.run_git, runner, prompts, schemas,
 		budget_ok=lambda: state.budget_left(config.invocation_budget_per_day, needed=2),
-		timeout=config.step_timeout_seconds, max_usd=config.merge_max_usd, log=log)
+		timeout=config.step_timeout_seconds, max_usd=config.merge_max_usd, log=log, decoder=decoder)
 	if args.dry_run:
 		gh = None
 		log("ci watch: off (dry run)")
