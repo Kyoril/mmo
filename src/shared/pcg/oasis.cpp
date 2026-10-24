@@ -50,6 +50,65 @@ namespace mmo::pcg
 			}
 			return smoothstep(1.0f - saturate(d / p.outerFalloff));
 		}
+
+		constexpr uint64 kRuleRim = 1;
+		constexpr uint64 kRulePalm = 2;
+		constexpr uint64 kRuleBush = 3;
+		constexpr uint64 kRulePlant = 4;
+		constexpr float kPi = 3.14159265358979f;
+
+		/// Sub-hash of a rule, so different rules never share a stream.
+		uint64 RuleSeed(uint64 seed, uint64 rule)
+		{
+			return Hash(seed, static_cast<int64>(rule), 0x0A515LL);
+		}
+
+		/// Picks a non-empty rock family by weight; null if none is usable.
+		const std::vector<String>* PickFamily(float u, const OasisParams& p, const OasisAssets& a)
+		{
+			const std::vector<String>* lists[3] = { &a.cliffs, &a.shelves, &a.clumps };
+			const float weights[3] = { p.cliffWeight, p.shelfWeight, p.clumpWeight };
+			float total = 0.0f;
+			for (int i = 0; i < 3; ++i)
+			{
+				if (!lists[i]->empty() && weights[i] > 0.0f)
+				{
+					total += weights[i];
+				}
+			}
+			if (total <= 0.0f)
+			{
+				return nullptr;
+			}
+
+			float target = u * total;
+			const std::vector<String>* last = nullptr;
+			for (int i = 0; i < 3; ++i)
+			{
+				if (lists[i]->empty() || weights[i] <= 0.0f)
+				{
+					continue;
+				}
+				last = lists[i];
+				if (target < weights[i])
+				{
+					return lists[i];
+				}
+				target -= weights[i];
+			}
+			return last;
+		}
+
+		const String& PickAsset(float u, const std::vector<String>& list)
+		{
+			const size_t index = std::min(list.size() - 1, static_cast<size_t>(u * static_cast<float>(list.size())));
+			return list[index];
+		}
+
+		Quaternion YawRotation(float yawRadians)
+		{
+			return Quaternion(Radian(yawRadians), Vector3::UnitY);
+		}
 	}
 
 	OasisError PrepareOasis(const PathSpline& loop, uint64 seed, const OasisParams& params,
@@ -175,5 +234,156 @@ namespace mmo::pcg
 		target.splatWeight = weight;
 		target.setMaterial = true;
 		return target;
+	}
+}
+
+namespace mmo::pcg
+{
+	void BuildPlacements(const OasisShape& shape, const OasisAssets& assets,
+		const std::function<float(float, float)>& ground, const std::function<float(float, float)>& slope,
+		std::vector<Placement>& out)
+	{
+		out.clear();
+		if (!shape.path)
+		{
+			return;
+		}
+
+		const OasisParams& p = shape.params;
+		const SampledPath& path = *shape.path;
+
+		// Rim rocks by arc length steps.
+		const uint64 rimSeed = RuleSeed(shape.seed, kRuleRim);
+		const int64 stepCount = static_cast<int64>(std::floor(path.GetLength() / p.rockSpacing));
+		for (int64 i = 0; i < stepCount; ++i)
+		{
+			const std::vector<String>* family = PickFamily(HashToUnit(Hash(rimSeed, i, 0, 1)), p, assets);
+			if (family == nullptr)
+			{
+				continue;
+			}
+
+			const float distance = static_cast<float>(i) * p.rockSpacing;
+			const SplineSample sample = path.SampleAtDistance(distance);
+			float nx = 0.0f, nz = 0.0f;
+			path.NormalAtDistance(distance, nx, nz);
+
+			const float offset = p.rockOffset + HashRange(Hash(rimSeed, i, 0, 2), -1.0f, 1.0f) * p.rockOffsetJitter;
+			const float px = sample.x + nx * offset;
+			const float pz = sample.z + nz * offset;
+			const float yawJitter = HashRange(Hash(rimSeed, i, 0, 3), -p.rockYawJitterDeg, p.rockYawJitterDeg) * kPi / 180.0f;
+			// Faces the basin: local +Z is turned onto the inward direction.
+			const float yaw = std::atan2(-nx, -nz) + yawJitter;
+			const float scale = HashRange(Hash(rimSeed, i, 0, 4), p.rockScaleMin, p.rockScaleMax);
+
+			Placement placement;
+			placement.key = Hash(rimSeed, i, 0, 0);
+			placement.kind = PlacementKind::Entity;
+			placement.asset = PickAsset(HashToUnit(Hash(rimSeed, i, 0, 5)), *family);
+			placement.position = Vector3(px, ground(px, pz) - p.rockSink, pz);
+			placement.rotation = YawRotation(yaw);
+			placement.scale = Vector3(scale, scale, scale);
+			placement.collides = true;
+			out.push_back(std::move(placement));
+		}
+
+		// Vegetation by world anchored cells.
+		struct VegRule
+		{
+			uint64 rule;
+			float cell;
+			const std::vector<String>* assets;
+			bool collides;
+			float scaleMin, scaleMax;
+		};
+		const VegRule rules[3] = {
+			{ kRulePalm, p.palmCell, &assets.palms, true, p.palmScaleMin, p.palmScaleMax },
+			{ kRuleBush, p.bushCell, &assets.bushes, false, 0.8f, 1.2f },
+			{ kRulePlant, p.bushCell, &assets.waterPlants, false, 0.8f, 1.2f }
+		};
+
+		const float bandOuter = -p.rimWidth * 0.5f;
+		const float bandInner = -p.waterInset + 1.0f;
+		for (const VegRule& rule : rules)
+		{
+			if (rule.assets->empty() || rule.cell <= 0.0f)
+			{
+				continue;
+			}
+
+			const uint64 ruleSeed = RuleSeed(shape.seed, rule.rule);
+			const int64 cx0 = static_cast<int64>(std::floor(shape.influence.minX / rule.cell));
+			const int64 cx1 = static_cast<int64>(std::floor(shape.influence.maxX / rule.cell));
+			const int64 cz0 = static_cast<int64>(std::floor(shape.influence.minZ / rule.cell));
+			const int64 cz1 = static_cast<int64>(std::floor(shape.influence.maxZ / rule.cell));
+			for (int64 cz = cz0; cz <= cz1; ++cz)
+			{
+				for (int64 cx = cx0; cx <= cx1; ++cx)
+				{
+					const float x = (static_cast<float>(cx) + HashToUnit(Hash(ruleSeed, cx, cz, 1))) * rule.cell;
+					const float z = (static_cast<float>(cz) + HashToUnit(Hash(ruleSeed, cx, cz, 2))) * rule.cell;
+					const float d = path.SignedDistance(x, z);
+					if (d >= 0.0f)
+					{
+						continue;
+					}
+
+					float density;
+					if (rule.rule == kRulePlant)
+					{
+						if (std::abs(d + p.waterInset) > p.waterPlantBand)
+						{
+							continue;
+						}
+						density = std::min(1.0f, p.bushDensity * 2.0f);
+					}
+					else
+					{
+						if (!(d < bandOuter && d > bandInner))
+						{
+							continue;
+						}
+						density = rule.rule == kRulePalm ? p.palmDensity : p.bushDensity;
+						if (rule.rule == kRulePalm)
+						{
+							// Rises linearly toward the pool.
+							const float nearWater = saturate((bandOuter - d) / std::max(0.001f, bandOuter - bandInner));
+							density *= 1.0f + p.palmNearWaterBoost * nearWater;
+						}
+					}
+
+					if (HashToUnit(Hash(ruleSeed, cx, cz, 3)) >= density)
+					{
+						continue;
+					}
+
+					const float y = ground(x, z);
+					// Land plants never stand under water; water plants live at the shoreline.
+					if (rule.rule != kRulePlant && y < shape.waterLevel)
+					{
+						continue;
+					}
+					if (slope(x, z) > p.maxSlopeDeg)
+					{
+						continue;
+					}
+
+					const float yaw = HashRange(Hash(ruleSeed, cx, cz, 4), 0.0f, 2.0f * kPi);
+					const float scale = HashRange(Hash(ruleSeed, cx, cz, 5), rule.scaleMin, rule.scaleMax);
+
+					Placement placement;
+					placement.key = Hash(ruleSeed, cx, cz, 0);
+					placement.kind = PlacementKind::Foliage;
+					placement.asset = PickAsset(HashToUnit(Hash(ruleSeed, cx, cz, 6)), *rule.assets);
+					placement.position = Vector3(x, y, z);
+					placement.rotation = YawRotation(yaw);
+					placement.scale = Vector3(scale, scale, scale);
+					placement.collides = rule.collides;
+					out.push_back(std::move(placement));
+				}
+			}
+		}
+
+		std::sort(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key < b.key; });
 	}
 }
