@@ -40,20 +40,8 @@ namespace mmo
 		/// Water material that reads the flow data. Pages that receive flow get it assigned.
 		constexpr const char* RiverWaterMaterial = "Worlds/Water_River.hmat";
 
-		/// Pick radius of a path point in screen pixels.
-		constexpr float FlowPointPickRadius = 9.0f;
-
 		/// Delay between the last flow edit and the recompute, in seconds.
 		constexpr float FlowApplyDelay = 0.35f;
-
-		float DistanceToSegment(const ImVec2& p, const ImVec2& a, const ImVec2& b)
-		{
-			const float dx = b.x - a.x;
-			const float dy = b.y - a.y;
-			const float lengthSq = dx * dx + dy * dy;
-			const float t = lengthSq > 0.0f ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq, 0.0f, 1.0f) : 0.0f;
-			return std::hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
-		}
 
 		/// Colour of a flow arrow: deep blue for still water up to white for the fastest current.
 		ImU32 FlowSpeedColor(const float speed, const int alpha)
@@ -83,6 +71,7 @@ namespace mmo
 		: WorldEditMode(worldEditor)
 		, m_terrain(terrain)
 		, m_camera(camera)
+		, m_splineEditor(camera, [this](const float x, const float z) { return GetFlowPointHeight(x, z); })
 	{
 		m_brushCircle = m_worldEditor.CreateManualRenderObject("WaterBrushCircle");
 		if (m_brushCircle)
@@ -130,7 +119,7 @@ namespace mmo
 			if (ImGui::Combo("Brush Mode##water", &modeIdx, s_waterBrushModeStrings, static_cast<int>(WaterBrushMode::Count_)))
 			{
 				m_brushMode = static_cast<WaterBrushMode>(modeIdx);
-				m_flowDragging = false;
+				m_splineEditor.CancelDrag();
 				UpdateBrushOverlay();
 			}
 		}
@@ -288,20 +277,8 @@ namespace mmo
 
 		if (m_brushMode == WaterBrushMode::Flow)
 		{
-			if (m_flowDragging && m_selectedRiver >= 0 && m_selectedRiver < static_cast<int32>(m_rivers.size()))
-			{
-				auto& path = m_rivers[m_selectedRiver].path;
-				if (m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(path.size()))
-				{
-					auto& point = path[m_selectedPoint];
-					if (point.x != m_brushPosition.x || point.z != m_brushPosition.z)
-					{
-						point.x = m_brushPosition.x;
-						point.z = m_brushPosition.z;
-						m_flowDragMoved = true;
-					}
-				}
-			}
+			auto splines = GetRiverSplines();
+			m_splineEditor.OnMouseMoved(m_brushPosition.x, m_brushPosition.z, splines);
 			return;
 		}
 
@@ -366,14 +343,14 @@ namespace mmo
 		WorldEditMode::OnMouseUp(x, y);
 		m_rampActive = false;
 
-		if (m_flowDragging)
+		if (m_splineEditor.IsDragging())
 		{
-			m_flowDragging = false;
-			if (m_flowDragMoved)
+			const bool moved = m_splineEditor.DragMoved();
+			m_splineEditor.OnMouseUp();
+			if (moved)
 			{
 				ScheduleFlowApply();
 			}
-			m_flowDragMoved = false;
 		}
 	}
 
@@ -382,13 +359,13 @@ namespace mmo
 		if (m_brushMode == WaterBrushMode::Flow)
 		{
 			// Shift+wheel widens or narrows the channel at the selected point.
-			if (ImGui::GetIO().KeyShift && m_selectedRiver >= 0 && m_selectedRiver < static_cast<int32>(m_rivers.size()))
+			if (ImGui::GetIO().KeyShift && m_splineEditor.GetSelectedSpline() >= 0 && m_splineEditor.GetSelectedSpline() < static_cast<int32>(m_rivers.size()))
 			{
-				auto& path = m_rivers[m_selectedRiver].path;
-				if (m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(path.size()))
+				auto& path = m_rivers[m_splineEditor.GetSelectedSpline()].path.points;
+				if (m_splineEditor.GetSelectedPoint() >= 0 && m_splineEditor.GetSelectedPoint() < static_cast<int32>(path.size()))
 				{
-					auto& point = path[m_selectedPoint];
-					point.halfWidth = std::clamp(point.halfWidth * (delta > 0.0f ? 1.1f : 1.0f / 1.1f), 1.0f, 500.0f);
+					auto& point = path[m_splineEditor.GetSelectedPoint()];
+					point.width = std::clamp(point.width * (delta > 0.0f ? 1.1f : 1.0f / 1.1f), 1.0f, 500.0f);
 					ScheduleFlowApply();
 				}
 			}
@@ -605,21 +582,20 @@ namespace mmo
 			River river;
 			river.name = "River " + std::to_string(m_rivers.size() + 1);
 			m_rivers.push_back(std::move(river));
-			m_selectedRiver = static_cast<int32>(m_rivers.size()) - 1;
-			m_selectedPoint = -1;
+			m_splineEditor.Select(static_cast<int32>(m_rivers.size()) - 1, -1);
 			m_flowFileDirty = true;
 		}
 
-		const bool hasRiver = m_selectedRiver >= 0 && m_selectedRiver < static_cast<int32>(m_rivers.size());
+		const bool hasRiver = m_splineEditor.GetSelectedSpline() >= 0 && m_splineEditor.GetSelectedSpline() < static_cast<int32>(m_rivers.size());
 		ImGui::SameLine();
 		ImGui::BeginDisabled(!hasRiver);
 		if (ImGui::Button("Reverse"))
 		{
-			auto& path = m_rivers[m_selectedRiver].path;
+			auto& path = m_rivers[m_splineEditor.GetSelectedSpline()].path.points;
 			std::reverse(path.begin(), path.end());
-			if (m_selectedPoint >= 0)
+			if (m_splineEditor.GetSelectedPoint() >= 0)
 			{
-				m_selectedPoint = static_cast<int32>(path.size()) - 1 - m_selectedPoint;
+				m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), static_cast<int32>(path.size()) - 1 - m_splineEditor.GetSelectedPoint());
 			}
 			ScheduleFlowApply();
 		}
@@ -630,9 +606,8 @@ namespace mmo
 		ImGui::SameLine();
 		if (ImGui::Button("Delete River"))
 		{
-			m_rivers.erase(m_rivers.begin() + m_selectedRiver);
-			m_selectedRiver = m_rivers.empty() ? -1 : std::min(m_selectedRiver, static_cast<int32>(m_rivers.size()) - 1);
-			m_selectedPoint = -1;
+			m_rivers.erase(m_rivers.begin() + m_splineEditor.GetSelectedSpline());
+			m_splineEditor.Select(m_rivers.empty() ? -1 : std::min(m_splineEditor.GetSelectedSpline(), static_cast<int32>(m_rivers.size()) - 1), -1);
 			ScheduleFlowApply();
 		}
 		ImGui::EndDisabled();
@@ -643,17 +618,16 @@ namespace mmo
 			{
 				const River& river = m_rivers[i];
 				float length = 0.0f;
-				for (size_t p = 1; p < river.path.size(); ++p)
+				for (size_t p = 1; p < river.path.points.size(); ++p)
 				{
-					length += std::hypot(river.path[p].x - river.path[p - 1].x, river.path[p].z - river.path[p - 1].z);
+					length += std::hypot(river.path.points[p].x - river.path.points[p - 1].x, river.path.points[p].z - river.path.points[p - 1].z);
 				}
 
 				std::ostringstream label;
-				label << river.name << "  (" << river.path.size() << " points, " << static_cast<int32>(length) << " m)##river" << i;
-				if (ImGui::Selectable(label.str().c_str(), i == m_selectedRiver))
+				label << river.name << "  (" << river.path.points.size() << " points, " << static_cast<int32>(length) << " m)##river" << i;
+				if (ImGui::Selectable(label.str().c_str(), i == m_splineEditor.GetSelectedSpline()))
 				{
-					m_selectedRiver = i;
-					m_selectedPoint = river.path.empty() ? -1 : static_cast<int32>(river.path.size()) - 1;
+					m_splineEditor.Select(i, river.path.points.empty() ? -1 : static_cast<int32>(river.path.points.size()) - 1);
 				}
 			}
 			ImGui::EndListBox();
@@ -661,7 +635,7 @@ namespace mmo
 
 		if (hasRiver)
 		{
-			River& river = m_rivers[m_selectedRiver];
+			River& river = m_rivers[m_splineEditor.GetSelectedSpline()];
 			char nameBuffer[128];
 			std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", river.name.c_str());
 			if (ImGui::InputText("Name##river", nameBuffer, sizeof(nameBuffer)))
@@ -670,11 +644,11 @@ namespace mmo
 				m_flowFileDirty = true;
 			}
 
-			if (m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(river.path.size()))
+			if (m_splineEditor.GetSelectedPoint() >= 0 && m_splineEditor.GetSelectedPoint() < static_cast<int32>(river.path.points.size()))
 			{
-				terrain_io::water_flow::FlowPoint& point = river.path[m_selectedPoint];
-				ImGui::Text("Point %d of %d", m_selectedPoint + 1, static_cast<int32>(river.path.size()));
-				if (ImGui::DragFloat("Half Width##flowpoint", &point.halfWidth, 0.25f, 1.0f, 500.0f, "%.1f m"))
+				SplinePoint& point = river.path.points[m_splineEditor.GetSelectedPoint()];
+				ImGui::Text("Point %d of %d", m_splineEditor.GetSelectedPoint() + 1, static_cast<int32>(river.path.points.size()));
+				if (ImGui::DragFloat("Half Width##flowpoint", &point.width, 0.25f, 1.0f, 500.0f, "%.1f m"))
 				{
 					ScheduleFlowApply();
 				}
@@ -795,20 +769,21 @@ namespace mmo
 	void WaterEditMode::FlowMouseDown()
 	{
 		const ImGuiIO& io = ImGui::GetIO();
+		auto splines = GetRiverSplines();
 
+		// Ctrl+click on a point deletes it.
 		int32 riverIndex, pointIndex;
-		if (HitTestFlowPoint(riverIndex, pointIndex))
+		if (io.KeyCtrl && m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, riverIndex, pointIndex))
 		{
-			m_selectedRiver = riverIndex;
-			m_selectedPoint = pointIndex;
-			if (io.KeyCtrl)
-			{
-				DeleteSelectedFlowPoint();
-				return;
-			}
+			m_splineEditor.Select(riverIndex, pointIndex);
+			DeleteSelectedFlowPoint();
+			return;
+		}
 
-			m_flowDragging = true;
-			m_flowDragMoved = false;
+		// Select and drag a point, or Alt+click a segment to insert one.
+		const Vector3* worldHit = m_brushPositionValid ? &m_brushPosition : nullptr;
+		if (m_splineEditor.OnMouseDown(io.MousePos.x, io.MousePos.y, splines, io.KeyAlt, worldHit))
+		{
 			return;
 		}
 
@@ -817,69 +792,60 @@ namespace mmo
 			return;
 		}
 
-		terrain_io::water_flow::FlowPoint point;
+		SplinePoint point;
 		point.x = m_brushPosition.x;
 		point.z = m_brushPosition.z;
 
-		if (io.KeyAlt && HitTestFlowSegment(riverIndex, pointIndex))
+		if (m_splineEditor.GetSelectedSpline() < 0 || m_splineEditor.GetSelectedSpline() >= static_cast<int32>(m_rivers.size()))
 		{
-			auto& path = m_rivers[riverIndex].path;
-			point.halfWidth = (path[pointIndex].halfWidth + path[pointIndex + 1].halfWidth) * 0.5f;
-			path.insert(path.begin() + pointIndex + 1, point);
-			m_selectedRiver = riverIndex;
-			m_selectedPoint = pointIndex + 1;
+			River river;
+			river.name = "River " + std::to_string(m_rivers.size() + 1);
+			river.path.interpolation = SplineInterpolation::Linear;
+			river.path.closed = false;
+			m_rivers.push_back(std::move(river));
+			m_splineEditor.Select(static_cast<int32>(m_rivers.size()) - 1, -1);
+		}
+
+		auto& path = m_rivers[m_splineEditor.GetSelectedSpline()].path.points;
+		const int32 selectedPoint = m_splineEditor.GetSelectedPoint();
+		const bool hasSelection = selectedPoint >= 0 && selectedPoint < static_cast<int32>(path.size());
+		point.width = hasSelection ? path[selectedPoint].width : (path.empty() ? m_newRiverHalfWidth : path.back().width);
+
+		// With the source selected the river grows upstream, otherwise downstream after the selection.
+		if (hasSelection && selectedPoint == 0 && path.size() > 1)
+		{
+			path.insert(path.begin(), point);
+			m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), 0);
 		}
 		else
 		{
-			if (m_selectedRiver < 0 || m_selectedRiver >= static_cast<int32>(m_rivers.size()))
-			{
-				River river;
-				river.name = "River " + std::to_string(m_rivers.size() + 1);
-				m_rivers.push_back(std::move(river));
-				m_selectedRiver = static_cast<int32>(m_rivers.size()) - 1;
-				m_selectedPoint = -1;
-			}
-
-			auto& path = m_rivers[m_selectedRiver].path;
-			const bool hasSelection = m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(path.size());
-			point.halfWidth = hasSelection ? path[m_selectedPoint].halfWidth : (path.empty() ? m_newRiverHalfWidth : path.back().halfWidth);
-
-			// With the source selected the river grows upstream, otherwise downstream after the selection.
-			if (hasSelection && m_selectedPoint == 0 && path.size() > 1)
-			{
-				path.insert(path.begin(), point);
-				m_selectedPoint = 0;
-			}
-			else
-			{
-				const int32 insertAt = hasSelection ? m_selectedPoint + 1 : static_cast<int32>(path.size());
-				path.insert(path.begin() + insertAt, point);
-				m_selectedPoint = insertAt;
-			}
+			const int32 insertAt = hasSelection ? selectedPoint + 1 : static_cast<int32>(path.size());
+			path.insert(path.begin() + insertAt, point);
+			m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), insertAt);
 		}
 
 		// The new point follows the mouse until release, so click-and-drag places it precisely.
-		m_flowDragging = true;
-		m_flowDragMoved = true;
+		m_splineEditor.BeginDrag(true);
 	}
 
 	void WaterEditMode::DeleteSelectedFlowPoint()
 	{
-		if (m_selectedRiver < 0 || m_selectedRiver >= static_cast<int32>(m_rivers.size()))
+		auto splines = GetRiverSplines();
+		if (m_splineEditor.DeleteSelectedPoint(splines, 0))
 		{
-			return;
+			ScheduleFlowApply();
 		}
+	}
 
-		auto& path = m_rivers[m_selectedRiver].path;
-		if (m_selectedPoint < 0 || m_selectedPoint >= static_cast<int32>(path.size()))
+	std::vector<PathSpline*> WaterEditMode::GetRiverSplines()
+	{
+		std::vector<PathSpline*> splines;
+		splines.reserve(m_rivers.size());
+		for (River& river : m_rivers)
 		{
-			return;
+			splines.push_back(&river.path);
 		}
-
-		path.erase(path.begin() + m_selectedPoint);
-		m_selectedPoint = path.empty() ? -1 : std::min(m_selectedPoint, static_cast<int32>(path.size()) - 1);
-		m_flowDragging = false;
-		ScheduleFlowApply();
+		return splines;
 	}
 
 	void WaterEditMode::ScheduleFlowApply()
@@ -896,9 +862,9 @@ namespace mmo
 		std::vector<terrain_io::water_flow::FlowPath> paths;
 		for (const River& river : m_rivers)
 		{
-			if (river.path.size() >= 2)
+			if (river.path.points.size() >= 2)
 			{
-				paths.push_back(river.path);
+				paths.push_back(terrain_io::water_flow::FromSpline(river.path));
 			}
 		}
 		return paths;
@@ -947,72 +913,12 @@ namespace mmo
 		return m_terrain.GetSmoothHeightAt(x, z) + 0.3f;
 	}
 
-	bool WaterEditMode::HitTestFlowPoint(int32& riverIndex, int32& pointIndex) const
-	{
-		const ImVec2 mouse = ImGui::GetIO().MousePos;
-		float best = FlowPointPickRadius;
-		bool found = false;
-		for (int32 r = 0; r < static_cast<int32>(m_rivers.size()); ++r)
-		{
-			const auto& path = m_rivers[r].path;
-			for (int32 p = 0; p < static_cast<int32>(path.size()); ++p)
-			{
-				ImVec2 screen;
-				if (!ProjectToScreen(Vector3(path[p].x, GetFlowPointHeight(path[p].x, path[p].z), path[p].z), screen))
-				{
-					continue;
-				}
-
-				// Points of the selected river win ties, so overlapping rivers stay editable.
-				const float distance = std::hypot(screen.x - mouse.x, screen.y - mouse.y) - (r == m_selectedRiver ? 0.5f : 0.0f);
-				if (distance < best)
-				{
-					best = distance;
-					riverIndex = r;
-					pointIndex = p;
-					found = true;
-				}
-			}
-		}
-		return found;
-	}
-
-	bool WaterEditMode::HitTestFlowSegment(int32& riverIndex, int32& pointIndex) const
-	{
-		const ImVec2 mouse = ImGui::GetIO().MousePos;
-		float best = FlowPointPickRadius;
-		bool found = false;
-		for (int32 r = 0; r < static_cast<int32>(m_rivers.size()); ++r)
-		{
-			const auto& path = m_rivers[r].path;
-			for (int32 p = 0; p + 1 < static_cast<int32>(path.size()); ++p)
-			{
-				ImVec2 a, b;
-				if (!ProjectToScreen(Vector3(path[p].x, GetFlowPointHeight(path[p].x, path[p].z), path[p].z), a) ||
-					!ProjectToScreen(Vector3(path[p + 1].x, GetFlowPointHeight(path[p + 1].x, path[p + 1].z), path[p + 1].z), b))
-				{
-					continue;
-				}
-
-				const float distance = DistanceToSegment(mouse, a, b);
-				if (distance < best)
-				{
-					best = distance;
-					riverIndex = r;
-					pointIndex = p;
-					found = true;
-				}
-			}
-		}
-		return found;
-	}
-
 	void WaterEditMode::DrawFlowOverlay(ImDrawList& drawList)
 	{
 		const ImGuiIO& io = ImGui::GetIO();
 
 		// Deferred apply, and Delete for the selected point (unless a text field has the keyboard).
-		if (m_flowApplyCountdown >= 0.0f && !m_flowDragging)
+		if (m_flowApplyCountdown >= 0.0f && !m_splineEditor.IsDragging())
 		{
 			m_flowApplyCountdown -= io.DeltaTime;
 			if (m_flowApplyCountdown < 0.0f)
@@ -1112,102 +1018,36 @@ namespace mmo
 		}
 
 		// River paths: centre line with banks and direction chevrons, and a handle per point.
-		for (int32 r = 0; r < static_cast<int32>(m_rivers.size()); ++r)
 		{
-			const auto& path = m_rivers[r].path;
-			const bool selectedRiver = r == m_selectedRiver;
-			const ImU32 lineColor = selectedRiver ? IM_COL32(255, 220, 60, 255) : IM_COL32(255, 150, 40, 200);
-			const ImU32 bankColor = selectedRiver ? IM_COL32(255, 220, 60, 120) : IM_COL32(255, 150, 40, 80);
-
-			for (size_t p = 0; p + 1 < path.size(); ++p)
+			std::vector<const PathSpline*> splines;
+			std::vector<SplineEditController::Style> styles;
+			for (const River& river : m_rivers)
 			{
-				const auto& a = path[p];
-				const auto& b = path[p + 1];
-				const float dx = b.x - a.x;
-				const float dz = b.z - a.z;
-				const float length = std::hypot(dx, dz);
-				if (length <= 0.0f)
-				{
-					continue;
-				}
+				splines.push_back(&river.path);
 
-				// Left of the flow direction is (-dz, dx), as in the flow mapping.
-				const float nx = -dz / length;
-				const float nz = dx / length;
-
-				ImVec2 sa, sb;
-				if (ProjectToScreen(Vector3(a.x, GetFlowPointHeight(a.x, a.z), a.z), sa) &&
-					ProjectToScreen(Vector3(b.x, GetFlowPointHeight(b.x, b.z), b.z), sb))
-				{
-					drawList.AddLine(sa, sb, lineColor, selectedRiver ? 3.0f : 2.0f);
-				}
-
-				for (const float sideSign : { -1.0f, 1.0f })
-				{
-					const float ax = a.x + nx * a.halfWidth * sideSign;
-					const float az = a.z + nz * a.halfWidth * sideSign;
-					const float bx = b.x + nx * b.halfWidth * sideSign;
-					const float bz = b.z + nz * b.halfWidth * sideSign;
-					ImVec2 s0, s1;
-					if (ProjectToScreen(Vector3(ax, GetFlowPointHeight(ax, az), az), s0) &&
-						ProjectToScreen(Vector3(bx, GetFlowPointHeight(bx, bz), bz), s1))
-					{
-						drawList.AddLine(s0, s1, bankColor, 1.0f);
-					}
-				}
-
-				// Chevrons every ~15 m point downstream.
-				const int32 chevrons = std::max(1, static_cast<int32>(length / 15.0f));
-				for (int32 c = 0; c < chevrons; ++c)
-				{
-					const float t = (static_cast<float>(c) + 0.5f) / static_cast<float>(chevrons);
-					const float cx = a.x + dx * t;
-					const float cz = a.z + dz * t;
-					const float size = std::min(4.0f, (a.halfWidth + (b.halfWidth - a.halfWidth) * t) * 0.5f);
-					const float fx = dx / length;
-					const float fz = dz / length;
-					const float tipX = cx + fx * size;
-					const float tipZ = cz + fz * size;
-					ImVec2 sTip, sLeft, sRight;
-					if (ProjectToScreen(Vector3(tipX, GetFlowPointHeight(tipX, tipZ), tipZ), sTip) &&
-						ProjectToScreen(Vector3(cx - fx * size + nx * size, GetFlowPointHeight(cx, cz), cz - fz * size + nz * size), sLeft) &&
-						ProjectToScreen(Vector3(cx - fx * size - nx * size, GetFlowPointHeight(cx, cz), cz - fz * size - nz * size), sRight))
-					{
-						drawList.AddLine(sLeft, sTip, lineColor, 2.0f);
-						drawList.AddLine(sRight, sTip, lineColor, 2.0f);
-					}
-				}
+				SplineEditController::Style style;
+				style.lineColor = IM_COL32(255, 150, 40, 200);
+				style.selectedColor = IM_COL32(255, 220, 60, 255);
+				style.pointColor = IM_COL32(255, 255, 255, 255);
+				style.drawWidthRibbon = true;
+				style.drawDirection = true;
+				style.minPoints = 0;
+				style.label = river.name;
+				styles.push_back(std::move(style));
 			}
-
-			for (int32 p = 0; p < static_cast<int32>(path.size()); ++p)
-			{
-				ImVec2 screen;
-				if (!ProjectToScreen(Vector3(path[p].x, GetFlowPointHeight(path[p].x, path[p].z), path[p].z), screen))
-				{
-					continue;
-				}
-
-				const bool selectedPoint = selectedRiver && p == m_selectedPoint;
-				const float radius = selectedPoint ? 7.0f : 5.0f;
-				drawList.AddCircleFilled(screen, radius, selectedPoint ? IM_COL32(255, 255, 255, 255) : lineColor);
-				drawList.AddCircle(screen, radius, IM_COL32(0, 0, 0, 200), 0, 1.5f);
-
-				// Mark the source so the direction is clear even for a two-point river.
-				if (p == 0)
-				{
-					drawList.AddText(ImVec2(screen.x + 8.0f, screen.y - 8.0f), lineColor, m_rivers[r].name.c_str());
-				}
-			}
+			m_splineEditor.Draw(drawList, m_overlayViewportMin, m_overlayViewportSize, splines, styles);
 		}
 
 		// Preview of where a click would place the next point.
-		if (m_brushPositionValid && !m_flowDragging && m_selectedRiver >= 0 && m_selectedRiver < static_cast<int32>(m_rivers.size()))
+		if (m_brushPositionValid && !m_splineEditor.IsDragging() && m_splineEditor.GetSelectedSpline() >= 0 && m_splineEditor.GetSelectedSpline() < static_cast<int32>(m_rivers.size()))
 		{
-			const auto& path = m_rivers[m_selectedRiver].path;
+			const auto& path = m_rivers[m_splineEditor.GetSelectedSpline()].path.points;
+			auto splines = GetRiverSplines();
 			int32 hitRiver, hitPoint;
-			if (!path.empty() && m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(path.size()) && !HitTestFlowPoint(hitRiver, hitPoint))
+			if (!path.empty() && m_splineEditor.GetSelectedPoint() >= 0 && m_splineEditor.GetSelectedPoint() < static_cast<int32>(path.size()) &&
+				!m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, hitRiver, hitPoint))
 			{
-				const auto& from = path[m_selectedPoint];
+				const auto& from = path[m_splineEditor.GetSelectedPoint()];
 				ImVec2 a, b;
 				if (ProjectToScreen(Vector3(from.x, GetFlowPointHeight(from.x, from.z), from.z), a) &&
 					ProjectToScreen(Vector3(m_brushPosition.x, GetFlowPointHeight(m_brushPosition.x, m_brushPosition.z), m_brushPosition.z), b))
@@ -1222,8 +1062,8 @@ namespace mmo
 	{
 		m_rivers.clear();
 		m_flowSettings = {};
-		m_selectedRiver = -1;
-		m_selectedPoint = -1;
+		m_splineEditor.Select(-1, -1);
+		m_splineEditor.CancelDrag();
 		m_flowFileDirty = false;
 
 		if (const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(fileName))
@@ -1244,6 +1084,7 @@ namespace mmo
 					for (const auto& entry : *rivers)
 					{
 						River river;
+						terrain_io::water_flow::FlowPath flowPath;
 						river.name = entry.value("name", "River " + std::to_string(m_rivers.size() + 1));
 						if (const auto path = entry.find("path"); path != entry.end() && path->is_array())
 						{
@@ -1258,9 +1099,10 @@ namespace mmo
 								flowPoint.x = point[0].get<float>();
 								flowPoint.z = point[1].get<float>();
 								flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : m_newRiverHalfWidth;
-								river.path.push_back(flowPoint);
+								flowPath.push_back(flowPoint);
 							}
 						}
+						river.path = terrain_io::water_flow::ToSpline(flowPath);
 						m_rivers.push_back(std::move(river));
 					}
 				}
@@ -1304,9 +1146,9 @@ namespace mmo
 		for (const River& river : m_rivers)
 		{
 			nlohmann::json path = nlohmann::json::array();
-			for (const auto& point : river.path)
+			for (const auto& point : river.path.points)
 			{
-				path.push_back({ point.x, point.z, point.halfWidth });
+				path.push_back({ point.x, point.z, point.width });
 			}
 			rivers.push_back({ { "name", river.name }, { "path", std::move(path) } });
 		}

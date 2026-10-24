@@ -9,6 +9,8 @@
 #include "scene_graph/scene_node.h"
 #include "terrain/constants.h"
 #include "terrain_io/water_flow.h"
+#include "math/path_spline.h"
+#include "../spline_edit_controller.h"
 #include "math/matrix4.h"
 
 #include <imgui.h>
@@ -94,7 +96,7 @@ namespace mmo
 		struct River
 		{
 			String name;
-			terrain_io::water_flow::FlowPath path;
+			PathSpline path;
 		};
 
 		void UpdateBrushOverlay();
@@ -118,20 +120,21 @@ namespace mmo
 
 		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectFlowPaths() const;
 
+		/// Pointers to the river splines, in river order, for the spline editor.
+		[[nodiscard]] std::vector<PathSpline*> GetRiverSplines();
+
 		[[nodiscard]] bool ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const;
 
 		/// Height to draw a flow path point at: the water surface, else the ground.
 		[[nodiscard]] float GetFlowPointHeight(float x, float z) const;
 
-		/// Finds the path point under the mouse cursor.
-		[[nodiscard]] bool HitTestFlowPoint(int32& riverIndex, int32& pointIndex) const;
-
-		/// Finds the path segment under the mouse cursor (its first point).
-		[[nodiscard]] bool HitTestFlowSegment(int32& riverIndex, int32& pointIndex) const;
 
 	private:
 		terrain::Terrain& m_terrain;
 		Camera& m_camera;
+
+		/// Shared viewport editing of the river paths (selection, dragging, inserting, deleting).
+		SplineEditController m_splineEditor;
 
 		WaterBrushMode m_brushMode = WaterBrushMode::Paint;
 
@@ -170,11 +173,6 @@ namespace mmo
 		/// lose their flow on the next apply.
 		std::vector<terrain_io::water_flow::FlowPath> m_appliedFlowPaths;
 		terrain_io::water_flow::FlowSettings m_appliedFlowSettings;
-
-		int32 m_selectedRiver = -1;
-		int32 m_selectedPoint = -1;
-		bool  m_flowDragging = false;
-		bool  m_flowDragMoved = false;
 
 		/// Half width given to the first point of a new river.
 		float m_newRiverHalfWidth = 12.0f;

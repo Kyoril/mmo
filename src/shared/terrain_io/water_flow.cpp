@@ -14,6 +14,34 @@ namespace mmo
 	{
 		namespace water_flow
 		{
+			PathSpline ToSpline(const FlowPath& path)
+			{
+				PathSpline spline;
+				spline.closed = false;
+				spline.interpolation = SplineInterpolation::Linear;
+				spline.points.reserve(path.size());
+				for (const FlowPoint& point : path)
+				{
+					spline.points.push_back({ point.x, point.z, point.halfWidth });
+				}
+				return spline;
+			}
+
+			FlowPath FromSpline(const PathSpline& spline)
+			{
+				FlowPath path;
+				path.reserve(spline.points.size());
+				for (const SplinePoint& point : spline.points)
+				{
+					FlowPoint flowPoint;
+					flowPoint.x = point.x;
+					flowPoint.z = point.z;
+					flowPoint.halfWidth = point.width;
+					path.push_back(flowPoint);
+				}
+				return path;
+			}
+
 			namespace
 			{
 				constexpr uint32 OuterSide = terrain::constants::OuterVerticesPerPageSide;
