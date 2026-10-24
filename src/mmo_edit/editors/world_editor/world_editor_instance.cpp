@@ -1032,6 +1032,7 @@ namespace mmo
 			const Ray ray = m_camera->GetCameraToViewportRay(
 				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
 				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y, 50000.0f);
+			m_proceduralEditMode->SetCursorRay(ray);
 			if (const auto hit = m_terrain->RayIntersects(ray); hit.first)
 			{
 				m_proceduralEditMode->SetBrushPosition(hit.second.position);

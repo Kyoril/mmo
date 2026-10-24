@@ -731,6 +731,41 @@ namespace mmo
 		m_brushPositionValid = true;
 	}
 
+	void ProceduralEditMode::SetCursorRay(const Ray& ray)
+	{
+		m_cursorRay = ray;
+		m_cursorRayValid = true;
+	}
+
+	void ProceduralEditMode::BeginPlaneDrag()
+	{
+		const int32 spline = m_splineEditor.GetSelectedSpline();
+		const int32 point = m_splineEditor.GetSelectedPoint();
+		if (spline < 0 || spline >= static_cast<int32>(m_oases.size()))
+		{
+			return;
+		}
+
+		const auto& points = m_oases[spline].record.loop.points;
+		if (point < 0 || point >= static_cast<int32>(points.size()))
+		{
+			return;
+		}
+
+		// Keep the grab offset, so the point does not snap its centre to the cursor.
+		const SplinePoint& grabbed = points[point];
+		m_dragPlaneY = m_worldEditor.HasTerrain() ? m_worldEditor.GetTerrain()->GetSmoothHeightAt(grabbed.x, grabbed.z) : 0.0f;
+		m_dragOffsetX = 0.0f;
+		m_dragOffsetZ = 0.0f;
+
+		Vector3 hit;
+		if (m_cursorRayValid && IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
+		{
+			m_dragOffsetX = grabbed.x - hit.x;
+			m_dragOffsetZ = grabbed.z - hit.z;
+		}
+	}
+
 	std::vector<PathSpline*> ProceduralEditMode::GetSplines()
 	{
 		std::vector<PathSpline*> splines;
@@ -778,6 +813,11 @@ namespace mmo
 				// An inserted point is a change right away.
 				m_oases[m_selected].dirty = true;
 			}
+
+			if (m_splineEditor.IsDragging())
+			{
+				BeginPlaneDrag();
+			}
 		}
 	}
 
@@ -785,13 +825,14 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseHold(deltaSeconds);
 
-		if (!m_brushPositionValid || !m_splineEditor.IsDragging())
+		Vector3 hit;
+		if (!m_splineEditor.IsDragging() || !m_cursorRayValid || !IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
 		{
 			return;
 		}
 
 		auto splines = GetSplines();
-		if (m_splineEditor.OnMouseMoved(m_brushPosition.x, m_brushPosition.z, splines))
+		if (m_splineEditor.OnMouseMoved(hit.x + m_dragOffsetX, hit.z + m_dragOffsetZ, splines))
 		{
 			const int32 selected = m_splineEditor.GetSelectedSpline();
 			if (selected >= 0 && selected < static_cast<int32>(m_oases.size()))
@@ -805,6 +846,7 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseMoved(x, y);
 		m_brushPositionValid = false;
+		m_cursorRayValid = false;
 	}
 
 	void ProceduralEditMode::OnMouseUp(const float x, const float y)

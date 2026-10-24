@@ -5,6 +5,7 @@
 #include "world_edit_mode.h"
 #include "base/typedefs.h"
 #include "math/path_spline.h"
+#include "math/ray.h"
 #include "math/vector3.h"
 #include "pcg/oasis.h"
 #include "pcg/oasis_record.h"
@@ -60,6 +61,10 @@ namespace mmo
 		/// @brief Called by the world editor instance when the terrain raycast under the cursor succeeds.
 		/// @param position World position of the hit.
 		void SetBrushPosition(const Vector3& position);
+
+		/// @brief Called by the world editor instance with the camera ray under the cursor.
+		/// @param ray The ray from the camera through the cursor.
+		void SetCursorRay(const Ray& ray);
 
 		/// @brief Whether a spline point is being dragged (the camera must not rotate then).
 		bool IsDragging() const { return m_splineEditor.IsDragging(); }
@@ -181,6 +186,18 @@ namespace mmo
 
 		Vector3 m_brushPosition{};
 		bool m_brushPositionValid = false;
+
+		// A dragged point moves on the horizontal plane through its ground height, not along the
+		// terrain under the cursor: rim rocks hide the ground, so a terrain pick behind them
+		// would make the point jump tens of metres.
+		/// Records the grabbed point's ground height and grab offset when a drag starts.
+		void BeginPlaneDrag();
+
+		Ray m_cursorRay;
+		bool m_cursorRayValid = false;
+		float m_dragPlaneY = 0.0f;
+		float m_dragOffsetX = 0.0f;
+		float m_dragOffsetZ = 0.0f;
 
 		String m_status;
 		bool m_statusIsError = false;
