@@ -42,12 +42,13 @@ namespace mmo::pcg
 		std::vector<OwnedPlacement> placements;
 	};
 
-	/// Writes the record as chunked binary (magic PCGO, version 1). Deterministic: the same record
+	/// Writes the record as chunked binary (magic PCGO, version 2). Deterministic: the same record
 	/// produces the same bytes.
 	/// @return True on success.
 	bool WriteOasisRecord(io::Writer& writer, const OasisRecord& record);
 
 	/// Reads a record written by WriteOasisRecord.
+	/// Accepts versions 1 and 2; version 1 loop points get automatic tangents.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadOasisRecord(io::Reader& reader, OasisRecord& out);
 }

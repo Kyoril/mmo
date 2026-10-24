@@ -13,7 +13,9 @@ namespace mmo::pcg
 	{
 		/// PCGO as little endian characters.
 		constexpr uint32 MagicPcgo = 0x4F474350;
-		constexpr uint32 FormatVersion = 1;
+		/// 1: loop points x, z, width. 2: adds per-point auto flag and in/out tangent handles.
+		constexpr uint32 FormatVersion = 2;
+		constexpr uint32 MinFormatVersion = 1;
 		constexpr uint32 MaxStringLength = 1u << 20;
 
 		template<typename T>
@@ -257,6 +259,11 @@ namespace mmo::pcg
 			Put(writer, pt.x);
 			Put(writer, pt.z);
 			Put(writer, pt.width);
+			Put<uint8>(writer, pt.autoTangents ? 1 : 0);
+			Put(writer, pt.inX);
+			Put(writer, pt.inZ);
+			Put(writer, pt.outX);
+			Put(writer, pt.outZ);
 		}
 
 		PutRect(writer, record.influence);
@@ -289,7 +296,8 @@ namespace mmo::pcg
 	{
 		uint32 magic = 0;
 		uint32 version = 0;
-		if (!Get(reader, magic) || magic != MagicPcgo || !Get(reader, version) || version != FormatVersion)
+		if (!Get(reader, magic) || magic != MagicPcgo || !Get(reader, version) ||
+			version < MinFormatVersion || version > FormatVersion)
 		{
 			return false;
 		}
@@ -322,8 +330,9 @@ namespace mmo::pcg
 		uint8 closed = 0;
 		uint8 interp = 0;
 		uint32 pointCount = 0;
+		const bool hasTangents = version >= 2;
 		if (!Get(reader, closed) || !Get(reader, interp) ||
-			interp > static_cast<uint8>(SplineInterpolation::CatmullRom) || !GetCount(reader, pointCount, 12))
+			interp > static_cast<uint8>(SplineInterpolation::CatmullRom) || !GetCount(reader, pointCount, hasTangents ? 29 : 12))
 		{
 			return false;
 		}
@@ -335,6 +344,18 @@ namespace mmo::pcg
 			if (!Get(reader, pt.x) || !Get(reader, pt.z) || !Get(reader, pt.width))
 			{
 				return false;
+			}
+
+			// Version 1 points keep the defaults: automatic tangents.
+			if (hasTangents)
+			{
+				uint8 autoTangents = 1;
+				if (!Get(reader, autoTangents) || autoTangents > 1 ||
+					!Get(reader, pt.inX) || !Get(reader, pt.inZ) || !Get(reader, pt.outX) || !Get(reader, pt.outZ))
+				{
+					return false;
+				}
+				pt.autoTangents = autoTangents != 0;
 			}
 		}
 

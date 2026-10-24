@@ -7,6 +7,8 @@
 #include "binary_io/memory_source.h"
 #include "binary_io/vector_sink.h"
 
+#include <cstring>
+
 using namespace mmo;
 using namespace mmo::pcg;
 
@@ -74,6 +76,92 @@ namespace
 		io::Reader reader(source);
 		return ReadOasisRecord(reader, out);
 	}
+
+	/// Bytes per loop point in a version 1 record (x, z, width).
+	constexpr size_t V1PointBytes = 12;
+
+	/// Bytes per loop point a version 2 record adds (auto flag, in x/z, out x/z).
+	constexpr size_t V2PointExtraBytes = 17;
+
+	/// Rewrites a version 2 record of the given record into the version 1 layout: version field 1 and
+	/// loop points without tangents.
+	std::vector<char> ToVersion1(const std::vector<char>& v2, const OasisRecord& record)
+	{
+		// magic, version, id, name (length + chars), seed.
+		size_t offset = 4 + 4 + 8 + 4 + record.name.size() + 8;
+		uint32 paramsSize = 0;
+		std::memcpy(&paramsSize, &v2[offset], sizeof(paramsSize));
+		// params block, closed flag, interpolation, point count.
+		offset += 4 + paramsSize + 1 + 1 + 4;
+
+		std::vector<char> v1(v2.begin(), v2.begin() + offset);
+		const uint32 version = 1;
+		std::memcpy(&v1[4], &version, sizeof(version));
+		for (size_t i = 0; i < record.loop.points.size(); ++i)
+		{
+			v1.insert(v1.end(), v2.begin() + offset, v2.begin() + offset + V1PointBytes);
+			offset += V1PointBytes + V2PointExtraBytes;
+		}
+		v1.insert(v1.end(), v2.begin() + offset, v2.end());
+		return v1;
+	}
+}
+
+TEST_CASE("Oasis record keeps manual tangents bit-identically", "[oasis_record]")
+{
+	OasisRecord in = MakePopulated();
+	SplinePoint& manual = in.loop.points[1];
+	manual.autoTangents = false;
+	manual.inX = -1.25f;
+	manual.inZ = 3.5f;
+	manual.outX = 7.75f;
+	manual.outZ = -0.125f;
+
+	const std::vector<char> bytes = Serialize(in);
+	OasisRecord out;
+	REQUIRE(Deserialize(bytes, out));
+	REQUIRE(out.loop.points.size() == in.loop.points.size());
+	for (size_t i = 0; i < in.loop.points.size(); ++i)
+	{
+		const SplinePoint& a = in.loop.points[i];
+		const SplinePoint& b = out.loop.points[i];
+		CHECK(b.autoTangents == a.autoTangents);
+		CHECK(b.inX == a.inX);
+		CHECK(b.inZ == a.inZ);
+		CHECK(b.outX == a.outX);
+		CHECK(b.outZ == a.outZ);
+	}
+	CHECK_FALSE(out.loop.points[1].autoTangents);
+	CHECK(out.loop.points[0].autoTangents);
+
+	CHECK(Serialize(out) == bytes);
+	CHECK(Serialize(in) == bytes);
+}
+
+TEST_CASE("Oasis record reads version 1 files with automatic tangents", "[oasis_record]")
+{
+	const OasisRecord in = MakePopulated();
+	const std::vector<char> v2 = Serialize(in);
+	const std::vector<char> v1 = ToVersion1(v2, in);
+	REQUIRE(v1.size() == v2.size() - in.loop.points.size() * V2PointExtraBytes);
+
+	OasisRecord out;
+	REQUIRE(Deserialize(v1, out));
+	REQUIRE(out.loop.points.size() == 4);
+	for (const SplinePoint& p : out.loop.points)
+	{
+		CHECK(p.autoTangents);
+		CHECK(p.inX == 0.0f);
+		CHECK(p.outZ == 0.0f);
+	}
+	CHECK(out.loop.points[3].x == -10.0f);
+	CHECK(out.loop.points[2].width == 3.0f);
+	CHECK(out.name == in.name);
+	REQUIRE(out.placements.size() == 3);
+	CHECK(out.placements[2].written.asset == "Bush.hmsh");
+
+	// Written back, it is the current version.
+	CHECK(Serialize(out) == v2);
 }
 
 TEST_CASE("Oasis record round trips", "[oasis_record]")
