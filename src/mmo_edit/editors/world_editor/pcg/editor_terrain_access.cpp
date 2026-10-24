@@ -27,6 +27,23 @@ namespace mmo
 		/// Water quads per page side (one per outer vertex step).
 		constexpr int32 QuadsPerPage = VertexStepsPerPage;
 
+		/// Whether any water quad of the page is set.
+		bool HasWaterQuads(const terrain::Page& page)
+		{
+			for (uint32 z = 0; z < terrain::constants::TilesPerPage; ++z)
+			{
+				for (uint32 x = 0; x < terrain::constants::TilesPerPage; ++x)
+				{
+					if (page.GetWaterQuadMask(x, z) != 0)
+					{
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
 		/// Splits a global tile index into page and page-local tile.
 		void SplitTile(const int32 tile, int32& page, int32& local)
 		{
@@ -255,6 +272,13 @@ namespace mmo
 			if (page->GetWaterQuadMask(lx, lz) == 0 && page->GetWaterType(lx, lz) != terrain::WaterType::None)
 			{
 				page->SetWaterType(lx, lz, terrain::WaterType::None);
+			}
+
+			// A page without any water quad left needs no water material either. Clearing it undoes
+			// the material a build gave a dry page, so Delete restores the page's saved bytes.
+			if (!page->GetWaterMaterialName().empty() && page->GetWaterQuadMask(lx, lz) == 0 && !HasWaterQuads(*page))
+			{
+				page->SetWaterMaterialName(String());
 			}
 		}
 
