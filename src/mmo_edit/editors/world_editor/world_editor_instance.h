@@ -482,6 +482,33 @@ namespace mmo
 		/// @copydoc IWorldEditor::AddMeshToActiveKit
 		bool AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition) override;
 
+		/// @copydoc IWorldEditor::RemoveMapEntityById
+		bool RemoveMapEntityById(uint64 uniqueId) override;
+
+		/// @copydoc IWorldEditor::HasMapEntity
+		bool HasMapEntity(uint64 uniqueId) const override;
+
+		/// @copydoc IWorldEditor::SetMapEntityInfo
+		void SetMapEntityInfo(uint64 uniqueId, const String &name, const String &category) override;
+
+		/// @copydoc IWorldEditor::SetMapEntityTransform
+		bool SetMapEntityTransform(uint64 uniqueId, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale) override;
+
+		/// @copydoc IWorldEditor::GenerateEntityUniqueId
+		uint64 GenerateEntityUniqueId() override;
+
+		/// @copydoc IWorldEditor::GetInstancedFoliage
+		InstancedFoliage &GetInstancedFoliage() override { return *m_foliage; }
+
+		/// @copydoc IWorldEditor::MarkFoliagePageDirty
+		void MarkFoliagePageDirty(uint16 pageIndex) override;
+
+		/// @copydoc IWorldEditor::GenerateFoliageUniqueId
+		uint64 GenerateFoliageUniqueId() override;
+
+		/// @copydoc IWorldEditor::EnsurePagesLoaded
+		void EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ) override;
+
 	public:
 		// In-place furnishing: editing prop kits of placed world models
 

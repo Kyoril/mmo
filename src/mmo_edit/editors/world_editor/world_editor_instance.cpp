@@ -5069,6 +5069,156 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return nullptr;
 	}
 
+	bool WorldEditorInstance::RemoveMapEntityById(const uint64 uniqueId)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		// Never leave a selection pointing at a destroyed entity.
+		bool selected = false;
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto *selectedEntity = dynamic_cast<const SelectedMapEntity *>(selectable.get()))
+			{
+				if (&selectedEntity->GetEntity() == entity)
+				{
+					selected = true;
+					break;
+				}
+			}
+		}
+		if (selected)
+		{
+			m_selection.Clear();
+		}
+		if (entity->IsWorldModelEntity())
+		{
+			DeselectRemovedKitProps(*entity);
+		}
+
+		// Same path as deleting it by hand: OnMapEntityRemoved queues the file deletion and erases it.
+		entity->remove(*entity);
+		m_sceneOutlineWindow->Update();
+		return true;
+	}
+
+	bool WorldEditorInstance::HasMapEntity(const uint64 uniqueId) const
+	{
+		return FindMapEntity(uniqueId) != nullptr;
+	}
+
+	void WorldEditorInstance::SetMapEntityInfo(const uint64 uniqueId, const String &name, const String &category)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return;
+		}
+
+		entity->SetDisplayName(name);
+		entity->SetCategory(category);
+		m_sceneOutlineWindow->Update();
+	}
+
+	bool WorldEditorInstance::SetMapEntityTransform(const uint64 uniqueId, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		SceneNode &node = entity->GetSceneNode();
+		node.SetPosition(position);
+		node.SetOrientation(orientation);
+		node.SetScale(scale);
+		entity->MarkModified();
+		entity->transformChanged(*entity);
+		return true;
+	}
+
+	uint64 WorldEditorInstance::GenerateEntityUniqueId()
+	{
+		return m_entityFactory->GenerateUniqueId();
+	}
+
+	void WorldEditorInstance::MarkFoliagePageDirty(const uint16 pageIndex)
+	{
+		if (m_foliageEditMode)
+		{
+			m_foliageEditMode->MarkPageDirty(pageIndex);
+		}
+	}
+
+	uint64 WorldEditorInstance::GenerateFoliageUniqueId()
+	{
+		return FoliageEditMode::GenerateInstanceId();
+	}
+
+	void WorldEditorInstance::EnsurePagesLoaded(const float minX, const float minZ, const float maxX, const float maxZ)
+	{
+		if (!m_terrain)
+		{
+			return;
+		}
+
+		// Page index convention of OnMapEntityRemoved / FoliageEditMode::PageIndexFromPosition:
+		// floor(world / PageSize) + half the page count (32 on a 64 page map).
+		const int32 width = static_cast<int32>(m_terrain->GetWidth());
+		const int32 height = static_cast<int32>(m_terrain->GetHeight());
+		const int32 minPageX = std::max(0, static_cast<int32>(std::floor(std::min(minX, maxX) / terrain::constants::PageSize)) + width / 2);
+		const int32 maxPageX = std::min(width - 1, static_cast<int32>(std::floor(std::max(minX, maxX) / terrain::constants::PageSize)) + width / 2);
+		const int32 minPageZ = std::max(0, static_cast<int32>(std::floor(std::min(minZ, maxZ) / terrain::constants::PageSize)) + height / 2);
+		const int32 maxPageZ = std::min(height - 1, static_cast<int32>(std::floor(std::max(minZ, maxZ) / terrain::constants::PageSize)) + height / 2);
+
+		std::vector<PagePosition> pages;
+		for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
+		{
+			for (int32 px = minPageX; px <= maxPageX; ++px)
+			{
+				terrain::Page *page = m_terrain->GetPage(static_cast<uint32>(px), static_cast<uint32>(pz));
+				if (!page)
+				{
+					continue;
+				}
+
+				// Synchronous prepare (no-op if prepared; also clears a stale unload request).
+				page->Prepare();
+				if (!page->IsPrepared())
+				{
+					continue;
+				}
+
+				// Page::Load creates one tile per call; finish it now instead of over many frames.
+				if (!page->IsLoaded())
+				{
+					constexpr uint32 maxLoadSteps = terrain::constants::TilesPerPage * terrain::constants::TilesPerPage + 2;
+					for (uint32 step = 0; step < maxLoadSteps && !page->IsLoaded(); ++step)
+					{
+						page->Load();
+					}
+
+					if (!page->IsLoaded())
+					{
+						WLOG("Terrain page " << px << "x" << pz << " could not be loaded");
+						continue;
+					}
+
+					RegisterPageFoliage(static_cast<uint32>(px), static_cast<uint32>(pz));
+				}
+
+				pages.emplace_back(static_cast<uint32>(px), static_cast<uint32>(pz));
+			}
+		}
+
+		// Entities and authored foliage of pages streaming has not loaded yet; streaming takes them
+		// over when the pages become available.
+		ForceLoadPages(pages);
+	}
+
 	PropKitPtr WorldEditorInstance::ResolveKit(const String &kitPath) const
 	{
 		const String key = MakeKitKey(kitPath);

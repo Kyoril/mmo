@@ -1706,6 +1706,17 @@ namespace mmo
 			m_changed = true;
 		}
 
+		void Page::SetLayersAt(const unsigned int x, const unsigned int z, const uint32 packed)
+		{
+			if (m_layers.empty() || x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
+			{
+				return;
+			}
+
+			m_layers[x + z * constants::PixelsPerPage] = packed;
+			m_changed = true;
+		}
+
 		uint32 Page::GetArea(uint32 localTileX, uint32 localTileY) const
 		{
 			if (m_tileZones.empty() || localTileX >= constants::TilesPerPage || localTileY >= constants::TilesPerPage)

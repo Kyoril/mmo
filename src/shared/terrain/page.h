@@ -202,6 +202,13 @@ namespace mmo
 
 			void SetLayerAt(unsigned int x, unsigned int z, uint8 layer, float value);
 
+			/// @brief Sets the packed layer weights of a page-local splat pixel as they are (one byte
+			///        per layer, layer 0 in the low byte) and marks the page changed.
+			/// @param x Page-local pixel X (0..PixelsPerPage-1).
+			/// @param z Page-local pixel Z (0..PixelsPerPage-1).
+			/// @param packed The packed weights.
+			void SetLayersAt(unsigned int x, unsigned int z, uint32 packed);
+
 			uint32 GetArea(uint32 localTileX, uint32 localTileY) const;
 
 			void SetArea(uint32 localTileX, uint32 localTileY, uint32 area);

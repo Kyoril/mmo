@@ -27,6 +27,7 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class WorldModelInstance;
+	class InstancedFoliage;
 
 	namespace proto
 	{
@@ -157,6 +158,54 @@ namespace mmo
 		/// @param worldPosition The drop point in world space.
 		/// @return true if the mesh was added to a kit, in which case no world entity must be created.
 		virtual bool AddMeshToActiveKit(const String& meshPath, const Vector3& worldPosition) { return false; }
+
+		/// @brief Removes a loaded map entity (mesh or world model) by its unique id, exactly like
+		///        deleting it by hand: its file is deleted on the next Save() and it leaves the selection.
+		/// @param uniqueId The unique id of the entity.
+		/// @return False if no loaded entity has that id.
+		virtual bool RemoveMapEntityById(uint64 uniqueId) = 0;
+
+		/// @brief Whether a map entity with the given unique id is currently loaded.
+		/// @param uniqueId The unique id of the entity.
+		virtual bool HasMapEntity(uint64 uniqueId) const = 0;
+
+		/// @brief Sets the display name and category of a loaded map entity and marks it modified.
+		/// @param uniqueId The unique id of the entity. Unknown ids are ignored.
+		/// @param name The display name.
+		/// @param category The category.
+		virtual void SetMapEntityInfo(uint64 uniqueId, const String& name, const String& category) = 0;
+
+		/// @brief Moves a loaded map entity to a new world transform and marks it modified, like the
+		///        transform widget does. The unique id (and thus the entity file) is kept.
+		/// @param uniqueId The unique id of the entity.
+		/// @param position World position.
+		/// @param orientation World orientation.
+		/// @param scale World scale.
+		/// @return False if no loaded entity has that id.
+		virtual bool SetMapEntityTransform(uint64 uniqueId, const Vector3& position, const Quaternion& orientation, const Vector3& scale) = 0;
+
+		/// @brief Generates a fresh unique id for a map entity (the source CreateMapEntity uses for 0).
+		virtual uint64 GenerateEntityUniqueId() = 0;
+
+		/// @brief Gets the world's authored instanced foliage (trees, bushes).
+		virtual InstancedFoliage& GetInstancedFoliage() = 0;
+
+		/// @brief Marks a terrain page's authored foliage as changed so the next Save() rewrites
+		///        its .hfol file (forwards to the foliage edit mode, which owns the dirty set).
+		/// @param pageIndex The page index as FoliageEditMode::PageIndexFromPosition computes it.
+		virtual void MarkFoliagePageDirty(uint16 pageIndex) = 0;
+
+		/// @brief Generates a fresh unique id for a foliage instance (the source the foliage brush uses).
+		virtual uint64 GenerateFoliageUniqueId() = 0;
+
+		/// @brief Loads, synchronously, every terrain page intersecting the world rect (prepare +
+		///        load) together with its entities and authored foliage, so content there can be
+		///        edited and found by id. Pages outside the terrain are skipped.
+		/// @param minX Minimum world X.
+		/// @param minZ Minimum world Z.
+		/// @param maxX Maximum world X.
+		/// @param maxZ Maximum world Z.
+		virtual void EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ) = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

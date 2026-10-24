@@ -109,6 +109,14 @@ namespace mmo
 			/// @param value The layer value to set (0.0 to 1.0).
 			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value) const;
 
+			/// @brief Sets all four layer weights of a splat pixel at once, without renormalising.
+			/// @details Mirrors the value into the neighbour pages that share the pixel on a page
+			///          seam, exactly like SetLayerAt. Pages that are not prepared are skipped.
+			/// @param x The global pixel X coordinate.
+			/// @param z The global pixel Z coordinate.
+			/// @param packed The packed weights, one byte per layer (layer 0 in the low byte).
+			void SetLayersAt(uint32 x, uint32 z, uint32 packed) const;
+
 			/// @brief Gets the value of a specific layer at a world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
