@@ -51,10 +51,10 @@ cbuffer OceanRenderConstants : register(b4)
     float3 CrestColor;
     float AmbientScatter;
 
-    float3 SkyHorizonLinear;     // linear HDR sky colour at the horizon
+    float3 SkyHorizonDisplay;    // display-referred sky colour at the horizon, as authored
     float Roughness;
 
-    float3 SkyZenithLinear;      // linear HDR sky colour straight up
+    float3 SkyZenithDisplay;     // display-referred sky colour straight up, as authored
     float ReflectionStrength;
 
     float SunSpecularStrength;
@@ -66,6 +66,9 @@ cbuffer OceanRenderConstants : register(b4)
     float OceanTime;
     float WaveFadeStart;         // distance beyond which displacement starts to flatten
     float WaveFadeInverseRange;
+
+    float InverseExposure;       // 1 / exposure of the tone mapper
+    float3 _RenderPadding;
 };
 
 Texture2DArray<float4> OceanDisplacement : register(t0);
