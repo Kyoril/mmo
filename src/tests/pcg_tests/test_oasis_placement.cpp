@@ -311,11 +311,11 @@ TEST_CASE("Oasis places nothing under water", "[oasis_placement]")
 	REQUIRE(PrepareOasis(MakeCircle(40.0f), 11, OasisParams(), Flat, shape) == OasisError::None);
 	const float waterLevel = GetWaterLevel(shape);
 
-	// A trench ring around d = -5 sinks well below the water level.
+	// Two trench rings (d around -5, and across the water plant band at d around -8.5) sink below the water level.
 	const auto trenchGround = [&shape](float x, float z)
 	{
 		const float d = shape.path->SignedDistance(x, z);
-		return (d > -6.0f && d < -4.0f) ? 10.0f : 20.0f;
+		return ((d > -6.0f && d < -4.0f) || (d > -9.5f && d < -7.5f)) ? 10.0f : 20.0f;
 	};
 
 	std::vector<Placement> dry, trench;
@@ -332,6 +332,17 @@ TEST_CASE("Oasis places nothing under water", "[oasis_placement]")
 		}
 	}
 	REQUIRE(inTrenchWithoutIt > 0);
+
+	uint32 plantsInRingWithoutIt = 0;
+	for (const Placement& p : dry)
+	{
+		const float d = shape.path->SignedDistance(p.position.x, p.position.z);
+		if (p.asset.rfind("reed", 0) == 0 && d > -9.5f && d < -7.5f)
+		{
+			++plantsInRingWithoutIt;
+		}
+	}
+	REQUIRE(plantsInRingWithoutIt > 0);
 
 	uint32 foliage = 0;
 	for (const Placement& p : trench)
