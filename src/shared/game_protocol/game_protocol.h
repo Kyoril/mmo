@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000001F;
+		constexpr uint32 ProtocolVersion = 0x00000022;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -182,6 +182,7 @@ namespace mmo
 				SwapItem,
 				SwapInvItem,
 				SplitItem,
+				/// uint64 item instance GUID, uint8 count (zero removes the entire stack).
 				DestroyItem,
 
 				Loot,
@@ -487,8 +488,11 @@ namespace mmo
 				DuelRequest,
 				DuelResponse,
 
-				/// GM faction alias: uint8 (0 = Alias 1, 1 = Alias 2), selected player or self.
+				/// GM faction-template ID: uint32, applies only to the caller's own character.
 				CheatFaction,
+
+				/// GM cooldown bypass on the sender. Payload: uint8 enabled (0/1).
+				CheatNoCooldown,
 
 				/// Counter constant
 				Count_,

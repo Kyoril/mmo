@@ -3034,13 +3034,18 @@ namespace mmo
 		{
 			SendSystemMessage("Godmode is on.");
 		}
+		if (m_characterData->gmFlags & gm_flags::NoCooldown)
+		{
+			SendSystemMessage("No cooldown is on.");
+		}
 	}
 
 #ifdef MMO_WITH_DEV_COMMANDS
 	PacketParseResult Player::OnCheatGmFlag(game::IncomingPacket &packet)
 	{
 		const bool isInvisible = packet.GetId() == game::client_realm_packet::CheatInvisible;
-		const uint8 flag = isInvisible ? gm_flags::Invisible : gm_flags::Godmode;
+		const bool isNoCooldown = packet.GetId() == game::client_realm_packet::CheatNoCooldown;
+		const uint8 flag = isInvisible ? gm_flags::Invisible : (isNoCooldown ? gm_flags::NoCooldown : gm_flags::Godmode);
 
 		if (!HasGMLevel(isInvisible ? gm_level::Gm : gm_level::SeniorGm))
 		{
@@ -3049,7 +3054,7 @@ namespace mmo
 		}
 
 		uint8 enable = 0;
-		if (!(packet >> io::read<uint8>(enable)))
+		if (!(packet >> io::read<uint8>(enable)) || enable > 1)
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -3065,7 +3070,7 @@ namespace mmo
 
 		m_database.asyncRequestKeyed(m_characterData->characterId, [](bool) {}, &IDatabase::SetCharacterGmFlags, m_characterData->characterId, m_characterData->gmFlags);
 
-		SendSystemMessage(std::string(isInvisible ? "GM invisibility" : "Godmode") + (enable ? " is on." : " is off."));
+		SendSystemMessage(std::string(isInvisible ? "GM invisibility" : (isNoCooldown ? "No cooldown" : "Godmode")) + (enable ? " is on." : " is off."));
 		ForwardProxyPayload(static_cast<uint16>(packet.GetId()), { enable });
 		return PacketParseResult::Pass;
 	}
@@ -3079,6 +3084,7 @@ namespace mmo
 
 		const uint8 flags = m_characterData->gmFlags;
 		ForwardProxyPayload(game::client_realm_packet::CheatGodmode, { static_cast<uint8>((flags & gm_flags::Godmode) != 0 ? 1 : 0) });
+		ForwardProxyPayload(game::client_realm_packet::CheatNoCooldown, { static_cast<uint8>((flags & gm_flags::NoCooldown) != 0 ? 1 : 0) });
 		ForwardProxyPayload(game::client_realm_packet::CheatInvisible, { static_cast<uint8>((flags & gm_flags::Invisible) != 0 ? 1 : 0) });
 	}
 
@@ -3834,6 +3840,7 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatClassLevelUp, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatCreateObject, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatGodmode, *this, &Player::OnCheatGmFlag);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatNoCooldown, *this, &Player::OnCheatGmFlag);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatInvisible, *this, &Player::OnCheatGmFlag);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatSetInstanceVariable, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatDamage, *this, &Player::OnProxyPacket);

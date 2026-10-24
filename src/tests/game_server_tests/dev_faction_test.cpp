@@ -1,6 +1,5 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 #include "catch.hpp"
-#include "game/dev_faction.h"
 #include "game/player_faction.h"
 #include "test_unit_factory.h"
 #include "asio/io_service.hpp"
@@ -19,11 +18,11 @@ namespace
 		FactionFixture()
 		{
 			// Existing player factions: Human (template 0, faction 9) and Orc (template 7, faction 7).
-			for (uint32 alias = 0; alias < DevFactionTemplates.size(); ++alias)
+			for (const uint32 templateId : {0u, 7u})
 			{
-				auto* faction = project.factionTemplates.add(DevFactionTemplates[alias]);
-				faction->set_faction(alias == 0 ? 9 : 7);
-				faction->add_enemies(alias == 0 ? 7 : 9);
+				auto* faction = project.factionTemplates.add(templateId);
+				faction->set_faction(templateId == 0 ? 9 : 7);
+				faction->add_enemies(templateId == 0 ? 7 : 9);
 			}
 			a = test::MakeUnit(project, timers);
 			b = test::MakeUnit(project, timers);
@@ -33,23 +32,23 @@ namespace
 			{
 				unit->Set<uint32>(object_fields::Health, 1000);
 				unit->Set<uint32>(object_fields::MaxHealth, 1000);
-				unit->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[0]);
+				unit->Set<uint32>(object_fields::FactionTemplate, 0);
 			}
 		}
 	};
 }
 
-TEST_CASE("Faction aliases are mutually hostile and changes invalidate the faction cache", "[faction]")
+TEST_CASE("Project faction templates are mutually hostile and changes invalidate the faction cache", "[faction]")
 {
 	FactionFixture f;
 	CHECK(f.a->UnitIsFriendly(*f.b));
 	CHECK_FALSE(f.a->UnitIsEnemy(*f.b));
-	f.b->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[1]);
+	f.b->Set<uint32>(object_fields::FactionTemplate, 7);
 	CHECK(f.a->UnitIsEnemy(*f.b));
 	CHECK(f.b->UnitIsEnemy(*f.a));
 	CHECK_FALSE(f.a->UnitIsFriendly(*f.b));
 	CHECK_FALSE(f.b->UnitIsFriendly(*f.a));
-	f.a->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[1]);
+	f.a->Set<uint32>(object_fields::FactionTemplate, 7);
 	CHECK(f.a->UnitIsFriendly(*f.b));
 	CHECK(f.b->UnitIsFriendly(*f.a));
 	CHECK_FALSE(f.a->UnitIsEnemy(*f.b));
@@ -63,14 +62,14 @@ TEST_CASE("Player social permissions require a known matching faction regardless
 	CHECK(CanPlayerFactionsInteract(first, second));
 	CHECK_FALSE(CanPlayerFactionsInteract(first, static_cast<const proto::FactionTemplateEntry*>(nullptr)));
 	CHECK_FALSE(CanPlayerFactionsInteract(static_cast<const proto::FactionTemplateEntry*>(nullptr), second));
-	f.b->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[1]);
+	f.b->Set<uint32>(object_fields::FactionTemplate, 7);
 	CHECK_FALSE(CanPlayerFactionsInteract(first, f.b->GetFactionTemplate()));
 	CHECK_FALSE(CanPlayerFactionsInteract(f.b->GetFactionTemplate(), first));
 	auto* sameFaction = f.project.factionTemplates.add(20);
 	sameFaction->set_faction(first->faction());
 	CHECK(CanPlayerFactionsInteract(first, sameFaction));
 	// A duel's temporary hostility must not change faction-based social permissions.
-	f.b->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[0]);
+	f.b->Set<uint32>(object_fields::FactionTemplate, 0);
 	f.a->SetDuelPartner(f.b->GetGuid(), true);
 	CHECK(f.a->UnitIsEnemy(*f.b));
 	CHECK(CanPlayerFactionsInteract(f.a->GetFactionTemplate(), f.b->GetFactionTemplate()));
@@ -79,9 +78,9 @@ TEST_CASE("Player social permissions require a known matching faction regardless
 TEST_CASE("Opposing faction combat reaches zero health and raises death instead of duel defeat", "[faction]")
 {
 	FactionFixture f;
-	f.b->Set<uint32>(object_fields::FactionTemplate, DevFactionTemplates[1]);
-	SECTION("Alias 1 defeats Alias 2") {}
-	SECTION("Alias 2 defeats Alias 1") { std::swap(f.a, f.b); }
+	f.b->Set<uint32>(object_fields::FactionTemplate, 7);
+	SECTION("Human defeats Orc") {}
+	SECTION("Orc defeats Human") { std::swap(f.a, f.b); }
 	bool died = false, duelDefeat = false;
 	scoped_connection death{f.b->killed.connect([&](GameUnitS* killer) { died = killer == f.a.get(); })};
 	scoped_connection defeat{f.b->duelDefeated.connect([&]() { duelDefeat = true; })};

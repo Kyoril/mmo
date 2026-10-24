@@ -50,6 +50,8 @@ namespace mmo
 		std::string GetGameDirectory() const override;
 		bool GetKeepOpen() const override;
 		bool SaveKeepOpen(bool keepOpen) override;
+		ClientDisplaySettings GetDisplaySettings() const override;
+		bool SaveDisplaySettings(const ClientDisplaySettings& settings) override;
 		void OpenGameDirectory() override;
 		void OpenLogDirectory() override;
 		bool RepairGame() override;

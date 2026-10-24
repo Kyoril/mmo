@@ -263,6 +263,7 @@ namespace mmo
 			Key_Enter        = 0x0D,
 			Key_Shift        = 0x10,
 			Key_Control      = 0x11,
+			Key_Alt          = 0x12,
 			Key_Pause        = 0x13,
 			Key_Accept       = 0x1E,
 			Key_Escape       = 0x1B,
@@ -321,6 +322,7 @@ namespace mmo
 			case Key_Delete:      return "DEL";
 			case Key_Insert:      return "INSERT";
 			case Key_Control:     return "CONTROL";
+			case Key_Alt:         return "ALT";
 			case Key_Shift:       return "SHIFT";
 			case Key_Left:        return "LEFT";
 			case Key_Right:       return "RIGHT";
@@ -753,7 +755,7 @@ namespace mmo
 		FrameManager::Get().ResetTopFrame();
 
 		// Make the top frame element
-		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
+		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
@@ -1076,6 +1078,10 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
+		// This handler observes all unit flags, including godmode's mana-cost bypass.
+		// Refresh action-button usability even when the mana amount itself did not change.
+		FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+
 		const uint32 flags = ObjectMgr::GetActivePlayer()->Get<uint32>(object_fields::Flags);
 		const bool combatMode = (flags & unit_flags::InCombat) != 0;
 
@@ -1166,6 +1172,15 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// A modifier released without a following key is a standalone binding.
+		// Combinations are still captured on the non-modifier key's Down event.
+		const String baseName = MapBindingKeyCode(key);
+		if (m_bindings.IsCapturing() && IsModifierKeyName(baseName))
+		{
+			m_pressedKeyBindings.erase(key);
+			m_bindings.ExecuteKey(baseName, BindingKeyState::Down);
+			return true;
+		}
 		String keyName;
 		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
@@ -2327,14 +2342,18 @@ namespace mmo
 			Console::RegisterCommand(name, [this](const std::string &cmd, const std::string &args)
 			{
 				Command_Faction(cmd, args);
-			}, ConsoleCommandCategory::Gm, "Sets the selected player's faction (or your own): faction 0 = Alias 1, faction 1 = Alias 2. Opposing factions fight to death.");
+			}, ConsoleCommandCategory::Gm, "Sets your own faction template: faction <id>. Uses project faction-template IDs and their hostility rules, regardless of your selected target.");
 		}
 		Console::RegisterCommand("kill", [this](const std::string &cmd, const std::string &args)
 								 { Command_Kill(cmd, args); }, ConsoleCommandCategory::Gm, "Instantly kills the selected target (or yourself if nothing is selected).");
 		Console::RegisterCommand("revive", [this](const std::string &cmd, const std::string &args)
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
-								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity and free mana costs on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+		Console::RegisterCommand("nocooldown", [this](const std::string &cmd, const std::string &args)
+		{
+			Command_NoCooldown(cmd, args);
+		}, ConsoleCommandCategory::Gm, "Clears and prevents your skill and global cooldowns. 'nocooldown' or 'nocooldown 1' enables it, 'nocooldown 0' disables it. Cast times still apply.");
 		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
 								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
 		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
@@ -2381,6 +2400,7 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("nocooldown");
 		Console::UnregisterCommand("invis");
 		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");

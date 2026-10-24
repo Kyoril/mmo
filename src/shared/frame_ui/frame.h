@@ -213,6 +213,15 @@ namespace mmo
 		/// Sets the text of this frame.
 		virtual void SetText(std::string text);
 
+		/// Scales this frame's layout and descendants without reducing their text size.
+		void SetLayoutScale(float scale);
+
+		/// Returns the local layout multiplier (excluding ancestors and screen scaling).
+		float GetLayoutScale() const { return m_layoutScale; }
+
+		/// Returns the screen scale including this frame's inherited layout multiplier.
+		Point GetLayoutUIScale() const;
+
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.
@@ -644,6 +653,7 @@ namespace mmo
 		GeometryBuffer m_geometryBuffer;
 		/// The current size of this frame in pixels.
 		Size m_pixelSize = { 200.0f, 96.0f };
+		float m_layoutScale = 1.0f;
 		/// The parent frame (or nullptr if there is no parent frame).
 		Frame* m_parent;
 		/// Window renderer instance.

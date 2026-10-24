@@ -39,6 +39,7 @@ namespace mmo
 
 		// ~Begin RenderWindow
 		virtual void SetTitle(const std::string& title) final override;
+		void SetResizable(bool resizable) override;
 
 		virtual void Hide() final override;
 
@@ -78,5 +79,8 @@ namespace mmo
 
 		/// Whether the window currently is a borderless window covering its monitor.
 		bool m_fullScreen;
+		bool m_resizable = true;
+		uint16 m_windowedWidth = 0;
+		uint16 m_windowedHeight = 0;
 	};
 }

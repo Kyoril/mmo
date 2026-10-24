@@ -785,6 +785,11 @@ namespace mmo
 
 	void GameUnitS::SetCooldown(const uint32 spellId, const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_spellCooldowns.erase(spellId);
@@ -797,6 +802,11 @@ namespace mmo
 
 	void GameUnitS::StartDeferredSpellCooldown(const proto::SpellEntry& spell)
 	{
+		if (m_noCooldown)
+		{
+			return;
+		}
+
 		// Determine the base cooldown: prefer the spell's own cooldown, fall back to its category cooldown.
 		GameTime finalCD = spell.cooldown();
 		if (finalCD == 0)
@@ -830,6 +840,11 @@ namespace mmo
 
 	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		// Category 0 is "no category". Storing a cooldown for it would put every uncategorised
 		// spell - almost all of them - on a shared cooldown.
 		if (spellCategory == 0)
@@ -867,6 +882,11 @@ namespace mmo
 
 	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_globalCooldownEnd = 0;
@@ -898,7 +918,29 @@ namespace mmo
 
 	GameTime GameUnitS::GetGlobalCooldownDuration() const
 	{
-		return GetCombatSettings().global_cooldown_ms();
+		return m_noCooldown ? 0 : GetCombatSettings().global_cooldown_ms();
+	}
+
+	void GameUnitS::SetGodmode(const bool enable)
+	{
+		m_godmode = enable;
+		if (enable)
+		{
+			AddFlag<uint32>(object_fields::Flags, unit_flags::Godmode);
+		}
+		else
+		{
+			RemoveFlag<uint32>(object_fields::Flags, unit_flags::Godmode);
+		}
+	}
+
+	void GameUnitS::SetNoCooldown(const bool enable)
+	{
+		m_noCooldown = enable;
+		if (enable)
+		{
+			ResetCooldowns();
+		}
 	}
 
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid, bool ignoreKnownSpellCheck)

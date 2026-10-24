@@ -739,7 +739,7 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatMorph(uint16 opCode, uint32 size, io::Reader& contentReader);
 
-		/// Handles a GM request to set faction alias 0 or 1 on a player outside a duel.
+		/// Handles a GM request to set the caller's own faction-template ID outside a duel.
 		void OnCheatFaction(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to instantly kill the selected unit (or the player if nothing is targeted).
@@ -759,6 +759,12 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatGodmode(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles the client's request to enable or disable their own cooldown bypass.
+		/// @param opCode The packet opcode.
+		/// @param size The payload size in bytes.
+		/// @param contentReader The packet payload reader.
+		void OnCheatNoCooldown(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 		/// Handles the client's request to toggle game master invisibility on their own character.
 		///	@param opCode The op code of the packet.

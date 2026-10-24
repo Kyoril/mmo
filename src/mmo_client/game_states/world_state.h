@@ -610,7 +610,7 @@ namespace mmo
 
 		void Command_Morph(const std::string &cmd, const std::string &args) const;
 
-		/// Validates the faction alias (0 or 1) before requesting a server-side change.
+		/// Validates a project faction-template ID before requesting a server-side change.
 		void Command_Faction(const std::string &cmd, const std::string &args) const;
 
 		void Command_Kill(const std::string &cmd, const std::string &args) const;
@@ -618,6 +618,9 @@ namespace mmo
 		void Command_Revive(const std::string &cmd, const std::string &args) const;
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
+
+		/// Toggles GM cooldown bypass on the current player.
+		void Command_NoCooldown(const std::string &cmd, const std::string &args) const;
 
 		void Command_Invisible(const std::string &cmd, const std::string &args) const;
 

@@ -7,7 +7,7 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 12,
+		"version": 13,
 		"fingerprint": "sha256:3a0cf640eff24d010a782ccbc62cfc147406b4fecb6ceca1a138ef9096e3b568",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
@@ -138,8 +138,8 @@
 		]
 	},
 	"game": {
-		"version": 31,
-		"fingerprint": "sha256:3de597a5295fe6bc3ae3cc3559c43f6f07a305667fda6c874b6d990504c29012",
+		"version": 34,
+		"fingerprint": "sha256:a540b425733343a5767aecb5b9f8a22eb691a6cd681568ea9ba6587d166f0b4f",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -147,7 +147,7 @@
 			"src/shared/game/game.h": "sha256:701905ce17b3c5650c9e82cd50555cba21271b2a1c6a95efda9ad9ebe752e8a5",
 			"src/shared/game/mail.h": "sha256:665ffaee5b569667ca8c8a264de39f333a3475b6779175b8223bc7eeab2e2c54",
 			"src/shared/game/movement_info.h": "sha256:76a78cd18e8906426a99759b10104a524dec328fddd92c36646f4dcd4f0ee976",
-			"src/shared/game/object_type_id.h": "sha256:84019bb6272f40184089187b067fffa717923cff18d64403c6619d8f779b1f10",
+			"src/shared/game/object_type_id.h": "sha256:4fac37b57e167c7edc7261b507917f6b97bb9d131b261e7395e19c0f3ed92b3f",
 			"src/shared/game/trade_skill_data.h": "sha256:1bff308d1252a2e0a04b9ca4e54607fbcf381bb287497bdc71738bd93364afc5",
 			"src/shared/game_protocol/game_crypt.cpp": "sha256:0e29c28c573ee10abb08b313a9beaf1d1afd0f1064af07ad313ae69e6f32d9db",
 			"src/shared/game_protocol/game_crypt.h": "sha256:278f155eab32b2afb4bdbf5f2f1907c286458b355f86fa2e2c0563923c7a0e17",
@@ -156,7 +156,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:6b53c1d755d79b4e3fe1fed7237bf33b3cf5d5d8ab0d5f3dc8b3975e49866393"
+			"src/shared/game_protocol/game_protocol.h": "sha256:3749e276a77096c2ca8ecb91131de70fc100a412c508aa614671c1c9e9b940d0"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -233,6 +233,7 @@
 			"game::client_realm_packet::CheatLearnSpell = 29",
 			"game::client_realm_packet::CheatLevelUp = 59",
 			"game::client_realm_packet::CheatMorph = 133",
+			"game::client_realm_packet::CheatNoCooldown = 178",
 			"game::client_realm_packet::CheatRecharge = 30",
 			"game::client_realm_packet::CheatResetCooldowns = 164",
 			"game::client_realm_packet::CheatRestorePower = 166",
@@ -245,7 +246,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 178",
+			"game::client_realm_packet::Count_ = 179",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -802,6 +803,7 @@
 			"game::transfer_abort_reason::TooManyInstances = 3",
 			"game::transfer_abort_reason::ZoneInCombat = 4",
 			"game::unit_flags::Attacking = 8",
+			"game::unit_flags::Godmode = 64",
 			"game::unit_flags::Immune = 16",
 			"game::unit_flags::InCombat = 1",
 			"game::unit_flags::Lootable = 2",

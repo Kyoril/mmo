@@ -80,7 +80,7 @@ namespace mmo
 
 	public:
 		/// Applies this anchor point's logic to an absolute rect that is passed.
-		void ApplyToAbsRect(Rect& rect, const Rect& parentRect, bool hasOppositeAnchor);
+		void ApplyToAbsRect(Rect& rect, const Rect& parentRect, bool hasOppositeAnchor, const Point& scale);
 
 		/// 
 		float GetValueByPoint(const Rect& absRect, AnchorPoint point);

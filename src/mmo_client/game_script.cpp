@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "base/client_display_settings.h"
 #include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
@@ -1294,21 +1295,19 @@ namespace mmo
 						   }
 					   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
-					   // Returns the window resolutions available on a monitor (0-based index as in
-					   // GetDisplayMonitors), each entry being a table with { width, height, label = "WxH" },
-					   // sorted ascending.
-					   luabind::def<std::function<luabind::object(int)>>("GetScreenResolutions", [this](const int monitorIndex) -> luabind::object
+					   // Returns the supported window presets as { width, height, label = "WxH" }.
+					   // The monitor argument is retained for existing UI callers.
+					   luabind::def<std::function<luabind::object(int)>>("GetScreenResolutions", [this](const int) -> luabind::object
 					   {
 						   luabind::object result = luabind::newtable(m_luaState.get());
 
-						   const auto resolutions = GraphicsDevice::Get().GetMonitorResolutions(static_cast<uint32>(std::max(0, monitorIndex)));
 						   int i = 1;
-						   for (const auto& res : resolutions)
+						   for (const auto& res : ClientResolutions)
 						   {
 							   luabind::object entry = luabind::newtable(m_luaState.get());
-							   entry["width"] = static_cast<int>(res.first);
-							   entry["height"] = static_cast<int>(res.second);
-							   entry["label"] = std::to_string(res.first) + "x" + std::to_string(res.second);
+							   entry["width"] = static_cast<int>(res.width);
+							   entry["height"] = static_cast<int>(res.height);
+							   entry["label"] = res.label;
 							   result[i++] = entry;
 						   }
 
@@ -1528,6 +1527,7 @@ namespace mmo
 					   luabind::def("print", &Script_Print),
 
 					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
+					   luabind::def("IsControlKeyDown", Platform::IsControlKeyDown),
 					   luabind::def("IsAltKeyDown", Platform::IsAltKeyDown),
 
 					   luabind::def("UnitExists", &Script_UnitExists),
@@ -1723,6 +1723,7 @@ namespace mmo
 					   if (!spell) { return 0; }
 					   const auto player = ObjectMgr::GetActivePlayer();
 					   if (!player) { return spell->cost(); }
+					   if (player->IsGodmode() && spell->powertype() == power_type::Mana) { return 0; }
 					   int32 cost = spell->cost();
 					   cost = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), cost, spell->familyflags());
 					   return std::max(0, cost);
@@ -1860,10 +1861,19 @@ namespace mmo
 												 {
 													 return;
 												 }
-												 uint8 bag = (slot >> 8) & 0xFF;
-												 uint8 bagSlot = slot & 0xFF;
-												 this->m_realmConnector.DestroyItem(bag, bagSlot, static_cast<uint8>(count)); 
+												 if (const auto item = GetItemFromSlot("player", slot))
+												 {
+													 this->m_realmConnector.DestroyItem(item->GetGuid(), static_cast<uint8>(count));
+												 }
 											 }),
+					   luabind::def<std::function<void(const ItemHandle&)>>("DestroyItemInstance", [this](const ItemHandle& handle)
+					   {
+						   if (const auto* item = handle.Get())
+						   {
+							   // The server verifies ownership and resolves the instance's current slot.
+							   this->m_realmConnector.DestroyItem(item->GetGuid(), 0);
+						   }
+					   }),
 				   
 				   // Cursor management functions
 				   luabind::def<std::function<bool()>>("CursorHasPayload", []() -> bool

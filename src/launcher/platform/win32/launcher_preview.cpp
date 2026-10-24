@@ -3,6 +3,7 @@
 #include "launcher_preview.h"
 #include "launcher_view.h"
 #include "launcher_layout.h"
+#include "launcher_window.h"
 #include "canvas.h"
 #include "resource_data.h"
 #include "resource.h"
@@ -42,6 +43,21 @@ namespace mmo
 			{
 				return m_keepOpen;
 			}
+			ClientDisplaySettings GetDisplaySettings() const override
+			{
+				return m_displaySettings;
+			}
+			bool SaveDisplaySettings(const ClientDisplaySettings& settings) override
+			{
+				if (m_failDisplaySave)
+				{
+					return false;
+				}
+				m_displaySettings = settings;
+				return settings.resolution == NormalizeClientResolution(settings.resolution).label;
+			}
+			ClientDisplaySettings m_displaySettings;
+			bool m_failDisplaySave = false;
 			bool m_launched = false;
 			bool SetDownloadPaused(const bool paused) override
 			{
@@ -78,6 +94,59 @@ namespace mmo
 		std::filesystem::create_directories(directory, error);
 		if (error)
 		{
+			return false;
+		}
+		// Exercise the real Win32 INI persistence without touching the installation.
+		const auto previousDirectory = std::filesystem::current_path(error);
+		if (error)
+		{
+			return false;
+		}
+		const auto settingsDirectory = std::filesystem::absolute(directory, error) / ("display-settings-" + std::to_string(GetCurrentProcessId()));
+		if (error)
+		{
+			return false;
+		}
+		std::filesystem::create_directories(settingsDirectory, error);
+		if (error)
+		{
+			return false;
+		}
+		std::filesystem::current_path(settingsDirectory, error);
+		if (error)
+		{
+			return false;
+		}
+		const bool settingsValid = []
+		{
+			LauncherModel model;
+			UpdateWorker worker(model, UpdateWorkerConfig{});
+			LauncherWindow host(model, worker);
+			if (host.GetDisplaySettings().resolution != "1280x720" || !host.GetDisplaySettings().windowed)
+			{
+				return false;
+			}
+			for (const auto& resolution : ClientResolutions)
+			{
+				for (const bool windowed : { false, true })
+				{
+					if (!host.SaveDisplaySettings({ resolution.label, windowed })
+						|| host.GetDisplaySettings().resolution != resolution.label
+						|| host.GetDisplaySettings().windowed != windowed)
+					{
+						return false;
+					}
+				}
+			}
+			return !host.SaveDisplaySettings({ "800x600", true });
+		}();
+		std::filesystem::current_path(previousDirectory, error);
+		const bool restoredDirectory = !error;
+		std::filesystem::remove(settingsDirectory / "launcher.ini", error);
+		std::filesystem::remove(settingsDirectory, error);
+		if (!settingsValid || !restoredDirectory || error)
+		{
+			ELOG("Launcher display settings persistence failed");
 			return false;
 		}
 		for (const float dpi : {1.0f, 1.5f, 2.0f})
@@ -140,11 +209,63 @@ namespace mmo
 			}
 			snapshot.paused = false;
 			view.ApplySnapshot(snapshot);
-			click(Point{110, 440});
+			click(Point{400, 370});
+			if (!capture("resolution-dropdown"))
+			{
+				return false;
+			}
+			for (int32 i = 0; i < static_cast<int32>(ClientResolutions.size()); ++i)
+			{
+				if (i != 0)
+				{
+					click(Point{400, 370});
+				}
+				click(Point{400, 406 + i * 32});
+				click(Point{780, 540});
+				if (host.m_displaySettings.resolution != ClientResolutions[i].label)
+				{
+					ELOG("Resolution selection/save interaction failed");
+					return false;
+				}
+			}
+			click(Point{664, 370});
+			click(Point{780, 540});
+			if (host.m_displaySettings.windowed)
+			{
+				return false;
+			}
+			// Unsaved edits must be discarded by Cancel.
+			click(Point{664, 370});
+			click(Point{400, 370});
+			click(Point{400, 406});
+			click(Point{980, 540});
+			click(Point{780, 540});
+			if (host.m_displaySettings.windowed || host.m_displaySettings.resolution != "1920x1080")
+			{
+				ELOG("Display settings Cancel failed");
+				return false;
+			}
+			click(Point{400, 370});
+			view.OnKey(40, false);
+			view.OnKey(13, false);
+			click(Point{780, 540});
+			if (host.m_displaySettings.resolution != "1280x720")
+			{
+				ELOG("Resolution dropdown keyboard interaction failed");
+				return false;
+			}
+			click(Point{400, 370});
+			click(Point{400, 406});
+			click(Point{664, 370});
+			click(Point{110, 484});
 			click(Point{780, 540});
 			if (!host.m_keepOpen)
 			{
 				ELOG("Settings checkbox/save interaction failed");
+				return false;
+			}
+			if (host.m_displaySettings.resolution != "1280x720" || !host.m_displaySettings.windowed || !capture("display-settings-saved"))
+			{
 				return false;
 			}
 			click(Point{554, 74});
@@ -188,6 +309,14 @@ namespace mmo
 			{
 				return false;
 			}
+			host.m_failDisplaySave = true;
+			click(Point{950, 640});
+			if (host.m_launched)
+			{
+				ELOG("Play ignored a display-settings save failure");
+				return false;
+			}
+			host.m_failDisplaySave = false;
 			click(Point{950, 640});
 			if (!host.m_launched)
 			{

@@ -167,6 +167,11 @@ namespace mmo
 
 	int32 SpellCast::CalculatePowerCost(const proto::SpellEntry& spell) const
 	{
+		if (m_executor.IsGodmode() && spell.powertype() == power_type::Mana)
+		{
+			return 0;
+		}
+
 		int32 cost = spell.cost();
 
 		m_executor.ApplySpellMod(spell_mod_op::Cost, spell.id(), cost);

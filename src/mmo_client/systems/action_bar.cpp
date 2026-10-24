@@ -102,6 +102,11 @@ namespace mmo
 				return true;
 			}
 
+			if (player->IsGodmode() && spell->powertype() == power_type::Mana)
+			{
+				return true;
+			}
+
 			if (spell->powertype() != player->GetPowerType())
 			{
 				return false;

@@ -920,6 +920,9 @@ namespace mmo
 		case game::client_realm_packet::CheatGodmode:
 			OnCheatGodmode(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatNoCooldown:
+			OnCheatNoCooldown(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatInvisible:
 			OnCheatInvisible(opCode, buffer.size(), reader);
 			break;

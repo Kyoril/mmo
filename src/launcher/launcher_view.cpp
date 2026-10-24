@@ -20,6 +20,38 @@ namespace mmo
 {
 	namespace
 	{
+		constexpr Rect resolutionControl{210, 350, 510, 390};
+		constexpr Rect resolutionMenu{210, 390, 510, 390 + static_cast<int32>(ClientResolutions.size()) * 32};
+
+		// Geometric marks have stable, centered ink bounds, independent of font baselines.
+		void drawSettingsMark(Canvas& canvas, const Rect& area, const bool arrow)
+		{
+			Bitmap mark(area.GetWidth(), area.GetHeight());
+			constexpr int samples = 4;
+			for (int32 y = 0; y < mark.GetHeight(); ++y)
+			{
+				for (int32 x = 0; x < mark.GetWidth(); ++x)
+				{
+					int coverage = 0;
+					for (int sy = 0; sy < samples; ++sy)
+					{
+						for (int sx = 0; sx < samples; ++sx)
+						{
+							const float px = (x + (sx + 0.5f) / samples) * 12.0f / mark.GetWidth() - 6.0f;
+							const float py = (y + (sy + 0.5f) / samples) * 12.0f / mark.GetHeight() - 6.0f;
+							const bool inside = arrow
+								? py >= -3.0f && py <= 3.0f && std::abs(px) <= (3.0f - py) * 0.8f
+								: std::abs(std::abs(px) - std::abs(py)) <= 0.8f && std::max(std::abs(px), std::abs(py)) <= 4.5f;
+							coverage += inside ? 1 : 0;
+						}
+					}
+					mark.GetRow(y)[x] = ScaleColor(theme::HeroTitleColor,
+						static_cast<uint8>(coverage * 255 / (samples * samples)));
+				}
+			}
+			canvas.Blit(mark, Rect{0, 0, mark.GetWidth(), mark.GetHeight()}, area);
+		}
+
 		/// Every image the skin needs. Decode once so opening a page does not stall
 		/// while loading its artwork.
 		constexpr std::array<uint32, 15> RequiredImages = {
@@ -161,7 +193,13 @@ namespace mmo
 		// Disabled until the update finishes, which makes it the first thing anyone
 		// sees; the Disabled art matters as much as the Up art.
 		m_playButton.enabled = false;
-		m_playButton.onClick = [this] { m_host.LaunchGame(); };
+		m_playButton.onClick = [this]
+		{
+			if (SaveSettings())
+			{
+				m_host.LaunchGame();
+			}
+		};
 		m_pauseButton.rect = layout::PauseButton;
 		m_pauseButton.enabled = false;
 		m_pauseButton.onClick = [this]
@@ -183,6 +221,8 @@ namespace mmo
 
 		m_content.Load(m_host.GetGameDirectory());
 		m_keepOpen = m_host.GetKeepOpen();
+		m_displaySettings = m_host.GetDisplaySettings();
+		m_displaySettings.resolution = NormalizeClientResolution(m_displaySettings.resolution).label;
 		const std::array<const char*, 4> tabs{"Home", "News", "Patch Notes", "Settings"};
 		for (size_t i = 0; i < m_navigation.size(); ++i)
 		{
@@ -522,6 +562,10 @@ namespace mmo
 
 	void LauncherView::OnMouseMove(const Point& logical)
 	{
+		if (m_resolutionOpen)
+		{
+			m_pageDirty = true;
+		}
 		const Button* hit = FindButtonAt(logical);
 
 		for (Button* button : GetButtons())
@@ -550,6 +594,12 @@ namespace mmo
 
 	void LauncherView::OnMouseDown(const Point& logical)
 	{
+		if (m_resolutionOpen && !Rect{resolutionControl.left, resolutionControl.top, resolutionMenu.right, resolutionMenu.bottom}.Contains(logical))
+		{
+			m_resolutionOpen = false;
+			BuildPageButtons();
+			m_dirty = true;
+		}
 		if (Button* hit = FindButtonAt(logical))
 		{
 			hit->pressed = true;
@@ -876,6 +926,7 @@ namespace mmo
 	void LauncherView::SelectPage(const Page page)
 	{
 		m_page = page;
+		m_resolutionOpen = false;
 		m_selectedArticle = -1;
 		m_scroll = 0;
 		m_maxScroll = 0;
@@ -1001,12 +1052,26 @@ namespace mmo
 		}
 		else if (m_page == Page::Settings)
 		{
+			if (m_resolutionOpen)
+			{
+				for (int32 i = 0; i < static_cast<int32>(ClientResolutions.size()); ++i)
+				{
+					add(Rect{resolutionMenu.left, 390 + i * 32, resolutionMenu.right, 422 + i * 32}, [this, i]
+					{
+						m_displaySettings.resolution = ClientResolutions[i].label;
+						m_resolutionOpen = false;
+						m_settingsSaved = false;
+						BuildPageButtons();
+						m_dirty = true;
+					});
+				}
+			}
 			add(Rect{790, 210, 1048, 250},
 				[this]
 				{
 					m_host.OpenGameDirectory();
 				});
-			add(Rect{96, 280, 356, 322},
+			add(Rect{96, 270, 356, 306},
 				[this]
 				{
 					if (!m_host.RepairGame())
@@ -1015,7 +1080,27 @@ namespace mmo
 										   "Please wait until the current update finishes before checking your files again.");
 					}
 				});
-			add(Rect{96, 420, 1028, 464},
+			add(resolutionControl, [this]
+			{
+				m_resolutionOpen = !m_resolutionOpen;
+				for (int32 i = 0; i < static_cast<int32>(ClientResolutions.size()); ++i)
+				{
+					if (m_displaySettings.resolution == ClientResolutions[i].label)
+					{
+						m_resolutionHighlight = i;
+					}
+				}
+				BuildPageButtons();
+				m_dirty = true;
+			});
+			add(Rect{650, 350, 1030, 390}, [this]
+			{
+				m_displaySettings.windowed = !m_displaySettings.windowed;
+				m_settingsSaved = false;
+				m_pageDirty = true;
+				m_dirty = true;
+			});
+			add(Rect{96, 466, 1028, 500},
 				[this]
 				{
 					m_keepOpen = !m_keepOpen;
@@ -1031,19 +1116,15 @@ namespace mmo
 			add(Rect{716, 520, 888, 562},
 				[this]
 				{
-					m_settingsSaved = m_host.SaveKeepOpen(m_keepOpen);
-					m_pageDirty = true;
-					if (!m_settingsSaved)
-					{
-						m_host.ShowMessage("Settings",
-										   "Could not save launcher settings. Please check write permissions for the game folder.");
-					}
-					m_dirty = true;
+					SaveSettings();
 				});
 			add(Rect{916, 520, 1048, 562},
 				[this]
 				{
 					m_keepOpen = m_host.GetKeepOpen();
+					m_displaySettings = m_host.GetDisplaySettings();
+					m_resolutionOpen = false;
+					BuildPageButtons();
 					m_settingsSaved = false;
 					m_pageDirty = true;
 					m_dirty = true;
@@ -1071,8 +1152,49 @@ namespace mmo
 		m_dirty = true;
 	}
 
+	bool LauncherView::SaveSettings()
+	{
+		m_settingsSaved = m_host.SaveDisplaySettings(m_displaySettings) && m_host.SaveKeepOpen(m_keepOpen);
+		if (!m_settingsSaved)
+		{
+			m_host.ShowMessage("Settings", "Could not save launcher settings. Please check write permissions for the game folder.");
+		}
+		m_pageDirty = true;
+		m_dirty = true;
+		return m_settingsSaved;
+	}
+
 	void LauncherView::OnKey(const int32 key, const bool shift)
 	{
+		if (m_resolutionOpen && key == 9)
+		{
+			m_resolutionOpen = false;
+			BuildPageButtons();
+			// Continue tab navigation from the closed resolution control.
+			m_focus = static_cast<int32>(m_navigation.size()) + 2;
+			m_dirty = true;
+		}
+		if (m_resolutionOpen && (key == 27 || key == 13 || key == 38 || key == 40))
+		{
+			if (key == 38 || key == 40)
+			{
+				const auto count = static_cast<int32>(ClientResolutions.size());
+				m_resolutionHighlight = (m_resolutionHighlight + (key == 38 ? count - 1 : 1)) % count;
+			}
+			else
+			{
+				if (key == 13)
+				{
+					m_displaySettings.resolution = ClientResolutions[m_resolutionHighlight].label;
+					m_settingsSaved = false;
+				}
+				m_resolutionOpen = false;
+				BuildPageButtons();
+			}
+			m_pageDirty = true;
+			m_dirty = true;
+			return;
+		}
 		if (key == 9)
 		{
 			const auto buttons = GetButtons();
@@ -1424,27 +1546,54 @@ namespace mmo
 		{
 			DrawTextLine(canvas, "Settings", Rect{76, 120, 352, 164}, true);
 			DrawTextLine(canvas, "Make yourself at home", Rect{354, 128, 760, 158});
-			DrawPanel(canvas, Rect{64, 180, 1076, 350});
+			DrawPanel(canvas, Rect{64, 180, 1076, 316});
 			DrawTextLine(canvas, "Installation", Rect{96, 188, 670, 224}, true);
 			DrawTextLine(canvas, m_host.GetGameDirectory(), Rect{96, 236, 764, 264});
 			DrawPanel(canvas, Rect{790, 210, 1048, 250});
 			DrawTextLine(canvas, "Open game folder  >", Rect{806, 212, 1032, 248}, false, true);
-			DrawPanel(canvas, Rect{96, 280, 356, 322});
-			DrawTextLine(canvas, "Check and repair files", Rect{110, 282, 344, 320}, false, true);
-			DrawTextLine(canvas, "Rechecks installed files and downloads missing or changed files.", Rect{378, 282, 1048, 320});
-			DrawPanel(canvas, Rect{64, 368, 1076, 492});
-			DrawTextLine(canvas, "Launcher behavior", Rect{96, 382, 1048, 418}, true);
-			DrawPanel(canvas, Rect{98, 430, 118, 450});
+			DrawPanel(canvas, Rect{96, 270, 356, 306});
+			DrawTextLine(canvas, "Check and repair files", Rect{110, 270, 344, 306}, false, true);
+			DrawTextLine(canvas, "Rechecks installed files and downloads missing or changed files.", Rect{378, 270, 1048, 306});
+			DrawPanel(canvas, Rect{64, 328, 1076, 430});
+			DrawTextLine(canvas, "Resolution", Rect{96, 350, 194, 390});
+			DrawPanel(canvas, resolutionControl);
+			DrawTextLine(canvas, m_displaySettings.resolution, Rect{228, 352, 460, 388}, false, true);
+			drawSettingsMark(canvas, Scale(Rect{478, 364, 490, 376}), true);
+			DrawPanel(canvas, Rect{654, 360, 674, 380});
+			if (m_displaySettings.windowed)
+			{
+				drawSettingsMark(canvas, Scale(Rect{658, 364, 670, 376}), false);
+			}
+			DrawTextLine(canvas, "Windowed", Rect{692, 350, 1030, 390});
+			DrawTextLine(canvas, "Fullscreen uses your monitor's desktop size.", Rect{96, 392, 1048, 420});
+			DrawPanel(canvas, Rect{64, 442, 1076, 508});
+			DrawTextLine(canvas, "Launcher behavior", Rect{96, 440, 1048, 470}, true);
+			DrawPanel(canvas, Rect{98, 474, 118, 494});
 			if (m_keepOpen)
 			{
-				DrawTextLine(canvas, "x", Rect{102, 428, 118, 452}, false, true);
+				drawSettingsMark(canvas, Scale(Rect{102, 478, 114, 490}), false);
 			}
-			DrawTextLine(canvas, "Keep the launcher open after starting the game", Rect{136, 422, 1028, 462});
+			DrawTextLine(canvas, "Keep the launcher open after starting the game", Rect{136, 466, 1028, 500});
 			DrawTextLine(canvas, "Open launcher logs  >", Rect{96, 520, 300, 562}, false, true);
 			DrawPanel(canvas, Rect{716, 520, 888, 562});
 			DrawTextLine(canvas, m_settingsSaved ? "Saved" : "Save changes", Rect{738, 522, 880, 560}, false, true);
 			DrawPanel(canvas, Rect{916, 520, 1048, 562});
 			DrawTextLine(canvas, "Cancel", Rect{946, 522, 1038, 560});
+			if (m_resolutionOpen)
+			{
+				canvas.FillRect(Scale(resolutionMenu), FromArgb(0xFF15110E));
+				DrawPanel(canvas, resolutionMenu);
+				for (int32 i = 0; i < static_cast<int32>(ClientResolutions.size()); ++i)
+				{
+					const Rect row{resolutionMenu.left + 2, 390 + i * 32, resolutionMenu.right - 2, 422 + i * 32};
+					if (i == m_resolutionHighlight || m_pageButtons[i].hovered)
+					{
+						canvas.FillRect(Scale(row), FromArgb(0xFF51402A));
+					}
+					DrawTextLine(canvas, ClientResolutions[i].label,
+						Rect{228, row.top, 494, row.bottom}, false, m_displaySettings.resolution == ClientResolutions[i].label);
+				}
+			}
 		}
 	}
 }

@@ -47,6 +47,9 @@ namespace mmo
 		}
 
 		FrameManager::Initialize(&gameScript.GetLuaState(), m_localization);
+		// Retain the 1080p control size when possible. Smaller windows still fit the widest
+		// panels and the character window including its top offset, without stretching sockets.
+		FrameManager::Get().SetMinimumUIScale(0.5f, Size(2560.0f, 1600.0f));
 
 		FrameManager::Get().RegisterFrameRenderer("ModelRenderer", [](const std::string& name)
 			{

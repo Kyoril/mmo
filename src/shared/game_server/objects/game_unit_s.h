@@ -918,12 +918,19 @@ namespace mmo
 		bool IsAlive() const noexcept { return GetHealth() > 0; } /// Starts the regeneration countdown.
 		void StartRegeneration() const;
 
-		/// @brief Enables or disables damage immunity (developer/test cheat).
-		/// @param enable True to make this unit immune to all incoming damage.
-		void SetGodmode(bool enable) { m_godmode = enable; }
+		/// @brief Enables or disables damage immunity and free mana costs (developer/test cheat).
+		/// @param enable True to ignore incoming damage and spell mana costs.
+		void SetGodmode(bool enable);
 
 		/// @brief Whether this unit currently ignores all incoming damage.
 		bool IsGodmode() const { return m_godmode; }
+
+		/// Enables or disables cooldown bypass, clearing existing cooldowns when enabled.
+		/// @param enable True to prevent spell, category and global cooldowns.
+		void SetNoCooldown(bool enable);
+
+		/// Whether this unit casts without spell, category and global cooldowns.
+		bool IsNoCooldown() const { return m_noCooldown; }
 
 		/// Sets this unit's private duel partner; hostility starts only after the countdown.
 		void SetDuelPartner(uint64 guid, bool active);
@@ -1944,6 +1951,7 @@ public:
 		// Developer/test cheat: when true, Damage() absorbs everything without touching
 		// health, threat or procs. Only ever set by the dev-command handler.
 		bool m_godmode = false;
+		bool m_noCooldown = false;
 
 		bool m_gmInvisible = false;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.

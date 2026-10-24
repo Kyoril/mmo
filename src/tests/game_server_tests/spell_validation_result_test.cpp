@@ -18,6 +18,7 @@
 #include "base/id_generator.h"
 #include "base/timer_queue.h"
 #include "game/spell.h"
+#include "game_server/spells/spell_cast.h"
 #include "shared/proto_data/project.h"
 #include "asio/io_service.hpp"
 
@@ -145,4 +146,80 @@ TEST_CASE_METHOD(CastResultFixture, "A cast that passes validation still reports
 	const SpellCastResult result = caster->CastSpell(targetMap, *bolt, 0, false, 0, true);
 
 	CHECK(result == spell_cast_result::CastOkay);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "GM cooldown bypass allows repeated casts and disabling restores cooldowns", "[spell][gm_cheats]")
+{
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	auto victim = Spawn(*victimEntry, Vector3(5.0f, 0.0f, 0.0f));
+	bolt->set_cooldown(60000);
+	bolt->set_category(7);
+	bolt->set_categorycooldown(60000);
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+	REQUIRE(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+	REQUIRE(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::FailedNotReady);
+	caster->SetNoCooldown(true);
+	for (uint32 i = 0; i < 5; ++i)
+	{
+		CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+		CHECK_FALSE(caster->SpellHasCooldown(BoltSpell, 7, 0));
+	}
+	caster->SetNoCooldown(false);
+	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::FailedNotReady);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "Godmode casts mana spells for free even with no mana and disabling restores cost", "[spell][gm_cheats]")
+{
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	auto victim = Spawn(*victimEntry, Vector3(5.0f, 0.0f, 0.0f));
+	bolt->set_cost(35);
+	bolt->set_powertype(power_type::Mana);
+	bolt->set_cooldownflags(spell_cooldown_flags::NoGlobalCooldown);
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+	caster->Set<uint32>(object_fields::Mana, 0);
+	caster->SetGodmode(true);
+	CHECK((caster->Get<uint32>(object_fields::Flags) & unit_flags::Godmode) != 0);
+	for (uint32 i = 0; i < 5; ++i)
+	{
+		CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+		CHECK(caster->Get<uint32>(object_fields::Mana) == 0);
+	}
+	caster->SetGodmode(false);
+	CHECK((caster->Get<uint32>(object_fields::Flags) & unit_flags::Godmode) == 0);
+	caster->Set<uint32>(object_fields::Mana, 100);
+	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+	CHECK(caster->Get<uint32>(object_fields::Mana) == 65);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "Godmode leaves non-mana spell costs unchanged", "[spell][gm_cheats]")
+{
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	SpellCast cast(timers, *caster);
+	caster->SetGodmode(true);
+	bolt->set_cost(35);
+	bolt->set_powertype(power_type::Energy);
+	CHECK(cast.CalculatePowerCost(*bolt) == 35);
+	bolt->set_powertype(power_type::Health);
+	CHECK(cast.CalculatePowerCost(*bolt) == 35);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "Cooldown bypass preserves cast times and does not allow overlapping casts", "[spell][gm_cheats]")
+{
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	auto victim = Spawn(*victimEntry, Vector3(5.0f, 0.0f, 0.0f));
+	bolt->set_cooldown(60000);
+	bolt->set_cooldownflags(spell_cooldown_flags::StartOnCastStart);
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+	caster->SetNoCooldown(true);
+	REQUIRE(caster->CastSpell(targetMap, *bolt, 1500, false, 0, true) == spell_cast_result::CastOkay);
+	CHECK_FALSE(caster->SpellHasCooldown(BoltSpell, 0, 0));
+	CHECK(caster->CastSpell(targetMap, *bolt, 1500, false, 0, true) == spell_cast_result::FailedSpellInProgress);
+	caster->CancelCast(spell_interrupt_flags::Any);
 }

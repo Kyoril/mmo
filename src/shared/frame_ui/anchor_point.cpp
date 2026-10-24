@@ -67,9 +67,8 @@ namespace mmo
 			point == anchor_point::HorizontalCenter;
 	}
 
-	void Anchor::ApplyToAbsRect(Rect & rect, const Rect & parentRect, bool hasOppositeAnchor)
+	void Anchor::ApplyToAbsRect(Rect & rect, const Rect & parentRect, bool hasOppositeAnchor, const Point& scale)
 	{
-		auto scale = FrameManager::Get().GetUIScale();
 		const float scaledOffset = m_offset * (IsHorizontalPoint(m_point) ? scale.x : scale.y);
 		
 		const float offset = GetValueByPoint(parentRect, m_relativePoint) + scaledOffset;

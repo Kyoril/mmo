@@ -26,6 +26,9 @@ namespace mmo
 	public:
 		virtual void SetTitle(const std::string& title) = 0;
 
+		/// Enables or disables manual window resizing; editor-owned windows remain unaffected.
+		virtual void SetResizable(bool resizable) {}
+
 		/// @brief Takes the window off the screen, giving the display back to the desktop.
 		/// @remarks Needed before anything else may show UI of its own: a backend running in
 		///          exclusive fullscreen owns the output, so a message box raised over it can

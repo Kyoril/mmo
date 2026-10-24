@@ -12,7 +12,6 @@
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
-#include "game/dev_faction.h"
 
 namespace mmo
 {
@@ -794,16 +793,22 @@ namespace mmo
 #if MMO_WITH_DEV_COMMANDS
 	void Player::OnCheatFaction(uint16 opCode, uint32 size, io::Reader& contentReader)
 	{
-		uint8 alias = 0;
-		if (size != sizeof(alias) || !(contentReader >> io::read<uint8>(alias)) || alias >= DevFactionTemplates.size())
+		uint32 templateId = 0;
+		if (size != sizeof(templateId) || !(contentReader >> io::read<uint32>(templateId)))
 		{
-			WLOG("CheatFaction: expected alias 0 or 1");
+			WLOG("CheatFaction: expected a uint32 faction-template ID");
 			return;
 		}
-		auto* unit = GetCheatTargetUnit("CheatFaction");
-		if (!unit || !unit->IsPlayer())
+		const auto* factionTemplate = m_project.factionTemplates.getById(templateId);
+		if (!factionTemplate)
 		{
-			WLOG("CheatFaction: select a player, or clear the target to change yourself");
+			WLOG("CheatFaction: unknown faction-template ID " << templateId);
+			return;
+		}
+		auto* unit = m_character.get();
+		if (!unit)
+		{
+			WLOG("CheatFaction: your character is not available");
 			return;
 		}
 		if (unit->GetDuelPartner() != 0)
@@ -811,21 +816,15 @@ namespace mmo
 			WLOG("CheatFaction: finish or cancel the duel before changing faction");
 			return;
 		}
-		const uint32 templateId = DevFactionTemplates[alias];
-		if (!m_project.factionTemplates.getById(templateId))
-		{
-			ELOG("CheatFaction: faction template " << templateId << " is missing");
-			return;
-		}
 		unit->StopAttack();
 		unit->CancelCast(spell_interrupt_flags::Any);
 		unit->Set<uint32>(object_fields::FactionTemplate, templateId);
 		m_connector.SendPlayerFaction(unit->GetGuid(), templateId);
-		if (const auto player = m_manager.GetPlayerByCharacterGuid(unit->GetGuid()); player && player->IsTrading())
+		if (IsTrading())
 		{
-			player->CancelTradeSession(static_cast<uint8>(game::trade_close_reason::Cancelled));
+			CancelTradeSession(static_cast<uint8>(game::trade_close_reason::Cancelled));
 		}
-		DLOG("Faction " << static_cast<uint32>(alias) << " (" << DevFactionNames[alias] << ") applied to " << unit->GetName());
+		DLOG("Faction template " << templateId << " (" << factionTemplate->name() << ") applied to " << unit->GetName());
 	}
 #endif
 
@@ -846,6 +845,20 @@ namespace mmo
 
 		DLOG("GM godmode " << (enable ? "enabled" : "disabled") << " on character " << log_hex_digit(m_character->GetGuid()));
 		m_character->SetGodmode(enable != 0);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatNoCooldown(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint8 enable = 0;
+		if (!(contentReader >> io::read<uint8>(enable)) || enable > 1 || !m_character)
+		{
+			return;
+		}
+
+		m_character->SetNoCooldown(enable != 0);
+		DLOG("GM no cooldown " << (enable ? "enabled" : "disabled") << " on character " << log_hex_digit(m_character->GetGuid()));
 	}
 #endif
 

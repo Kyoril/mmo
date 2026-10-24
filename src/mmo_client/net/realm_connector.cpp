@@ -701,12 +701,12 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::SetFaction(const uint8 alias)
+	void RealmConnector::SetFaction(const uint32 factionTemplateId)
 	{
-		sendSinglePacket([alias](game::OutgoingPacket& packet)
+		sendSinglePacket([factionTemplateId](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::client_realm_packet::CheatFaction);
-			packet << io::write<uint8>(alias);
+			packet << io::write<uint32>(factionTemplateId);
 			packet.Finish();
 		});
 	}
@@ -734,6 +734,16 @@ namespace mmo
 			packet << io::write<uint8>(enable ? 1 : 0);
 			packet.Finish();
 			});
+	}
+
+	void RealmConnector::CheatNoCooldown(const bool enable)
+	{
+		sendSinglePacket([enable](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::client_realm_packet::CheatNoCooldown);
+			packet << io::write<uint8>(enable ? 1 : 0);
+			packet.Finish();
+		});
 	}
 
 	void RealmConnector::CheatInvisible(bool enable)
@@ -1012,13 +1022,12 @@ namespace mmo
 			});
 	}
 
-	void RealmConnector::DestroyItem(uint8 bag, uint8 slot, uint8 count)
+	void RealmConnector::DestroyItem(uint64 itemGuid, uint8 count)
 	{
-		sendSinglePacket([bag, slot, count](game::OutgoingPacket& packet) {
+		sendSinglePacket([itemGuid, count](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::DestroyItem);
 			packet
-				<< io::write<uint8>(bag)
-				<< io::write<uint8>(slot)
+				<< io::write<uint64>(itemGuid)
 				<< io::write<uint8>(count);
 			packet.Finish();
 			});

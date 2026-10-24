@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 12 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 31 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 34 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 13 | 2026-10-24 | CharacterData gm_flags bit 2 carries persistent no-cooldown mode to world nodes; only SeniorGm and higher retain it |
 | 12 | 2026-10-23 | World-to-realm `PlayerFactionUpdate`: uint64 character GUID and uint32 live faction template, reported after joining and after GM faction changes for social restrictions |
 | 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
@@ -121,6 +122,9 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 34 | 2026-10-24 | CheatFaction now carries a uint32 project faction-template ID instead of a uint8 alias; rebuild client, bots, and all server tiers together |
+| 33 | 2026-10-24 | DestroyItem identifies the confirmed item by uint64 instance GUID, followed by uint8 count (zero removes the whole stack), so moving it during confirmation cannot delete a replacement; rebuild client, bots, and all server tiers together |
+| 32 | 2026-10-24 | GM CheatNoCooldown client opcode (uint8 enabled); unit_flags::Godmode replicates mana-cost bypass for client cast validation and action-bar usability; rebuild client and all server tiers together |
 | 31 | 2026-10-24 | Merge the upstream 24-slot action bar payload with local duel and GM faction opcodes; rebuild client and all server tiers together |
 | 30 | 2026-10-23 | GM `CheatFaction` client opcode: uint8 alias, 0 = Alias 1, 1 = Alias 2; targets the selected player or self |
 | 29 (local branch) | 2026-10-23 | Player duels: `DuelRequest`/`DuelResponse` client opcodes and private `DuelUpdate` state notifications |
