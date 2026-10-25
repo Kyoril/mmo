@@ -8,6 +8,7 @@ target_link_libraries(frame_ui
 
 # Link external dependencies
 target_link_libraries(frame_ui
+	expat
 	freetype
 	lua
 	luabind)

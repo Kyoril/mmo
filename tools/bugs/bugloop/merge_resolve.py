@@ -118,7 +118,8 @@ class ConflictResolver:
 	ClaudeRunner, None to resolve game data only; `budget_ok()` says whether two more Claude
 	invocations fit today's budget."""
 
-	def __init__(self, git, runner=None, prompts=None, schemas=None, budget_ok=None, timeout=3600, max_usd=5.0, log=None):
+	def __init__(self, git, runner=None, prompts=None, schemas=None, budget_ok=None, timeout=3600, max_usd=5.0, log=None,
+			decoder=None):
 		self.run_git = git
 		self.runner = runner
 		self.prompts = prompts or {}
@@ -127,9 +128,19 @@ class ConflictResolver:
 		self.timeout = timeout
 		self.max_usd = max_usd
 		self.log = log or (lambda message: None)
+		# data_diff.DataDecoder: gives the game-data merge field names and types; it works without one.
+		self.decoder = decoder
 
 	def _git(self, repo, *args):
 		return self.run_git(repo, *args).stdout
+
+	def _data_schema(self, path):
+		if self.decoder is None:
+			return None
+		try:
+			return self.decoder.schema(path)
+		except Exception:  # the merge works without a schema, only less cleverly
+			return None
 
 	def _stages(self, repo, path):
 		"""{stage: blob bytes} of an unmerged path (1 base, 2 ours, 3 theirs; missing = absent on that side)."""
@@ -178,7 +189,7 @@ class ConflictResolver:
 			shown = prefix + path
 			if path.endswith(DATA_SUFFIX) and 2 in stages and 3 in stages:
 				try:
-					merged = data_merge.merge(stages.get(1), stages[2], stages[3])
+					merged = data_merge.merge(stages.get(1), stages[2], stages[3], self._data_schema(path))
 				except data_merge.DataConflict as conflict:
 					return "{}: {} changed differently on both sides ({})".format(shown, conflict, MANUAL), report
 				except ValueError:
