@@ -30,13 +30,13 @@ namespace mmo::pcg
 		float rightZ = 0.0f;
 	};
 
-	/// One copy of a section, stretched to fit its span.
+	/// One copy of a section, stretched to fit its span (or, for a corner copy, centred on its control point).
 	struct SectionCopy
 	{
-		/// Index of the control point span (segment) this copy lies in.
+		/// Index of the control point span (segment) this copy lies in; for a corner copy the index of its control point.
 		uint32 span = 0;
 
-		/// Index of the copy inside its span.
+		/// Index of the copy inside its span (0 for a corner copy).
 		uint32 copy = 0;
 
 		/// Arc distance of the copy's start from the path start.
@@ -45,8 +45,14 @@ namespace mmo::pcg
 		/// Arc length the copy covers (the section stretched to fit).
 		float stretchedLength = 0.0f;
 
-		/// Stable key of the span, derived from its two control point ids.
+		/// Stable key of the span, derived from its two control point ids; for a corner copy Hash(point id, role).
 		uint64 spanKey = 0;
+
+		/// Straight for an ordinary copy, InnerCorner / OuterCorner for a corner piece at control point `span`.
+		SectionVariantRole role = SectionVariantRole::Straight;
+
+		/// Position among the layout's copies of the same role (what sequentialVariants counts).
+		uint32 sequence = 0;
 	};
 
 	/// Result of fitting sections along a spline.
@@ -57,6 +63,14 @@ namespace mmo::pcg
 
 		/// Smallest x/z radius of curvature found; the largest float for a path without any bend.
 		float minimumBendRadius = 0.0f;
+
+		/// Per control point of the laid spline: the role of the corner piece laid there, Straight where the path
+		/// just bends (always Straight at the ends of an open path).
+		std::vector<SectionVariantRole> pointRoles;
+
+		/// Closed paths: the path length. The copies then cover [copies.front().startDistance, + loopLength), and an
+		/// arc distance below the first copy's start belongs to the copy wrapping past the path end. 0 for open paths.
+		float loopLength = 0.0f;
 	};
 
 	/// Sample step every path handed to this API must be built with, so arc distances agree between the
@@ -72,6 +86,17 @@ namespace mmo::pcg
 	/// @param sectionLength Authored length of the section along +Z; must be positive.
 	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, float sectionLength);
 
+	/// LayOutSections with corner pieces. The floor side is the path's left (-X); the path is laid as given.
+	/// Turn angle at a control point (every point of a closed path, the inner points of an open one) = signed x/z
+	/// angle between the chord arriving over the last L/2 and the chord leaving over the next L/2 (L = asset.length),
+	/// positive when turning towards the floor side. If |angle| >= asset.cornerAngleDeg and the asset has a variant of
+	/// the matching role (towards the floor = InnerCorner, away = OuterCorner), one corner copy (stretch 1) covers
+	/// [d_i - L/2, d_i + L/2] with spanKey = Hash(point id, role). Points are decided in index order; a corner falls
+	/// back to bending if it would leave less than L/2 of straight path to an earlier corner, or would not fit into
+	/// one of its spans. The straight copies of each span fill what remains (max(1, round(remaining / L)) copies).
+	/// An asset without corner variants lays exactly like the length overload.
+	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const SectionAsset& asset);
+
 	/// Upright frame at an arc distance (clamped or wrapped like SampledPath).
 	SectionFrame FrameAt(const SampledPath& path, float distance);
 
@@ -81,7 +106,8 @@ namespace mmo::pcg
 	/// @return False if the point is further than maxAcross from the path.
 	bool ProjectToPath(const SampledPath& path, float x, float z, float maxAcross, float& distance, float& across);
 
-	/// Finds the copy containing an arc distance.
+	/// Finds the copy containing an arc distance (on a closed loop a distance below the first copy's start is taken
+	/// + layout.loopLength, so it finds the corner copy wrapping past the path end).
 	/// @param localZ Receives the position inside the copy mapped to 0..sectionLength.
 	/// @return The copy, or nullptr if the distance is outside every copy.
 	const SectionCopy* FindCopy(const SectionLayout& layout, float distance, float sectionLength, float& localZ);
@@ -110,6 +136,10 @@ namespace mmo::pcg
 		float propDensity = 1.0f;
 		/// Where the centre line height comes from.
 		SectionHeightMode heightMode = SectionHeightMode::FollowSpline;
+		/// Closed paths: lay the section so that its floor side (-X) faces the loop interior, whatever the winding
+		/// (the path then runs against the control point order when the loop is clockwise). False lays it in control
+		/// point order. Ignored for open paths.
+		bool floorInside = true;
 	};
 
 	/// layerRemap[sectionLayer] = target tile layer index, or -1 = not available on that tile.
@@ -136,12 +166,17 @@ namespace mmo::pcg
 	/// A section path ready to evaluate. Filled by PrepareSectionPath; treat every member as read-only.
 	struct SectionPathShape
 	{
-		/// The spline sampled with kSectionPathSampleStep (empty until prepared).
+		/// The spline sampled with kSectionPathSampleStep (empty until prepared); reversed if `reversed`.
 		std::optional<SampledPath> path;
-		/// Copies fitted to the spline's spans.
+		/// True if the path runs against the control point order (a clockwise loop laid with floorInside).
+		bool reversed = false;
+		/// Copies fitted to the spline's spans (span indices along `path`); layout.pointRoles is in the caller's
+		/// control point order.
 		SectionLayout layout;
 		/// Copy of the section asset, so the shape does not depend on the caller keeping it alive.
 		SectionAsset asset;
+		/// Indices of the asset's variants per SectionVariantRole, ascending.
+		std::array<std::vector<uint32>, 3> variantsByRole;
 		/// Sanitised parameters (joinBlend >= 0, propDensity in 0..1).
 		SectionPathParams params;
 		/// Centre line height per path sample (spline height, or the base ground under it).
@@ -155,7 +190,8 @@ namespace mmo::pcg
 	/// Samples and lays out a section path.
 	/// @param spline Control points (at least two).
 	/// @param pointIds Stable, unique id per control point (same size as spline.points).
-	/// @param asset The section; needs at least one variant, length > 0 and halfWidth > 0.
+	/// @param asset The section; needs at least one Straight variant, length > 0 and halfWidth > 0. Corner variants are
+	///        laid at sharp control points (see the asset overload of LayOutSections).
 	/// @param params Path settings; out-of-range values are clamped.
 	/// @param baseGround Base terrain height at a world position; required for FollowGround, may be empty otherwise.
 	/// @param out Receives the shape.
@@ -170,8 +206,9 @@ namespace mmo::pcg
 	/// times sqrt(2) (jitter is per local axis), plus a 1 m margin.
 	WorldRect GetInfluenceRect(const SectionPathShape& shape);
 
-	/// Variant index of a copy: Hash(seed, spanKey, copy) % variantCount, or the copy's position in the layout
-	/// % variantCount with sequentialVariants.
+	/// Variant index of a copy, chosen among the variants of the copy's role (shape.variantsByRole): candidate
+	/// Hash(seed, spanKey, copy) % candidateCount, or copy.sequence % candidateCount with sequentialVariants. Straight
+	/// copies never get a corner variant and corner copies never a straight one. 0 if the role has no variant.
 	uint32 GetVariant(const SectionPathShape& shape, const SectionCopy& copy);
 
 	/// ProjectToPath on the shape's path, testing only the segments of the segment grid around the point. The
@@ -198,7 +235,8 @@ namespace mmo::pcg
 	/// propDensity still applies):
 	/// - kept if a hash is below keepChance x propDensity;
 	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch, clamped to the
-	///   span's arc range, and position = frame(s).position + right x localX, y = ground(x, z) + heightAboveTerrain;
+	///   span's arc range (a corner copy's own range), and position = frame(s).position + right x localX,
+	///   y = ground(x, z) + heightAboveTerrain;
 	///   the frame's direction is measured inside the span too, so a prop never depends on a neighbouring span;
 	/// - rotation = yaw of the frame and a yaw jitter (+-yawJitterDeg) about world up times the local rotation,
 	///   so props stay upright on slopes; scale x (1 +- scaleJitter);
@@ -211,7 +249,8 @@ namespace mmo::pcg
 	/// Connected prop runs (SectionVariant::runs) are laid as whole lines instead:
 	/// - chains: continuous runs (IsContinuousRun) with the same name in consecutive copies, across spans, are joined
 	///   into one chain; any other run is a chain of its own copy. A chain covers the arc range [first copy start +
-	///   startZ x stretch, last copy start + endZ x stretch] (chains never wrap around a closed path);
+	///   startZ x stretch, last copy start + endZ x stretch]. On a closed path a chain still open at the last copy
+	///   continues into the chain of the same name started by the first copy (no seam at the loop start);
 	/// - one keep roll per chain: Hash(seed, chainKey) < keepChance (of the first run) x propDensity, with chainKey =
 	///   Hash of the first copy's spanKey and copy index and the run name, so it is stable when other spans change;
 	/// - the pieces follow the offset line L(s) = frame(s).position + right(s) x run.x (the x of the run of the

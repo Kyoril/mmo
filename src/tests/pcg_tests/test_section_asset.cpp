@@ -6,6 +6,8 @@
 #include "binary_io/memory_source.h"
 #include "binary_io/vector_sink.h"
 
+#include <limits>
+
 using namespace mmo;
 using namespace mmo::pcg;
 
@@ -334,4 +336,23 @@ TEST_CASE("Section asset version 2 reads with Straight roles and the default ang
 	CHECK(loaded.variants[0].role == SectionVariantRole::Straight);
 	CHECK(loaded.variants[1].role == SectionVariantRole::Straight);
 	CHECK(loaded.variants[1].heights.values == asset.variants[1].heights.values);
+}
+
+TEST_CASE("Section asset rejects a non-finite corner angle and clamps it to 0..180", "[section_asset]")
+{
+	SectionAsset asset = MakeAsset();
+	asset.cornerAngleDeg = std::numeric_limits<float>::quiet_NaN();
+	SectionAsset loaded;
+	CHECK_FALSE(Deserialize(Serialize(asset), loaded));
+
+	asset.cornerAngleDeg = std::numeric_limits<float>::infinity();
+	CHECK_FALSE(Deserialize(Serialize(asset), loaded));
+
+	asset.cornerAngleDeg = 500.0f;
+	REQUIRE(Deserialize(Serialize(asset), loaded));
+	CHECK(loaded.cornerAngleDeg == 180.0f);
+
+	asset.cornerAngleDeg = -20.0f;
+	REQUIRE(Deserialize(Serialize(asset), loaded));
+	CHECK(loaded.cornerAngleDeg == 0.0f);
 }

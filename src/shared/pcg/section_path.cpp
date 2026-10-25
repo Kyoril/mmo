@@ -173,62 +173,194 @@ namespace mmo::pcg
 		}
 	}
 
-	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const float sectionLength)
+	namespace
 	{
-		SectionLayout layout;
-		layout.minimumBendRadius = std::numeric_limits<float>::max();
+		constexpr uint64 kCornerSalt = 0x434f524eu;
+		constexpr float kRadToDeg = 57.29577951308232f;
 
-		const size_t pointCount = spline.points.size();
-		if (pointCount < 2 || sectionLength <= 0.0f || pointIds.size() != pointCount)
+		/// Signed x/z turn angle (degrees) at an arc distance between the chord arriving over [d - reach, d] and the
+		/// chord leaving over [d, d + reach]; positive for a left turn (towards -X, the floor side).
+		float TurnAngleDeg(const SampledPath& path, const float distance, const float reach)
 		{
-			return layout;
-		}
-
-		const std::vector<SplineSample>& samples = path.GetSamples();
-
-		const bool closed = path.IsClosed();
-		const size_t spanCount = closed ? pointCount : pointCount - 1;
-		for (size_t span = 0; span < spanCount; ++span)
-		{
-			const float start = path.GetControlPointDistance(span);
-			const float end = (closed && span + 1 == pointCount) ? path.GetLength() : path.GetControlPointDistance(span + 1);
-			const float length = end - start;
-			if (length <= 0.0f)
+			const SplineSample a = path.SampleAtDistance(distance - reach);
+			const SplineSample b = path.SampleAtDistance(distance);
+			const SplineSample c = path.SampleAtDistance(distance + reach);
+			const float inX = b.x - a.x;
+			const float inZ = b.z - a.z;
+			const float outX = c.x - b.x;
+			const float outZ = c.z - b.z;
+			if (!(inX * inX + inZ * inZ > 1e-8f) || !(outX * outX + outZ * outZ > 1e-8f))
 			{
-				continue;
+				return 0.0f;
 			}
 
-			const uint32 count = std::max(1u, static_cast<uint32>(std::floor(length / sectionLength + 0.5f)));
-			const float stretched = length / static_cast<float>(count);
-			const uint64 key = Hash(pointIds[span], static_cast<int64>(pointIds[(span + 1) % pointCount]), 0, kSpanSalt);
-			for (uint32 copy = 0; copy < count; ++copy)
+			// The left of forward (fx, fz) is (-fz, fx): a positive cross product turns left.
+			const float cross = inX * outZ - inZ * outX;
+			const float dot = inX * outX + inZ * outZ;
+			return std::atan2(cross, dot) * kRadToDeg;
+		}
+
+		/// Which corner roles a layout may use.
+		struct CornerOptions
+		{
+			float angleDeg = 0.0f;
+			bool inner = false;
+			bool outer = false;
+		};
+
+		SectionLayout LayOut(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const float sectionLength,
+			const CornerOptions& corners)
+		{
+			SectionLayout layout;
+			layout.minimumBendRadius = std::numeric_limits<float>::max();
+
+			const size_t pointCount = spline.points.size();
+			if (pointCount < 2 || sectionLength <= 0.0f || pointIds.size() != pointCount)
+			{
+				return layout;
+			}
+
+			const std::vector<SplineSample>& samples = path.GetSamples();
+
+			const bool closed = path.IsClosed();
+			const size_t spanCount = closed ? pointCount : pointCount - 1;
+			layout.pointRoles.assign(pointCount, SectionVariantRole::Straight);
+			layout.loopLength = closed ? path.GetLength() : 0.0f;
+
+			const auto spanStart = [&](const size_t span)
+			{
+				return path.GetControlPointDistance(span);
+			};
+			const auto spanEnd = [&](const size_t span)
+			{
+				return (closed && span + 1 == pointCount) ? path.GetLength() : path.GetControlPointDistance(span + 1);
+			};
+
+			// Corners, decided in point order: a corner must fit into both of its spans and leave at least half a section
+			// of straight path to an earlier corner at the far end of a span, else it falls back to bending.
+			const float half = 0.5f * sectionLength;
+			std::vector<bool> isCorner(pointCount, false);
+			if ((corners.inner || corners.outer) && std::isfinite(corners.angleDeg))
+			{
+				const auto fits = [&](const size_t span, const size_t otherPoint)
+				{
+					const float length = spanEnd(span) - spanStart(span);
+					return isCorner[otherPoint] ? length - sectionLength >= half : length - half >= 0.0f;
+				};
+
+				for (size_t i = 0; i < pointCount; ++i)
+				{
+					if (!closed && (i == 0 || i + 1 == pointCount))
+					{
+						continue;
+					}
+
+					const float angle = TurnAngleDeg(path, path.GetControlPointDistance(i), half);
+					if (!(std::fabs(angle) >= corners.angleDeg))
+					{
+						continue;
+					}
+
+					const SectionVariantRole role = angle > 0.0f ? SectionVariantRole::InnerCorner : SectionVariantRole::OuterCorner;
+					if ((role == SectionVariantRole::InnerCorner && !corners.inner) || (role == SectionVariantRole::OuterCorner && !corners.outer))
+					{
+						continue;
+					}
+
+					const size_t previousSpan = i > 0 ? i - 1 : spanCount - 1;
+					const size_t previousPoint = i > 0 ? i - 1 : pointCount - 1;
+					if (fits(previousSpan, previousPoint) && fits(i, (i + 1) % pointCount))
+					{
+						isCorner[i] = true;
+						layout.pointRoles[i] = role;
+					}
+				}
+			}
+
+			std::array<uint32, 3> sequence{};
+			const auto addCorner = [&](const size_t point, const float start)
 			{
 				SectionCopy c;
-				c.span = static_cast<uint32>(span);
-				c.copy = copy;
-				c.startDistance = start + stretched * static_cast<float>(copy);
-				c.stretchedLength = stretched;
-				c.spanKey = key;
+				c.span = static_cast<uint32>(point);
+				c.copy = 0;
+				c.startDistance = start;
+				c.stretchedLength = sectionLength;
+				c.role = layout.pointRoles[point];
+				c.spanKey = Hash(pointIds[point], static_cast<int64>(c.role), 0, kCornerSalt);
+				c.sequence = sequence[static_cast<size_t>(c.role)]++;
 				layout.copies.push_back(c);
-			}
-		}
+			};
 
-		const size_t n = samples.size();
-		for (size_t i = 0; i < n; ++i)
+			for (size_t span = 0; span < spanCount; ++span)
+			{
+				// The corner at the start of a closed loop wraps past the path end; it is laid after the last span.
+				if (isCorner[span] && (span > 0 || !closed))
+				{
+					addCorner(span, spanStart(span) - half);
+				}
+
+				const float start = spanStart(span) + (isCorner[span] ? half : 0.0f);
+				const float end = spanEnd(span) - (isCorner[(span + 1) % pointCount] ? half : 0.0f);
+				const float length = end - start;
+				if (length <= 0.0f)
+				{
+					continue;
+				}
+
+				const uint32 count = std::max(1u, static_cast<uint32>(std::floor(length / sectionLength + 0.5f)));
+				const float stretched = length / static_cast<float>(count);
+				const uint64 key = Hash(pointIds[span], static_cast<int64>(pointIds[(span + 1) % pointCount]), 0, kSpanSalt);
+				for (uint32 copy = 0; copy < count; ++copy)
+				{
+					SectionCopy c;
+					c.span = static_cast<uint32>(span);
+					c.copy = copy;
+					c.startDistance = start + stretched * static_cast<float>(copy);
+					c.stretchedLength = stretched;
+					c.spanKey = key;
+					c.sequence = sequence[static_cast<size_t>(SectionVariantRole::Straight)]++;
+					layout.copies.push_back(c);
+				}
+			}
+			if (closed && isCorner[0])
+			{
+				addCorner(0, path.GetLength() - half);
+			}
+
+			const size_t n = samples.size();
+			for (size_t i = 0; i < n; ++i)
+			{
+				if (!closed && (i < kBendStride || i + kBendStride >= n))
+				{
+					continue;
+				}
+
+				float radius = 0.0f;
+				if (circumRadius(samples[(i + n - kBendStride) % n], samples[i], samples[(i + kBendStride) % n], radius))
+				{
+					layout.minimumBendRadius = std::min(layout.minimumBendRadius, radius);
+				}
+			}
+
+			return layout;
+		}
+	}
+
+	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const float sectionLength)
+	{
+		return LayOut(spline, path, pointIds, sectionLength, CornerOptions());
+	}
+
+	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const SectionAsset& asset)
+	{
+		CornerOptions corners;
+		corners.angleDeg = asset.cornerAngleDeg;
+		for (const SectionVariant& variant : asset.variants)
 		{
-			if (!closed && (i < kBendStride || i + kBendStride >= n))
-			{
-				continue;
-			}
-
-			float radius = 0.0f;
-			if (circumRadius(samples[(i + n - kBendStride) % n], samples[i], samples[(i + kBendStride) % n], radius))
-			{
-				layout.minimumBendRadius = std::min(layout.minimumBendRadius, radius);
-			}
+			corners.inner = corners.inner || variant.role == SectionVariantRole::InnerCorner;
+			corners.outer = corners.outer || variant.role == SectionVariantRole::OuterCorner;
 		}
-
-		return layout;
+		return LayOut(spline, path, pointIds, asset.length, corners);
 	}
 
 	SectionFrame FrameAt(const SampledPath& path, const float distance)
@@ -273,9 +405,14 @@ namespace mmo::pcg
 		return FinishProjection(best, maxAcross, distance, across);
 	}
 
-	const SectionCopy* FindCopy(const SectionLayout& layout, const float distance, const float sectionLength, float& localZ)
+	const SectionCopy* FindCopy(const SectionLayout& layout, float distance, const float sectionLength, float& localZ)
 	{
 		localZ = 0.0f;
+		if (layout.loopLength > 0.0f && !layout.copies.empty() && distance < layout.copies.front().startDistance)
+		{
+			distance += layout.loopLength;
+		}
+
 		if (layout.copies.empty() || distance < layout.copies.front().startDistance)
 		{
 			return nullptr;
@@ -428,6 +565,39 @@ namespace mmo::pcg
 			}
 			return out;
 		}
+
+		/// Shoelace area of a path's samples on x/z (closing segment included); positive when the interior lies on
+		/// the left of the travel direction.
+		double SignedArea(const SampledPath& path)
+		{
+			const std::vector<SplineSample>& samples = path.GetSamples();
+			const size_t n = samples.size();
+			double twice = 0.0;
+			for (size_t i = 0; i < n; ++i)
+			{
+				const SplineSample& a = samples[i];
+				const SplineSample& b = samples[(i + 1) % n];
+				twice += static_cast<double>(a.x) * b.z - static_cast<double>(b.x) * a.z;
+			}
+			return 0.5 * twice;
+		}
+
+		/// The same closed curve traversed the other way, still starting at point 0: point k = point (n - k) % n, with
+		/// its arriving and leaving handles swapped.
+		PathSpline ReverseLoop(const PathSpline& spline)
+		{
+			PathSpline out = spline;
+			const size_t n = spline.points.size();
+			for (size_t k = 0; k < n; ++k)
+			{
+				SplinePoint p = spline.points[(n - k) % n];
+				std::swap(p.inX, p.outX);
+				std::swap(p.inY, p.outY);
+				std::swap(p.inZ, p.outZ);
+				out.points[k] = p;
+			}
+			return out;
+		}
 	}
 
 	bool PrepareSectionPath(const PathSpline& spline, const std::vector<uint64>& pointIds, const SectionAsset& asset,
@@ -457,6 +627,11 @@ namespace mmo::pcg
 			error = "The section has no variants.";
 			return false;
 		}
+		if (std::none_of(asset.variants.begin(), asset.variants.end(), [](const SectionVariant& v) { return v.role == SectionVariantRole::Straight; }))
+		{
+			error = "The section has no straight variant.";
+			return false;
+		}
 		if (!(asset.length > 0.0f) || !(asset.halfWidth > 0.0f) || !(asset.sideFalloff >= 0.0f))
 		{
 			error = "The section needs a positive length and half width and a non-negative side falloff.";
@@ -476,12 +651,50 @@ namespace mmo::pcg
 			return false;
 		}
 
-		out.layout = LayOutSections(spline, *out.path, pointIds, asset.length);
+		// The floor side (-X) is the path's left; a loop running clockwise (negative area) has its interior on the right,
+		// so it is laid against the point order.
+		const size_t pointCount = spline.points.size();
+		PathSpline reversedSpline;
+		std::vector<uint64> reversedIds;
+		if (spline.closed && params.floorInside && SignedArea(*out.path) < 0.0)
+		{
+			out.reversed = true;
+			reversedSpline = ReverseLoop(spline);
+			reversedIds.resize(pointCount);
+			for (size_t k = 0; k < pointCount; ++k)
+			{
+				reversedIds[k] = pointIds[(pointCount - k) % pointCount];
+			}
+			out.path.emplace(reversedSpline, kSectionPathSampleStep);
+		}
+		const PathSpline& laid = out.reversed ? reversedSpline : spline;
+		const std::vector<uint64>& laidIds = out.reversed ? reversedIds : pointIds;
+
+		out.layout = LayOutSections(laid, *out.path, laidIds, asset);
 		if (out.layout.copies.empty())
 		{
 			out = SectionPathShape();
 			error = "No section copy fits the path.";
 			return false;
+		}
+		if (out.reversed)
+		{
+			// pointRoles in the caller's point order: laid point k is caller point (n - k) % n.
+			std::vector<SectionVariantRole> roles(pointCount, SectionVariantRole::Straight);
+			for (size_t k = 0; k < pointCount && k < out.layout.pointRoles.size(); ++k)
+			{
+				roles[(pointCount - k) % pointCount] = out.layout.pointRoles[k];
+			}
+			out.layout.pointRoles = std::move(roles);
+		}
+
+		for (size_t v = 0; v < asset.variants.size(); ++v)
+		{
+			const size_t role = static_cast<size_t>(asset.variants[v].role);
+			if (role < out.variantsByRole.size())
+			{
+				out.variantsByRole[role].push_back(static_cast<uint32>(v));
+			}
 		}
 
 		BuildSegmentGrid(*out.path, asset.halfWidth + asset.sideFalloff + kInfluenceMargin, out.segmentGrid);
@@ -545,24 +758,18 @@ namespace mmo::pcg
 
 	uint32 GetVariant(const SectionPathShape& shape, const SectionCopy& copy)
 	{
-		const size_t count = shape.asset.variants.size();
-		if (count == 0)
+		const size_t role = static_cast<size_t>(copy.role);
+		const std::vector<uint32>* candidates = role < shape.variantsByRole.size() ? &shape.variantsByRole[role] : nullptr;
+		if (candidates == nullptr || candidates->empty())
 		{
 			return 0;
 		}
 
-		if (shape.params.sequentialVariants)
-		{
-			const std::vector<SectionCopy>& copies = shape.layout.copies;
-			const auto it = std::lower_bound(copies.begin(), copies.end(), copy,
-				[](const SectionCopy& a, const SectionCopy& b) { return a.span < b.span || (a.span == b.span && a.copy < b.copy); });
-			const size_t position = (it != copies.end() && it->span == copy.span && it->copy == copy.copy)
-				? static_cast<size_t>(it - copies.begin())
-				: copy.copy;
-			return static_cast<uint32>(position % count);
-		}
-
-		return static_cast<uint32>(Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kVariantSalt) % count);
+		const size_t count = candidates->size();
+		const size_t choice = shape.params.sequentialVariants
+			? copy.sequence % count
+			: static_cast<size_t>(Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kVariantSalt) % count);
+		return (*candidates)[choice];
 	}
 
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, const float x, const float z, float /*baseHeight*/, const LayerRemapFunction& remap)
@@ -588,6 +795,12 @@ namespace mmo::pcg
 		if (falloff <= 0.0f)
 		{
 			return target;
+		}
+
+		// A closed loop whose first point has a corner: the start of the path belongs to the copy wrapping past its end.
+		if (shape.layout.loopLength > 0.0f && distance < shape.layout.copies.front().startDistance)
+		{
+			distance += shape.layout.loopLength;
 		}
 
 		float localZ = 0.0f;
@@ -811,8 +1024,10 @@ namespace mmo::pcg
 		{
 			/// Index of the first copy in the layout.
 			size_t firstCopy = 0;
-			/// The run of every copy of the chain, in order (copy firstCopy + i has runs[i]).
+			/// The run of every copy of the chain, in order (copy firstCopy + i, wrapping on a closed path, has runs[i]).
 			std::vector<const SectionRun*> runs;
+			/// Start distance of the copy of every run, ascending (+ path length for copies past a closed path's wrap).
+			std::vector<float> starts;
 			/// Arc range the pieces are laid over.
 			float start = 0.0f;
 			float end = 0.0f;
@@ -829,6 +1044,8 @@ namespace mmo::pcg
 
 			// Chains whose last copy is the previous copy and that may still grow, by run name.
 			std::map<String, size_t> open;
+			// The open chains after the first copy: a closed path's chains still open at its end continue into these.
+			std::map<String, size_t> openAtStart;
 			for (size_t c = 0; c < copies.size(); ++c)
 			{
 				const SectionCopy& copy = copies[c];
@@ -849,6 +1066,7 @@ namespace mmo::pcg
 					{
 						RunChain& chain = chains[joined->second];
 						chain.runs.push_back(&run);
+						chain.starts.push_back(copy.startDistance);
 						chain.end = copy.startDistance + run.endZ * stretch;
 						nextOpen.emplace(run.name, joined->second);
 						open.erase(joined);
@@ -858,6 +1076,7 @@ namespace mmo::pcg
 					RunChain chain;
 					chain.firstCopy = c;
 					chain.runs.push_back(&run);
+					chain.starts.push_back(copy.startDistance);
 					chain.start = copy.startDistance + run.startZ * stretch;
 					chain.end = copy.startDistance + run.endZ * stretch;
 					chain.key = Hash(Hash(copy.spanKey, copy.copy, 0, kRunChainSalt), static_cast<int64>(HashName(run.name)), 0, kRunChainSalt);
@@ -868,6 +1087,42 @@ namespace mmo::pcg
 					}
 				}
 				open = std::move(nextOpen);
+				if (c == 0)
+				{
+					openAtStart = open;
+				}
+			}
+
+			// Closed paths have no seam: a chain open at the last copy continues into the chain of the same name that
+			// the first copy started (unless that is the same chain, which then already rings the whole loop).
+			if (shape.path && shape.path->IsClosed() && copies.size() > 1)
+			{
+				const float length = shape.path->GetLength();
+				std::vector<size_t> absorbed;
+				for (const auto& tail : open)
+				{
+					const auto head = openAtStart.find(tail.first);
+					if (head == openAtStart.end() || head->second == tail.second)
+					{
+						continue;
+					}
+
+					RunChain& into = chains[tail.second];
+					const RunChain& from = chains[head->second];
+					into.runs.insert(into.runs.end(), from.runs.begin(), from.runs.end());
+					for (const float start : from.starts)
+					{
+						into.starts.push_back(start + length);
+					}
+					into.end = from.end + length;
+					absorbed.push_back(head->second);
+				}
+
+				std::sort(absorbed.begin(), absorbed.end());
+				for (auto it = absorbed.rbegin(); it != absorbed.rend(); ++it)
+				{
+					chains.erase(chains.begin() + static_cast<std::ptrdiff_t>(*it));
+				}
 			}
 			return chains;
 		}
@@ -888,11 +1143,9 @@ namespace mmo::pcg
 			const SectionRun& RunAt(const float distance) const
 			{
 				// Last copy of the chain whose start is not beyond the distance.
-				const std::vector<SectionCopy>& copies = m_shape.layout.copies;
-				const auto first = copies.begin() + static_cast<std::ptrdiff_t>(m_chain.firstCopy) + 1;
-				const auto last = copies.begin() + static_cast<std::ptrdiff_t>(m_chain.firstCopy + m_chain.runs.size());
-				const auto it = std::upper_bound(first, last, distance,
-					[](const float value, const SectionCopy& copy) { return value < copy.startDistance; });
+				const std::vector<float>& starts = m_chain.starts;
+				const auto first = starts.begin() + 1;
+				const auto it = std::upper_bound(first, starts.end(), distance);
 				return *m_chain.runs[static_cast<size_t>(it - first)];
 			}
 
@@ -1137,9 +1390,11 @@ namespace mmo::pcg
 					scaleFactor = std::max(kMinScaleFactor, 1.0f + HashRange(Hash(h, 5), -scaleJitter, scaleJitter));
 				}
 
-				// Clamped to the span so a jittered prop never takes its frame from a neighbouring span.
-				const float spanStart = path.GetControlPointDistance(copy.span);
-				const float spanEnd = path.GetControlPointDistance(copy.span + 1);
+				// Clamped to the span so a jittered prop never takes its frame from a neighbouring span; a corner copy
+				// stays inside its own range around the corner point.
+				const bool corner = copy.role != SectionVariantRole::Straight;
+				const float spanStart = corner ? copy.startDistance : path.GetControlPointDistance(copy.span);
+				const float spanEnd = corner ? copy.startDistance + copy.stretchedLength : path.GetControlPointDistance(copy.span + 1);
 				const float s = std::clamp(copy.startDistance + localZ * stretch, spanStart, std::max(spanStart, spanEnd));
 				const SectionFrame frame = FrameInRange(path, s, spanStart, spanEnd);
 				yaw += std::atan2(frame.forwardX, frame.forwardZ);

@@ -152,7 +152,8 @@ namespace mmo::pcg
 	bool WriteSectionAsset(io::Writer& writer, const SectionAsset& asset);
 
 	/// Reads an asset written by WriteSectionAsset. Version 1 assets (from before runs) read with no runs,
-	/// versions 1 and 2 read with all roles Straight and the default corner angle.
+	/// versions 1 and 2 read with all roles Straight and the default corner angle. A version 3 corner angle is clamped
+	/// to 0..180; a non-finite one counts as corrupt data.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadSectionAsset(io::Reader& reader, SectionAsset& out);
 

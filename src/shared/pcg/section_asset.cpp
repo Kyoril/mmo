@@ -461,10 +461,12 @@ namespace mmo::pcg
 
 		if (version >= 3)
 		{
-			if (!Get(reader, out.cornerAngleDeg))
+			// A non-finite angle is corrupt data; a finite one is clamped to the range a turn angle can have.
+			if (!Get(reader, out.cornerAngleDeg) || !std::isfinite(out.cornerAngleDeg))
 			{
 				return false;
 			}
+			out.cornerAngleDeg = std::clamp(out.cornerAngleDeg, 0.0f, 180.0f);
 			for (SectionVariant& v : out.variants)
 			{
 				uint8 role = 0;
