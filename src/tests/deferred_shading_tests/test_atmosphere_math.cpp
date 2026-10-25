@@ -108,3 +108,25 @@ TEST_CASE("Scatter phase is isotropic at zero anisotropy and forward-peaked othe
 	REQUIRE(awayFromSun < 1.0f);
 	REQUIRE(awayFromSun > 0.0f);
 }
+
+TEST_CASE("Hue-preserving inverse tonemap keeps saturated sky colours from blowing apart", "[atmosphere]")
+{
+	// The Sands of Korash dawn horizon. Per channel, red came out about 30x green; reflected by the
+	// ocean that read as deep red water under a pale orange sky.
+	float linear[3];
+	mmo::atmosphere::InverseTonemapPreservingHue(1.0f, 0.58f, 0.30f, linear);
+
+	CHECK(linear[0] == Approx(mmo::atmosphere::InverseTonemap(1.0f)));
+	CHECK(linear[0] / linear[1] == Approx(std::pow(1.0f / 0.58f, mmo::atmosphere::Gamma)).epsilon(1e-3));
+	CHECK(linear[0] / linear[1] < 4.0f);
+	CHECK(linear[1] / linear[2] == Approx(std::pow(0.58f / 0.30f, mmo::atmosphere::Gamma)).epsilon(1e-3));
+
+	// Grey is unchanged from the per-channel inverse.
+	mmo::atmosphere::InverseTonemapPreservingHue(0.5f, 0.5f, 0.5f, linear);
+	CHECK(linear[0] == Approx(mmo::atmosphere::InverseTonemap(0.5f)));
+	CHECK(linear[2] == Approx(mmo::atmosphere::InverseTonemap(0.5f)));
+
+	mmo::atmosphere::InverseTonemapPreservingHue(0.0f, -0.1f, 0.0f, linear);
+	CHECK(linear[0] == 0.0f);
+	CHECK(linear[1] == 0.0f);
+}

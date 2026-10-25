@@ -224,3 +224,27 @@ TEST_CASE("Profile cache maps unknown ids and id 0 to the shared Default", "[env
 	cache.Clear();
 	CHECK(cache.Get(5)->exposure == Approx(2.0f));
 }
+
+TEST_CASE("Auto tangents never overshoot the keys after a steep drop", "[environment]")
+{
+	// The Sands of Korash dusk horizon: the plain Catmull-Rom average dipped the red channel below
+	// zero between 0.83 and 0.97, which the sky drew as a purple band around 21:30.
+	const ColorCurve curve = MakeEnvironmentCurve({
+		{ 0.74f, Vector4(1.0f, 0.52f, 0.25f, 1.0f) },
+		{ 0.78f, Vector4(0.45f, 0.2f, 0.1f, 1.0f) },
+		{ 0.83f, Vector4(0.03f, 0.04f, 0.08f, 1.0f) },
+		{ 0.97f, Vector4(0.01f, 0.01f, 0.02f, 1.0f) },
+	});
+
+	for (float time = 0.74f; time <= 0.97f; time += 0.005f)
+	{
+		const Vector4 color = curve.Evaluate(time);
+		CHECK(color.x >= 0.01f - 1e-5f);
+		CHECK(color.y >= 0.01f - 1e-5f);
+		CHECK(color.z >= 0.02f - 1e-5f);
+	}
+
+	const Vector4 night = curve.Evaluate(0.894f);
+	CHECK(night.x <= 0.03f + 1e-5f);
+	CHECK(night.z <= 0.08f + 1e-5f);
+}

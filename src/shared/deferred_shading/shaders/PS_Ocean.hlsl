@@ -18,6 +18,7 @@
 
 Texture2D SceneColorTex : register(t30);   // kSceneColorTextureSlot
 Texture2D SceneDepthTex : register(t31);   // kSceneDepthTextureSlot
+Texture2DArray<float4> OceanSkyMap : register(t3); // sky as drawn, by azimuth x elevation (CS_OceanSkyCapture)
 
 struct PixelIn
 {
@@ -55,10 +56,91 @@ float3 LoadSceneColor(float2 uv)
     return any((asuint(color) & 0x7fffffffu) >= 0x7f800000u) ? float3(0.0f, 0.0f, 0.0f) : min(color, 1e4f);
 }
 
+// The on-screen sky around uv, blurred by a rough surface: five taps spread by the roughness, each
+// counted only where it hits sky. A tap on a distant dune or headland would otherwise mix sand into
+// the reflection and outline every wave facet that straddles the horizon. rgb = sky colour,
+// a = how much of the footprint was sky, faded out toward the screen edges.
+float4 LoadScreenSky(float2 uv, float2 spread, float2 targetSize)
+{
+    const float2 offsets[5] = { float2(0.0f, 0.0f), float2(spread.x, 0.0f), float2(-spread.x, 0.0f), float2(0.0f, spread.y), float2(0.0f, -spread.y) };
+    const float weights[5] = { 0.4f, 0.15f, 0.15f, 0.15f, 0.15f };
+    float3 color = float3(0.0f, 0.0f, 0.0f);
+    float coverage = 0.0f;
+    [unroll]
+    for (int i = 0; i < 5; ++i)
+    {
+        float2 tapUv = saturate(uv + offsets[i]);
+        if (LoadSceneDistance(int2(tapUv * (targetSize - 1.0f))) >= NO_SCENE_DEPTH)
+        {
+            color += LoadSceneColor(tapUv) * weights[i];
+            coverage += weights[i];
+        }
+    }
+
+    float2 edge = saturate((1.0f - abs(uv * 2.0f - 1.0f)) * 8.0f);
+    return float4(color / max(coverage, 1e-4f), coverage * edge.x * edge.y);
+}
+
+// Display colour to linear HDR, inverting only the brightest channel and keeping the hue. Twin of
+// atmosphere::InverseTonemapPreservingHue: the water scales this by Fresnel before the tonemap, and a
+// per-channel inverse blows saturated colours near 1.0 apart (a dawn horizon came out red 30x green).
+float3 InverseTonemapPreservingHue(float3 display)
+{
+    float peak = max(max(display.r, display.g), max(display.b, 0.0f));
+    if (peak <= 0.0f)
+    {
+        return float3(0.0f, 0.0f, 0.0f);
+    }
+
+    float y = pow(min(peak, 0.999f), 2.2f);
+    const float a = 2.51f;
+    const float b = 0.03f;
+    const float c = 2.43f;
+    const float d = 0.59f;
+    const float e = 0.14f;
+    float qa = y * c - a;
+    float qb = y * d - b;
+    float qc = y * e;
+    float linearPeak = (-qb - sqrt(max(qb * qb - 4.0f * qa * qc, 0.0f))) / (2.0f * qa);
+    return pow(saturate(display / peak), 2.2f) * linearPeak;
+}
+
+// Linear HDR sky along the authored gradient at blend t (0 = horizon, 1 = zenith). Blended in display
+// space and inverted after, as the sky material does: blending HDR colours let a dawn horizon at
+// display 1.0, far brighter in HDR than the zenith, turn every reflected direction gold.
+float3 SkyGradient(float t)
+{
+    return InverseTonemapPreservingHue(lerp(SkyHorizonDisplay, SkyZenithDisplay, t)) * InverseExposure;
+}
+
+// Distance PS_FogComposite fogs sky pixels over (VolumetricFogSettings::SkyDistance).
+static const float OCEAN_SKY_FOG_DISTANCE = 2000.0f;
+
+// The sky gradient as PS_FogComposite draws it: height fog and sun haze over the whole sky, then the
+// distance fog up to the sky band. A hazy dawn sky is drawn pale cream from the horizon up although
+// its authored colours are saturated orange; without the fog the water reflected orange-brown
+// wherever no sky was on screen to sample (looking down at the sea).
 float3 SkyRadiance(float3 direction)
 {
     float up = saturate(direction.y);
-    return lerp(SkyHorizonLinear, SkyZenithLinear, pow(up, 0.45f));
+    float3 sky = SkyGradient(pow(up, 0.45f));
+    float transmittance = exp(-FogOpticalDepth(CameraPosition.y, up, OCEAN_SKY_FOG_DISTANCE));
+    sky = sky * transmittance + FogSource(dot(direction, SunDirection), 1.0f) * (1.0f - transmittance);
+    return ApplyDistanceFog(sky, DistanceFogSkyAmount(up));
+}
+
+// The sky the water reflects in a direction: as it was last drawn on screen (CS_OceanSkyCapture), and
+// the authored gradient only where that direction has not been seen yet. The drawn sky is mostly fog
+// and sun haze; the gradient alone made the sea change colour with the camera pitch, as soon as the
+// reflected rays left the screen.
+float3 ReflectedSky(float3 direction)
+{
+    float u = atan2(direction.z, direction.x) / (2.0f * OCEAN_PI) + 0.5f;
+    float v = clamp(sqrt(saturate(direction.y)), 0.5f / 16.0f, 1.0f - 0.5f / 16.0f);
+    // rgb is zero where a is: rgb / a averages only the texels that hold sky.
+    float4 captured = OceanSkyMap.SampleLevel(OceanWrapSampler, float3(u, v, 0.0f), 0.0f);
+    float coverage = saturate(captured.a);
+    return lerp(SkyRadiance(direction), captured.rgb / max(captured.a, 1e-4f), coverage);
 }
 
 // Karis' analytic fit of the split-sum environment BRDF.
@@ -350,23 +432,47 @@ float4 main(PixelIn input) : SV_Target
 
     // Reflect the sky that is actually on screen (clouds, sun haze, the fogged horizon) where the
     // reflected ray leaves the screen through a sky pixel; the gradient only fills in elsewhere.
-    float3 reflection = SkyRadiance(r);
+    float3 reflection = ReflectedSky(r);
     {
+        // Looking down at the sea the reflected ray points above the top of the screen, so the
+        // authored gradient would fill nearly all of it - unfogged, and far more saturated than the
+        // hazy sky actually drawn. The sky low over the horizon in the same direction is almost
+        // always on screen then (off the side of the screen, its nearest column stands in); a few
+        // heights are tried, since the lowest one may sit behind a distant dune.
+        float4 sky = float4(0.0f, 0.0f, 0.0f, 0.0f);
         float2 skyUv;
         float skyDistance;
-        if (ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance)
-            && LoadSceneDistance(int2(skyUv * targetSize)) >= NO_SCENE_DEPTH)
+        float2 spread = roughness * float2(0.06f, 0.035f);
+        if (ProjectToScreen(CameraPosition + r * 20000.0f, targetSize, skyUv, skyDistance))
         {
-            // A rough surface reflects a blurred sky: five taps spread by the roughness.
-            float2 spread = roughness * float2(0.06f, 0.035f);
-            float3 sky = LoadSceneColor(skyUv) * 0.4f;
-            sky += LoadSceneColor(skyUv + float2(spread.x, 0.0f)) * 0.15f;
-            sky += LoadSceneColor(skyUv - float2(spread.x, 0.0f)) * 0.15f;
-            sky += LoadSceneColor(skyUv + float2(0.0f, spread.y)) * 0.15f;
-            sky += LoadSceneColor(skyUv - float2(0.0f, spread.y)) * 0.15f;
-            float2 edge = saturate((1.0f - abs(skyUv * 2.0f - 1.0f)) * 8.0f);
-            reflection = lerp(reflection, sky, edge.x * edge.y);
+            sky = LoadScreenSky(skyUv, spread, targetSize);
         }
+
+        const float lowHeights[3] = { 0.06f, 0.12f, 0.2f };
+        [unroll]
+        for (int i = 0; i < 3; ++i)
+        {
+            if (sky.a < 0.99f)
+            {
+                float3 low = normalize(float3(r.x, min(r.y, lowHeights[i]), r.z));
+                float4 clipPos = mul(mul(float4(CameraPosition + low * 20000.0f, 1.0f), matView), matProj);
+                if (clipPos.w > 1e-4f)
+                {
+                    float2 ndc = clipPos.xy / clipPos.w;
+                    if (abs(ndc.y) <= 0.95f)
+                    {
+                        ndc.x = clamp(ndc.x, -0.85f, 0.85f);
+                        float4 candidate = LoadScreenSky(float2(ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f), spread, targetSize);
+                        if (candidate.a > sky.a)
+                        {
+                            sky = candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        reflection = lerp(reflection, sky.rgb, sky.a);
     }
     if (viewDistance < 600.0f && ReflectionStrength > 0.0f)
     {
@@ -417,7 +523,7 @@ float4 main(PixelIn input) : SV_Target
     // moonlit water. The sky this very pixel reflects (on-screen sky, scene or gradient) is the best
     // estimate of that radiance; take whichever is brighter, mostly neutral so the foam stays white.
     const float3 luminanceWeights = float3(0.2126f, 0.7152f, 0.0722f);
-    float3 skyIrradiance = max(lerp(SkyHorizonLinear, SkyZenithLinear, 0.5f), reflection);
+    float3 skyIrradiance = max(SkyGradient(0.5f), reflection);
     float3 ambientIrradiance = max(CameraAmbientColor, skyIrradiance);
     float3 foamAmbient = lerp(dot(ambientIrradiance, luminanceWeights).xxx, ambientIrradiance, 0.35f);
     float3 foamColor = FoamBrightness * (sunRadiance * sunAbove * foamNDotL * (1.0f / OCEAN_PI) + foamAmbient);

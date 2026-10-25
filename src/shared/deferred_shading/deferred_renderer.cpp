@@ -540,6 +540,10 @@ namespace mmo
             m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
             m_device.SetViewport(0, 0, m_gBuffer.GetWidth(), m_gBuffer.GetHeight(), 0.0f, 1.0f);
 
+            // Only now: the scene colour copy may still have been a render target above, and D3D11
+            // reads an SRV of a bound render target as zeros.
+            m_oceanPass->CaptureSky(camera, *m_sceneColorCopy, m_gBuffer.GetNormalRT());
+
             // Expose the opaque scene's linear depth to forward/translucent materials so they can
             // sample SceneDepth (depth-based effects like shoreline softening, depth-tinted water).
             // The G-buffer normal RT stores linear view-space depth in its alpha channel (see the

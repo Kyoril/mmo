@@ -149,8 +149,10 @@ namespace mmo
 			/// Sets the state of a world object.
 			/// Targets: NAMED_OBJECT; Data: <NEW-STATE>; Texts: NONE;
 			SetWorldObjectState = 3,
-			/// Activates or deactivates a creature or object spawner.
-			/// Targets: NAMED_CREATURE/NAMED_OBJECT; Data: <0/1>; Texts: NONE;
+			/// Activates or deactivates a creature or object spawner. Deactivating only stops further
+			/// spawns; with DESPAWN set, a creature spawner also removes the creatures it has out
+			/// (those in combat stay until they die or are reset).
+			/// Targets: NAMED_CREATURE/NAMED_OBJECT; Data: <0/1>, [<DESPAWN:0/1>]; Texts: NONE;
 			SetSpawnState = 4,
 			/// Activates or deactivates respawn of a creature or object spawner.
 			/// Targets: NAMED_CREATURE/NAMED_OBJECT; Data: <0/1>; Texts: NONE;
@@ -289,6 +291,12 @@ namespace mmo
 			/// day on a 12-hour clock (1 to 12), which is how bells strike the hour. INTERVAL-MS is the
 			/// time between two starts and defaults to 3000.
 			PlaySound = 38,
+
+			/// Executes one of several triggers, picked at random with equal chance, e.g. a market
+			/// trader calling out one of a handful of lines. The picked trigger still checks its own
+			/// probability and condition.
+			/// Targets: NONE; Data: <TRIGGER-ID>, [<TRIGGER-ID>...]; Texts: NONE;
+			RandomTrigger = 39,
 
 			Invalid,
 			Count_ = Invalid

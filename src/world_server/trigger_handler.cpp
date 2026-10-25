@@ -149,6 +149,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(ClearFollowTarget)
 				MMO_HANDLE_TRIGGER_ACTION(PlaySpellVisual)
 				MMO_HANDLE_TRIGGER_ACTION(PlaySound)
+				MMO_HANDLE_TRIGGER_ACTION(RandomTrigger)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -299,6 +300,32 @@ namespace mmo
 		}
 
 		// Execute another trigger
+		ExecuteTrigger(*trigger, context, 0);
+	}
+
+	void TriggerHandler::HandleRandomTrigger(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		if (action.target() != trigger_action_target::None)
+		{
+			WLOG("Unsupported target provided for TRIGGER_ACTION_RANDOM_TRIGGER - has no effect");
+		}
+
+		if (action.data_size() == 0)
+		{
+			WLOG("TRIGGER_ACTION_RANDOM_TRIGGER: No trigger ids given, action will be ignored");
+			return;
+		}
+
+		std::uniform_int_distribution<int> pick(0, action.data_size() - 1);
+		const uint32 triggerId = static_cast<uint32>(action.data(pick(randomGenerator)));
+
+		const auto* trigger = m_project.triggers.getById(triggerId);
+		if (!trigger)
+		{
+			ELOG("Unable to find trigger " << triggerId << " - trigger is not executed");
+			return;
+		}
+
 		ExecuteTrigger(*trigger, context, 0);
 	}
 
@@ -456,6 +483,32 @@ namespace mmo
 
 			const bool isActive = (GetActionData(action, 0) != 0);
 			spawner->SetState(isActive);
+
+			// Deactivating only stops further spawns. Asked to, also take away the creatures that
+			// are out right now, e.g. a market trader going home for the night.
+			if (!isActive && GetActionData(action, 1) != 0)
+			{
+				const auto creatures = spawner->GetCreatures();
+				for (const auto& creature : creatures)
+				{
+					if (creature->IsInCombat())
+					{
+						continue;
+					}
+
+					std::weak_ptr<GameObjectS> weak(creature);
+					world->GetUniverse().Post([weak]()
+						{
+							if (const auto strong = weak.lock())
+							{
+								if (auto* creatureWorld = strong->GetWorldInstance())
+								{
+									creatureWorld->RemoveGameObject(*strong);
+								}
+							}
+						});
+				}
+			}
 		}
 		else
 		{
@@ -2061,6 +2114,14 @@ namespace mmo
 				});
 
 			return static_cast<double>(livingCount);
+		}
+
+		case proto::HourOfDay:
+		{
+			// The authoritative clock, not the blended one, so a settime transition does not make
+			// the town flip back and forth while the sky sweeps to the new time.
+			auto* world = GetWorldInstance(context);
+			return world ? static_cast<double>(GetHourOfDay(world->GetGameTime().GetTargetTime())) : 0.0;
 		}
 
 		default:

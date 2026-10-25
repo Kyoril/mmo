@@ -509,7 +509,7 @@ namespace mmo
 			break;
 
 		case SoundType::StreamLooped3D:
-			result = m_system->createStream((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
+			result = m_system->createStream(instanceName.c_str(), FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::Sound2D:
