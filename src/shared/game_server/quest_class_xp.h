@@ -14,13 +14,13 @@ namespace mmo
 	/// Scales a quest's designer-set class XP reward by the turn-in class level relative to the
 	/// quest's intended level, using the same level-range language as mob and character quest XP.
 	///
-	/// An under-leveled class (class level below the quest level) is rewarded as if the quest had
-	/// been designed for its own level: it receives the same fraction of its current class level
-	/// bar that the full reward represents at the quest's intended level, but never less than half
-	/// of its current class level bar (and never more than the designer-set reward). The floor
-	/// keeps a turn-in ahead of a single creature kill, whose class XP is not scaled down for a low
-	/// class level at all; the half-level bound keeps banked high-level quests from power-leveling
-	/// a fresh class.
+	/// An under-leveled class (class level below the quest level) keeps the full reward while it is
+	/// within five levels of the quest level, and loses a thirtieth of the reward per level below
+	/// that, down to a third of the reward at twenty-five levels below. The protection therefore only
+	/// bites where it was meant to - banking very high level quests to power-level a fresh class -
+	/// and a moderately higher level quest still grants far more than a single creature kill, whose
+	/// class XP is not scaled down for a low class level at all. The quest level is clamped to the
+	/// class max level, so a quest above everything the class can reach counts as a class-cap quest.
 	///
 	/// An over-leveled class steps down through the same factor table as character quest XP
 	/// (full XP up to quest level + 5, then 80/60/40/20/10 percent).

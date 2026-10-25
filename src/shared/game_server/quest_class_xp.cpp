@@ -62,9 +62,17 @@ namespace mmo
 			return std::max<uint32>(1, static_cast<uint32>(static_cast<float>(rewardClassXp) * xpFactor));
 		}
 
-		// Under-leveled class: grant the same fraction of the class's own level bar that the full
-		// reward represents at the quest's intended level - the XP a quest designed for the class
-		// level would have granted.
+		// Under-leveled class: a quest above the class level stays worth turning in. The reward only
+		// decays once the class is more than five levels below the quest - the same grace window the
+		// over-leveled side uses - and then by a thirtieth per level, down to a third of the reward at
+		// twenty-five levels below. That keeps the protection for the case it was meant for (banking
+		// very high level quests to power-level a fresh class once high levels exist) while a merely
+		// higher level quest is no longer scaled below what a single creature kill grants, which is not
+		// scaled down for a low class level at all.
+		constexpr int32 graceLevels = 5;
+		constexpr int32 scaleSteps = 30;
+		constexpr int32 minSteps = 10;
+
 		const int32 clampedClassLevel = std::clamp(static_cast<int32>(classLevel), 1, maxClassLevel);
 		const int32 clampedQuestLevel = std::clamp(questLevel, 1, maxClassLevel);
 		if (clampedClassLevel >= clampedQuestLevel)
@@ -72,25 +80,9 @@ namespace mmo
 			return rewardClassXp;
 		}
 
-		const uint32 classLevelBar = classEntry.classlevels(clampedClassLevel - 1).xptonextlevel();
-		const uint32 questLevelBar = classEntry.classlevels(clampedQuestLevel - 1).xptonextlevel();
-		if (questLevelBar == 0)
-		{
-			return rewardClassXp;
-		}
-
-		const uint64 scaled = static_cast<uint64>(rewardClassXp) * classLevelBar / questLevelBar;
-
-		// On a steep class curve that fraction collapses to less than a single creature kill grants
-		// the same class - creature class XP is not scaled down for a low class level at all, it
-		// even gets the catch-up bonus for the level difference (CreatureAIDeathState) - which made
-		// turning quests in pointless while leveling a secondary class. Floor the reward at half of
-		// the class's current level bar: a turn-in is then always worth more than a kill, while a
-		// banked high-level quest still cannot advance a fresh class by more than half a level.
-		// Never more than the designer-set reward, so the floor cannot exceed what the quest would
-		// grant a class at its own level.
-		const uint64 floorXp = classLevelBar / 2;
-		const uint64 granted = std::min<uint64>(rewardClassXp, std::max<uint64>(scaled, floorXp));
+		const int32 levelsBelow = clampedQuestLevel - clampedClassLevel;
+		const int32 steps = std::max(scaleSteps - std::max(levelsBelow - graceLevels, 0), minSteps);
+		const uint64 granted = static_cast<uint64>(rewardClassXp) * static_cast<uint64>(steps) / static_cast<uint64>(scaleSteps);
 		return static_cast<uint32>(std::max<uint64>(1, granted));
 	}
 }
