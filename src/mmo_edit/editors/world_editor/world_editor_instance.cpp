@@ -66,6 +66,10 @@
 #include "tex/png_writer.h"
 #include "graphics/material_instance.h"
 #include "base/clock.h"
+#include "pcg/placement.h"
+
+#include <algorithm>
+#include <cctype>
 
 namespace mmo
 {
@@ -5180,6 +5184,69 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		return nullptr;
+	}
+
+	bool WorldEditorInstance::CreatePlacementEntity(const pcg::Placement &placement, const uint64 uniqueId)
+	{
+		if (placement.kind == pcg::PlacementKind::Foliage)
+		{
+			WLOG("Foliage placement " << placement.asset << " is not a map entity");
+			return false;
+		}
+
+		static const String worldModelExtension = ".hwmo";
+		const bool isWorldModel = placement.kind == pcg::PlacementKind::WorldModel ||
+			(placement.asset.size() >= worldModelExtension.size() &&
+				std::equal(worldModelExtension.begin(), worldModelExtension.end(), placement.asset.end() - static_cast<std::ptrdiff_t>(worldModelExtension.size()),
+					[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }));
+
+		if (isWorldModel)
+		{
+			WorldModelInstance *instance = CreateWorldModelEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId);
+			if (!instance)
+			{
+				return false;
+			}
+
+			MapEntity *mapEntity = instance->GetUserObject<MapEntity>();
+			if (mapEntity && !placement.kitPaths.empty())
+			{
+				// Same as loading a placement from its file: the paths are kept even when a kit fails to load.
+				mapEntity->SetKitPaths(placement.kitPaths);
+				ApplyKits(*mapEntity);
+			}
+
+			if (!placement.materialOverrides.empty())
+			{
+				WLOG("World model placement " << placement.asset << " ignores its material overrides");
+			}
+			return true;
+		}
+
+		Entity *entity = CreateMapEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		// Same as loading an entity from its file; the save writes every slot whose material differs.
+		for (const pcg::PlacementMaterialOverride &materialOverride : placement.materialOverrides)
+		{
+			if (materialOverride.materialIndex >= entity->GetNumSubEntities())
+			{
+				WLOG("Placement " << placement.asset << " has a material override for slot " << static_cast<uint32>(materialOverride.materialIndex)
+					<< " but the mesh has only " << entity->GetNumSubEntities() << "; skipping it");
+				continue;
+			}
+
+			entity->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+		}
+
+		if (!placement.kitPaths.empty())
+		{
+			WLOG("Mesh placement " << placement.asset << " ignores its prop kit paths");
+		}
+		return true;
 	}
 
 	bool WorldEditorInstance::RemoveMapEntityById(const uint64 uniqueId)

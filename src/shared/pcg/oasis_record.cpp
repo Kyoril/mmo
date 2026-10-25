@@ -316,9 +316,9 @@ namespace mmo::pcg
 			Put(writer, pt.outY);
 		}
 
-		PutRect(writer, record.influence);
+		PutRect(writer, record.content.influence);
 
-		const TerrainContribution& t = record.terrain;
+		const TerrainContribution& t = record.content.terrain;
 		PutEntries(writer, t.outer);
 		PutEntries(writer, t.inner);
 		PutEntries(writer, t.waterHeights);
@@ -330,8 +330,8 @@ namespace mmo::pcg
 		Put(writer, t.touchedOuter.maxX);
 		Put(writer, t.touchedOuter.maxZ);
 
-		Put<uint32>(writer, static_cast<uint32>(record.placements.size()));
-		for (const OwnedPlacement& op : record.placements)
+		Put<uint32>(writer, static_cast<uint32>(record.content.placements.size()));
+		for (const OwnedPlacement& op : record.content.placements)
 		{
 			Put(writer, op.key);
 			Put(writer, op.uniqueId);
@@ -418,12 +418,12 @@ namespace mmo::pcg
 			}
 		}
 
-		if (!GetRect(reader, out.influence))
+		if (!GetRect(reader, out.content.influence))
 		{
 			return false;
 		}
 
-		TerrainContribution& t = out.terrain;
+		TerrainContribution& t = out.content.terrain;
 		if (!GetEntries(reader, t.outer) || !GetEntries(reader, t.inner) || !GetEntries(reader, t.waterHeights) ||
 			!GetEntries(reader, t.splat) || !GetEntries(reader, t.waterQuads) || !GetEntries(reader, t.materials) ||
 			!Get(reader, t.touchedOuter.minX) || !Get(reader, t.touchedOuter.minZ) ||
@@ -437,7 +437,7 @@ namespace mmo::pcg
 		{
 			return false;
 		}
-		out.placements.reserve(placementCount);
+		out.content.placements.reserve(placementCount);
 		for (uint32 i = 0; i < placementCount; ++i)
 		{
 			OwnedPlacement op;
@@ -448,7 +448,7 @@ namespace mmo::pcg
 				return false;
 			}
 			op.kind = static_cast<PlacementKind>(kind);
-			out.placements.push_back(std::move(op));
+			out.content.placements.push_back(std::move(op));
 		}
 
 		return true;

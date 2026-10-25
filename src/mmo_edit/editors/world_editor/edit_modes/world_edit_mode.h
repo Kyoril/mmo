@@ -31,6 +31,11 @@ namespace mmo
 	class InstancedFoliage;
 	class Selectable;
 
+	namespace pcg
+	{
+		struct Placement;
+	}
+
 	namespace proto
 	{
 		class ObjectSpawnEntry;
@@ -164,6 +169,18 @@ namespace mmo
 		/// @param worldPosition The drop point in world space.
 		/// @return true if the mesh was added to a kit, in which case no world entity must be created.
 		virtual bool AddMeshToActiveKit(const String& meshPath, const Vector3& worldPosition) { return false; }
+
+		/// @brief Creates the map entity of a generated (PCG) placement, marked modified so the next
+		///        Save() writes it. PlacementKind::WorldModel, and Entity placements whose asset is a
+		///        .hwmo, become a world model with the placement's prop kits applied in order (the
+		///        paths are kept even if a kit fails to load). Other Entity placements become a mesh
+		///        entity with the placement's material overrides applied (overrides for a slot the
+		///        mesh does not have are skipped with a warning). Foliage placements are no map
+		///        entities and are refused.
+		/// @param placement The placement (asset, transform, kits, material overrides).
+		/// @param uniqueId Unique id of the new entity (from GenerateEntityUniqueId).
+		/// @return True if the entity was created.
+		virtual bool CreatePlacementEntity(const pcg::Placement& placement, uint64 uniqueId) = 0;
 
 		/// @brief Removes a loaded map entity (mesh or world model) by its unique id, exactly like
 		///        deleting it by hand: its file is deleted on the next Save() and it leaves the selection.

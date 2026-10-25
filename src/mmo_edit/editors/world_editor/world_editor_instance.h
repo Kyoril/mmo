@@ -496,6 +496,9 @@ namespace mmo
 		/// @copydoc IWorldEditor::AddMeshToActiveKit
 		bool AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition) override;
 
+		/// @copydoc IWorldEditor::CreatePlacementEntity
+		bool CreatePlacementEntity(const pcg::Placement &placement, uint64 uniqueId) override;
+
 		/// @copydoc IWorldEditor::RemoveMapEntityById
 		bool RemoveMapEntityById(uint64 uniqueId) override;
 

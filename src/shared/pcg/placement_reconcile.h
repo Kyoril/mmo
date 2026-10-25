@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "oasis_record.h"
+#include "owned_content.h"
 
 #include <functional>
 #include <vector>

@@ -3,8 +3,7 @@
 #pragma once
 
 #include "oasis.h"
-#include "placement.h"
-#include "terrain_contribution.h"
+#include "owned_content.h"
 #include "math/path_spline.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
@@ -13,19 +12,6 @@
 
 namespace mmo::pcg
 {
-	/// A placement the oasis wrote into the world, with the id of the created object.
-	struct OwnedPlacement
-	{
-		/// Stable placement key.
-		uint64 key = 0;
-		/// Id of the world object that was created for it.
-		uint64 uniqueId = 0;
-		/// Whether the object is an entity or a foliage instance.
-		PlacementKind kind = PlacementKind::Entity;
-		/// The placement as it was written.
-		Placement written;
-	};
-
 	/// Everything persisted about one oasis instance.
 	struct OasisRecord
 	{
@@ -39,20 +25,17 @@ namespace mmo::pcg
 		/// heights: the loop's y and tangent heights are zero and the editor fills them from the
 		/// terrain. Not serialized (writing always stores heights).
 		bool heightsValid = true;
-		/// Influence rect of the last build.
-		WorldRect influence{};
-		TerrainContribution terrain;
-		/// Sorted by key.
-		std::vector<OwnedPlacement> placements;
+		/// What the last build put into the world (influence, terrain contribution, owned objects).
+		OwnedContent content;
 	};
 
-	/// Writes the record as chunked binary (magic PCGO, version 3). Deterministic: the same record
+	/// Writes the record as chunked binary (magic PCGO, version 4). Deterministic: the same record
 	/// produces the same bytes.
 	/// @return True on success.
 	bool WriteOasisRecord(io::Writer& writer, const OasisRecord& record);
 
 	/// Reads a record written by WriteOasisRecord.
-	/// Accepts versions 1 to 3; version 1 loop points get automatic tangents, and records older than
+	/// Accepts versions 1 to 4; version 1 loop points get automatic tangents, and records older than
 	/// version 3 have heightsValid = false.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadOasisRecord(io::Reader& reader, OasisRecord& out);

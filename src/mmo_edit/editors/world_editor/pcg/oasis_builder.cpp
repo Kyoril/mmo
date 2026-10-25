@@ -2,39 +2,15 @@
 
 #include "oasis_builder.h"
 
-#include "editor_terrain_access.h"
-#include "editors/world_editor/edit_modes/foliage_edit_mode.h"
-#include "editors/world_editor/edit_modes/world_edit_mode.h"
-#include "log/default_log_levels.h"
-#include "math/vector3.h"
-#include "pcg/placement_reconcile.h"
-#include "scene_graph/instanced_foliage.h"
-#include "terrain/constants.h"
-#include "terrain/terrain.h"
-
-#include <algorithm>
-#include <cctype>
 #include <chrono>
-#include <cmath>
-#include <cstdio>
-#include <map>
-#include <sstream>
+#include <memory>
 
 namespace mmo
 {
 	namespace
 	{
-		constexpr float RadToDeg = 57.2957795131f;
-
-		/// Category of every map entity an oasis creates.
-		const String PcgCategory = "Pcg";
-
-		using Clock = std::chrono::steady_clock;
-
-		double MillisecondsSince(const Clock::time_point start)
-		{
-			return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
-		}
+		/// Generator label in the names of the map entities an oasis creates.
+		const String OasisLabel = "Oasis";
 
 		const char* DescribeError(const pcg::OasisError error)
 		{
@@ -52,483 +28,60 @@ namespace mmo
 
 			return "unknown error";
 		}
-
-		/// "Oasis <oasis id hex> <placement key hex>", both as 16 lower case hex digits.
-		String MakeEntityName(const uint64 oasisId, const uint64 key)
-		{
-			char buffer[64];
-			std::snprintf(buffer, sizeof(buffer), "Oasis %016llx %016llx",
-				static_cast<unsigned long long>(oasisId), static_cast<unsigned long long>(key));
-			return String(buffer);
-		}
-
-		bool IsWorldModelAsset(const String& asset)
-		{
-			static const String extension = ".hwmo";
-			if (asset.size() < extension.size())
-			{
-				return false;
-			}
-
-			return std::equal(extension.begin(), extension.end(), asset.end() - static_cast<std::ptrdiff_t>(extension.size()),
-				[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); });
-		}
-
-		void Include(pcg::WorldRect& rect, bool& any, const pcg::WorldRect& other)
-		{
-			if (!any)
-			{
-				rect = other;
-				any = true;
-				return;
-			}
-
-			rect.minX = std::min(rect.minX, other.minX);
-			rect.minZ = std::min(rect.minZ, other.minZ);
-			rect.maxX = std::max(rect.maxX, other.maxX);
-			rect.maxZ = std::max(rect.maxZ, other.maxZ);
-		}
-
-		/// Whether the record has anything in the world (a contribution or owned objects).
-		bool HasContent(const pcg::OasisRecord& record)
-		{
-			return !record.terrain.IsEmpty() || !record.placements.empty();
-		}
-
-		/// The old influence plus every owned object's position: everything that has to be loaded
-		/// to undo the record's previous build.
-		bool GetOldContentRect(const pcg::OasisRecord& record, pcg::WorldRect& out)
-		{
-			bool any = false;
-			if (!record.terrain.IsEmpty())
-			{
-				Include(out, any, record.influence);
-			}
-
-			for (const auto& owned : record.placements)
-			{
-				const Vector3& p = owned.written.position;
-				Include(out, any, pcg::WorldRect{ p.x, p.z, p.x, p.z });
-			}
-
-			return any;
-		}
-
-		/// World extent of the terrain.
-		pcg::WorldRect GetTerrainRect(const terrain::Terrain& terrain)
-		{
-			const auto halfX = static_cast<float>(static_cast<double>(terrain.GetWidth()) / 2.0 * terrain::constants::PageSize);
-			const auto halfZ = static_cast<float>(static_cast<double>(terrain.GetHeight()) / 2.0 * terrain::constants::PageSize);
-			return pcg::WorldRect{ -halfX, -halfZ, halfX, halfZ };
-		}
-
-		bool Contains(const pcg::WorldRect& outer, const pcg::WorldRect& inner)
-		{
-			return inner.minX >= outer.minX && inner.minZ >= outer.minZ && inner.maxX <= outer.maxX && inner.maxZ <= outer.maxZ;
-		}
-
-		uint32 CountSamples(const pcg::TerrainContribution& contribution)
-		{
-			return static_cast<uint32>(contribution.outer.size() + contribution.inner.size() + contribution.waterHeights.size() +
-				contribution.splat.size() + contribution.waterQuads.size() + contribution.materials.size());
-		}
-
-		/// Refuses (fills the error) when the recorded contribution is not on the terrain any more:
-		/// Unapply would then shift the heights by minus the recorded delta.
-		bool CheckRecordMatchesTerrain(const EditorTerrainAccess& access, const pcg::TerrainContribution& contribution, String& error)
-		{
-			size_t matching = 0;
-			size_t total = 0;
-			const float ratio = pcg::ContributionMatchRatio(access, contribution, &matching, &total);
-			if (total == 0 || ratio >= pcg::kMinContributionMatchRatio)
-			{
-				return true;
-			}
-
-			error = "The oasis record does not match the terrain (" + std::to_string(matching) + " of " + std::to_string(total)
-				+ " samples match); the world was not changed.";
-			ELOG("PCG: " << error);
-			return false;
-		}
-
-		void ReportTouchedPages(const EditorTerrainAccess& access, OasisBuildReport& report)
-		{
-			report.touchedPages.clear();
-			for (const auto& page : access.GetTouchedPages())
-			{
-				report.touchedPages.push_back(static_cast<uint16>((page.first << 8) | page.second));
-			}
-
-			if (report.touchedPages.empty())
-			{
-				return;
-			}
-
-			std::ostringstream pages;
-			for (const auto& page : access.GetTouchedPages())
-			{
-				pages << " " << page.first << "x" << page.second;
-			}
-			ILOG("PCG: terrain pages changed (their .tlod bake is stale, run --bake-terrain-lod):" << pages.str());
-		}
-
-		/// Loads every page the rect touches, widened by two vertex spacings so that seam copies of
-		/// vertices and pixels on the rect border (which live in the neighbour page) are loaded too.
-		/// On failure the report gets the error (naming the pages) and nothing may be applied.
-		bool LoadPagesOrFail(IWorldEditor& editor, const pcg::WorldRect& rect, OasisBuildReport& report)
-		{
-			const auto margin = static_cast<float>(2.0 * terrain::constants::PageSize / static_cast<double>(terrain::constants::OuterVerticesPerPageSide - 1));
-			String error;
-			if (editor.EnsurePagesLoaded(rect.minX - margin, rect.minZ - margin, rect.maxX + margin, rect.maxZ + margin, error))
-			{
-				return true;
-			}
-
-			report.error = "Refused, the world was not changed: " + error;
-			ELOG("PCG: " << report.error);
-			return false;
-		}
-
-		bool FoliageExists(const InstancedFoliage& foliage, const uint64 uniqueId)
-		{
-			InstancedFoliageInstance instance;
-			return foliage.TryGetInstance(uniqueId, instance);
-		}
-
-		/// Deletes an owned object. Returns false if it no longer exists.
-		bool RemoveOwned(IWorldEditor& editor, const uint64 uniqueId, const pcg::PlacementKind kind)
-		{
-			if (kind != pcg::PlacementKind::Foliage)
-			{
-				return editor.RemoveMapEntityById(uniqueId);
-			}
-
-			InstancedFoliage& foliage = editor.GetInstancedFoliage();
-			InstancedFoliageInstance instance;
-			if (!foliage.TryGetInstance(uniqueId, instance))
-			{
-				return false;
-			}
-
-			editor.MarkFoliagePageDirty(instance.pageIndex);
-			return foliage.RemoveInstance(uniqueId);
-		}
-
-		/// Creates the world object of a placement. Returns its unique id, or 0 on failure.
-		uint64 CreatePlacement(IWorldEditor& editor, const uint64 oasisId, const pcg::Placement& placement)
-		{
-			if (placement.kind == pcg::PlacementKind::WorldModel)
-			{
-				// Section template world models are created by a later editor step.
-				WLOG("PCG: world model placements are not supported yet: " << placement.asset);
-				return 0;
-			}
-
-			if (placement.kind == pcg::PlacementKind::Entity)
-			{
-				const uint64 uniqueId = editor.GenerateEntityUniqueId();
-				const bool created = IsWorldModelAsset(placement.asset)
-					? editor.CreateWorldModelEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId) != nullptr
-					: editor.CreateMapEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId) != nullptr;
-				if (!created || !editor.HasMapEntity(uniqueId))
-				{
-					WLOG("PCG: failed to create entity " << placement.asset);
-					return 0;
-				}
-
-				editor.SetMapEntityInfo(uniqueId, MakeEntityName(oasisId, placement.key), PcgCategory);
-				return uniqueId;
-			}
-
-			InstancedFoliageInstance instance;
-			instance.uniqueId = editor.GenerateFoliageUniqueId();
-			instance.meshName = placement.asset;
-			instance.position = placement.position;
-			instance.rotation = placement.rotation;
-			instance.scale = placement.scale;
-			instance.pageIndex = FoliageEditMode::PageIndexFromPosition(placement.position);
-			instance.collides = placement.collides;
-			if (!editor.GetInstancedFoliage().AddInstance(instance))
-			{
-				WLOG("PCG: failed to add foliage instance " << placement.asset);
-				return 0;
-			}
-
-			editor.MarkFoliagePageDirty(instance.pageIndex);
-			return instance.uniqueId;
-		}
-
-		/// Moves an owned object to the transform of owned.written. Returns false if it is gone.
-		bool UpdatePlacement(IWorldEditor& editor, const pcg::OwnedPlacement& owned)
-		{
-			const pcg::Placement& p = owned.written;
-			if (owned.kind != pcg::PlacementKind::Foliage)
-			{
-				return editor.SetMapEntityTransform(owned.uniqueId, p.position, p.rotation, p.scale);
-			}
-
-			InstancedFoliage& foliage = editor.GetInstancedFoliage();
-			InstancedFoliageInstance instance;
-			if (!foliage.TryGetInstance(owned.uniqueId, instance))
-			{
-				return false;
-			}
-
-			// Foliage is saved per page by its pageIndex, which UpdateInstanceTransform does not change:
-			// an instance that moves to another page is re-added under the new page.
-			const uint16 newPage = FoliageEditMode::PageIndexFromPosition(p.position);
-			editor.MarkFoliagePageDirty(instance.pageIndex);
-			editor.MarkFoliagePageDirty(newPage);
-			if (instance.pageIndex == newPage && instance.meshName == p.asset)
-			{
-				foliage.UpdateInstanceTransform(owned.uniqueId, p.position, p.rotation, p.scale);
-				if (instance.collides != p.collides)
-				{
-					foliage.SetInstanceCollides(owned.uniqueId, p.collides);
-				}
-				return true;
-			}
-
-			foliage.RemoveInstance(owned.uniqueId);
-			instance.meshName = p.asset;
-			instance.position = p.position;
-			instance.rotation = p.rotation;
-			instance.scale = p.scale;
-			instance.pageIndex = newPage;
-			instance.collides = p.collides;
-			return foliage.AddInstance(instance);
-		}
 	}
 
 	OasisBuildReport RebuildOasis(IWorldEditor& editor, pcg::OasisRecord& record, const pcg::OasisAssets& assets)
 	{
-		const Clock::time_point start = Clock::now();
-		OasisBuildReport report;
+		const auto start = std::chrono::steady_clock::now();
 
-		terrain::Terrain* terrain = editor.GetTerrain();
-		if (!terrain || !editor.HasTerrain())
-		{
-			report.error = "The world has no terrain";
-			return report;
-		}
-
-		// 1. Validate first. Validation does not depend on the heights, so any height function will
-		//    do; a broken loop must leave the world untouched.
+		// Validate first. Validation (and the influence) does not depend on the heights, so any
+		// height function will do; a broken loop must leave the world untouched.
 		pcg::OasisShape probe;
 		const pcg::OasisError validation = pcg::PrepareOasis(record.loop, record.seed, record.params,
 			[](float, float) { return 0.0f; }, probe);
 		if (validation != pcg::OasisError::None)
 		{
+			OasisBuildReport report;
 			report.error = String("Invalid oasis loop: ") + DescribeError(validation);
-			report.milliseconds = MillisecondsSince(start);
+			report.milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 			return report;
 		}
 
-		const pcg::WorldRect newInfluence = pcg::GetInfluenceRect(probe);
-		if (!Contains(GetTerrainRect(*terrain), newInfluence))
-		{
-			report.error = "The oasis does not fit inside the terrain";
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
+		// The shape is prepared on the ground as it is once the old contribution is undone; the
+		// terrain and placement functions read it from there.
+		const auto shape = std::make_shared<pcg::OasisShape>();
 
-		// 2. Load everything the old build touched and the new one will touch.
-		pcg::WorldRect loadRect = newInfluence;
-		pcg::WorldRect oldRect;
-		if (GetOldContentRect(record, oldRect))
+		GeneratedContent content;
+		content.influence = pcg::GetInfluenceRect(probe);
+		content.tileMaterial = assets.terrainMaterial;
+		content.waterMaterial = assets.waterMaterial;
+		content.prepare = [&record, shape](const GroundFunction& ground, String& error)
 		{
-			bool any = true;
-			Include(loadRect, any, oldRect);
-		}
-		if (!LoadPagesOrFail(editor, loadRect, report))
+			const pcg::OasisError prepared = pcg::PrepareOasis(record.loop, record.seed, record.params, ground, *shape);
+			if (prepared != pcg::OasisError::None)
+			{
+				// Cannot happen (validation does not depend on heights), but never apply a bad shape.
+				error = String("Invalid oasis loop: ") + DescribeError(prepared);
+				return false;
+			}
+			return true;
+		};
+		content.terrain = [shape](const float x, const float z, const float baseHeight)
 		{
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-
-		// The terrain brushes turn ocean placeholder pages into real terrain before writing; do the
-		// same so no write of the contribution is silently dropped.
-		terrain->MaterializeOceanPages(newInfluence.minX, newInfluence.minZ, newInfluence.maxX, newInfluence.maxZ);
-
-		EditorTerrainAccess access(*terrain);
-		access.SetDefaultWaterMaterial(assets.waterMaterial);
-
-		// 3. Undo the previous contribution (keeps hand sculpting done since as a height delta).
-		if (!CheckRecordMatchesTerrain(access, record.terrain, report.error))
+			return pcg::EvaluateTerrain(*shape, x, z, baseHeight);
+		};
+		content.placements = [shape, &assets](const GroundFunction& ground, const GroundFunction& slope, std::vector<pcg::Placement>& out)
 		{
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-		pcg::Unapply(access, record.terrain);
-
-		// 4. Prepare on the current ground and write the new contribution.
-		auto groundHeight = [terrain](const float x, const float z)
-		{
-			return terrain->GetSmoothHeightAt(x, z);
+			pcg::BuildPlacements(*shape, assets, ground, slope, out);
 		};
 
-		pcg::OasisShape shape;
-		const pcg::OasisError prepared = pcg::PrepareOasis(record.loop, record.seed, record.params, groundHeight, shape);
-		if (prepared != pcg::OasisError::None)
-		{
-			// Cannot happen (validation does not depend on heights), but never apply a bad shape.
-			report.error = String("Invalid oasis loop: ") + DescribeError(prepared);
-			ReportTouchedPages(access, report);
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-
-		record.influence = pcg::GetInfluenceRect(shape);
-		pcg::Apply(access, record.influence,
-			[&shape](const float x, const float z, const float baseHeight) { return pcg::EvaluateTerrain(shape, x, z, baseHeight); },
-			assets.terrainMaterial, record.terrain);
-		report.terrainSamples = CountSamples(record.terrain);
-
-		// 5. Placements on the final ground, reconciled against what the oasis owns.
-		auto groundSlope = [terrain](const float x, const float z)
-		{
-			const Vector3 normal = terrain->GetSmoothNormalAt(x, z);
-			return std::acos(std::clamp(normal.y, -1.0f, 1.0f)) * RadToDeg;
-		};
-
-		std::vector<pcg::Placement> placements;
-		pcg::BuildPlacements(shape, assets, groundHeight, groundSlope, placements);
-
-		InstancedFoliage& foliage = editor.GetInstancedFoliage();
-		const pcg::ReconcileResult reconciled = pcg::Reconcile(record.placements, placements,
-			[&editor, &foliage](const uint64 uniqueId, const pcg::PlacementKind kind)
-			{
-				return kind != pcg::PlacementKind::Foliage ? editor.HasMapEntity(uniqueId) : FoliageExists(foliage, uniqueId);
-			});
-
-		std::map<uint64, pcg::PlacementKind> ownedKinds;
-		for (const auto& owned : record.placements)
-		{
-			ownedKinds[owned.uniqueId] = owned.kind;
-		}
-
-		for (const uint64 uniqueId : reconciled.remove)
-		{
-			const auto it = ownedKinds.find(uniqueId);
-			if (it != ownedKinds.end() && RemoveOwned(editor, uniqueId, it->second))
-			{
-				++report.removed;
-			}
-		}
-
-		std::vector<pcg::OwnedPlacement> owned = reconciled.keep;
-		report.kept = static_cast<uint32>(reconciled.keep.size());
-
-		for (const auto& update : reconciled.update)
-		{
-			if (UpdatePlacement(editor, update))
-			{
-				owned.push_back(update);
-				++report.updated;
-				continue;
-			}
-
-			// Vanished since the existence check: create it again.
-			if (const uint64 uniqueId = CreatePlacement(editor, record.id, update.written))
-			{
-				pcg::OwnedPlacement recreated = update;
-				recreated.uniqueId = uniqueId;
-				owned.push_back(recreated);
-				++report.created;
-			}
-		}
-
-		for (const auto& placement : reconciled.create)
-		{
-			const uint64 uniqueId = CreatePlacement(editor, record.id, placement);
-			if (uniqueId == 0)
-			{
-				// Not owned: the next rebuild tries again.
-				continue;
-			}
-
-			pcg::OwnedPlacement created;
-			created.key = placement.key;
-			created.uniqueId = uniqueId;
-			created.kind = placement.kind;
-			created.written = placement;
-			owned.push_back(created);
-			++report.created;
-		}
-
-		std::sort(owned.begin(), owned.end(), [](const pcg::OwnedPlacement& a, const pcg::OwnedPlacement& b)
-		{
-			return a.key < b.key;
-		});
-		record.placements = std::move(owned);
-
-		foliage.RebuildDirtyCells();
-
-		ReportTouchedPages(access, report);
-		report.ok = true;
-		report.milliseconds = MillisecondsSince(start);
+		OasisBuildReport report = ApplyGeneratedContent(editor, content, record.content, record.id, OasisLabel);
+		report.milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 		return report;
 	}
 
 	OasisBuildReport DeleteOasisContent(IWorldEditor& editor, pcg::OasisRecord& record)
 	{
-		const Clock::time_point start = Clock::now();
-		OasisBuildReport report;
-
-		pcg::WorldRect contentRect;
-		if (!GetOldContentRect(record, contentRect))
-		{
-			// Nothing in the world.
-			record.terrain.Clear();
-			record.placements.clear();
-			record.influence = pcg::WorldRect{};
-			report.ok = true;
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-
-		terrain::Terrain* terrain = editor.GetTerrain();
-		if (!record.terrain.IsEmpty() && (!terrain || !editor.HasTerrain()))
-		{
-			report.error = "The world has no terrain";
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-
-		// Without a terrain there are no pages to load (and no contribution, checked above).
-		if (terrain && !LoadPagesOrFail(editor, contentRect, report))
-		{
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-
-		if (terrain)
-		{
-			EditorTerrainAccess access(*terrain);
-			if (!CheckRecordMatchesTerrain(access, record.terrain, report.error))
-			{
-				report.milliseconds = MillisecondsSince(start);
-				return report;
-			}
-			pcg::Unapply(access, record.terrain);
-			ReportTouchedPages(access, report);
-		}
-		record.terrain.Clear();
-
-		for (const auto& owned : record.placements)
-		{
-			if (RemoveOwned(editor, owned.uniqueId, owned.kind))
-			{
-				++report.removed;
-			}
-		}
-		record.placements.clear();
-		record.influence = pcg::WorldRect{};
-
-		editor.GetInstancedFoliage().RebuildDirtyCells();
-
-		report.ok = true;
-		report.milliseconds = MillisecondsSince(start);
-		return report;
+		return RemoveGeneratedContent(editor, record.content);
 	}
 }

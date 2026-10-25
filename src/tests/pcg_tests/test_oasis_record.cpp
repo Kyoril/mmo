@@ -45,19 +45,19 @@ namespace
 		r.loop.closed = true;
 		r.loop.interpolation = SplineInterpolation::CatmullRom;
 		r.loop.points = { { 0.0f, 10.0f, 1.0f }, { 10.0f, 0.0f, 2.0f }, { 0.0f, -10.0f, 3.0f }, { -10.0f, 0.0f, 4.0f } };
-		r.influence = WorldRect{ -20.0f, -21.0f, 22.0f, 23.0f };
+		r.content.influence = WorldRect{ -20.0f, -21.0f, 22.0f, 23.0f };
 
-		r.terrain.outer = { { 1, 2, 3.0f, 4.0f }, { 5, 6, 7.0f, 8.0f } };
-		r.terrain.inner = { { -1, -2, 0.5f, 0.75f } };
-		r.terrain.waterHeights = { { 9, 9, 1.0f, 2.0f } };
-		r.terrain.splat = { { 3, 4, 0xAABBCCDDu, 0x11223344u } };
-		r.terrain.waterQuads = { { 7, 8, uint8(0), uint8(2) } };
-		r.terrain.materials = { { 1, 1, String("Old.hmat"), String("Sand.hmat") } };
-		r.terrain.touchedOuter = IntRect{ -3, -4, 5, 6 };
+		r.content.terrain.outer = { { 1, 2, 3.0f, 4.0f }, { 5, 6, 7.0f, 8.0f } };
+		r.content.terrain.inner = { { -1, -2, 0.5f, 0.75f } };
+		r.content.terrain.waterHeights = { { 9, 9, 1.0f, 2.0f } };
+		r.content.terrain.splat = { { 3, 4, 0xAABBCCDDu, 0x11223344u } };
+		r.content.terrain.waterQuads = { { 7, 8, uint8(0), uint8(2) } };
+		r.content.terrain.materials = { { 1, 1, String("Old.hmat"), String("Sand.hmat") } };
+		r.content.terrain.touchedOuter = IntRect{ -3, -4, 5, 6 };
 
-		r.placements.push_back(MakeOwned(10, 100, PlacementKind::Entity, "Rock01.hmsh", 1.0f));
-		r.placements.push_back(MakeOwned(20, 200, PlacementKind::Foliage, "Palm01.hmsh", 2.0f));
-		r.placements.push_back(MakeOwned(30, 300, PlacementKind::Foliage, "Bush.hmsh", 3.0f));
+		r.content.placements.push_back(MakeOwned(10, 100, PlacementKind::Entity, "Rock01.hmsh", 1.0f));
+		r.content.placements.push_back(MakeOwned(20, 200, PlacementKind::Foliage, "Palm01.hmsh", 2.0f));
+		r.content.placements.push_back(MakeOwned(30, 300, PlacementKind::Foliage, "Bush.hmsh", 3.0f));
 		return r;
 	}
 
@@ -120,7 +120,7 @@ namespace
 		offset += 4 + paramsSize + 1 + 1 + 4;
 
 		size_t placementBytes = 0;
-		for (const OwnedPlacement& op : record.placements)
+		for (const OwnedPlacement& op : record.content.placements)
 		{
 			placementBytes += PlacementBytes(op);
 		}
@@ -146,7 +146,7 @@ namespace
 
 		// Placements: drop the trailing override and kit lists.
 		size_t cursor = placementsStart;
-		for (const OwnedPlacement& op : record.placements)
+		for (const OwnedPlacement& op : record.content.placements)
 		{
 			const size_t total = PlacementBytes(op);
 			older.insert(older.end(), current.begin() + cursor, current.begin() + cursor + total - PlacementExtraBytes(op.written));
@@ -206,8 +206,8 @@ TEST_CASE("Oasis record reads version 1 files with automatic tangents", "[oasis_
 	CHECK(out.loop.points[3].x == -10.0f);
 	CHECK(out.loop.points[2].width == 3.0f);
 	CHECK(out.name == in.name);
-	REQUIRE(out.placements.size() == 3);
-	CHECK(out.placements[2].written.asset == "Bush.hmsh");
+	REQUIRE(out.content.placements.size() == 3);
+	CHECK(out.content.placements[2].written.asset == "Bush.hmsh");
 
 	// Written back, it is the current version.
 	CHECK(Serialize(out) == current);
@@ -271,8 +271,8 @@ TEST_CASE("Oasis record reads version 2 files without heights", "[oasis_record]"
 		CHECK(p.inY == 0.0f);
 		CHECK(p.outY == 0.0f);
 	}
-	REQUIRE(out.placements.size() == 3);
-	CHECK(out.placements[1].written.asset == "Palm01.hmsh");
+	REQUIRE(out.content.placements.size() == 3);
+	CHECK(out.content.placements[1].written.asset == "Palm01.hmsh");
 }
 
 TEST_CASE("Oasis record round trips", "[oasis_record]")
@@ -298,37 +298,37 @@ TEST_CASE("Oasis record round trips", "[oasis_record]")
 	REQUIRE(out.loop.points.size() == 4);
 	CHECK(out.loop.points[2].width == 3.0f);
 	CHECK(out.loop.points[3].x == -10.0f);
-	CHECK(out.influence.minZ == -21.0f);
-	CHECK(out.influence.maxZ == 23.0f);
+	CHECK(out.content.influence.minZ == -21.0f);
+	CHECK(out.content.influence.maxZ == 23.0f);
 
-	REQUIRE(out.terrain.outer.size() == 2);
-	CHECK(out.terrain.outer[1].written == 8.0f);
-	REQUIRE(out.terrain.inner.size() == 1);
-	CHECK(out.terrain.inner[0].x == -1);
-	CHECK(out.terrain.inner[0].base == 0.5f);
-	REQUIRE(out.terrain.waterHeights.size() == 1);
-	REQUIRE(out.terrain.splat.size() == 1);
-	CHECK(out.terrain.splat[0].base == 0xAABBCCDDu);
-	CHECK(out.terrain.splat[0].written == 0x11223344u);
-	REQUIRE(out.terrain.waterQuads.size() == 1);
-	CHECK(out.terrain.waterQuads[0].written == 2);
-	REQUIRE(out.terrain.materials.size() == 1);
-	CHECK(out.terrain.materials[0].base == "Old.hmat");
-	CHECK(out.terrain.materials[0].written == "Sand.hmat");
-	CHECK(out.terrain.touchedOuter.minX == -3);
-	CHECK(out.terrain.touchedOuter.maxZ == 6);
+	REQUIRE(out.content.terrain.outer.size() == 2);
+	CHECK(out.content.terrain.outer[1].written == 8.0f);
+	REQUIRE(out.content.terrain.inner.size() == 1);
+	CHECK(out.content.terrain.inner[0].x == -1);
+	CHECK(out.content.terrain.inner[0].base == 0.5f);
+	REQUIRE(out.content.terrain.waterHeights.size() == 1);
+	REQUIRE(out.content.terrain.splat.size() == 1);
+	CHECK(out.content.terrain.splat[0].base == 0xAABBCCDDu);
+	CHECK(out.content.terrain.splat[0].written == 0x11223344u);
+	REQUIRE(out.content.terrain.waterQuads.size() == 1);
+	CHECK(out.content.terrain.waterQuads[0].written == 2);
+	REQUIRE(out.content.terrain.materials.size() == 1);
+	CHECK(out.content.terrain.materials[0].base == "Old.hmat");
+	CHECK(out.content.terrain.materials[0].written == "Sand.hmat");
+	CHECK(out.content.terrain.touchedOuter.minX == -3);
+	CHECK(out.content.terrain.touchedOuter.maxZ == 6);
 
-	REQUIRE(out.placements.size() == 3);
+	REQUIRE(out.content.placements.size() == 3);
 	for (size_t i = 0; i < 3; ++i)
 	{
-		CHECK(out.placements[i].key == in.placements[i].key);
-		CHECK(out.placements[i].uniqueId == in.placements[i].uniqueId);
-		CHECK(out.placements[i].kind == in.placements[i].kind);
-		CHECK(out.placements[i].written.asset == in.placements[i].written.asset);
-		CHECK(out.placements[i].written.position == in.placements[i].written.position);
-		CHECK((out.placements[i].written.rotation == in.placements[i].written.rotation));
-		CHECK(out.placements[i].written.scale == in.placements[i].written.scale);
-		CHECK(out.placements[i].written.collides == in.placements[i].written.collides);
+		CHECK(out.content.placements[i].key == in.content.placements[i].key);
+		CHECK(out.content.placements[i].uniqueId == in.content.placements[i].uniqueId);
+		CHECK(out.content.placements[i].kind == in.content.placements[i].kind);
+		CHECK(out.content.placements[i].written.asset == in.content.placements[i].written.asset);
+		CHECK(out.content.placements[i].written.position == in.content.placements[i].written.position);
+		CHECK((out.content.placements[i].written.rotation == in.content.placements[i].written.rotation));
+		CHECK(out.content.placements[i].written.scale == in.content.placements[i].written.scale);
+		CHECK(out.content.placements[i].written.collides == in.content.placements[i].written.collides);
 	}
 
 	// Re-serializing the loaded record gives the same bytes.
@@ -418,25 +418,25 @@ TEST_CASE("Oasis record keeps world models, kits and material overrides bit-iden
 	wmo.written.kitPaths = { "Kits/Hut/Interior.hkit", "Kits/Hut/Props.hkit" };
 	OwnedPlacement entity = MakeOwned(50, 500, PlacementKind::Entity, "Rock02.hmsh", 5.0f);
 	entity.written.materialOverrides = { { 0, "Mat/Sand.hmat" }, { 3, "Mat/Moss.hmat" } };
-	in.placements.push_back(wmo);
-	in.placements.push_back(entity);
+	in.content.placements.push_back(wmo);
+	in.content.placements.push_back(entity);
 
 	const std::vector<char> bytes = Serialize(in);
 	CHECK(bytes[4] == 4);
 
 	OasisRecord out;
 	REQUIRE(Deserialize(bytes, out));
-	REQUIRE(out.placements.size() == 5);
-	CHECK(out.placements[3].kind == PlacementKind::WorldModel);
-	CHECK(out.placements[3].written.kind == PlacementKind::WorldModel);
-	REQUIRE(out.placements[3].written.kitPaths.size() == 2);
-	CHECK(out.placements[3].written.kitPaths[0] == "Kits/Hut/Interior.hkit");
-	CHECK(out.placements[3].written.kitPaths[1] == "Kits/Hut/Props.hkit");
-	CHECK(out.placements[3].written.materialOverrides.empty());
-	REQUIRE(out.placements[4].written.materialOverrides.size() == 2);
-	CHECK(out.placements[4].written.materialOverrides[1].materialIndex == 3);
-	CHECK(out.placements[4].written.materialOverrides[1].materialName == "Mat/Moss.hmat");
-	CHECK(out.placements[4].written.kitPaths.empty());
+	REQUIRE(out.content.placements.size() == 5);
+	CHECK(out.content.placements[3].kind == PlacementKind::WorldModel);
+	CHECK(out.content.placements[3].written.kind == PlacementKind::WorldModel);
+	REQUIRE(out.content.placements[3].written.kitPaths.size() == 2);
+	CHECK(out.content.placements[3].written.kitPaths[0] == "Kits/Hut/Interior.hkit");
+	CHECK(out.content.placements[3].written.kitPaths[1] == "Kits/Hut/Props.hkit");
+	CHECK(out.content.placements[3].written.materialOverrides.empty());
+	REQUIRE(out.content.placements[4].written.materialOverrides.size() == 2);
+	CHECK(out.content.placements[4].written.materialOverrides[1].materialIndex == 3);
+	CHECK(out.content.placements[4].written.materialOverrides[1].materialName == "Mat/Moss.hmat");
+	CHECK(out.content.placements[4].written.kitPaths.empty());
 
 	CHECK(Serialize(out) == bytes);
 	CHECK(Serialize(in) == bytes);
@@ -452,13 +452,13 @@ TEST_CASE("Oasis record reads version 3 files without overrides or kits", "[oasi
 	OasisRecord out;
 	REQUIRE(Deserialize(v3, out));
 	CHECK(out.heightsValid);
-	REQUIRE(out.placements.size() == 3);
-	for (const OwnedPlacement& op : out.placements)
+	REQUIRE(out.content.placements.size() == 3);
+	for (const OwnedPlacement& op : out.content.placements)
 	{
 		CHECK(op.written.materialOverrides.empty());
 		CHECK(op.written.kitPaths.empty());
 	}
-	CHECK(out.placements[1].written.asset == "Palm01.hmsh");
+	CHECK(out.content.placements[1].written.asset == "Palm01.hmsh");
 
 	// Written back, it is the current version.
 	CHECK(Serialize(out) == current);

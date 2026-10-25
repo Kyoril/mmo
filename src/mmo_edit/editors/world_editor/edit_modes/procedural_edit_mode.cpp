@@ -605,12 +605,12 @@ namespace mmo
 			}
 
 			// Only oases that put something into the world can be in the way.
-			if (other.record.terrain.IsEmpty() && other.record.placements.empty())
+			if (other.record.content.IsEmpty())
 			{
 				continue;
 			}
 
-			if (pcg::RectsOverlap(influence, other.record.influence))
+			if (pcg::RectsOverlap(influence, other.record.content.influence))
 			{
 				error = "Rebuild refused: the influence area of '" + oasis.record.name + "' overlaps the one of '"
 					+ other.record.name + "' (" + FormatId(other.record.id) + "). Move the loops apart first.";
@@ -1232,8 +1232,8 @@ namespace mmo
 		for (size_t i = 0; i < m_oases.size(); ++i)
 		{
 			const pcg::OasisRecord& record = m_oases[i].record;
-			pcg::WorldRect rect = record.influence;
-			if (record.terrain.IsEmpty() && record.placements.empty())
+			pcg::WorldRect rect = record.content.influence;
+			if (record.content.IsEmpty())
 			{
 				ComputeBounds(record.loop, rect);
 				const float margin = record.params.outerFalloff + 2.0f;
