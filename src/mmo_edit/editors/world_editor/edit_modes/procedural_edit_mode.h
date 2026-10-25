@@ -131,14 +131,14 @@ namespace mmo
 		///        missing or unreadable, or with fewer than 2 points (3 for a loop).
 		/// @param points World x/z of the control points, in order.
 		/// @param sectionAsset Asset path of the baked section (.hsec).
-		/// @param seed Seed of the path.
-		/// @param closed True for a section loop: closed spline, height mode SmoothedGround, floor side inside.
+		/// @param options Seed, loop flag (closed spline, floor side inside), height mode (SmoothedGround for a loop
+		///        unless set), mass, facade variety and name=value settings (see ApplyNewSectionPathOptions).
 		/// @param name Name of the path; empty picks "Section Path <n>" ("Section Loop <n>" for a loop).
 		/// @param id Receives the id of the new path.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if the path was added.
-		bool CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, uint64 seed,
-			bool closed, const String& name, uint64& id, String& error);
+		bool CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, const NewSectionPathOptions& options,
+			const String& name, uint64& id, String& error);
 
 		/// @brief Removes the control's content from the world and the control from the list (its
 		///        record file is removed on the next save). The "Delete" button uses this.

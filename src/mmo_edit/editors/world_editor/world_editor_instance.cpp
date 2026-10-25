@@ -1114,7 +1114,7 @@ namespace mmo
 	}
 
 	bool WorldEditorInstance::CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
-		const uint64 seed, const bool closed, const String& name, uint64& id, String& error)
+		const NewSectionPathOptions& options, const String& name, uint64& id, String& error)
 	{
 		id = 0;
 		if (!m_proceduralEditMode)
@@ -1124,7 +1124,7 @@ namespace mmo
 		}
 
 		// Refuses a missing or unreadable section asset before anything is added.
-		if (!m_proceduralEditMode->CreateSectionPath(points, sectionAsset, seed, closed, name, id, error))
+		if (!m_proceduralEditMode->CreateSectionPath(points, sectionAsset, options, name, id, error))
 		{
 			return false;
 		}

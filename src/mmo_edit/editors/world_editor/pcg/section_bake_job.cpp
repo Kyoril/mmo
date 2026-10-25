@@ -246,24 +246,28 @@ namespace mmo
 
 	bool IsValidSectionFolder(const String& folder, String& error)
 	{
-		const String prefix = "Editor/Pcg/";
-		if (folder.size() <= prefix.size() || folder.compare(0, prefix.size(), prefix) != 0)
+		// Only where ListSectionAssets finds the baked assets: never next to world records (Editor/Pcg/Worlds).
+		const String usage = "A section folder is " + String(SectionWorldFolder) + " or Editor/Pcg/Biomes/<Biome>/Sections (got '" + folder + "')";
+		if (folder == SectionWorldFolder)
 		{
-			error = "A section folder must lie below " + prefix;
+			return true;
+		}
+
+		const String prefix = "Editor/Pcg/Biomes/";
+		const String suffix = "/Sections";
+		if (folder.size() <= prefix.size() + suffix.size() || folder.compare(0, prefix.size(), prefix) != 0 ||
+			folder.compare(folder.size() - suffix.size(), suffix.size(), suffix) != 0)
+		{
+			error = usage;
 			return false;
 		}
 
-		size_t start = prefix.size();
-		while (start <= folder.size())
+		const String biome = folder.substr(prefix.size(), folder.size() - prefix.size() - suffix.size());
+		String nameError;
+		if (biome.find('/') != String::npos || !IsValidSectionName(biome, nameError))
 		{
-			const size_t end = std::min(folder.find('/', start), folder.size());
-			String partError;
-			if (!IsValidSectionName(folder.substr(start, end - start), partError))
-			{
-				error = "Section folder " + folder + ": every part needs 1 to 64 of A-Z, a-z, 0-9, '_' and '-'";
-				return false;
-			}
-			start = end + 1;
+			error = usage + ": the biome name needs 1 to 64 of A-Z, a-z, 0-9, '_' and '-'";
+			return false;
 		}
 
 		return true;

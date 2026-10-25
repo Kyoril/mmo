@@ -96,6 +96,7 @@
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_editor/pcg/section_bake_job.h"
+#include "editors/world_editor/pcg/section_path_builder.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
@@ -980,12 +981,12 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--new-section")
 			{
-				// mmo_edit --new-section <Name> [--material <asset>] [--folder <Editor/Pcg/...>]
+				// mmo_edit --new-section <Name> [--material <asset>] [--folder Editor/Pcg/Sections|Editor/Pcg/Biomes/<Biome>/Sections]
 				// Creates a section world like "New Section..." (Editor/Pcg/Sections/<Name>/, or
 				// <folder>/<Name>/ with --folder) and exits (0 = success).
 				mmo::RedirectUnattendedLog("new_section");
 
-				const char* usage = "--new-section <Name> [--material <asset>] [--folder <Editor/Pcg/...>]";
+				const char* usage = "--new-section <Name> [--material <asset>] [--folder Editor/Pcg/Sections|Editor/Pcg/Biomes/<Biome>/Sections]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1233,13 +1234,18 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-new-path")
 			{
 				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]
+				//          [--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror]
+				//          [--set name=value ...]
 				// Adds a section path through the points (at terrain height), builds it, saves the world and
-				// logs the new id (0 = success). A missing or unreadable section asset is refused before
-				// anything is added or saved. --closed makes it a section loop (at least three points, height
-				// mode SmoothedGround, floor side inside).
+				// logs the new id and its layout (0 = success). A missing or unreadable section asset is refused
+				// before anything is added or saved. --closed makes it a section loop (at least three points,
+				// height mode SmoothedGround unless --height-mode says otherwise, floor side inside). --mass turns
+				// the mass layer on, --mirror the facade variety (mirrored copies, 20 % height jitter); --set sets
+				// any path parameter by name (e.g. --set massHeight=70), applied last.
 				mmo::RedirectUnattendedLog("pcg_new_path");
 
-				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]";
+				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed] "
+					"[--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1275,9 +1281,8 @@ int main(int argc, char* arg[])
 
 				std::vector<std::pair<float, float>> points;
 				std::string section;
-				uint64 seed = 1;
 				std::string name;
-				bool closed = false;
+				mmo::NewSectionPathOptions options;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount && argumentsValid; ++j)
 				{
@@ -1293,7 +1298,7 @@ int main(int argc, char* arg[])
 					}
 					else if (option == "--seed" && j + 1 < argCount)
 					{
-						argumentsValid = mmo::ParseSeed(args[++j], seed);
+						argumentsValid = mmo::ParseSeed(args[++j], options.seed);
 					}
 					else if (option == "--name" && j + 1 < argCount)
 					{
@@ -1301,7 +1306,46 @@ int main(int argc, char* arg[])
 					}
 					else if (option == "--closed")
 					{
-						closed = true;
+						options.closed = true;
+					}
+					else if (option == "--height-mode" && j + 1 < argCount)
+					{
+						mmo::pcg::SectionPathParams probe;
+						std::string error;
+						argumentsValid = mmo::pcg::SetSectionPathParam(probe, "heightMode", args[++j], error);
+						options.heightMode = probe.heightMode;
+					}
+					else if (option == "--smoothing" && j + 1 < argCount)
+					{
+						float smoothing = 0.0f;
+						argumentsValid = parseFloat(args[++j], smoothing) && smoothing >= 0.0f;
+						options.groundSmoothing = smoothing;
+					}
+					else if (option == "--mass")
+					{
+						options.mass = true;
+					}
+					else if (option == "--mirror")
+					{
+						options.mirror = true;
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked here so a typo is refused before the world is opened.
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						mmo::pcg::SectionPathParams probe;
+						std::string error;
+						argumentsValid = equals != std::string::npos &&
+							mmo::pcg::SetSectionPathParam(probe, setting.substr(0, equals), setting.substr(equals + 1), error);
+						if (argumentsValid)
+						{
+							options.settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+						else if (!error.empty())
+						{
+							ELOG("--pcg-new-path: " << error);
+						}
 					}
 					else
 					{
@@ -1319,7 +1363,7 @@ int main(int argc, char* arg[])
 					ELOG("--pcg-new-path: --points (at least two x,z pairs) and --section are required, usage: " << usage);
 					argumentsValid = false;
 				}
-				if (argumentsValid && closed && points.size() < 3)
+				if (argumentsValid && options.closed && points.size() < 3)
 				{
 					ELOG("--pcg-new-path: --closed needs at least three x,z pairs, usage: " << usage);
 					argumentsValid = false;
@@ -1334,7 +1378,7 @@ int main(int argc, char* arg[])
 				{
 					uint64 id = 0;
 					std::string error;
-					if (!world->CreateProceduralSectionPath(points, section, seed, closed, name, id, error))
+					if (!world->CreateProceduralSectionPath(points, section, options, name, id, error))
 					{
 						// The world is not saved: a refused or failed run leaves no record behind.
 						ELOG("--pcg-new-path: " << error);
@@ -1347,7 +1391,7 @@ int main(int argc, char* arg[])
 					{
 						char idText[32];
 						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
-						ILOG("--pcg-new-path: created section " << (closed ? "loop " : "path ") << idText);
+						ILOG("--pcg-new-path: created section " << (options.closed ? "loop " : "path ") << idText);
 						succeeded = true;
 					}
 				}

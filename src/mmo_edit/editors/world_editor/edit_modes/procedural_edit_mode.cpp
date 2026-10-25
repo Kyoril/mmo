@@ -64,6 +64,83 @@ namespace mmo
 		const ImVec4 StatusWarningColor(1.0f, 0.8f, 0.3f, 1.0f);
 		const ImVec4 StatusErrorColor(1.0f, 0.4f, 0.3f, 1.0f);
 
+		/// The mass layer group of the section path parameters. Returns true if a value changed.
+		bool DrawSectionMassParams(pcg::SectionPathParams& params)
+		{
+			bool changed = ImGui::Checkbox("Mass behind the wall##massEnabled", &params.massEnabled);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Raises a broad terrain mass on the section's +X side (away from the floor): it rises from the\n"
+					"floor-side edge, holds, and falls back to the ground at the depth. Within the section the higher of\n"
+					"section and mass wins, so the facade keeps its detail where it stands above the mass.");
+			}
+			if (!params.massEnabled)
+			{
+				return changed;
+			}
+
+			ImGui::Indent();
+			changed = ImGui::DragFloat("Mass height (m)##massHeight", &params.massHeight, 0.25f, 0.0f, 500.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Height above the centre line height, before noise.");
+			}
+			changed = ImGui::DragFloat("Mass depth (m)##massDepth", &params.massDepth, 0.5f, 1.0f, 1000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("How far the mass reaches, from the section's floor-side edge towards +X. A deep mass grows the\n"
+					"influence (and the overlap rects) of the path by the same amount.");
+			}
+			changed = ImGui::SliderFloat("Mass rise##massRise", &params.massRise, 0.01f, 0.7f, "%.2f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Fraction of the depth over which the mass rises to full height. Larger keeps more of the facade\n"
+					"visible in front of it.");
+			}
+			changed = ImGui::DragFloat("Noise amplitude (m)##massNoiseAmplitude", &params.massNoiseAmplitude, 0.1f, 0.0f, 300.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			changed = ImGui::DragFloat("Noise wavelength (m)##massNoiseWavelength", &params.massNoiseWavelength, 0.5f, 1.0f, 2000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			changed = ImGui::DragFloat("Detail amplitude (m)##massDetailAmplitude", &params.massDetailAmplitude, 0.05f, 0.0f, 100.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			changed = ImGui::DragFloat("Detail wavelength (m)##massDetailWavelength", &params.massDetailWavelength, 0.25f, 1.0f, 500.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp) || changed;
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("World-anchored noise: moving a control point never changes the mass far from it.");
+			}
+
+			const char* layers[] = { "Auto (wall layer)", "Layer 0", "Layer 1", "Layer 2", "Layer 3" };
+			int layer = std::clamp(static_cast<int>(params.massPaintLayer) + 1, 0, 4);
+			if (ImGui::Combo("Mass paint##massPaintLayer", &layer, layers, IM_ARRAYSIZE(layers)))
+			{
+				params.massPaintLayer = static_cast<int8>(layer - 1);
+				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Section layer painted on the mass's slopes (none below 10 deg, full from 30 deg). Auto picks the\n"
+					"layer the straight variants paint most above their floor.");
+			}
+			ImGui::Unindent();
+			return changed;
+		}
+
+		/// The facade variety group of the section path parameters. Returns true if a value changed.
+		bool DrawSectionFacadeParams(pcg::SectionPathParams& params)
+		{
+			bool changed = ImGui::Checkbox("Mirror copies##mirrorCopies", &params.mirrorCopies);
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Lays about half of the copies (by hash) reversed along their length, props reflected,\n"
+					"so a few variants repeat less visibly. The facade keeps facing the floor side.");
+			}
+			changed = ImGui::SliderFloat("Facade height jitter##facadeHeightJitter", &params.facadeHeightJitter, 0.0f, 0.9f, "%.2f",
+				ImGuiSliderFlags_AlwaysClamp) || changed;
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Scales each copy's section heights by a hashed factor in [1 - j, 1 + j]; props keep their\n"
+					"height above the scaled ground.");
+			}
+			return changed;
+		}
+
 		String ToAssetPath(const std::filesystem::path& path)
 		{
 			String result = path.generic_string();
@@ -680,7 +757,7 @@ namespace mmo
 
 		String error;
 		uint64 id = 0;
-		CreateSectionPath(points, m_newPathAsset, 1, false, "", id, error);
+		CreateSectionPath(points, m_newPathAsset, NewSectionPathOptions(), "", id, error);
 	}
 
 	void ProceduralEditMode::CreateSectionLoopAtViewportCentre()
@@ -713,9 +790,14 @@ namespace mmo
 			points.emplace_back(hit.second.position.x + NewLoopRadius * std::cos(angle), hit.second.position.z + NewLoopRadius * std::sin(angle));
 		}
 
+		// A loop is a wall: mass behind it and facade variety on.
+		NewSectionPathOptions options;
+		options.closed = true;
+		options.mass = true;
+		options.mirror = true;
 		String error;
 		uint64 id = 0;
-		CreateSectionPath(points, m_newPathAsset, 1, true, "", id, error);
+		CreateSectionPath(points, m_newPathAsset, options, "", id, error);
 	}
 
 	bool ProceduralEditMode::CreateOasisAt(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
@@ -764,10 +846,11 @@ namespace mmo
 		return true;
 	}
 
-	bool ProceduralEditMode::CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, const uint64 seed,
-		const bool closed, const String& name, uint64& id, String& error)
+	bool ProceduralEditMode::CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
+		const NewSectionPathOptions& options, const String& name, uint64& id, String& error)
 	{
 		id = 0;
+		const bool closed = options.closed;
 		if (!m_worldEditor.HasTerrain())
 		{
 			error = "This world has no terrain.";
@@ -798,11 +881,11 @@ namespace mmo
 		record.id = m_worldEditor.GenerateEntityUniqueId();
 		record.name = name.empty() ? String(closed ? "Section Loop " : "Section Path ") + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
 		record.sectionAsset = sectionAsset;
-		record.params.seed = seed;
-		if (closed)
+		// A loop follows the large shape of the hand-made ground and levels its bumps (SmoothedGround unless set).
+		if (!ApplyNewSectionPathOptions(options, record.params, error))
 		{
-			// A loop follows the large shape of the hand-made ground and levels its bumps.
-			record.params.heightMode = pcg::SectionHeightMode::SmoothedGround;
+			SetStatus(error, StatusLevel::Error);
+			return false;
 		}
 		record.spline.closed = closed;
 		record.spline.interpolation = SplineInterpolation::CatmullRom;
@@ -1019,7 +1102,7 @@ namespace mmo
 		}
 
 		std::vector<pcg::WorldRect> rects;
-		GetSectionCopyRects(probe, rects);
+		pcg::GetSectionCopyRects(probe, rects);
 		if (!CheckOverlap(control, rects, error))
 		{
 			SetStatus(error, StatusLevel::Error);
@@ -1039,7 +1122,7 @@ namespace mmo
 		control.dirty = true;
 		warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
 
-		String text = DescribeReport(report, "Rebuilt '" + record.name + "'");
+		String text = DescribeReport(report, "Rebuilt '" + record.name + "'") + " Layout: " + DescribeSectionLayout(probe) + ".";
 		for (const String& warning : warnings)
 		{
 			text += "\nWarning: " + warning;
@@ -1410,14 +1493,10 @@ namespace mmo
 			{
 				const pcg::SectionLayout& layout = shape.layout;
 				const float reach = asset.halfWidth + asset.sideFalloff;
-				size_t inner = 0;
-				size_t outer = 0;
-				for (const pcg::SectionCopy& copy : layout.copies)
-				{
-					inner += copy.role == pcg::SectionVariantRole::InnerCorner ? 1 : 0;
-					outer += copy.role == pcg::SectionVariantRole::OuterCorner ? 1 : 0;
-				}
-				const int straight = static_cast<int>(layout.copies.size() - inner - outer);
+				const pcg::SectionLayoutCounts counts = pcg::CountSectionCopies(layout);
+				const size_t inner = counts.inner;
+				const size_t outer = counts.outer;
+				const int straight = static_cast<int>(counts.straight);
 				if (layout.minimumBendRadius >= std::numeric_limits<float>::max())
 				{
 					ImGui::TextDisabled("Length %.1f m, %d straight copies, %d inner / %d outer corners, no bends.", shape.path->GetLength(),
@@ -1533,6 +1612,9 @@ namespace mmo
 						"Off: laid in point order, the floor on the left looking along it (inside or outside depending on the winding).");
 				}
 			}
+
+			changed = DrawSectionMassParams(rec.params) || changed;
+			changed = DrawSectionFacadeParams(rec.params) || changed;
 
 			if (changed)
 			{

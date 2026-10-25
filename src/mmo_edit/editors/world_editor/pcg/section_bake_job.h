@@ -33,8 +33,9 @@ namespace mmo
 	///        asset then goes to <folder>/<name>.hsec). An empty folder means SectionWorldFolder.
 	[[nodiscard]] String GetSectionWorldPath(const String& folder, const String& name);
 
-	/// @brief Checks a folder for section worlds: a relative asset path below Editor/Pcg/ made of names
-	///        allowed by IsValidSectionName, separated by '/'.
+	/// @brief Checks a folder for section worlds: SectionWorldFolder (Editor/Pcg/Sections) or
+	///        Editor/Pcg/Biomes/<Biome>/Sections with a biome name allowed by IsValidSectionName (the folders
+	///        ListSectionAssets searches; never Editor/Pcg/Worlds, where the world records live).
 	/// @param error Receives the reason if the folder is not valid.
 	bool IsValidSectionFolder(const String& folder, String& error);
 

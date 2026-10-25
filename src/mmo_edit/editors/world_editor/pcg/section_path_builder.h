@@ -9,6 +9,8 @@
 #include "pcg/section_path.h"
 #include "pcg/section_path_record.h"
 
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace mmo
@@ -20,6 +22,37 @@ namespace mmo
 
 	/// @brief Asset folder (with trailing slash) holding the baked section assets (*.hsec).
 	extern const char* const SectionAssetFolder;
+
+	/// @brief Facade height jitter a new wall gets with NewSectionPathOptions::mirror.
+	constexpr float DefaultFacadeHeightJitter = 0.2f;
+
+	/// @brief Settings of a new section path besides its points, asset and name.
+	struct NewSectionPathOptions
+	{
+		/// @brief Seed of the path.
+		uint64 seed = 1;
+		/// @brief True for a section loop (closed spline, floor side inside).
+		bool closed = false;
+		/// @brief Height mode; unset = FollowSpline for a path, SmoothedGround for a loop.
+		std::optional<pcg::SectionHeightMode> heightMode;
+		/// @brief SmoothedGround window (m); unset keeps the default.
+		std::optional<float> groundSmoothing;
+		/// @brief Turns the mass layer on (with its default settings).
+		bool mass = false;
+		/// @brief Facade variety: mirrored copies and DefaultFacadeHeightJitter.
+		bool mirror = false;
+		/// @brief name=value parameter settings applied last (pcg::SetSectionPathParam).
+		std::vector<std::pair<String, String>> settings;
+	};
+
+	/// @brief Fills the parameters of a new section path: seed, height mode, smoothing window, mass, facade variety,
+	///        then the name=value settings in order.
+	/// @param error Receives the reason when a setting is refused.
+	/// @return False if a setting has an unknown name or an invalid value.
+	bool ApplyNewSectionPathOptions(const NewSectionPathOptions& options, pcg::SectionPathParams& params, String& error);
+
+	/// @brief One-line summary of a laid path: its length and its straight, inner and outer corner copies.
+	[[nodiscard]] String DescribeSectionLayout(const pcg::SectionPathShape& shape);
 
 	/// @brief Lists every baked section asset (Editor/Pcg/Sections/*.hsec and the biome sections
 	///        Editor/Pcg/Biomes/<Biome>/Sections/*.hsec), sorted.
@@ -52,13 +85,6 @@ namespace mmo
 	/// @param error Receives why the path is invalid.
 	/// @return False if the path or the asset is not valid.
 	bool PrepareSectionPathProbe(const pcg::SectionPathRecord& record, const pcg::SectionAsset& asset, pcg::SectionPathShape& shape, String& error);
-
-	/// @brief Influence rect per section copy: the x/z bounds of the copy's stretch of the path,
-	///        grown like GetInfluenceRect. Their union is the path's influence for overlap checks
-	///        (much tighter than the single rect around a winding path).
-	/// @param shape A prepared shape.
-	/// @param out Cleared, then receives one rect per copy, in layout order.
-	void GetSectionCopyRects(const pcg::SectionPathShape& shape, std::vector<pcg::WorldRect>& out);
 
 	/// @brief Rebuilds a section path: validates it (the world stays untouched if it is invalid),
 	///        then hands its shape to ApplyGeneratedContent with GetInfluenceRect as the influence.

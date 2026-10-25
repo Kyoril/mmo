@@ -254,66 +254,51 @@ namespace mmo
 		return true;
 	}
 
+	bool ApplyNewSectionPathOptions(const NewSectionPathOptions& options, pcg::SectionPathParams& params, String& error)
+	{
+		pcg::SectionPathParams p = params;
+		p.seed = options.seed;
+		p.heightMode = options.heightMode ? *options.heightMode
+			: (options.closed ? pcg::SectionHeightMode::SmoothedGround : pcg::SectionHeightMode::FollowSpline);
+		if (options.groundSmoothing)
+		{
+			p.groundSmoothing = *options.groundSmoothing;
+		}
+		if (options.mass)
+		{
+			p.massEnabled = true;
+		}
+		if (options.mirror)
+		{
+			p.mirrorCopies = true;
+			p.facadeHeightJitter = DefaultFacadeHeightJitter;
+		}
+		for (const auto& [name, value] : options.settings)
+		{
+			if (!pcg::SetSectionPathParam(p, name, value, error))
+			{
+				return false;
+			}
+		}
+
+		params = p;
+		error.clear();
+		return true;
+	}
+
+	String DescribeSectionLayout(const pcg::SectionPathShape& shape)
+	{
+		const pcg::SectionLayoutCounts counts = pcg::CountSectionCopies(shape.layout);
+		std::ostringstream stream;
+		stream << "length " << static_cast<int32>(shape.path ? shape.path->GetLength() + 0.5f : 0.0f) << " m, " << counts.straight
+			<< " straight copies, " << counts.inner << " inner / " << counts.outer << " outer corners";
+		return stream.str();
+	}
+
 	bool PrepareSectionPathProbe(const pcg::SectionPathRecord& record, const pcg::SectionAsset& asset, pcg::SectionPathShape& shape, String& error)
 	{
 		return pcg::PrepareSectionPath(record.spline, record.pointIds, asset, record.params,
-			[](float, float) { return 0.0f; }, shape, error);
-	}
-
-	void GetSectionCopyRects(const pcg::SectionPathShape& shape, std::vector<pcg::WorldRect>& out)
-	{
-		out.clear();
-		if (!shape.path)
-		{
-			return;
-		}
-
-		// GetInfluenceRect grows the path bounds by one amount on every side; recover it.
-		float pathMinX = 0.0f, pathMinZ = 0.0f, pathMaxX = 0.0f, pathMaxZ = 0.0f;
-		shape.path->GetBounds(pathMinX, pathMinZ, pathMaxX, pathMaxZ);
-		const pcg::WorldRect influence = pcg::GetInfluenceRect(shape);
-		const float grow = std::max(0.0f, pathMinX - influence.minX);
-
-		const std::vector<SplineSample>& samples = shape.path->GetSamples();
-		for (const pcg::SectionCopy& copy : shape.layout.copies)
-		{
-			const float begin = copy.startDistance;
-			const float end = copy.startDistance + copy.stretchedLength;
-
-			const SplineSample first = shape.path->SampleAtDistance(begin);
-			const SplineSample last = shape.path->SampleAtDistance(end);
-			pcg::WorldRect rect{ std::min(first.x, last.x), std::min(first.z, last.z), std::max(first.x, last.x), std::max(first.z, last.z) };
-
-			const auto from = std::lower_bound(samples.begin(), samples.end(), begin,
-				[](const SplineSample& sample, const float distance) { return sample.distance < distance; });
-			const auto include = [&rect](const SplineSample& sample)
-			{
-				rect.minX = std::min(rect.minX, sample.x);
-				rect.minZ = std::min(rect.minZ, sample.z);
-				rect.maxX = std::max(rect.maxX, sample.x);
-				rect.maxZ = std::max(rect.maxZ, sample.z);
-			};
-			for (auto it = from; it != samples.end() && it->distance <= end; ++it)
-			{
-				include(*it);
-			}
-
-			// On a loop the corner copy at the first point wraps past the path end into its start.
-			const float loopLength = shape.layout.loopLength;
-			if (loopLength > 0.0f && end > loopLength)
-			{
-				for (auto it = samples.begin(); it != samples.end() && it->distance <= end - loopLength; ++it)
-				{
-					include(*it);
-				}
-			}
-
-			rect.minX -= grow;
-			rect.minZ -= grow;
-			rect.maxX += grow;
-			rect.maxZ += grow;
-			out.push_back(rect);
-		}
+			[](float, float) { return 0.0f; }, shape, error, false);
 	}
 
 	OasisBuildReport RebuildSectionPath(IWorldEditor& editor, pcg::SectionPathRecord& record, const pcg::SectionAsset& asset)
@@ -356,7 +341,7 @@ namespace mmo
 		content.influence = pcg::GetInfluenceRect(probe);
 
 		// Every write lies within a copy's rect; open ocean between far apart copies stays open ocean.
-		GetSectionCopyRects(probe, content.writeRects);
+		pcg::GetSectionCopyRects(probe, content.writeRects);
 		content.prepare = [&record, &asset, shape](const GroundFunction& ground, String& error)
 		{
 			return pcg::PrepareSectionPath(record.spline, record.pointIds, asset, record.params, ground, *shape, error);
