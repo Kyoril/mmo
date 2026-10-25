@@ -165,8 +165,9 @@ namespace mmo::pcg
 		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error);
 
 	/// Rectangle containing every terrain sample the path may change and every prop it may place: the path's
-	/// sample bounds grown by max(halfWidth + sideFalloff, largest |x| of any baked placement), plus the largest
-	/// position jitter of any rule times sqrt(2) (jitter is per local axis), plus a 1 m margin.
+	/// sample bounds grown by max(halfWidth + sideFalloff, largest |x| of any baked placement, largest
+	/// |run x| + piece length + |piece startOffset| of any run piece), plus the largest position jitter of any rule
+	/// times sqrt(2) (jitter is per local axis), plus a 1 m margin.
 	WorldRect GetInfluenceRect(const SectionPathShape& shape);
 
 	/// Variant index of a copy: Hash(seed, spanKey, copy) % variantCount, or the copy's position in the layout
@@ -207,6 +208,19 @@ namespace mmo::pcg
 	///   foliage and never swaps to a world model;
 	/// - key = SectionPlacementKey(copy, variant, p.key, p.kind), so editing one span leaves the keys of the others
 	///   unchanged, and so does adding or removing another prop in the section.
+	/// Connected prop runs (SectionVariant::runs) are laid as whole lines instead:
+	/// - chains: continuous runs (IsContinuousRun) with the same name in consecutive copies, across spans, are joined
+	///   into one chain; any other run is a chain of its own copy. A chain covers the arc range [first copy start +
+	///   startZ x stretch, last copy start + endZ x stretch] (chains never wrap around a closed path);
+	/// - one keep roll per chain: Hash(seed, chainKey) < keepChance (of the first run) x propDensity, with chainKey =
+	///   Hash of the first copy's spanKey and copy index and the run name, so it is stable when other spans change;
+	/// - the pieces follow the offset line L(s) = frame(s).position + right(s) x run.x (the x of the run of the
+	///   copy containing s; past the ends of an open path the line continues straight). The run's pieces are walked
+	///   in order, repeating: a piece starting at s0 ends at the first s1 > s0 with |L(s1) - L(s0)| = its length
+	///   (x/z), its yaw is the direction L(s0) -> L(s1), its pivot is L(s0) - direction x startOffset, its rotation
+	///   is that yaw times the authored rotation, y = ground + heightAboveTerrain; the next piece starts at s1. The
+	///   last piece laid is the last one that ends at most half its length (x/z) past L(chain end);
+	/// - no prop rule, jitter or swap applies; key = Hash(chainKey, piece index in the chain).
 	/// All props lie inside GetInfluenceRect.
 	/// @param ground Final ground (base + this path's terrain). Empty = the centre line height of the height mode
 	///        at the prop's arc position (spline height, or the base ground under the spline for FollowGround).

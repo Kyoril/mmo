@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <map>
 
 namespace mmo::pcg
 {
@@ -511,6 +512,19 @@ namespace mmo::pcg
 		{
 			jitter = std::max(jitter, std::fabs(rule.positionJitter));
 		}
+
+		// A run piece's pivot lies within |x| + |startOffset| of the path; its footprint and the overshoot at a
+		// chain end (at most half a piece) stay within |x| + length + |startOffset|.
+		for (const SectionVariant& variant : asset.variants)
+		{
+			for (const SectionRun& run : variant.runs)
+			{
+				for (const SectionRunPiece& piece : run.pieces)
+				{
+					reach = std::max(reach, std::fabs(run.x) + std::fabs(piece.length) + std::fabs(piece.startOffset));
+				}
+			}
+		}
 		const float grow = reach + jitter * 1.41421356f + kInfluenceMargin;
 
 		float minX = 0.0f, minZ = 0.0f, maxX = 0.0f, maxZ = 0.0f;
@@ -769,6 +783,270 @@ namespace mmo::pcg
 			placement.materialOverrides.clear();
 			placement.kitPaths.clear();
 		}
+
+		constexpr uint64 kRunChainSalt = 0x52554e43u;
+		constexpr uint64 kRunKeepSalt = 0x52554e4bu;
+		constexpr uint64 kRunPieceSalt = 0x52554e50u;
+		/// Bisection steps when solving for a piece's end; far below float precision on a sample step.
+		constexpr uint32 kRunBisectSteps = 40;
+		/// Upper bound of pieces per chain, against degenerate input.
+		constexpr uint32 kMaxRunPieces = 100000;
+		/// Slack on the "at most half a piece past the chain end" rule, against float rounding.
+		constexpr float kRunOvershootSlack = 1e-3f;
+
+		/// FNV-1a 64 of a string (run names into chain keys).
+		uint64 HashName(const String& name)
+		{
+			uint64 hash = 14695981039346656037ull;
+			for (const char c : name)
+			{
+				hash ^= static_cast<uint8>(c);
+				hash *= 1099511628211ull;
+			}
+			return hash;
+		}
+
+		/// Runs of consecutive copies joined into one line: one keep roll, one piece sequence.
+		struct RunChain
+		{
+			/// Index of the first copy in the layout.
+			size_t firstCopy = 0;
+			/// The run of every copy of the chain, in order (copy firstCopy + i has runs[i]).
+			std::vector<const SectionRun*> runs;
+			/// Arc range the pieces are laid over.
+			float start = 0.0f;
+			float end = 0.0f;
+			/// Hash of the first copy's span key, its copy index and the run name.
+			uint64 key = 0;
+		};
+
+		/// Joins continuous runs of the same name in consecutive copies; every other run is a chain of its own.
+		std::vector<RunChain> BuildRunChains(const SectionPathShape& shape)
+		{
+			std::vector<RunChain> chains;
+			const SectionAsset& asset = shape.asset;
+			const std::vector<SectionCopy>& copies = shape.layout.copies;
+
+			// Chains whose last copy is the previous copy and that may still grow, by run name.
+			std::map<String, size_t> open;
+			for (size_t c = 0; c < copies.size(); ++c)
+			{
+				const SectionCopy& copy = copies[c];
+				const SectionVariant& variant = asset.variants[GetVariant(shape, copy)];
+				const float stretch = copy.stretchedLength / asset.length;
+
+				std::map<String, size_t> nextOpen;
+				for (const SectionRun& run : variant.runs)
+				{
+					if (run.pieces.empty())
+					{
+						continue;
+					}
+
+					const bool continuous = IsContinuousRun(run, asset.length);
+					const auto joined = continuous ? open.find(run.name) : open.end();
+					if (joined != open.end() && nextOpen.find(run.name) == nextOpen.end())
+					{
+						RunChain& chain = chains[joined->second];
+						chain.runs.push_back(&run);
+						chain.end = copy.startDistance + run.endZ * stretch;
+						nextOpen.emplace(run.name, joined->second);
+						open.erase(joined);
+						continue;
+					}
+
+					RunChain chain;
+					chain.firstCopy = c;
+					chain.runs.push_back(&run);
+					chain.start = copy.startDistance + run.startZ * stretch;
+					chain.end = copy.startDistance + run.endZ * stretch;
+					chain.key = Hash(Hash(copy.spanKey, copy.copy, 0, kRunChainSalt), static_cast<int64>(HashName(run.name)), 0, kRunChainSalt);
+					chains.push_back(std::move(chain));
+					if (continuous && nextOpen.find(run.name) == nextOpen.end())
+					{
+						nextOpen.emplace(run.name, chains.size() - 1);
+					}
+				}
+				open = std::move(nextOpen);
+			}
+			return chains;
+		}
+
+		/// Lays the pieces of one chain along its offset line.
+		class RunLayer final
+		{
+		public:
+			RunLayer(const SectionPathShape& shape, const RunChain& chain)
+				: m_shape(shape)
+				, m_path(*shape.path)
+				, m_chain(chain)
+				, m_length(shape.path->GetLength())
+			{
+			}
+
+			/// The run of the chain's copy at an arc distance (clamped to the chain's copies).
+			const SectionRun& RunAt(const float distance) const
+			{
+				// Last copy of the chain whose start is not beyond the distance.
+				const std::vector<SectionCopy>& copies = m_shape.layout.copies;
+				const auto first = copies.begin() + static_cast<std::ptrdiff_t>(m_chain.firstCopy) + 1;
+				const auto last = copies.begin() + static_cast<std::ptrdiff_t>(m_chain.firstCopy + m_chain.runs.size());
+				const auto it = std::upper_bound(first, last, distance,
+					[](const float value, const SectionCopy& copy) { return value < copy.startDistance; });
+				return *m_chain.runs[static_cast<size_t>(it - first)];
+			}
+
+			/// Point of the offset line at an arc distance: frame position + right * x. Past the ends of an open
+			/// path the line continues straight along the end direction.
+			void OffsetPoint(const float distance, float& x, float& z) const
+			{
+				const float lateral = RunAt(distance).x;
+				float along = 0.0f;
+				SectionFrame frame;
+				if (!m_path.IsClosed() && distance > m_length)
+				{
+					frame = FrameAt(m_path, m_length);
+					along = distance - m_length;
+				}
+				else if (!m_path.IsClosed() && distance < 0.0f)
+				{
+					frame = FrameAt(m_path, 0.0f);
+					along = distance;
+				}
+				else
+				{
+					frame = FrameAt(m_path, distance);
+				}
+				x = frame.position.x + frame.forwardX * along + frame.rightX * lateral;
+				z = frame.position.z + frame.forwardZ * along + frame.rightZ * lateral;
+			}
+
+			float DistanceFrom(const float x0, const float z0, const float distance) const
+			{
+				float x = 0.0f, z = 0.0f;
+				OffsetPoint(distance, x, z);
+				return std::sqrt((x - x0) * (x - x0) + (z - z0) * (z - z0));
+			}
+
+			/// First arc distance s1 > s0 whose offset point lies `length` from the one at s0 (marching along the
+			/// path samples, then bisecting). False if none lies before `limit`.
+			bool SolveEnd(const float s0, const float length, const float limit, float& s1) const
+			{
+				float x0 = 0.0f, z0 = 0.0f;
+				OffsetPoint(s0, x0, z0);
+
+				float lo = s0;
+				float hi = s0;
+				bool found = false;
+				while (hi < limit)
+				{
+					lo = hi;
+					hi = std::min(limit, hi + kSectionPathSampleStep);
+					if (DistanceFrom(x0, z0, hi) >= length)
+					{
+						found = true;
+						break;
+					}
+				}
+				if (!found)
+				{
+					return false;
+				}
+
+				for (uint32 i = 0; i < kRunBisectSteps; ++i)
+				{
+					const float mid = 0.5f * (lo + hi);
+					if (!(mid > lo && mid < hi))
+					{
+						break;
+					}
+					if (DistanceFrom(x0, z0, mid) >= length)
+					{
+						hi = mid;
+					}
+					else
+					{
+						lo = mid;
+					}
+				}
+				s1 = hi;
+				return true;
+			}
+
+			void Lay(const std::function<float(float, float)>& ground, std::vector<Placement>& out) const
+			{
+				float s0 = m_chain.start;
+				float endX = 0.0f, endZ = 0.0f;
+				OffsetPoint(m_chain.end, endX, endZ);
+
+				for (uint32 index = 0; index < kMaxRunPieces; ++index)
+				{
+					const SectionRun& run = RunAt(s0);
+					const SectionRunPiece& piece = run.pieces[index % run.pieces.size()];
+					const float length = piece.length;
+					if (!(length >= 1e-3f))
+					{
+						return;
+					}
+
+					// The offset line is never longer per arc metre than 1 + |x| / bend radius; four piece lengths plus
+					// a metre is ample to find the end of any piece that may still be laid.
+					const float limit = std::max(s0, m_chain.end) + 4.0f * length + 1.0f;
+					float s1 = 0.0f;
+					if (!SolveEnd(s0, length, limit, s1))
+					{
+						return;
+					}
+
+					float x0 = 0.0f, z0 = 0.0f, x1 = 0.0f, z1 = 0.0f;
+					OffsetPoint(s0, x0, z0);
+					OffsetPoint(s1, x1, z1);
+					if (s1 > m_chain.end)
+					{
+						const float overshoot = std::sqrt((x1 - endX) * (x1 - endX) + (z1 - endZ) * (z1 - endZ));
+						if (overshoot > 0.5f * length + kRunOvershootSlack)
+						{
+							return;
+						}
+					}
+
+					const float chord = std::sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+					const float dirX = chord > 0.0f ? (x1 - x0) / chord : 0.0f;
+					const float dirZ = chord > 0.0f ? (z1 - z0) / chord : 1.0f;
+
+					Placement placement = piece.placement;
+					placement.key = Hash(m_chain.key, static_cast<int64>(index), 0, kRunPieceSalt);
+					placement.position.x = x0 - dirX * piece.startOffset;
+					placement.position.z = z0 - dirZ * piece.startOffset;
+					const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : CentreHeightAt(m_shape, s0);
+					placement.position.y = groundHeight + piece.heightAboveTerrain;
+					placement.rotation = Quaternion(Radian(std::atan2(dirX, dirZ)), Vector3::UnitY) * piece.placement.rotation;
+					out.push_back(std::move(placement));
+
+					s0 = s1;
+				}
+			}
+
+		private:
+			const SectionPathShape& m_shape;
+			const SampledPath& m_path;
+			const RunChain& m_chain;
+			float m_length;
+		};
+
+		/// Places every kept run chain of the path.
+		void BuildRunPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out)
+		{
+			for (const RunChain& chain : BuildRunChains(shape))
+			{
+				const float keep = chain.runs.front()->keepChance * shape.params.propDensity;
+				if (!(HashToUnit(Hash(shape.params.seed, static_cast<int64>(chain.key), 0, kRunKeepSalt)) < keep))
+				{
+					continue;
+				}
+				RunLayer(shape, chain).Lay(ground, out);
+			}
+		}
 	}
 
 	uint64 SectionPlacementKey(const SectionCopy& copy, const uint32 variant, const uint64 sourceKey, const PlacementKind sourceKind)
@@ -883,6 +1161,8 @@ namespace mmo::pcg
 				out.push_back(std::move(placement));
 			}
 		}
+
+		BuildRunPlacements(shape, ground, out);
 
 		// Keys are 64-bit hashes; a collision is practically impossible, but keep the first one deterministically.
 		std::stable_sort(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key < b.key; });

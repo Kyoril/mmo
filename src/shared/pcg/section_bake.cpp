@@ -5,6 +5,8 @@
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <map>
+#include <set>
 #include <cmath>
 #include <string>
 #include <cstdio>
@@ -148,12 +150,47 @@ namespace mmo::pcg
 		const uint32 defaultPaint, const std::array<String, 4>& layerTextures, const uint64 sourceStamp, SectionAsset& out, String& error,
 		size_t* ignoredPlacements)
 	{
+		return BakeSection(def, terrain, worldPlacements, {}, defaultPaint, layerTextures, sourceStamp, out, error, ignoredPlacements);
+	}
+
+	bool BakeSection(const SectionDefinition& def, const ITerrainAccess& terrain, const std::vector<Placement>& worldPlacements,
+		const std::vector<SectionPieceExtent>& pieceExtents, const uint32 defaultPaint, const std::array<String, 4>& layerTextures,
+		const uint64 sourceStamp, SectionAsset& out, String& error, size_t* ignoredPlacements, size_t* missingMembers)
+	{
 		error.clear();
 		out = SectionAsset();
 		if (ignoredPlacements != nullptr)
 		{
 			*ignoredPlacements = 0;
 		}
+		if (missingMembers != nullptr)
+		{
+			*missingMembers = 0;
+		}
+
+		// Run membership: member key -> run index. A map entity may belong to one run only.
+		std::map<uint64, size_t> memberRun;
+		for (size_t r = 0; r < def.runs.size(); ++r)
+		{
+			if (def.runs[r].name.empty())
+			{
+				error = "Run " + std::to_string(r + 1) + " has no name.";
+				return false;
+			}
+			for (const uint64 key : def.runs[r].members)
+			{
+				const auto inserted = memberRun.emplace(key, r);
+				if (!inserted.second && inserted.first->second != r)
+				{
+					error = "Map entity " + std::to_string(key) + " is a member of the runs '" + def.runs[inserted.first->second].name + "' and '" +
+						def.runs[r].name + "'; a placement may belong to one run only.";
+					return false;
+				}
+			}
+		}
+
+		std::vector<SectionPieceExtent> extents = pieceExtents;
+		std::sort(extents.begin(), extents.end(), [](const SectionPieceExtent& a, const SectionPieceExtent& b) { return a.key < b.key; });
 
 		if (def.variants.empty())
 		{
@@ -249,6 +286,11 @@ namespace mmo::pcg
 			out.variants.push_back(std::move(v));
 		}
 
+		constexpr size_t NoVariant = static_cast<size_t>(-1);
+		std::vector<std::vector<SectionRunPiece>> runPieces(def.runs.size());
+		std::vector<size_t> runVariant(def.runs.size(), NoVariant);
+		std::set<uint64> foundMembers;
+
 		size_t ignored = 0;
 		for (const Placement& placement : worldPlacements)
 		{
@@ -266,6 +308,47 @@ namespace mmo::pcg
 					}
 				}
 			}
+			const auto member = placement.kind != PlacementKind::Foliage ? memberRun.find(placement.key) : memberRun.end();
+			if (member != memberRun.end())
+			{
+				const size_t r = member->second;
+				const String& name = def.runs[r].name;
+				if (owner == out.variants.size())
+				{
+					out = SectionAsset();
+					error = "Run '" + name + "': member " + std::to_string(placement.key) + " lies outside every variant.";
+					return false;
+				}
+				if (runVariant[r] != NoVariant && runVariant[r] != owner)
+				{
+					out = SectionAsset();
+					error = "Run '" + name + "' has members in variant " + std::to_string(runVariant[r] + 1) + " and variant " +
+						std::to_string(owner + 1) + "; a run belongs to one variant.";
+					return false;
+				}
+
+				const auto it = std::lower_bound(extents.begin(), extents.end(), placement.key,
+					[](const SectionPieceExtent& e, const uint64 key) { return e.key < key; });
+				if (it == extents.end() || it->key != placement.key || !(it->length >= kMinRunPieceLength))
+				{
+					out = SectionAsset();
+					error = "Run '" + name + "': member " + std::to_string(placement.key) + " (" + placement.asset +
+						") has no length along the run (needs at least " + std::to_string(kMinRunPieceLength) + " m).";
+					return false;
+				}
+
+				runVariant[r] = owner;
+				SectionRunPiece piece;
+				piece.placement = placement;
+				piece.placement.position.x = wx - def.variants[owner].originX;
+				piece.heightAboveTerrain = placement.position.y - SampleTerrainHeight(terrain, wx, wz);
+				piece.length = it->length;
+				piece.startOffset = it->startOffset;
+				runPieces[r].push_back(std::move(piece));
+				foundMembers.insert(placement.key);
+				continue;
+			}
+
 			if (owner == out.variants.size())
 			{
 				++ignored;
@@ -279,9 +362,59 @@ namespace mmo::pcg
 			out.variants[owner].placements.push_back(std::move(sp));
 		}
 
+		// Runs in definition order; a run without any member in the world is dropped.
+		for (size_t r = 0; r < def.runs.size(); ++r)
+		{
+			std::vector<SectionRunPiece>& pieces = runPieces[r];
+			if (pieces.empty())
+			{
+				continue;
+			}
+
+			SectionVariant& variant = out.variants[runVariant[r]];
+			const SectionRunDef& runDef = def.runs[r];
+			const bool duplicate = std::any_of(variant.runs.begin(), variant.runs.end(), [&runDef](const SectionRun& other) { return other.name == runDef.name; });
+			if (duplicate)
+			{
+				out = SectionAsset();
+				error = "Variant " + std::to_string(runVariant[r] + 1) + " has two runs named '" + runDef.name + "'; run names must be unique per variant.";
+				return false;
+			}
+
+			std::sort(pieces.begin(), pieces.end(), [](const SectionRunPiece& a, const SectionRunPiece& b)
+			{
+				if (a.placement.position.z != b.placement.position.z)
+				{
+					return a.placement.position.z < b.placement.position.z;
+				}
+				return a.placement.key < b.placement.key;
+			});
+
+			SectionRun run;
+			run.name = runDef.name;
+			run.keepChance = std::clamp(runDef.keepChance, 0.0f, 1.0f);
+			double sumX = 0.0;
+			for (size_t i = 0; i < pieces.size(); ++i)
+			{
+				const SectionRunPiece& piece = pieces[i];
+				const float start = piece.placement.position.z + piece.startOffset;
+				const float end = start + piece.length;
+				sumX += piece.placement.position.x;
+				run.startZ = i == 0 ? start : std::min(run.startZ, start);
+				run.endZ = i == 0 ? end : std::max(run.endZ, end);
+			}
+			run.x = static_cast<float>(sumX / static_cast<double>(pieces.size()));
+			run.pieces = std::move(pieces);
+			variant.runs.push_back(std::move(run));
+		}
+
 		if (ignoredPlacements != nullptr)
 		{
 			*ignoredPlacements = ignored;
+		}
+		if (missingMembers != nullptr)
+		{
+			*missingMembers = memberRun.size() - foundMembers.size();
 		}
 		return true;
 	}
@@ -356,6 +489,36 @@ namespace mmo::pcg
 				out.rules.push_back(std::move(rule));
 			}
 		}
+
+		const auto runIt = root.find("runs");
+		if (runIt != root.end() && runIt->is_array())
+		{
+			for (const Json& item : *runIt)
+			{
+				if (!item.is_object())
+				{
+					continue;
+				}
+				SectionRunDef run;
+				ReadString(item, "name", run.name);
+				ReadFloat(item, "keepChance", run.keepChance);
+				run.keepChance = std::clamp(run.keepChance, 0.0f, 1.0f);
+				const auto mit = item.find("members");
+				if (mit != item.end() && mit->is_array())
+				{
+					for (const Json& m : *mit)
+					{
+						if (m.is_number_unsigned())
+						{
+							run.members.push_back(m.get<uint64>());
+						}
+					}
+				}
+				std::sort(run.members.begin(), run.members.end());
+				run.members.erase(std::unique(run.members.begin(), run.members.end()), run.members.end());
+				out.runs.push_back(std::move(run));
+			}
+		}
 		return true;
 	}
 
@@ -395,6 +558,26 @@ namespace mmo::pcg
 			rules.push_back(std::move(item));
 		}
 		root["rules"] = std::move(rules);
+
+		// Only written when there are runs, so definitions without runs keep their text and source stamp.
+		if (!def.runs.empty())
+		{
+			Json runs = Json::array();
+			for (const SectionRunDef& run : def.runs)
+			{
+				Json item = Json::object();
+				item["name"] = run.name;
+				item["keepChance"] = PrettyFloat(run.keepChance);
+				Json members = Json::array();
+				for (const uint64 member : run.members)
+				{
+					members.push_back(member);
+				}
+				item["members"] = std::move(members);
+				runs.push_back(std::move(item));
+			}
+			root["runs"] = std::move(runs);
+		}
 
 		return root.dump(2);
 	}

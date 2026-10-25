@@ -37,6 +37,45 @@ namespace mmo::pcg
 		float heightAboveTerrain = 0.0f;
 	};
 
+	/// One piece of a connected prop run (a fence board, a wall segment).
+	struct SectionRunPiece
+	{
+		/// The piece as captured: asset, kind, material overrides, kit paths, scale, collision and the section object's
+		/// unique id as key. position.x/z are local to the variant origin (informational); rotation is the authored
+		/// rotation relative to the run direction (+Z).
+		Placement placement;
+		/// Height of the piece above the terrain surface at its pivot.
+		float heightAboveTerrain = 0.0f;
+		/// Length of the piece's footprint along the run in metres (the rotated and scaled bounds projected onto +Z).
+		float length = 0.0f;
+		/// Signed offset of the footprint start from the pivot along the run (negative when the pivot is inside).
+		float startOffset = 0.0f;
+	};
+
+	/// Pieces of a section variant laid end to end along the bent path when stamped, kept or dropped as a whole.
+	struct SectionRun
+	{
+		/// Name of the run; continuous runs of the same name in consecutive copies are joined into one chain.
+		String name;
+		/// Probability (0..1) that the whole run (chain) is kept.
+		float keepChance = 1.0f;
+		/// Lateral offset of the run line (mean local x of the pieces).
+		float x = 0.0f;
+		/// Local z where the pieces' footprints start.
+		float startZ = 0.0f;
+		/// Local z where the pieces' footprints end.
+		float endZ = 0.0f;
+		/// The pattern, sorted by local z (ties by key).
+		std::vector<SectionRunPiece> pieces;
+	};
+
+	/// How close (m) a run must come to both section ends to count as continuous.
+	constexpr float kRunContinuityTolerance = 0.5f;
+
+	/// True if the run covers the whole section: startZ <= kRunContinuityTolerance and
+	/// endZ >= sectionLength - kRunContinuityTolerance.
+	bool IsContinuousRun(const SectionRun& run, float sectionLength);
+
 	/// Regular height grid: sample (i, j) lies at local ((originX + i) * spacing, (originZ + j) * spacing).
 	struct SectionGrid
 	{
@@ -70,7 +109,10 @@ namespace mmo::pcg
 		float originX = 0.0f;
 		SectionGrid heights;
 		SectionPaint paint;
+		/// Placements stamped one by one (run members are not in here).
 		std::vector<SectionPlacement> placements;
+		/// Connected prop runs, in definition order.
+		std::vector<SectionRun> runs;
 	};
 
 	/// A baked road/path section: terrain shape, paint and props for every variant.
@@ -89,11 +131,11 @@ namespace mmo::pcg
 		uint64 sourceStamp = 0;
 	};
 
-	/// Writes the asset as binary (magic PSEC, version 1). Deterministic.
+	/// Writes the asset as binary (magic PSEC, version 2 = version 1 plus the runs of every variant). Deterministic.
 	/// @return False if a grid or paint array does not match its dimensions.
 	bool WriteSectionAsset(io::Writer& writer, const SectionAsset& asset);
 
-	/// Reads an asset written by WriteSectionAsset.
+	/// Reads an asset written by WriteSectionAsset. Version 1 assets (from before runs) read with no runs.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadSectionAsset(io::Reader& reader, SectionAsset& out);
 

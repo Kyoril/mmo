@@ -12,7 +12,9 @@ namespace mmo::pcg
 	{
 		/// PSEC as little endian characters.
 		constexpr uint32 MagicPsec = 0x43455350;
-		constexpr uint32 FormatVersion = 1;
+		constexpr uint32 FormatVersion = 2;
+		/// Oldest version the reader accepts (version 1 has no runs).
+		constexpr uint32 MinFormatVersion = 1;
 		constexpr uint32 MaxStringLength = 1u << 20;
 
 		template<typename T>
@@ -207,6 +209,56 @@ namespace mmo::pcg
 		{
 			return Get(r, spacing) && Get(r, originX) && Get(r, originZ) && Get(r, width) && Get(r, depth);
 		}
+
+		void PutRuns(io::Writer& w, const std::vector<SectionRun>& runs)
+		{
+			Put<uint32>(w, static_cast<uint32>(runs.size()));
+			for (const SectionRun& run : runs)
+			{
+				PutString(w, run.name);
+				Put(w, run.keepChance);
+				Put(w, run.x);
+				Put(w, run.startZ);
+				Put(w, run.endZ);
+				Put<uint32>(w, static_cast<uint32>(run.pieces.size()));
+				for (const SectionRunPiece& piece : run.pieces)
+				{
+					PutPlacement(w, piece.placement);
+					Put(w, piece.heightAboveTerrain);
+					Put(w, piece.length);
+					Put(w, piece.startOffset);
+				}
+			}
+		}
+
+		bool GetRuns(io::Reader& r, std::vector<SectionRun>& runs)
+		{
+			uint32 runCount = 0;
+			// Name length prefix, four floats and the piece count.
+			if (!GetCount(r, runCount, 24))
+			{
+				return false;
+			}
+			runs.resize(runCount);
+			for (SectionRun& run : runs)
+			{
+				uint32 pieceCount = 0;
+				if (!GetString(r, run.name) || !Get(r, run.keepChance) || !Get(r, run.x) || !Get(r, run.startZ) || !Get(r, run.endZ) ||
+					!GetCount(r, pieceCount, 60))
+				{
+					return false;
+				}
+				run.pieces.resize(pieceCount);
+				for (SectionRunPiece& piece : run.pieces)
+				{
+					if (!GetPlacement(r, piece.placement) || !Get(r, piece.heightAboveTerrain) || !Get(r, piece.length) || !Get(r, piece.startOffset))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
+		}
 	}
 
 	bool WriteSectionAsset(io::Writer& writer, const SectionAsset& asset)
@@ -272,6 +324,8 @@ namespace mmo::pcg
 				PutPlacement(writer, sp.placement);
 				Put(writer, sp.heightAboveTerrain);
 			}
+
+			PutRuns(writer, v.runs);
 		}
 		return true;
 	}
@@ -280,7 +334,7 @@ namespace mmo::pcg
 	{
 		uint32 magic = 0;
 		uint32 version = 0;
-		if (!Get(reader, magic) || magic != MagicPsec || !Get(reader, version) || version != FormatVersion)
+		if (!Get(reader, magic) || magic != MagicPsec || !Get(reader, version) || version < MinFormatVersion || version > FormatVersion)
 		{
 			return false;
 		}
@@ -391,6 +445,11 @@ namespace mmo::pcg
 					return false;
 				}
 			}
+
+			if (version >= 2 && !GetRuns(reader, v.runs))
+			{
+				return false;
+			}
 		}
 		return true;
 	}
@@ -458,5 +517,10 @@ namespace mmo::pcg
 	bool TextureKeysMatch(const String& a, const String& b)
 	{
 		return a.size() == b.size() && NormalizeTextureKey(a) == NormalizeTextureKey(b);
+	}
+
+	bool IsContinuousRun(const SectionRun& run, const float sectionLength)
+	{
+		return run.startZ <= kRunContinuityTolerance && run.endZ >= sectionLength - kRunContinuityTolerance;
 	}
 }
