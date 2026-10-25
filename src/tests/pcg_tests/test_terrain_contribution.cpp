@@ -2,6 +2,7 @@
 
 #include "catch.hpp"
 
+#include "fake_terrain.h"
 #include "pcg/terrain_contribution.h"
 
 #include <cmath>
@@ -11,64 +12,6 @@ using namespace mmo::pcg;
 
 namespace
 {
-	/// 2x2 tiles of 8 vertex steps, 1 m spacing, so world 0..16 on both axes.
-	class FakeTerrain final : public ITerrainAccess
-	{
-	public:
-		static constexpr int32 N = 17;   // outer vertices / splat pixels / water vertices per side
-		static constexpr int32 Q = 16;   // inner vertices / water quads per side
-
-		struct Data
-		{
-			std::vector<float> outer, inner, water;
-			std::vector<uint32> splat;
-			std::vector<uint8> quads;
-			std::vector<String> materials;
-
-			bool operator==(const Data& o) const
-			{
-				return outer == o.outer && inner == o.inner && water == o.water && splat == o.splat && quads == o.quads && materials == o.materials;
-			}
-		};
-
-		FakeTerrain()
-		{
-			m_layout.originX = 0.0;
-			m_layout.originZ = 0.0;
-			m_layout.vertexSpacing = 1.0;
-			m_layout.pixelSpacing = 1.0;
-			m_layout.quadsPerTile = 8;
-			m_layout.verticesPerTile = 8;
-			m_data.outer.assign(N * N, 10.0f);
-			m_data.inner.assign(Q * Q, 10.0f);
-			m_data.water.assign(N * N, 0.0f);
-			m_data.splat.assign(N * N, 0xFFu);
-			m_data.quads.assign(Q * Q, 0);
-			m_data.materials.assign(4, "Base");
-		}
-
-		const GridLayout& GetLayout() const override { return m_layout; }
-		float GetOuterHeight(int32 x, int32 z) const override { return m_data.outer[z * N + x]; }
-		void SetOuterHeight(int32 x, int32 z, float h) override { m_data.outer[z * N + x] = h; }
-		float GetInnerHeight(int32 x, int32 z) const override { return m_data.inner[z * Q + x]; }
-		void SetInnerHeight(int32 x, int32 z, float h) override { m_data.inner[z * Q + x] = h; }
-		uint32 GetSplat(int32 x, int32 z) const override { return m_data.splat[z * N + x]; }
-		void SetSplat(int32 x, int32 z, uint32 p) override { m_data.splat[z * N + x] = p; }
-		uint8 GetWaterQuad(int32 x, int32 z) const override { return m_data.quads[z * Q + x]; }
-		void SetWaterQuad(int32 x, int32 z, uint8 t) override { m_data.quads[z * Q + x] = t; }
-		float GetWaterHeight(int32 x, int32 z) const override { return m_data.water[z * N + x]; }
-		void SetWaterHeight(int32 x, int32 z, float h) override { m_data.water[z * N + x] = h; }
-		String GetTileMaterial(int32 x, int32 z) const override { return m_data.materials[z * 2 + x]; }
-		void SetTileMaterial(int32 x, int32 z, const String& m) override { m_data.materials[z * 2 + x] = m; }
-		void FinishEdits(const IntRect&) override { ++m_finishCount; }
-
-		Data m_data;
-		int m_finishCount = 0;
-
-	private:
-		GridLayout m_layout;
-	};
-
 	/// Bowl of radius 10 around (8,8) with grass splat, a pond of radius 3 and a tile material.
 	TerrainTarget Bowl(float x, float z, float)
 	{
