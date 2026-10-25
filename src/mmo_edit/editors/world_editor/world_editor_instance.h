@@ -303,6 +303,7 @@ namespace mmo
 
 	class SelectedKitProp;
 	class SelectedSplinePoint;
+	class SectionPanel;
 
 	class SelectableVisitor
 	{
@@ -774,6 +775,15 @@ namespace mmo
 		/// @brief Calls the visitor for every authored foliage instance of the given pages that is loaded.
 		void ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const;
 
+		/// @brief Collects every loaded map entity and authored foliage instance as world-space placements:
+		///        meshes with their material overrides (sorted by slot), world models with their kit paths,
+		///        foliage with its collision flag. The key is the object's unique id; the result is sorted by
+		///        kind, then key, so it does not depend on load order.
+		void CollectWorldPlacements(std::vector<pcg::Placement>& out) const;
+
+		/// @brief Whether this world is a section world (a .hsecdef next to the .hwld, see section_bake_job.h).
+		[[nodiscard]] bool IsSectionWorld() const { return m_sectionPanel != nullptr; }
+
 		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
 		///        heights, layers and water. Null when the world has no terrain, the page is out of
 		///        range or it has no .tile file.
@@ -983,6 +993,9 @@ namespace mmo
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<ProceduralEditMode> m_proceduralEditMode;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
+
+		/// Section authoring panel; only set for section worlds.
+		std::unique_ptr<SectionPanel> m_sectionPanel;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 
 		/// Blends environment profiles for the viewport, exactly like the client.

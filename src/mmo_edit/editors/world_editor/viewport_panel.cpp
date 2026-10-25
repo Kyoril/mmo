@@ -81,6 +81,11 @@ namespace mmo
                 currentEditMode->DrawViewportOverlay(drawList, viewportPos, availableSpace);
             }
 
+            if (m_extraOverlay)
+            {
+                m_extraOverlay(ImGui::GetWindowDrawList(), viewportPos, availableSpace);
+            }
+
             HandleViewportDragDrop(currentEditMode);
 
             HandleViewportInteractions(availableSpace, currentEditMode);

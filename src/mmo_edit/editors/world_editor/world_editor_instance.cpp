@@ -67,6 +67,8 @@
 #include "graphics/material_instance.h"
 #include "base/clock.h"
 #include "pcg/placement.h"
+#include "section_panel.h"
+#include "pcg/section_bake_job.h"
 
 #include <algorithm>
 #include <cctype>
@@ -530,6 +532,16 @@ namespace mmo
 			m_proceduralEditMode->Load(GetPcgFolderName());
 		}
 
+		// Section worlds (a .hsecdef next to the .hwld) get the section panel and its viewport overlay.
+		if (mmo::IsSectionWorld(GetAssetPath().generic_string()))
+		{
+			m_sectionPanel = std::make_unique<SectionPanel>(*this);
+			m_viewportPanel->SetExtraOverlay([this](ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
+			{
+				m_sectionPanel->DrawViewportOverlay(drawList, viewportMin, viewportSize);
+			});
+		}
+
 		CreateFarTerrain();
 
 		m_worldSettingsPanel->SetExtraContent([this]() { DrawViewSettings(); });
@@ -744,6 +756,11 @@ namespace mmo
 		const String minimapId = "World Map##" + GetAssetPath().string();
 		DrawMinimapPanel(minimapId);
 
+		if (m_sectionPanel)
+		{
+			m_sectionPanel->Draw("Section##" + GetAssetPath().string());
+		}
+
 		// Kit prop removals requested this frame (Delete key, details panel) are applied once the
 		// selection is no longer being iterated.
 		ApplyPendingKitPropRemovals();
@@ -862,6 +879,11 @@ namespace mmo
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(spawnPaletteId.c_str(), sideId);
+		if (m_sectionPanel)
+		{
+			const String sectionId = "Section##" + GetAssetPath().string();
+			ImGui::DockBuilderDockWindow(sectionId.c_str(), sideId);
+		}
 
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;
@@ -1449,6 +1471,11 @@ namespace mmo
 
 		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.
 		SaveDirtyKits();
+
+		if (m_sectionPanel)
+		{
+			m_sectionPanel->OnWorldSaved();
+		}
 
 		return oasesSaved;
 	}
@@ -3058,6 +3085,99 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 				visitor(instance);
 			}
 		}
+	}
+
+	void WorldEditorInstance::CollectWorldPlacements(std::vector<pcg::Placement>& out) const
+	{
+		out.clear();
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			if (!mapEntity)
+			{
+				continue;
+			}
+
+			const SceneNode& node = mapEntity->GetSceneNode();
+			pcg::Placement placement;
+			placement.key = mapEntity->GetUniqueId();
+			placement.position = node.GetDerivedPosition();
+			placement.rotation = node.GetDerivedOrientation();
+			placement.scale = node.GetDerivedScale();
+			placement.collides = true;
+
+			if (mapEntity->IsWorldModelEntity())
+			{
+				if (!mapEntity->GetWorldModelInstance())
+				{
+					continue;
+				}
+
+				placement.kind = pcg::PlacementKind::WorldModel;
+				placement.asset = mapEntity->GetAssetName();
+				placement.kitPaths = mapEntity->GetKitPaths();
+			}
+			else
+			{
+				const Entity* entity = mapEntity->GetEntity();
+				if (!entity || !entity->GetMesh())
+				{
+					continue;
+				}
+
+				placement.kind = pcg::PlacementKind::Entity;
+				placement.asset = String(entity->GetMesh()->GetName());
+
+				// Same rule as the save: every slot whose material differs from the mesh's, by slot index.
+				for (uint16 i = 0; i < entity->GetNumSubEntities() && i <= 0xFF; ++i)
+				{
+					const SubEntity* subEntity = entity->GetSubEntity(i);
+					const MaterialPtr material = subEntity ? subEntity->GetMaterial() : nullptr;
+					if (material && material != subEntity->GetSubMesh().GetMaterial())
+					{
+						placement.materialOverrides.push_back(pcg::PlacementMaterialOverride{ static_cast<uint8>(i), String(material->GetName()) });
+					}
+				}
+			}
+
+			out.push_back(std::move(placement));
+		}
+
+		if (m_foliage)
+		{
+			std::vector<uint16> pages;
+			m_foliage->GetUsedPages(pages);
+			std::vector<InstancedFoliageInstance> instances;
+			for (const uint16 page : pages)
+			{
+				instances.clear();
+				m_foliage->GetInstancesForPage(page, instances);
+				for (const InstancedFoliageInstance& instance : instances)
+				{
+					pcg::Placement placement;
+					placement.key = instance.uniqueId;
+					placement.kind = pcg::PlacementKind::Foliage;
+					placement.asset = instance.meshName;
+					placement.position = instance.position;
+					placement.rotation = instance.rotation;
+					placement.scale = instance.scale;
+					placement.collides = instance.collides;
+					out.push_back(std::move(placement));
+				}
+			}
+		}
+
+		std::sort(out.begin(), out.end(), [](const pcg::Placement& a, const pcg::Placement& b)
+		{
+			if (a.kind != b.kind)
+			{
+				return a.kind < b.kind;
+			}
+			if (a.key != b.key)
+			{
+				return a.key < b.key;
+			}
+			return a.asset < b.asset;
+		});
 	}
 
 	const terrain::Page* WorldEditorInstance::GetPreparedTerrainPage(const PagePosition& page)

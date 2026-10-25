@@ -286,6 +286,14 @@ namespace mmo::pcg
 		return true;
 	}
 
+	void ClampPropRule(PropRule& rule)
+	{
+		rule.keepChance = std::clamp(rule.keepChance, 0.0f, 1.0f);
+		rule.positionJitter = std::max(0.0f, rule.positionJitter);
+		rule.yawJitterDeg = std::max(0.0f, rule.yawJitterDeg);
+		rule.scaleJitter = std::max(0.0f, rule.scaleJitter);
+	}
+
 	bool ParseSectionDefinition(const String& json, SectionDefinition& out)
 	{
 		const Json root = Json::parse(json, nullptr, false);
@@ -333,6 +341,7 @@ namespace mmo::pcg
 				ReadFloat(item, "positionJitter", rule.positionJitter);
 				ReadFloat(item, "yawJitterDeg", rule.yawJitterDeg);
 				ReadFloat(item, "scaleJitter", rule.scaleJitter);
+				ClampPropRule(rule);
 				const auto sit = item.find("swapGroup");
 				if (sit != item.end() && sit->is_array())
 				{

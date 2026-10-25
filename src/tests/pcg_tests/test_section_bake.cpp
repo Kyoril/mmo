@@ -271,3 +271,22 @@ TEST_CASE("Section definition JSON round trips", "[section_bake]")
 	CHECK_FALSE(ParseSectionDefinition("not json", bad));
 	CHECK_FALSE(ParseSectionDefinition("[1,2]", bad));
 }
+
+TEST_CASE("Section definition parsing clamps rule values", "[section_bake]")
+{
+	const String json = R"({"name":"Clamp","rules":[)"
+		R"({"asset":"Rocks/a.hmsh","keepChance":1.5,"positionJitter":-2,"yawJitterDeg":-10,"scaleJitter":-0.5},)"
+		R"({"asset":"Rocks/b.hmsh","keepChance":-0.25,"positionJitter":0.5,"yawJitterDeg":15,"scaleJitter":0.1}]})";
+
+	SectionDefinition parsed;
+	REQUIRE(ParseSectionDefinition(json, parsed));
+	REQUIRE(parsed.rules.size() == 2);
+	CHECK(parsed.rules[0].keepChance == 1.0f);
+	CHECK(parsed.rules[0].positionJitter == 0.0f);
+	CHECK(parsed.rules[0].yawJitterDeg == 0.0f);
+	CHECK(parsed.rules[0].scaleJitter == 0.0f);
+	CHECK(parsed.rules[1].keepChance == 0.0f);
+	CHECK(parsed.rules[1].positionJitter == 0.5f);
+	CHECK(parsed.rules[1].yawJitterDeg == 15.0f);
+	CHECK(parsed.rules[1].scaleJitter == 0.1f);
+}

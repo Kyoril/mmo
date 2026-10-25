@@ -58,7 +58,11 @@ namespace mmo::pcg
 		uint32 defaultPaint, const std::array<String, 4>& layerTextures, uint64 sourceStamp, SectionAsset& out, String& error,
 		size_t* ignoredPlacements = nullptr);
 
-	/// Parses a .hsecdef JSON document. Missing fields keep their defaults.
+	/// Clamps a rule's values into their valid ranges: keepChance to 0..1, the jitters to >= 0.
+	void ClampPropRule(PropRule& rule);
+
+	/// Parses a .hsecdef JSON document. Missing fields keep their defaults; rule values are clamped
+	/// with ClampPropRule.
 	/// @return False if the text is not a JSON object.
 	bool ParseSectionDefinition(const String& json, SectionDefinition& out);
 

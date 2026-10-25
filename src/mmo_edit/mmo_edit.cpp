@@ -91,6 +91,7 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor_instance.h"
+#include "editors/world_editor/pcg/section_bake_job.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
@@ -952,6 +953,92 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(captured ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--new-section")
+			{
+				// mmo_edit --new-section <Name> [--material <asset>]
+				// Creates a section world like "New Section..." (Editor/Pcg/Sections/<Name>/) and exits
+				// (0 = success).
+				mmo::RedirectUnattendedLog("new_section");
+
+				const char* usage = "--new-section <Name> [--material <asset>]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				std::string material = mmo::DefaultSectionTerrainMaterial;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--material" && j + 1 < argCount)
+					{
+						material = args[++j];
+					}
+					else
+					{
+						ELOG("--new-section: unknown or incomplete option " << args[j] << ", usage: " << usage);
+						argumentsValid = false;
+					}
+				}
+
+				bool succeeded = false;
+				if (argumentsValid)
+				{
+					std::string error;
+					if (!mmo::CreateSectionWorld(args[i + 1], material, error))
+					{
+						ELOG("--new-section: " << error);
+					}
+					else
+					{
+						ILOG("--new-section: created " << mmo::GetSectionWorldPath(args[i + 1]));
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-section")
+			{
+				// mmo_edit --bake-section Editor/Pcg/Sections/<Name>/<Name>.hwld
+				// Opens the section world, bakes it into Editor/Pcg/Sections/<Name>.hsec like the Bake
+				// button (without saving the world first) and exits (0 = success).
+				mmo::RedirectUnattendedLog("bake_section");
+
+				if (missingArgs(i, 1, "--bake-section <world.hwld>"))
+				{
+					break;
+				}
+
+				bool succeeded = false;
+				if (!mmo::AssetRegistry::HasFile(args[i + 1]))
+				{
+					ELOG("--bake-section: " << args[i + 1] << " does not exist");
+				}
+				else if (!mmo::IsSectionWorld(args[i + 1]))
+				{
+					ELOG("--bake-section: " << args[i + 1] << " is not a section world (no " << mmo::GetSectionDefinitionPath(args[i + 1]) << ")");
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--bake-section", args[i + 1]))
+				{
+					std::string error;
+					if (!mmo::BakeSectionWorld(*world, error))
+					{
+						ELOG("--bake-section: " << error);
+					}
+					else
+					{
+						ILOG("--bake-section: done");
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
 				break;
 			}
 
