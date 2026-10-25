@@ -12,7 +12,7 @@ namespace mmo::pcg
 	{
 		/// PSEC as little endian characters.
 		constexpr uint32 MagicPsec = 0x43455350;
-		constexpr uint32 FormatVersion = 2;
+		constexpr uint32 FormatVersion = 3;
 		/// Oldest version the reader accepts (version 1 has no runs).
 		constexpr uint32 MinFormatVersion = 1;
 		constexpr uint32 MaxStringLength = 1u << 20;
@@ -327,6 +327,13 @@ namespace mmo::pcg
 
 			PutRuns(writer, v.runs);
 		}
+
+		// Version 3 trailer: corner angle, then the role of every variant.
+		Put(writer, asset.cornerAngleDeg);
+		for (const SectionVariant& v : asset.variants)
+		{
+			Put<uint8>(writer, static_cast<uint8>(v.role));
+		}
 		return true;
 	}
 
@@ -449,6 +456,23 @@ namespace mmo::pcg
 			if (version >= 2 && !GetRuns(reader, v.runs))
 			{
 				return false;
+			}
+		}
+
+		if (version >= 3)
+		{
+			if (!Get(reader, out.cornerAngleDeg))
+			{
+				return false;
+			}
+			for (SectionVariant& v : out.variants)
+			{
+				uint8 role = 0;
+				if (!Get(reader, role) || role > static_cast<uint8>(SectionVariantRole::OuterCorner))
+				{
+					return false;
+				}
+				v.role = static_cast<SectionVariantRole>(role);
 			}
 		}
 		return true;

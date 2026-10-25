@@ -293,3 +293,45 @@ TEST_CASE("Texture keys compare case-insensitively with either slash", "[section
 	CHECK_FALSE(TextureKeysMatch("", "a"));
 	CHECK(TextureKeysMatch("", ""));
 }
+
+TEST_CASE("Section asset round trips variant roles and the corner angle", "[section_asset]")
+{
+	SectionAsset asset = MakeAsset();
+	asset.cornerAngleDeg = 50.0f;
+	asset.variants[0].role = SectionVariantRole::InnerCorner;
+	asset.variants[1].role = SectionVariantRole::OuterCorner;
+
+	const std::vector<char> bytes = Serialize(asset);
+	SectionAsset loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(loaded.cornerAngleDeg == 50.0f);
+	REQUIRE(loaded.variants.size() == 2);
+	CHECK(loaded.variants[0].role == SectionVariantRole::InnerCorner);
+	CHECK(loaded.variants[1].role == SectionVariantRole::OuterCorner);
+	CHECK(Serialize(loaded) == bytes);
+
+	// An unknown role byte is corrupt data.
+	std::vector<char> badRole = bytes;
+	badRole.back() = 9;
+	CHECK_FALSE(Deserialize(badRole, loaded));
+}
+
+TEST_CASE("Section asset version 2 reads with Straight roles and the default angle", "[section_asset]")
+{
+	SectionAsset asset = MakeAsset();
+	asset.cornerAngleDeg = 50.0f;
+	asset.variants[0].role = SectionVariantRole::InnerCorner;
+
+	// A version 2 stream is the version 3 stream without the trailer (angle + one role byte per variant).
+	std::vector<char> bytes = Serialize(asset);
+	bytes.resize(bytes.size() - 4 - asset.variants.size());
+	bytes[4] = 2;
+
+	SectionAsset loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(loaded.cornerAngleDeg == 35.0f);
+	REQUIRE(loaded.variants.size() == 2);
+	CHECK(loaded.variants[0].role == SectionVariantRole::Straight);
+	CHECK(loaded.variants[1].role == SectionVariantRole::Straight);
+	CHECK(loaded.variants[1].heights.values == asset.variants[1].heights.values);
+}

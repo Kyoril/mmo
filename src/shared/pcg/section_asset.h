@@ -102,11 +102,24 @@ namespace mmo::pcg
 		std::vector<uint8> coverage;
 	};
 
+	/// What a section variant is used for when a section is laid along a path.
+	enum class SectionVariantRole : uint8
+	{
+		/// An ordinary piece laid along straight and gently bent stretches.
+		Straight,
+		/// A corner piece for a turn towards the floor side; its middle (local z = length / 2) is the corner point.
+		InnerCorner,
+		/// A corner piece for a turn away from the floor side; its middle (local z = length / 2) is the corner point.
+		OuterCorner
+	};
+
 	/// One authored shape of a section.
 	struct SectionVariant
 	{
 		/// World x the variant was captured around (informational).
 		float originX = 0.0f;
+		/// What the variant is used for (version 1 and 2 assets read as Straight).
+		SectionVariantRole role = SectionVariantRole::Straight;
 		SectionGrid heights;
 		SectionPaint paint;
 		/// Placements stamped one by one (run members are not in here).
@@ -122,6 +135,8 @@ namespace mmo::pcg
 		float length = 20.0f;
 		float halfWidth = 4.0f;
 		float sideFalloff = 4.0f;
+		/// Turn angle (degrees) above which a corner piece is used instead of bending (version 1 and 2 assets read as the default).
+		float cornerAngleDeg = 35.0f;
 		/// Albedo texture path per paint layer of the section's terrain material.
 		std::array<String, 4> layerTextures;
 		/// Sorted by asset.
@@ -131,11 +146,13 @@ namespace mmo::pcg
 		uint64 sourceStamp = 0;
 	};
 
-	/// Writes the asset as binary (magic PSEC, version 2 = version 1 plus the runs of every variant). Deterministic.
+	/// Writes the asset as binary (magic PSEC, version 3 = version 2 plus a trailer with the corner angle and the
+	/// role of every variant; version 2 = version 1 plus the runs of every variant). Deterministic.
 	/// @return False if a grid or paint array does not match its dimensions.
 	bool WriteSectionAsset(io::Writer& writer, const SectionAsset& asset);
 
-	/// Reads an asset written by WriteSectionAsset. Version 1 assets (from before runs) read with no runs.
+	/// Reads an asset written by WriteSectionAsset. Version 1 assets (from before runs) read with no runs,
+	/// versions 1 and 2 read with all roles Straight and the default corner angle.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadSectionAsset(io::Reader& reader, SectionAsset& out);
 

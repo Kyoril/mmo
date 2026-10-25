@@ -15,6 +15,8 @@ namespace mmo::pcg
 	{
 		/// World x of the variant's centre line; the line runs along +Z from world z = 0.
 		float originX = 0.0f;
+		/// What the variant is used for. Written to the .hsecdef only when not Straight.
+		SectionVariantRole role = SectionVariantRole::Straight;
 	};
 
 	/// A connected prop run as authored: map entities (meshes or world models) of one variant laid end to end.
@@ -35,6 +37,8 @@ namespace mmo::pcg
 		float length = 20.0f;
 		float halfWidth = 4.0f;
 		float sideFalloff = 4.0f;
+		/// Turn angle (degrees) above which a corner piece is used. Written to the .hsecdef only when not 35.
+		float cornerAngleDeg = 35.0f;
 		std::vector<SectionVariantDef> variants;
 		std::vector<PropRule> rules;
 		/// Connected prop runs, in authoring order. A map entity belongs to at most one run.

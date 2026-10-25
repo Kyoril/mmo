@@ -232,6 +232,16 @@ namespace mmo
 		{
 			Commit();
 		}
+
+		ImGui::DragFloat("Corner angle (deg)##cornerAngle", &m_definition.cornerAngleDeg, 0.5f, 0.0f, 180.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		if (ImGui::IsItemDeactivatedAfterEdit())
+		{
+			Commit();
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Turn angle above which a path uses a corner variant instead of bending the straight ones.");
+		}
 	}
 
 	void SectionPanel::DrawVariantSection()
@@ -254,6 +264,16 @@ namespace mmo
 			ImGui::DragFloat("originX (m)", &m_definition.variants[i].originX, 0.5f, -10000.0f, 10000.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 			if (ImGui::IsItemDeactivatedAfterEdit())
 			{
+				Commit();
+			}
+
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(110.0f);
+			int role = static_cast<int>(m_definition.variants[i].role);
+			static const char* const RoleNames[] = { "Straight", "Inner corner", "Outer corner" };
+			if (ImGui::Combo("##variantRole", &role, RoleNames, static_cast<int>(std::size(RoleNames))))
+			{
+				m_definition.variants[i].role = static_cast<pcg::SectionVariantRole>(role);
 				Commit();
 			}
 

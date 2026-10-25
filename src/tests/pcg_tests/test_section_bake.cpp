@@ -318,3 +318,58 @@ TEST_CASE("Section definition canonical text ignores line endings", "[section_ba
 	CHECK(CanonicalSectionDefinitionText("not\r\njson\r\n") == "not\njson\n");
 	CHECK(CanonicalSectionDefinitionText("not\njson\n") == "not\njson\n");
 }
+
+TEST_CASE("Section definition JSON round trips variant roles and the corner angle", "[section_bake]")
+{
+	SectionDefinition def = MakeDefinition();
+	def.cornerAngleDeg = 50.0f;
+	def.variants[0].role = SectionVariantRole::InnerCorner;
+	def.variants[1].role = SectionVariantRole::OuterCorner;
+
+	const String json = WriteSectionDefinition(def);
+	CHECK(json.find("\"innerCorner\"") != String::npos);
+	CHECK(json.find("\"outerCorner\"") != String::npos);
+
+	SectionDefinition parsed;
+	REQUIRE(ParseSectionDefinition(json, parsed));
+	CHECK(parsed.cornerAngleDeg == 50.0f);
+	REQUIRE(parsed.variants.size() == 2);
+	CHECK(parsed.variants[0].role == SectionVariantRole::InnerCorner);
+	CHECK(parsed.variants[1].role == SectionVariantRole::OuterCorner);
+	CHECK(WriteSectionDefinition(parsed) == json);
+}
+
+TEST_CASE("Section definition without roles keeps its text and defaults", "[section_bake]")
+{
+	const SectionDefinition def = MakeDefinition();
+	const String json = WriteSectionDefinition(def);
+	CHECK(json.find("role") == String::npos);
+	CHECK(json.find("cornerAngleDeg") == String::npos);
+
+	SectionDefinition parsed;
+	REQUIRE(ParseSectionDefinition(json, parsed));
+	CHECK(parsed.cornerAngleDeg == 35.0f);
+	REQUIRE(parsed.variants.size() == 2);
+	CHECK(parsed.variants[0].role == SectionVariantRole::Straight);
+	CHECK(CanonicalSectionDefinitionText(json) == json);
+
+	// Unknown role names fall back to Straight.
+	SectionDefinition odd;
+	REQUIRE(ParseSectionDefinition("{\"variants\":[{\"originX\":1,\"role\":\"bogus\"}]}", odd));
+	CHECK(odd.variants[0].role == SectionVariantRole::Straight);
+}
+
+TEST_CASE("BakeSection copies variant roles and the corner angle", "[section_bake]")
+{
+	SectionDefinition def = MakeDefinition();
+	def.cornerAngleDeg = 60.0f;
+	def.variants[1].role = SectionVariantRole::OuterCorner;
+	FakeTerrain terrain(10);
+	FlatTerrain(terrain);
+	SectionAsset out;
+	String error;
+	REQUIRE(BakeSection(def, terrain, {}, kDefaultPaint, kTextures, 1ull, out, error));
+	CHECK(out.cornerAngleDeg == 60.0f);
+	CHECK(out.variants[0].role == SectionVariantRole::Straight);
+	CHECK(out.variants[1].role == SectionVariantRole::OuterCorner);
+}

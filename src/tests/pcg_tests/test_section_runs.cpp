@@ -269,11 +269,12 @@ TEST_CASE("Version 1 section assets read with no runs", "[section_runs]")
 	rock.placement.asset = "Rocks/a.hmsh";
 	asset.variants[0].placements.push_back(rock);
 
-	// A version 1 file is the version 2 file without the trailing run count of the (only) variant.
+	// A version 1 file is the version 3 file without the trailer (corner angle + one role byte for the only
+	// variant) and without the trailing run count of that variant.
 	std::vector<char> bytes = Serialize(asset);
-	REQUIRE(bytes[4] == 2);
+	REQUIRE(bytes[4] == 3);
 	bytes[4] = 1;
-	bytes.resize(bytes.size() - 4);
+	bytes.resize(bytes.size() - 5 - 4);
 
 	SectionAsset loaded;
 	REQUIRE(Deserialize(bytes, loaded));
@@ -281,7 +282,7 @@ TEST_CASE("Version 1 section assets read with no runs", "[section_runs]")
 	CHECK(loaded.variants[0].placements.size() == 1);
 	CHECK(loaded.variants[0].runs.empty());
 
-	bytes[4] = 3;
+	bytes[4] = 4;
 	CHECK_FALSE(Deserialize(bytes, loaded));
 }
 

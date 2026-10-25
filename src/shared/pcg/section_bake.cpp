@@ -86,6 +86,31 @@ namespace mmo::pcg
 			}
 		}
 
+		constexpr float kDefaultCornerAngleDeg = 35.0f;
+
+		const char* RoleName(const SectionVariantRole role)
+		{
+			switch (role)
+			{
+			case SectionVariantRole::InnerCorner: return "innerCorner";
+			case SectionVariantRole::OuterCorner: return "outerCorner";
+			default: return "straight";
+			}
+		}
+
+		SectionVariantRole ParseRole(const String& name)
+		{
+			if (name == "innerCorner")
+			{
+				return SectionVariantRole::InnerCorner;
+			}
+			if (name == "outerCorner")
+			{
+				return SectionVariantRole::OuterCorner;
+			}
+			return SectionVariantRole::Straight;
+		}
+
 		void ReadString(const Json& obj, const char* key, String& out)
 		{
 			const auto it = obj.find(key);
@@ -228,6 +253,7 @@ namespace mmo::pcg
 		out.length = def.length;
 		out.halfWidth = def.halfWidth;
 		out.sideFalloff = def.sideFalloff;
+		out.cornerAngleDeg = def.cornerAngleDeg;
 		out.layerTextures = layerTextures;
 		out.sourceStamp = sourceStamp;
 		out.rules = def.rules;
@@ -245,6 +271,7 @@ namespace mmo::pcg
 		{
 			SectionVariant v;
 			v.originX = vd.originX;
+			v.role = vd.role;
 
 			v.heights.spacing = static_cast<float>(vs);
 			v.heights.originX = hx.first;
@@ -440,6 +467,8 @@ namespace mmo::pcg
 		ReadFloat(root, "length", out.length);
 		ReadFloat(root, "halfWidth", out.halfWidth);
 		ReadFloat(root, "sideFalloff", out.sideFalloff);
+		ReadFloat(root, "cornerAngleDeg", out.cornerAngleDeg);
+		out.cornerAngleDeg = std::clamp(out.cornerAngleDeg, 0.0f, 180.0f);
 
 		const auto vit = root.find("variants");
 		if (vit != root.end() && vit->is_array())
@@ -450,6 +479,11 @@ namespace mmo::pcg
 				{
 					SectionVariantDef v;
 					ReadFloat(item, "originX", v.originX);
+					const auto roleIt = item.find("role");
+					if (roleIt != item.end() && roleIt->is_string())
+					{
+						v.role = ParseRole(roleIt->get<String>());
+					}
 					out.variants.push_back(v);
 				}
 			}
@@ -530,12 +564,20 @@ namespace mmo::pcg
 		root["length"] = PrettyFloat(def.length);
 		root["halfWidth"] = PrettyFloat(def.halfWidth);
 		root["sideFalloff"] = PrettyFloat(def.sideFalloff);
+		if (def.cornerAngleDeg != kDefaultCornerAngleDeg)
+		{
+			root["cornerAngleDeg"] = PrettyFloat(def.cornerAngleDeg);
+		}
 
 		Json variants = Json::array();
 		for (const SectionVariantDef& v : def.variants)
 		{
 			Json item = Json::object();
 			item["originX"] = PrettyFloat(v.originX);
+			if (v.role != SectionVariantRole::Straight)
+			{
+				item["role"] = RoleName(v.role);
+			}
 			variants.push_back(std::move(item));
 		}
 		root["variants"] = std::move(variants);
