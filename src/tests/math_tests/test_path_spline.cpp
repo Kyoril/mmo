@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <vector>
 
 using namespace mmo;
@@ -233,12 +234,12 @@ namespace
 			for (int k = 0; k < steps; ++k)
 			{
 				const float t = static_cast<float>(k) / static_cast<float>(steps);
-				samples.push_back({ cr(p0.x, p1.x, p2.x, p3.x, t), cr(p0.z, p1.z, p2.z, p3.z, t), 0.0f, 0.0f });
+				samples.push_back({ cr(p0.x, p1.x, p2.x, p3.x, t), cr(p0.z, p1.z, p2.z, p3.z, t), 0.0f, 0.0f, cr(p0.y, p1.y, p2.y, p3.y, t) });
 			}
 		}
 		if (!closed)
 		{
-			samples.push_back({ pts.back().x, pts.back().z, 0.0f, 0.0f });
+			samples.push_back({ pts.back().x, pts.back().z, 0.0f, 0.0f, pts.back().y });
 		}
 		return samples;
 	}
@@ -274,8 +275,26 @@ namespace
 		return spline;
 	}
 
-	/// Largest distance between corresponding samples; infinity if the counts differ.
+	/// Largest 3D distance between corresponding samples; infinity if the counts differ.
 	float MaxSampleDeviation(const std::vector<SplineSample>& a, const std::vector<SplineSample>& b)
+	{
+		if (a.size() != b.size())
+		{
+			return std::numeric_limits<float>::infinity();
+		}
+		float worst = 0.0f;
+		for (size_t i = 0; i < a.size(); ++i)
+		{
+			const float dx = a[i].x - b[i].x;
+			const float dy = a[i].y - b[i].y;
+			const float dz = a[i].z - b[i].z;
+			worst = std::max(worst, std::sqrt(dx * dx + dy * dy + dz * dz));
+		}
+		return worst;
+	}
+
+	/// Largest planar (x/z) distance between corresponding samples; infinity if the counts differ.
+	float MaxSampleDeviationXZ(const std::vector<SplineSample>& a, const std::vector<SplineSample>& b)
 	{
 		if (a.size() != b.size())
 		{
@@ -287,6 +306,16 @@ namespace
 			worst = std::max(worst, std::hypot(a[i].x - b[i].x, a[i].z - b[i].z));
 		}
 		return worst;
+	}
+
+	/// The spline with uneven point heights (a few metres up and down, offset like a real world).
+	PathSpline WithHeights(PathSpline spline)
+	{
+		for (size_t i = 0; i < spline.points.size(); ++i)
+		{
+			spline.points[i].y = 37.5f + 4.0f * std::sin(static_cast<float>(i) * 1.7f) + static_cast<float>(i % 3);
+		}
+		return spline;
 	}
 
 	float AngleBetweenDegrees(float ax, float az, float bx, float bz)
@@ -470,8 +499,114 @@ TEST_CASE("All-auto curved splines sample bit-identically to the old Catmull-Rom
 		p.z += 18765.25f;
 	}
 
-	for (const PathSpline& spline : { MakeCircle(16, 40.0f), MakeOpenCurve(), MakeDiamond(), far })
+	for (const PathSpline& spline : { MakeCircle(16, 40.0f), MakeOpenCurve(), MakeDiamond(), far,
+		WithHeights(MakeCircle(16, 40.0f)), WithHeights(MakeOpenCurve()), WithHeights(far) })
 	{
 		CHECK(MaxSampleDeviation(SampledPath(spline, 1.0f).GetSamples(), SampleUniformCatmullRom(spline, 1.0f)) == 0.0f);
+	}
+}
+
+TEST_CASE("Curved splines interpolate the height between points", "[path_spline]")
+{
+	// Two points: the auto tangents are a third of the chord each way, so the curve is a straight
+	// line in 3D, uniformly parameterised.
+	PathSpline ramp;
+	ramp.interpolation = SplineInterpolation::CatmullRom;
+	ramp.points = { { 0.0f, 0.0f, 0.0f, 2.0f }, { 10.0f, 0.0f, 0.0f, 12.0f } };
+	const SampledPath path(ramp, 1.0f);
+	CHECK(path.SampleAtDistance(0.0f).y == Approx(2.0f).margin(1e-4));
+	CHECK(path.SampleAtDistance(5.0f).y == Approx(7.0f).margin(1e-4));
+	CHECK(path.SampleAtDistance(10.0f).y == Approx(12.0f).margin(1e-4));
+	CHECK(path.GetLength() == Approx(10.0f).margin(1e-4));
+
+	// Every control point is a sample at its own height.
+	const PathSpline diamond = WithHeights(MakeDiamond());
+	const SampledPath sampled(diamond, 1.0f);
+	for (const SplinePoint& p : diamond.points)
+	{
+		bool found = false;
+		for (const SplineSample& s : sampled.GetSamples())
+		{
+			if (s.x == p.x && s.z == p.z)
+			{
+				found = true;
+				CHECK(s.y == Approx(p.y).margin(1e-4));
+			}
+		}
+		CHECK(found);
+	}
+}
+
+TEST_CASE("Auto tangents include the height", "[path_spline]")
+{
+	const PathSpline diamond = WithHeights(MakeDiamond());
+	const SplineTangents t = GetEffectiveTangents(diamond, 0);
+	CHECK(t.outY == Approx((diamond.points[1].y - diamond.points[3].y) / 6.0f).margin(1e-5));
+	CHECK(t.inY == Approx(-t.outY).margin(1e-5));
+	CHECK(t.outZ == Approx(40.0f / 6.0f).margin(1e-5));
+}
+
+TEST_CASE("Planar queries ignore heights", "[path_spline]")
+{
+	const PathSpline flat = MakeDiamond();
+	PathSpline raised = WithHeights(flat);
+	raised.points[2].autoTangents = false;
+	raised.points[2].inZ = 5.0f;
+	raised.points[2].outZ = -5.0f;
+	PathSpline flatManual = flat;
+	flatManual.points[2] = raised.points[2];
+	flatManual.points[2].y = 0.0f;
+	raised.points[2].inY = 9.0f;
+	raised.points[2].outY = -4.0f;
+
+	for (const auto& pair : { std::make_pair(flat, WithHeights(flat)), std::make_pair(flatManual, raised) })
+	{
+		const SampledPath a(pair.first, 1.0f);
+		const SampledPath b(pair.second, 1.0f);
+		CHECK(MaxSampleDeviationXZ(a.GetSamples(), b.GetSamples()) == 0.0f);
+		CHECK(a.GetLength() == b.GetLength());
+		CHECK(a.SignedDistance(3.0f, 4.0f) == b.SignedDistance(3.0f, 4.0f));
+		CHECK(a.SignedDistance(30.0f, -4.0f) == b.SignedDistance(30.0f, -4.0f));
+		CHECK(a.Contains(3.0f, 4.0f) == b.Contains(3.0f, 4.0f));
+		float ax0, az0, ax1, az1, bx0, bz0, bx1, bz1;
+		a.GetBounds(ax0, az0, ax1, az1);
+		b.GetBounds(bx0, bz0, bx1, bz1);
+		CHECK(ax0 == bx0);
+		CHECK(az1 == bz1);
+		float anx, anz, bnx, bnz;
+		a.NormalAtDistance(17.0f, anx, anz);
+		b.NormalAtDistance(17.0f, bnx, bnz);
+		CHECK(anx == bnx);
+		CHECK(anz == bnz);
+	}
+}
+
+TEST_CASE("Tangent height tilts the curve without moving it on the plane", "[path_spline]")
+{
+	PathSpline base = MakeDiamond();
+	MakeTangentsManual(base, 1);
+	PathSpline tilted = base;
+	tilted.points[1].outY = 8.0f;
+
+	const SampledPath a(base, 1.0f);
+	const SampledPath b(tilted, 1.0f);
+	CHECK(MaxSampleDeviationXZ(a.GetSamples(), b.GetSamples()) == 0.0f);
+
+	float maxDy = 0.0f;
+	for (size_t i = 0; i < a.GetSamples().size(); ++i)
+	{
+		maxDy = std::max(maxDy, std::fabs(a.GetSamples()[i].y - b.GetSamples()[i].y));
+	}
+	CHECK(maxDy > 0.5f);
+}
+
+TEST_CASE("Making tangents manual keeps the height of the curve", "[path_spline]")
+{
+	PathSpline spline = WithHeights(MakeCircle(16, 40.0f));
+	const std::vector<SplineSample> before = SampledPath(spline, 1.0f).GetSamples();
+	for (size_t i = 0; i < spline.points.size(); ++i)
+	{
+		MakeTangentsManual(spline, i);
+		CHECK(MaxSampleDeviation(SampledPath(spline, 1.0f).GetSamples(), before) < 1e-4f);
 	}
 }

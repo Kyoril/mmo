@@ -57,23 +57,25 @@ namespace mmo
 		}
 	}
 
-	void GetEffectiveTangents(const PathSpline& spline, const size_t index, float& inX, float& inZ, float& outX, float& outZ)
+	SplineTangents GetEffectiveTangents(const PathSpline& spline, const size_t index)
 	{
-		inX = inZ = outX = outZ = 0.0f;
+		SplineTangents t;
 		const std::vector<SplinePoint>& pts = spline.points;
 		if (index >= pts.size())
 		{
-			return;
+			return t;
 		}
 
 		const SplinePoint& point = pts[index];
 		if (!point.autoTangents)
 		{
-			inX = point.inX;
-			inZ = point.inZ;
-			outX = point.outX;
-			outZ = point.outZ;
-			return;
+			t.inX = point.inX;
+			t.inY = point.inY;
+			t.inZ = point.inZ;
+			t.outX = point.outX;
+			t.outY = point.outY;
+			t.outZ = point.outZ;
+			return t;
 		}
 
 		// Same neighbour rule as the sampling: a closed path (three or more points) wraps, an open one
@@ -93,10 +95,22 @@ namespace mmo
 			next = std::min(index + 1, n - 1);
 		}
 
-		outX = (pts[next].x - pts[previous].x) / 6.0f;
-		outZ = (pts[next].z - pts[previous].z) / 6.0f;
-		inX = -outX;
-		inZ = -outZ;
+		t.outX = (pts[next].x - pts[previous].x) / 6.0f;
+		t.outY = (pts[next].y - pts[previous].y) / 6.0f;
+		t.outZ = (pts[next].z - pts[previous].z) / 6.0f;
+		t.inX = -t.outX;
+		t.inY = -t.outY;
+		t.inZ = -t.outZ;
+		return t;
+	}
+
+	void GetEffectiveTangents(const PathSpline& spline, const size_t index, float& inX, float& inZ, float& outX, float& outZ)
+	{
+		const SplineTangents t = GetEffectiveTangents(spline, index);
+		inX = t.inX;
+		inZ = t.inZ;
+		outX = t.outX;
+		outZ = t.outZ;
 	}
 
 	void MakeTangentsManual(PathSpline& spline, const size_t index)
@@ -106,13 +120,14 @@ namespace mmo
 			return;
 		}
 
-		float inX, inZ, outX, outZ;
-		GetEffectiveTangents(spline, index, inX, inZ, outX, outZ);
+		const SplineTangents t = GetEffectiveTangents(spline, index);
 		SplinePoint& point = spline.points[index];
-		point.inX = inX;
-		point.inZ = inZ;
-		point.outX = outX;
-		point.outZ = outZ;
+		point.inX = t.inX;
+		point.inY = t.inY;
+		point.inZ = t.inZ;
+		point.outX = t.outX;
+		point.outY = t.outY;
+		point.outZ = t.outZ;
 		point.autoTangents = false;
 	}
 
@@ -161,18 +176,22 @@ namespace mmo
 			// authored before tangents existed, so rebuilding old content changes nothing.
 			const bool catmullRomSegment = curved && p1.autoTangents && p2.autoTangents;
 
-			// Bezier controls: P1 = p1 + out(p1), P2 = p2 + in(p2); relative to p1.
-			float c1x = 0.0f, c1z = 0.0f, c2x = 0.0f, c2z = 0.0f;
+			// Bezier controls: P1 = p1 + out(p1), P2 = p2 + in(p2); relative to p1. Each component is
+			// evaluated on its own, so the height never influences the planar curve.
+			float c1x = 0.0f, c1y = 0.0f, c1z = 0.0f, c2x = 0.0f, c2y = 0.0f, c2z = 0.0f;
 			const float ex = p2.x - p1.x;
+			const float ey = p2.y - p1.y;
 			const float ez = p2.z - p1.z;
 			if (curved)
 			{
-				float unusedX, unusedZ;
-				GetEffectiveTangents(spline, static_cast<size_t>(s), unusedX, unusedZ, c1x, c1z);
-				float inX, inZ;
-				GetEffectiveTangents(spline, static_cast<size_t>((s + 1) % n), inX, inZ, unusedX, unusedZ);
-				c2x = ex + inX;
-				c2z = ez + inZ;
+				const SplineTangents leaving = GetEffectiveTangents(spline, static_cast<size_t>(s));
+				const SplineTangents arriving = GetEffectiveTangents(spline, static_cast<size_t>((s + 1) % n));
+				c1x = leaving.outX;
+				c1y = leaving.outY;
+				c1z = leaving.outZ;
+				c2x = ex + arriving.inX;
+				c2y = ey + arriving.inY;
+				c2z = ez + arriving.inZ;
 			}
 
 			const float cdx = p2.x - p1.x;
@@ -188,16 +207,19 @@ namespace mmo
 				{
 					sample.x = catmullRom(p0.x, p1.x, p2.x, p3.x, t);
 					sample.z = catmullRom(p0.z, p1.z, p2.z, p3.z, t);
+					sample.y = catmullRom(p0.y, p1.y, p2.y, p3.y, t);
 				}
 				else if (curved)
 				{
 					sample.x = bezier(p1.x, c1x, c2x, ex, t);
 					sample.z = bezier(p1.z, c1z, c2z, ez, t);
+					sample.y = bezier(p1.y, c1y, c2y, ey, t);
 				}
 				else
 				{
 					sample.x = p1.x + (p2.x - p1.x) * t;
 					sample.z = p1.z + (p2.z - p1.z) * t;
+					sample.y = p1.y + (p2.y - p1.y) * t;
 				}
 				sample.width = p1.width + (p2.width - p1.width) * t;
 				sample.distance = 0.0f;
@@ -209,7 +231,7 @@ namespace mmo
 		if (!m_closed)
 		{
 			const SplinePoint& last = pts.back();
-			m_samples.push_back({ last.x, last.z, last.width, 0.0f });
+			m_samples.push_back({ last.x, last.z, last.width, 0.0f, last.y });
 			m_controlSegments.push_back(static_cast<uint32>(std::max(0, segmentCount - 1)));
 		}
 
@@ -373,7 +395,7 @@ namespace mmo
 		const float endDistance = (m_closed && i + 1 == m_samples.size()) ? m_length : b.distance;
 		const float span = endDistance - a.distance;
 		const float t = span > 0.0f ? std::clamp((distance - a.distance) / span, 0.0f, 1.0f) : 0.0f;
-		return { a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, a.width + (b.width - a.width) * t, distance };
+		return { a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, a.width + (b.width - a.width) * t, distance, a.y + (b.y - a.y) * t };
 	}
 
 	void SampledPath::NormalAtDistance(float distance, float& nx, float& nz) const
