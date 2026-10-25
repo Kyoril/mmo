@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 
@@ -171,6 +172,215 @@ namespace mmo::pcg
 			across = best.across;
 			return true;
 		}
+
+		/// Cell size of the nearest-segment grid (m).
+		constexpr float kNearestCell = 8.0f;
+		/// Consecutive segments per bounding box when the nearest-segment grid is built.
+		constexpr size_t kNearestChunk = 16;
+		/// Slack on the candidate distance, against float rounding (extra candidates never change a result).
+		constexpr double kNearestSlack = 0.01;
+
+		struct Box
+		{
+			double minX = 0.0, minZ = 0.0, maxX = 0.0, maxZ = 0.0;
+		};
+
+		double BoxPointDistanceSq(const Box& box, const double x, const double z)
+		{
+			const double dx = std::max({ box.minX - x, 0.0, x - box.maxX });
+			const double dz = std::max({ box.minZ - z, 0.0, z - box.maxZ });
+			return dx * dx + dz * dz;
+		}
+
+		double BoxBoxDistanceSq(const Box& a, const Box& b)
+		{
+			const double dx = std::max({ a.minX - b.maxX, 0.0, b.minX - a.maxX });
+			const double dz = std::max({ a.minZ - b.maxZ, 0.0, b.minZ - a.maxZ });
+			return dx * dx + dz * dz;
+		}
+
+		/// Squared distance from a point to the farthest corner of a box: an upper bound of the distance from any
+		/// point of the box to that point.
+		double FarCornerDistanceSq(const Box& box, const double x, const double z)
+		{
+			const double dx = std::max(std::fabs(x - box.minX), std::fabs(x - box.maxX));
+			const double dz = std::max(std::fabs(z - box.minZ), std::fabs(z - box.maxZ));
+			return dx * dx + dz * dz;
+		}
+
+		double SegmentPointDistanceSq(const double ax, const double az, const double bx, const double bz, const double x, const double z)
+		{
+			const double sx = bx - ax;
+			const double sz = bz - az;
+			const double lenSq = sx * sx + sz * sz;
+			const double t = lenSq > 0.0 ? std::clamp(((x - ax) * sx + (z - az) * sz) / lenSq, 0.0, 1.0) : 0.0;
+			const double px = x - (ax + sx * t);
+			const double pz = z - (az + sz * t);
+			return px * px + pz * pz;
+		}
+
+		/// Liang-Barsky: true if the segment touches the box.
+		bool SegmentTouchesBox(const Box& box, const double ax, const double az, const double bx, const double bz)
+		{
+			double t0 = 0.0;
+			double t1 = 1.0;
+			const double dx = bx - ax;
+			const double dz = bz - az;
+			const double p[4] = { -dx, dx, -dz, dz };
+			const double q[4] = { ax - box.minX, box.maxX - ax, az - box.minZ, box.maxZ - az };
+			for (int i = 0; i < 4; ++i)
+			{
+				if (p[i] == 0.0)
+				{
+					if (q[i] < 0.0)
+					{
+						return false;
+					}
+					continue;
+				}
+				const double r = q[i] / p[i];
+				if (p[i] < 0.0)
+				{
+					t0 = std::max(t0, r);
+				}
+				else
+				{
+					t1 = std::min(t1, r);
+				}
+				if (t0 > t1)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/// Squared distance between a box and a segment (0 if they touch): attained at a vertex of one of them.
+		double BoxSegmentDistanceSq(const Box& box, const double ax, const double az, const double bx, const double bz)
+		{
+			if (SegmentTouchesBox(box, ax, az, bx, bz))
+			{
+				return 0.0;
+			}
+			double best = std::min(BoxPointDistanceSq(box, ax, az), BoxPointDistanceSq(box, bx, bz));
+			best = std::min(best, SegmentPointDistanceSq(ax, az, bx, bz, box.minX, box.minZ));
+			best = std::min(best, SegmentPointDistanceSq(ax, az, bx, bz, box.maxX, box.minZ));
+			best = std::min(best, SegmentPointDistanceSq(ax, az, bx, bz, box.minX, box.maxZ));
+			best = std::min(best, SegmentPointDistanceSq(ax, az, bx, bz, box.maxX, box.maxZ));
+			return best;
+		}
+
+		void BuildNearestGrid(const SampledPath& path, const float reach, SectionNearestGrid& grid)
+		{
+			grid = SectionNearestGrid();
+			const std::vector<SplineSample>& samples = path.GetSamples();
+			const size_t n = samples.size();
+			if (n < 2 || !(reach > 0.0f))
+			{
+				return;
+			}
+
+			const size_t segments = path.IsClosed() ? n : n - 1;
+			float minX = 0.0f, minZ = 0.0f, maxX = 0.0f, maxZ = 0.0f;
+			path.GetBounds(minX, minZ, maxX, maxZ);
+			grid.cellSize = kNearestCell;
+			grid.reach = reach;
+			grid.originX = minX - (reach + kNearestCell);
+			grid.originZ = minZ - (reach + kNearestCell);
+			grid.columns = static_cast<int32>(std::ceil((maxX + reach + kNearestCell - grid.originX) / kNearestCell)) + 1;
+			grid.rows = static_cast<int32>(std::ceil((maxZ + reach + kNearestCell - grid.originZ) / kNearestCell)) + 1;
+
+			// Chunks of consecutive segments with their bounds, and probe points (segment ends) for the upper bound.
+			std::vector<Box> chunks;
+			for (size_t first = 0; first < segments; first += kNearestChunk)
+			{
+				Box box{ samples[first].x, samples[first].z, samples[first].x, samples[first].z };
+				const size_t last = std::min(segments, first + kNearestChunk);
+				for (size_t i = first; i < last; ++i)
+				{
+					const SplineSample& b = samples[(i + 1) % n];
+					box.minX = std::min(box.minX, static_cast<double>(b.x));
+					box.minZ = std::min(box.minZ, static_cast<double>(b.z));
+					box.maxX = std::max(box.maxX, static_cast<double>(b.x));
+					box.maxZ = std::max(box.maxZ, static_cast<double>(b.z));
+				}
+				chunks.push_back(box);
+			}
+			std::vector<size_t> probes;
+			for (size_t i = 0; i < n; i += kNearestChunk)
+			{
+				probes.push_back(i);
+			}
+			probes.push_back(n - 1);
+
+			const Box pathBox{ minX, minZ, maxX, maxZ };
+			const double reachSq = (reach + kNearestSlack) * (reach + kNearestSlack);
+			const size_t cells = static_cast<size_t>(grid.columns) * static_cast<size_t>(grid.rows);
+			grid.cellStart.assign(cells + 1, 0);
+			for (int32 cz = 0; cz < grid.rows; ++cz)
+			{
+				for (int32 cx = 0; cx < grid.columns; ++cx)
+				{
+					const size_t cell = static_cast<size_t>(cz) * grid.columns + cx;
+					grid.cellStart[cell + 1] = static_cast<uint32>(grid.segments.size());
+					const Box box{ grid.originX + static_cast<double>(cx) * kNearestCell, grid.originZ + static_cast<double>(cz) * kNearestCell,
+						grid.originX + static_cast<double>(cx + 1) * kNearestCell, grid.originZ + static_cast<double>(cz + 1) * kNearestCell };
+					if (BoxBoxDistanceSq(box, pathBox) > reachSq)
+					{
+						continue;
+					}
+
+					// Every point of the cell is at most `upper` from the path (the distance to a probe's far corner).
+					double upperSq = std::numeric_limits<double>::max();
+					for (const size_t p : probes)
+					{
+						upperSq = std::min(upperSq, FarCornerDistanceSq(box, samples[p].x, samples[p].z));
+					}
+					const double limit = std::min(std::sqrt(upperSq), static_cast<double>(reach)) + kNearestSlack;
+					const double limitSq = limit * limit;
+
+					for (size_t c = 0; c < chunks.size(); ++c)
+					{
+						if (BoxBoxDistanceSq(box, chunks[c]) > limitSq)
+						{
+							continue;
+						}
+						const size_t last = std::min(segments, (c + 1) * kNearestChunk);
+						for (size_t i = c * kNearestChunk; i < last; ++i)
+						{
+							const SplineSample& a = samples[i];
+							const SplineSample& b = samples[(i + 1) % n];
+							if (BoxSegmentDistanceSq(box, a.x, a.z, b.x, b.z) <= limitSq)
+							{
+								grid.segments.push_back(static_cast<uint32>(i));
+							}
+						}
+					}
+					grid.cellStart[cell + 1] = static_cast<uint32>(grid.segments.size());
+				}
+			}
+		}
+	}
+
+	SectionLayoutCounts CountSectionCopies(const SectionLayout& layout)
+	{
+		SectionLayoutCounts counts;
+		for (const SectionCopy& copy : layout.copies)
+		{
+			switch (copy.role)
+			{
+			case SectionVariantRole::InnerCorner:
+				++counts.inner;
+				break;
+			case SectionVariantRole::OuterCorner:
+				++counts.outer;
+				break;
+			default:
+				++counts.straight;
+				break;
+			}
+		}
+		return counts;
 	}
 
 	namespace
@@ -548,10 +758,19 @@ namespace mmo::pcg
 		{
 			CopySample out;
 			const SectionVariant& variant = shape.asset.variants[GetVariant(shape, copy)];
-			const float localZ = copy.stretchedLength > 0.0f
+			float localZ = copy.stretchedLength > 0.0f
 				? (distance - copy.startDistance) * shape.asset.length / copy.stretchedLength
 				: 0.0f;
+			const SectionCopyFacade facade = GetCopyFacade(shape, copy);
+			if (facade.mirrored)
+			{
+				localZ = shape.asset.length - localZ;
+			}
 			out.height = SampleHeight(variant.heights, across, localZ);
+			if (facade.heightScale != 1.0f)
+			{
+				out.height *= facade.heightScale;
+			}
 			SamplePaint(variant.paint, across, localZ, out.weights, out.coverage);
 			return out;
 		}
@@ -701,10 +920,93 @@ namespace mmo::pcg
 			}
 			return out;
 		}
+
+		constexpr uint64 kMassSalt = 0x4d415353u;
+		constexpr uint64 kMirrorSalt = 0x4d495252u;
+		constexpr uint64 kHeightScaleSalt = 0x48534341u;
+		/// The mass weight falls to 0 over this last fraction of the mass depth.
+		constexpr float kMassFall = 0.3f;
+		/// Section heights at least this high (m) count as the wall when the mass paint layer is chosen.
+		constexpr float kWallHeight = 1.0f;
+		/// Facade height jitter is clamped to this.
+		constexpr float kMaxHeightJitter = 0.9f;
+
+		float FiniteOr(const float value, const float fallback)
+		{
+			return std::isfinite(value) ? value : fallback;
+		}
+
+		/// Clamps the mass and facade settings into their valid ranges; a mass without depth is switched off.
+		void SanitiseMassParams(SectionPathParams& p)
+		{
+			const SectionPathParams defaults;
+			p.massHeight = FiniteOr(p.massHeight, defaults.massHeight);
+			p.massDepth = FiniteOr(p.massDepth, 0.0f);
+			if (!(p.massDepth > 0.0f))
+			{
+				p.massEnabled = false;
+			}
+			p.massRise = std::clamp(FiniteOr(p.massRise, defaults.massRise), 0.01f, 1.0f - kMassFall);
+			p.massNoiseAmplitude = std::max(0.0f, FiniteOr(p.massNoiseAmplitude, 0.0f));
+			p.massNoiseWavelength = FiniteOr(p.massNoiseWavelength, 0.0f);
+			p.massDetailAmplitude = std::max(0.0f, FiniteOr(p.massDetailAmplitude, 0.0f));
+			p.massDetailWavelength = FiniteOr(p.massDetailWavelength, 0.0f);
+			if (p.massPaintLayer < -1 || p.massPaintLayer > 3)
+			{
+				p.massPaintLayer = -1;
+			}
+			p.facadeHeightJitter = std::clamp(FiniteOr(p.facadeHeightJitter, 0.0f), 0.0f, kMaxHeightJitter);
+		}
+
+		/// The section layer the straight variants paint most where they are at least kWallHeight high, or -1.
+		int8 DominantWallLayer(const SectionAsset& asset)
+		{
+			std::array<double, 4> sums{};
+			for (const SectionVariant& variant : asset.variants)
+			{
+				if (variant.role != SectionVariantRole::Straight)
+				{
+					continue;
+				}
+
+				const SectionPaint& paint = variant.paint;
+				const size_t count = std::min({ paint.packed.size(), paint.coverage.size(), static_cast<size_t>(paint.width) * paint.depth });
+				for (size_t index = 0; index < count; ++index)
+				{
+					if (paint.coverage[index] == 0)
+					{
+						continue;
+					}
+					const uint32 i = static_cast<uint32>(index % paint.width);
+					const uint32 j = static_cast<uint32>(index / paint.width);
+					const float x = static_cast<float>(paint.originX + static_cast<int32>(i)) * paint.spacing;
+					const float z = static_cast<float>(paint.originZ + static_cast<int32>(j)) * paint.spacing;
+					if (!(SampleHeight(variant.heights, x, z) >= kWallHeight))
+					{
+						continue;
+					}
+					for (size_t layer = 0; layer < 4; ++layer)
+					{
+						sums[layer] += static_cast<double>((paint.packed[index] >> (layer * 8)) & 0xFFu) * paint.coverage[index];
+					}
+				}
+			}
+
+			int8 best = -1;
+			for (size_t layer = 0; layer < 4; ++layer)
+			{
+				if (sums[layer] > 0.0 && (best < 0 || sums[layer] > sums[static_cast<size_t>(best)]))
+				{
+					best = static_cast<int8>(layer);
+				}
+			}
+			return best;
+		}
 	}
 
 	bool PrepareSectionPath(const PathSpline& spline, const std::vector<uint64>& pointIds, const SectionAsset& asset,
-		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error)
+		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error,
+		const bool buildLookups)
 	{
 		out = SectionPathShape();
 		if (spline.points.size() < 2)
@@ -806,6 +1108,18 @@ namespace mmo::pcg
 		out.params = params;
 		out.params.joinBlend = params.joinBlend > 0.0f ? params.joinBlend : 0.0f;
 		out.params.propDensity = params.propDensity > 0.0f ? std::min(params.propDensity, 1.0f) : 0.0f;
+		SanitiseMassParams(out.params);
+
+		if (out.params.massEnabled)
+		{
+			out.massReach = std::max(0.0f, out.params.massDepth - asset.halfWidth);
+			out.massSeed = Hash(out.params.seed, 0, 0, kMassSalt);
+			out.massLayer = out.params.massPaintLayer >= 0 ? out.params.massPaintLayer : DominantWallLayer(asset);
+			if (buildLookups && out.massReach > asset.halfWidth + asset.sideFalloff)
+			{
+				BuildNearestGrid(*out.path, out.massReach, out.nearestGrid);
+			}
+		}
 
 		const std::vector<SplineSample>& samples = out.path->GetSamples();
 		out.centreHeights.reserve(samples.size());
@@ -820,7 +1134,7 @@ namespace mmo::pcg
 		}
 
 		// Influence: everything a terrain sample or a prop can reach from the path.
-		float reach = asset.halfWidth + asset.sideFalloff;
+		float reach = std::max(asset.halfWidth + asset.sideFalloff, out.massReach);
 		float jitter = 0.0f;
 		for (const SectionVariant& variant : asset.variants)
 		{
@@ -880,101 +1194,276 @@ namespace mmo::pcg
 		return (*candidates)[choice];
 	}
 
-	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, const float x, const float z, float /*baseHeight*/, const LayerRemapFunction& remap)
+	SectionCopyFacade GetCopyFacade(const SectionPathShape& shape, const SectionCopy& copy)
 	{
-		TerrainTarget target;
-		if (!shape.path || shape.layout.copies.empty() || shape.asset.variants.empty())
+		SectionCopyFacade facade;
+		const SectionPathParams& params = shape.params;
+		if (params.mirrorCopies)
 		{
-			return target;
+			facade.mirrored = HashToUnit(Hash(params.seed, static_cast<int64>(copy.spanKey), copy.copy, kMirrorSalt)) < 0.5f;
+		}
+		if (params.facadeHeightJitter > 0.0f)
+		{
+			const float j = params.facadeHeightJitter;
+			facade.heightScale = 1.0f + HashRange(Hash(params.seed, static_cast<int64>(copy.spanKey), copy.copy, kHeightScaleSalt), -j, j);
+		}
+		return facade;
+	}
+
+	void GetSectionCopyRects(const SectionPathShape& shape, std::vector<WorldRect>& out)
+	{
+		out.clear();
+		if (!shape.path)
+		{
+			return;
 		}
 
-		const SampledPath& path = *shape.path;
-		const SectionAsset& asset = shape.asset;
-		float distance = 0.0f;
-		float across = 0.0f;
-		if (!ProjectToSectionPath(shape, x, z, asset.halfWidth + asset.sideFalloff, distance, across))
-		{
-			return target;
-		}
+		// GetInfluenceRect grows the path bounds by one amount on every side; recover it.
+		float pathMinX = 0.0f, pathMinZ = 0.0f, pathMaxX = 0.0f, pathMaxZ = 0.0f;
+		shape.path->GetBounds(pathMinX, pathMinZ, pathMaxX, pathMaxZ);
+		const WorldRect influence = GetInfluenceRect(shape);
+		const float grow = std::max(0.0f, pathMinX - influence.minX);
 
-		// Distance to the nearest path point: |across| along the path, radial past the ends of an open path.
-		const SplineSample nearest = path.SampleAtDistance(distance);
-		const float falloff = SideFalloff(asset, std::sqrt((x - nearest.x) * (x - nearest.x) + (z - nearest.z) * (z - nearest.z)));
-		if (falloff <= 0.0f)
+		const std::vector<SplineSample>& samples = shape.path->GetSamples();
+		for (const SectionCopy& copy : shape.layout.copies)
 		{
-			return target;
-		}
+			const float begin = copy.startDistance;
+			const float end = copy.startDistance + copy.stretchedLength;
 
-		// A closed loop whose first point has a corner: the start of the path belongs to the copy wrapping past its end.
-		if (shape.layout.loopLength > 0.0f && distance < shape.layout.copies.front().startDistance)
-		{
-			distance += shape.layout.loopLength;
-		}
+			const SplineSample first = shape.path->SampleAtDistance(begin);
+			const SplineSample last = shape.path->SampleAtDistance(end);
+			WorldRect rect{ std::min(first.x, last.x), std::min(first.z, last.z), std::max(first.x, last.x), std::max(first.z, last.z) };
 
-		float localZ = 0.0f;
-		const SectionCopy* found = FindCopy(shape.layout, distance, asset.length, localZ);
-		if (found == nullptr)
-		{
-			return target;
-		}
-
-		const std::vector<SectionCopy>& copies = shape.layout.copies;
-		const size_t count = copies.size();
-		const size_t index = static_cast<size_t>(found - copies.data());
-		const bool closed = path.IsClosed();
-		const float length = path.GetLength();
-
-		CopySample sample = SampleCopy(shape, *found, distance, across);
-
-		// Cross-fade with the neighbouring copy within joinBlend of the nearer boundary.
-		const float toStart = distance - found->startDistance;
-		const float toEnd = found->startDistance + found->stretchedLength - distance;
-		const SectionCopy* other = nullptr;
-		float otherDistance = distance;
-		float edge = 0.0f;
-		float blend = 0.0f;
-		if (toStart <= toEnd && (index > 0 || closed))
-		{
-			other = &copies[index > 0 ? index - 1 : count - 1];
-			otherDistance = index > 0 ? distance : distance + length;
-			edge = toStart;
-		}
-		else if (toEnd < toStart && (index + 1 < count || closed))
-		{
-			other = &copies[index + 1 < count ? index + 1 : 0];
-			otherDistance = index + 1 < count ? distance : distance - length;
-			edge = toEnd;
-		}
-
-		if (other != nullptr && other != found)
-		{
-			blend = std::min(shape.params.joinBlend, 0.5f * std::min(found->stretchedLength, other->stretchedLength));
-		}
-
-		if (blend > 0.0f && edge < blend)
-		{
-			// Own weight runs from 0.5 at the boundary to 1 at joinBlend inside the copy.
-			const float own = Smooth(0.5f + 0.5f * edge / blend);
-			const CopySample neighbour = SampleCopy(shape, *other, otherDistance, across);
-			sample.height = neighbour.height + (sample.height - neighbour.height) * own;
-			sample.coverage = neighbour.coverage + (sample.coverage - neighbour.coverage) * own;
-			for (size_t i = 0; i < 4; ++i)
+			const auto from = std::lower_bound(samples.begin(), samples.end(), begin,
+				[](const SplineSample& sample, const float distance) { return sample.distance < distance; });
+			const auto include = [&rect](const SplineSample& sample)
 			{
-				sample.weights[i] = neighbour.weights[i] + (sample.weights[i] - neighbour.weights[i]) * own;
+				rect.minX = std::min(rect.minX, sample.x);
+				rect.minZ = std::min(rect.minZ, sample.z);
+				rect.maxX = std::max(rect.maxX, sample.x);
+				rect.maxZ = std::max(rect.maxZ, sample.z);
+			};
+			for (auto it = from; it != samples.end() && it->distance <= end; ++it)
+			{
+				include(*it);
+			}
+
+			// On a loop the corner copy at the first point wraps past the path end into its start.
+			const float loopLength = shape.layout.loopLength;
+			if (loopLength > 0.0f && end > loopLength)
+			{
+				for (auto it = samples.begin(); it != samples.end() && it->distance <= end - loopLength; ++it)
+				{
+					include(*it);
+				}
+			}
+
+			rect.minX -= grow;
+			rect.minZ -= grow;
+			rect.maxX += grow;
+			rect.maxZ += grow;
+			out.push_back(rect);
+		}
+	}
+
+	namespace
+	{
+		bool ParseFloatText(const String& text, float& out)
+		{
+			char* end = nullptr;
+			const float value = std::strtof(text.c_str(), &end);
+			if (text.empty() || end != text.c_str() + text.size() || !std::isfinite(value))
+			{
+				return false;
+			}
+			out = value;
+			return true;
+		}
+
+		bool ParseBoolText(const String& text, bool& out)
+		{
+			if (text == "1" || text == "true")
+			{
+				out = true;
+				return true;
+			}
+			if (text == "0" || text == "false")
+			{
+				out = false;
+				return true;
+			}
+			return false;
+		}
+	}
+
+	bool SetSectionPathParam(SectionPathParams& params, const String& name, const String& value, String& error)
+	{
+		SectionPathParams p = params;
+		bool known = true;
+		bool parsed = false;
+
+		const std::pair<const char*, float SectionPathParams::*> floats[] = {
+			{ "joinBlend", &SectionPathParams::joinBlend },
+			{ "propDensity", &SectionPathParams::propDensity },
+			{ "groundSmoothing", &SectionPathParams::groundSmoothing },
+			{ "massHeight", &SectionPathParams::massHeight },
+			{ "massDepth", &SectionPathParams::massDepth },
+			{ "massRise", &SectionPathParams::massRise },
+			{ "massNoiseAmplitude", &SectionPathParams::massNoiseAmplitude },
+			{ "massNoiseWavelength", &SectionPathParams::massNoiseWavelength },
+			{ "massDetailAmplitude", &SectionPathParams::massDetailAmplitude },
+			{ "massDetailWavelength", &SectionPathParams::massDetailWavelength },
+			{ "facadeHeightJitter", &SectionPathParams::facadeHeightJitter },
+		};
+		const std::pair<const char*, bool SectionPathParams::*> bools[] = {
+			{ "sequentialVariants", &SectionPathParams::sequentialVariants },
+			{ "floorInside", &SectionPathParams::floorInside },
+			{ "massEnabled", &SectionPathParams::massEnabled },
+			{ "mirrorCopies", &SectionPathParams::mirrorCopies },
+		};
+
+		const auto findFloat = std::find_if(std::begin(floats), std::end(floats), [&name](const auto& f) { return name == f.first; });
+		const auto findBool = std::find_if(std::begin(bools), std::end(bools), [&name](const auto& b) { return name == b.first; });
+		if (findFloat != std::end(floats))
+		{
+			parsed = ParseFloatText(value, p.*(findFloat->second));
+		}
+		else if (findBool != std::end(bools))
+		{
+			parsed = ParseBoolText(value, p.*(findBool->second));
+		}
+		else if (name == "seed")
+		{
+			char* end = nullptr;
+			const unsigned long long seed = std::strtoull(value.c_str(), &end, 0);
+			parsed = !value.empty() && value[0] != '-' && end == value.c_str() + value.size();
+			p.seed = static_cast<uint64>(seed);
+		}
+		else if (name == "massPaintLayer")
+		{
+			char* end = nullptr;
+			const long layer = std::strtol(value.c_str(), &end, 10);
+			parsed = !value.empty() && end == value.c_str() + value.size() && layer >= -1 && layer <= 3;
+			p.massPaintLayer = static_cast<int8>(layer);
+		}
+		else if (name == "heightMode")
+		{
+			parsed = true;
+			if (value == "followSpline")
+			{
+				p.heightMode = SectionHeightMode::FollowSpline;
+			}
+			else if (value == "followGround")
+			{
+				p.heightMode = SectionHeightMode::FollowGround;
+			}
+			else if (value == "smoothedGround")
+			{
+				p.heightMode = SectionHeightMode::SmoothedGround;
+			}
+			else
+			{
+				parsed = false;
 			}
 		}
-
-		target.height = CentreHeightAt(shape, distance) + sample.height;
-		target.heightWeight = falloff;
-		target.setMaterial = false;
-
-		const float paintWeight = sample.coverage / 255.0f * falloff;
-		if (paintWeight > 0.0f)
+		else
 		{
-			std::array<int8, 4> map{ 0, 1, 2, 3 };
-			if (remap)
+			known = false;
+		}
+
+		if (!known)
+		{
+			error = "Unknown section path parameter '" + name + "'.";
+			return false;
+		}
+		if (!parsed)
+		{
+			error = "Invalid value '" + value + "' for section path parameter '" + name + "'.";
+			return false;
+		}
+
+		params = p;
+		error.clear();
+		return true;
+	}
+
+	namespace
+	{
+		/// The section's blended sample at a projected position: the copy containing the distance cross-faded with its
+		/// neighbour within joinBlend of the nearer boundary. False if the distance lies outside every copy.
+		bool SampleSection(const SectionPathShape& shape, float& distance, const float across, CopySample& sample)
+		{
+			const SampledPath& path = *shape.path;
+			const SectionAsset& asset = shape.asset;
+
+			// A closed loop whose first point has a corner: the start of the path belongs to the copy wrapping past its end.
+			if (shape.layout.loopLength > 0.0f && distance < shape.layout.copies.front().startDistance)
 			{
-				map = remap(x, z);
+				distance += shape.layout.loopLength;
+			}
+
+			float localZ = 0.0f;
+			const SectionCopy* found = FindCopy(shape.layout, distance, asset.length, localZ);
+			if (found == nullptr)
+			{
+				return false;
+			}
+
+			const std::vector<SectionCopy>& copies = shape.layout.copies;
+			const size_t count = copies.size();
+			const size_t index = static_cast<size_t>(found - copies.data());
+			const bool closed = path.IsClosed();
+			const float length = path.GetLength();
+
+			sample = SampleCopy(shape, *found, distance, across);
+
+			// Cross-fade with the neighbouring copy within joinBlend of the nearer boundary.
+			const float toStart = distance - found->startDistance;
+			const float toEnd = found->startDistance + found->stretchedLength - distance;
+			const SectionCopy* other = nullptr;
+			float otherDistance = distance;
+			float edge = 0.0f;
+			float blend = 0.0f;
+			if (toStart <= toEnd && (index > 0 || closed))
+			{
+				other = &copies[index > 0 ? index - 1 : count - 1];
+				otherDistance = index > 0 ? distance : distance + length;
+				edge = toStart;
+			}
+			else if (toEnd < toStart && (index + 1 < count || closed))
+			{
+				other = &copies[index + 1 < count ? index + 1 : 0];
+				otherDistance = index + 1 < count ? distance : distance - length;
+				edge = toEnd;
+			}
+
+			if (other != nullptr && other != found)
+			{
+				blend = std::min(shape.params.joinBlend, 0.5f * std::min(found->stretchedLength, other->stretchedLength));
+			}
+
+			if (blend > 0.0f && edge < blend)
+			{
+				// Own weight runs from 0.5 at the boundary to 1 at joinBlend inside the copy.
+				const float own = Smooth(0.5f + 0.5f * edge / blend);
+				const CopySample neighbour = SampleCopy(shape, *other, otherDistance, across);
+				sample.height = neighbour.height + (sample.height - neighbour.height) * own;
+				sample.coverage = neighbour.coverage + (sample.coverage - neighbour.coverage) * own;
+				for (size_t i = 0; i < 4; ++i)
+				{
+					sample.weights[i] = neighbour.weights[i] + (sample.weights[i] - neighbour.weights[i]) * own;
+				}
+			}
+			return true;
+		}
+
+		/// The section's paint as a target splat (remapped, renormalised) at weight coverage x falloff.
+		void PaintSection(const CopySample& sample, const float falloff, const std::array<int8, 4>& map, TerrainTarget& target)
+		{
+			const float paintWeight = sample.coverage / 255.0f * falloff;
+			if (!(paintWeight > 0.0f))
+			{
+				return;
 			}
 
 			std::array<float, 4> tile{};
@@ -997,6 +1486,156 @@ namespace mmo::pcg
 			}
 		}
 
+		/// Mass height above the centre line before the rise: massHeight plus the world-anchored noise, never negative.
+		float MassAmplitude(const SectionPathShape& shape, const float x, const float z)
+		{
+			const SectionPathParams& p = shape.params;
+			float h = p.massHeight;
+			if (p.massNoiseAmplitude > 0.0f && p.massNoiseWavelength > 0.0f)
+			{
+				h += p.massNoiseAmplitude * FractalNoise(shape.massSeed, x, z, 1.0f / p.massNoiseWavelength, 4, 0.5f);
+			}
+			if (p.massDetailAmplitude > 0.0f && p.massDetailWavelength > 0.0f)
+			{
+				h += p.massDetailAmplitude * FractalNoise(Hash(shape.massSeed, 1), x, z, 1.0f / p.massDetailWavelength, 2, 0.5f);
+			}
+			return std::max(0.0f, h);
+		}
+
+		/// Slope (deg) below which the mass is not painted, and from which it is painted fully.
+		constexpr float kMassPaintSlopeLow = 10.0f;
+		constexpr float kMassPaintSlopeHigh = 30.0f;
+		/// Finite difference step (m) of the mass noise gradient.
+		constexpr float kMassGradientStep = 0.5f;
+	}
+
+	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, const float x, const float z, const float baseHeight, const LayerRemapFunction& remap)
+	{
+		TerrainTarget target;
+		if (!shape.path || shape.layout.copies.empty() || shape.asset.variants.empty())
+		{
+			return target;
+		}
+
+		const SampledPath& path = *shape.path;
+		const SectionAsset& asset = shape.asset;
+		const bool mass = shape.params.massEnabled;
+		const float sectionReach = asset.halfWidth + asset.sideFalloff;
+		float distance = 0.0f;
+		float across = 0.0f;
+		if (!ProjectToSectionPath(shape, x, z, mass ? std::max(sectionReach, shape.massReach) : sectionReach, distance, across))
+		{
+			return target;
+		}
+
+		// Distance to the nearest path point: |across| along the path, radial past the ends of an open path.
+		const SplineSample nearest = path.SampleAtDistance(distance);
+		const float radialSq = (x - nearest.x) * (x - nearest.x) + (z - nearest.z) * (z - nearest.z);
+		const float falloff = SideFalloff(asset, std::sqrt(radialSq));
+
+		// Position across the mass: < 0 on the floor side, where the mass changes nothing.
+		const float u = mass ? (across + asset.halfWidth) / shape.params.massDepth : -1.0f;
+		if (!(u >= 0.0f))
+		{
+			if (falloff <= 0.0f)
+			{
+				return target;
+			}
+
+			CopySample sample;
+			if (!SampleSection(shape, distance, across, sample))
+			{
+				return target;
+			}
+
+			target.height = CentreHeightAt(shape, distance) + sample.height;
+			target.heightWeight = falloff;
+			target.setMaterial = false;
+			std::array<int8, 4> map{ 0, 1, 2, 3 };
+			if (remap && sample.coverage / 255.0f * falloff > 0.0f)
+			{
+				map = remap(x, z);
+			}
+			PaintSection(sample, falloff, map, target);
+			return target;
+		}
+
+		// Mass: rises over massRise of the depth, holds, and its weight falls over the last kMassFall of it; past the ends of an
+		// open path it fades out over the rise length (at least the side falloff).
+		const SectionPathParams& p = shape.params;
+		const float rise = Smooth(u / p.massRise);
+		float weight = u >= 1.0f ? 0.0f : 1.0f - Smooth((u - (1.0f - kMassFall)) / kMassFall);
+		const float length = path.GetLength();
+		if (!path.IsClosed() && (distance <= 0.0f || distance >= length))
+		{
+			const float beyond = std::sqrt(std::max(0.0f, radialSq - across * across));
+			const float endFalloff = std::max(asset.sideFalloff, p.massRise * p.massDepth);
+			weight *= 1.0f - Smooth(beyond / endFalloff);
+		}
+		if (falloff <= 0.0f && weight <= 0.0f)
+		{
+			return target;
+		}
+
+		const float amplitude = MassAmplitude(shape, x, z);
+		const float massHeight = rise * amplitude;
+
+		CopySample sample;
+		const float sectionFalloff = falloff > 0.0f && SampleSection(shape, distance, across, sample) ? falloff : 0.0f;
+		const float centre = CentreHeightAt(shape, distance);
+
+		// The section and the mass as Apply would write them, combined so that the mass only raises the ground.
+		const float section = baseHeight + (centre + sample.height - baseHeight) * sectionFalloff;
+		const float massTarget = baseHeight + (centre + massHeight - baseHeight) * weight;
+		target.height = section + rise * std::max(0.0f, massTarget - section);
+		target.heightWeight = 1.0f;
+		target.setMaterial = false;
+
+		// Paint: the section's where it stands above the mass, else the mass layer on the mass's slopes.
+		const bool sectionOnTop = sectionFalloff > 0.0f && sample.height >= massHeight;
+		const float sectionPaint = sectionFalloff > 0.0f ? sample.coverage / 255.0f * sectionFalloff : 0.0f;
+		if (sectionOnTop)
+		{
+			if (sectionPaint > 0.0f)
+			{
+				PaintSection(sample, sectionFalloff, remap ? remap(x, z) : std::array<int8, 4>{ 0, 1, 2, 3 }, target);
+			}
+			return target;
+		}
+		if (shape.massLayer < 0 || !(weight > 0.0f))
+		{
+			return target;
+		}
+
+		// Gradient of the mass surface: the rise across the path plus the noise along both axes.
+		const float t = u / p.massRise;
+		const float riseSlope = t > 0.0f && t < 1.0f ? 6.0f * t * (1.0f - t) / (p.massRise * p.massDepth) : 0.0f;
+		const SectionFrame frame = FrameAt(path, distance);
+		const float e = kMassGradientStep;
+		const float dx = (MassAmplitude(shape, x + e, z) - MassAmplitude(shape, x - e, z)) / (2.0f * e);
+		const float dz = (MassAmplitude(shape, x, z + e) - MassAmplitude(shape, x, z - e)) / (2.0f * e);
+		const float gx = rise * dx + amplitude * riseSlope * frame.rightX;
+		const float gz = rise * dz + amplitude * riseSlope * frame.rightZ;
+		const float slopeDeg = std::atan(std::sqrt(gx * gx + gz * gz)) * kRadToDeg;
+		const float paintWeight = weight * Smooth((slopeDeg - kMassPaintSlopeLow) / (kMassPaintSlopeHigh - kMassPaintSlopeLow));
+		if (!(paintWeight > 0.0f))
+		{
+			return target;
+		}
+
+		std::array<int8, 4> map{ 0, 1, 2, 3 };
+		if (remap)
+		{
+			map = remap(x, z);
+		}
+		const int8 to = map[static_cast<size_t>(shape.massLayer)];
+		if (to < 0 || to > 3)
+		{
+			return target;
+		}
+		target.splat = std::array<uint8, 4>{};
+		target.splat[static_cast<size_t>(to)] = 255;
+		target.splatWeight = std::min(1.0f, paintWeight);
 		return target;
 	}
 
@@ -1425,7 +2064,29 @@ namespace mmo::pcg
 		const SectionSegmentGrid& grid = shape.segmentGrid;
 		if (grid.columns <= 0 || grid.rows <= 0 || !(maxAcross <= grid.reach))
 		{
-			return ProjectToPath(*shape.path, x, z, maxAcross, distance, across);
+			// Far queries (the mass layer): the candidates of the cell are the only segments that can be nearest.
+			const SectionNearestGrid& near = shape.nearestGrid;
+			if (near.columns <= 0 || near.rows <= 0 || !(maxAcross <= near.reach))
+			{
+				return ProjectToPath(*shape.path, x, z, maxAcross, distance, across);
+			}
+
+			const float fx = CellCoordinate(x, near.originX, near.cellSize);
+			const float fz = CellCoordinate(z, near.originZ, near.cellSize);
+			if (!(fx >= 0.0f && fx < static_cast<float>(near.columns) && fz >= 0.0f && fz < static_cast<float>(near.rows)))
+			{
+				// Outside the grid every point is further than its reach from the path.
+				return false;
+			}
+
+			const size_t cell = static_cast<size_t>(fz) * near.columns + static_cast<size_t>(fx);
+			const std::vector<SplineSample>& samples = shape.path->GetSamples();
+			Projection best;
+			for (uint32 k = near.cellStart[cell]; k < near.cellStart[cell + 1]; ++k)
+			{
+				TestSegment(samples, near.segments[k], x, z, best);
+			}
+			return FinishProjection(best, maxAcross, distance, across);
 		}
 
 		// Every segment within reach lies in the 3 x 3 cells around the query; outside them nothing is near.
@@ -1471,6 +2132,7 @@ namespace mmo::pcg
 			const SectionVariant& variant = asset.variants[variantIndex];
 			const uint64 copySeed = Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kPropSalt);
 			const float stretch = copy.stretchedLength / asset.length;
+			const bool mirrored = GetCopyFacade(shape, copy).mirrored;
 
 			for (const SectionPlacement& source : variant.placements)
 			{
@@ -1484,7 +2146,7 @@ namespace mmo::pcg
 				}
 
 				float localX = source.placement.position.x;
-				float localZ = source.placement.position.z;
+				float localZ = mirrored ? asset.length - source.placement.position.z : source.placement.position.z;
 				float yaw = 0.0f;
 				float scaleFactor = 1.0f;
 				if (rule != nullptr)
@@ -1513,7 +2175,10 @@ namespace mmo::pcg
 				placement.position.z = frame.position.z + frame.rightZ * localX;
 				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : CentreHeightAt(shape, s);
 				placement.position.y = groundHeight + source.heightAboveTerrain;
-				placement.rotation = Quaternion(Radian(yaw), Vector3::UnitY) * source.placement.rotation;
+				// A mirrored copy reflects the authored rotation across its local XY plane: (w, x, y, z) -> (w, -x, -y, z).
+				const Quaternion& authored = source.placement.rotation;
+				const Quaternion local = mirrored ? Quaternion(authored.w, -authored.x, -authored.y, authored.z) : authored;
+				placement.rotation = Quaternion(Radian(yaw), Vector3::UnitY) * local;
 				placement.scale = source.placement.scale * scaleFactor;
 
 				if (rule != nullptr && !rule->swapGroup.empty())

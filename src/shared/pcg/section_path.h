@@ -150,7 +150,54 @@ namespace mmo::pcg
 		/// SmoothedGround: length (m) of the window the base ground is averaged over, centred on each centre line
 		/// point (clamped to the path on open paths, wrapping on closed ones). 0 = FollowGround.
 		float groundSmoothing = 20.0f;
+
+		/// Mass layer: a broad terrain mass behind the section (on its +X side, away from the floor), so a wall of
+		/// sections gets the bulk of a mountain range behind its facade. Off by default (and for old records).
+		bool massEnabled = false;
+		/// Mass height (m) above the centre line height, before noise.
+		float massHeight = 30.0f;
+		/// How far (m) the mass reaches across, measured from the section's floor-side edge (local x = -halfWidth)
+		/// towards +X. The mass ends at local x = massDepth - halfWidth.
+		float massDepth = 60.0f;
+		/// Fraction of massDepth over which the mass rises (smoothstep) from 0 at the floor-side edge to full height.
+		float massRise = 0.25f;
+		/// Low-frequency variation (m, +-) of the mass height: world-anchored fractal noise.
+		float massNoiseAmplitude = 15.0f;
+		/// Wavelength (m) of that variation.
+		float massNoiseWavelength = 120.0f;
+		/// Breakup (m, +-) on top of it: world-anchored fractal noise of a shorter wavelength.
+		float massDetailAmplitude = 3.0f;
+		/// Wavelength (m) of the breakup.
+		float massDetailWavelength = 25.0f;
+		/// Section paint layer (0..3) the mass is painted with on its slopes; -1 = the layer the section's straight
+		/// variants paint most above their floor (none if they paint nothing there).
+		int8 massPaintLayer = -1;
+
+		/// Facade variety: every copy is laid mirrored along its length (local z -> length - z) or not, by hash.
+		bool mirrorCopies = false;
+		/// Facade variety: every copy's section heights are scaled by a hashed factor in [1 - j, 1 + j].
+		float facadeHeightJitter = 0.0f;
 	};
+
+	/// How one copy is laid (see SectionPathParams::mirrorCopies and facadeHeightJitter).
+	struct SectionCopyFacade
+	{
+		/// The copy is laid with its local z reversed (z' = length - z).
+		bool mirrored = false;
+		/// Factor on the copy's section heights.
+		float heightScale = 1.0f;
+	};
+
+	/// Counts of the copies of a layout by role.
+	struct SectionLayoutCounts
+	{
+		uint32 straight = 0;
+		uint32 inner = 0;
+		uint32 outer = 0;
+	};
+
+	/// Counts the copies of a layout per role.
+	SectionLayoutCounts CountSectionCopies(const SectionLayout& layout);
 
 	/// layerRemap[sectionLayer] = target tile layer index, or -1 = not available on that tile.
 	using LayerRemapFunction = std::function<std::array<int8, 4>(float x, float z)>;
@@ -169,6 +216,24 @@ namespace mmo::pcg
 		int32 columns = 0;
 		int32 rows = 0;
 		/// CSR layout: the segments of cell c are segments[cellStart[c] .. cellStart[c + 1]).
+		std::vector<uint32> cellStart;
+		std::vector<uint32> segments;
+	};
+
+	/// Uniform x/z grid listing, per cell, every polyline segment that can be the nearest one (within reach) for some
+	/// point of the cell: a segment is listed if its distance to the cell is at most min(an upper bound of the nearest
+	/// distance over the cell, reach). Used for the far queries of the mass layer, which reach much further than the
+	/// section. The grid covers the path bounds grown by reach + cellSize; points outside it are further than reach.
+	struct SectionNearestGrid
+	{
+		float originX = 0.0f;
+		float originZ = 0.0f;
+		float cellSize = 0.0f;
+		/// Largest maxAcross the grid answers exactly.
+		float reach = 0.0f;
+		int32 columns = 0;
+		int32 rows = 0;
+		/// CSR layout like SectionSegmentGrid, segments ascending per cell.
 		std::vector<uint32> cellStart;
 		std::vector<uint32> segments;
 	};
@@ -195,6 +260,15 @@ namespace mmo::pcg
 		WorldRect influence;
 		/// Segment lookup for ProjectToSectionPath; reach = halfWidth + sideFalloff + 1 m.
 		SectionSegmentGrid segmentGrid;
+		/// Mass layer: how far across (m, +X) the mass reaches (massDepth - halfWidth); 0 without mass.
+		float massReach = 0.0f;
+		/// Mass layer: section paint layer of the mass, -1 = none (resolved from params.massPaintLayer).
+		int8 massLayer = -1;
+		/// Mass layer: seed of its noise (from params.seed).
+		uint64 massSeed = 0;
+		/// Mass layer: nearest-segment lookup for queries up to the mass reach (empty without mass, or when the shape
+		/// was prepared without lookups; ProjectToSectionPath then scans every segment).
+		SectionNearestGrid nearestGrid;
 	};
 
 	/// Samples and lays out a section path.
@@ -207,15 +281,35 @@ namespace mmo::pcg
 	///        empty otherwise.
 	/// @param out Receives the shape.
 	/// @param error Receives a message on failure.
+	/// @param buildLookups False skips the mass layer's nearest-segment grid (cheap probes that only need the layout,
+	///        the influence and the copy rects; evaluating such a shape is still exact, just slower).
 	/// @return False on invalid input.
 	bool PrepareSectionPath(const PathSpline& spline, const std::vector<uint64>& pointIds, const SectionAsset& asset,
-		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error);
+		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error,
+		bool buildLookups = true);
 
 	/// Rectangle containing every terrain sample the path may change and every prop it may place: the path's
 	/// sample bounds grown by max(halfWidth + sideFalloff, largest |x| of any baked placement, largest
-	/// |run x| + piece length + |piece startOffset| of any run piece), plus the largest position jitter of any rule
-	/// times sqrt(2) (jitter is per local axis), plus a 1 m margin.
+	/// |run x| + piece length + |piece startOffset| of any run piece, the mass reach massDepth - halfWidth when the
+	/// mass is on), plus the largest position jitter of any rule times sqrt(2) (jitter is per local axis), plus a 1 m
+	/// margin.
 	WorldRect GetInfluenceRect(const SectionPathShape& shape);
+
+	/// Influence rect per section copy: the x/z bounds of the copy's stretch of the path (on a loop, the corner copy
+	/// wrapping past the path end includes the path start), grown like GetInfluenceRect. Every terrain sample the
+	/// path writes and every prop it places lies in their union (much tighter than the single rect around a winding
+	/// path).
+	/// @param out Cleared, then receives one rect per copy, in layout order.
+	void GetSectionCopyRects(const SectionPathShape& shape, std::vector<WorldRect>& out);
+
+	/// How a copy is laid: mirrored if params.mirrorCopies and Hash(seed, spanKey, copy) says so; heights scaled by
+	/// 1 + HashRange(-j, j) with j = params.facadeHeightJitter (1 when j is 0).
+	SectionCopyFacade GetCopyFacade(const SectionPathShape& shape, const SectionCopy& copy);
+
+	/// Sets one SectionPathParams field by its member name (e.g. "massHeight", "mirrorCopies") from text; bools take
+	/// 0/1/true/false, heightMode followSpline/followGround/smoothedGround. For unattended tools.
+	/// @return False with a message for an unknown name or a value that does not parse (params unchanged then).
+	bool SetSectionPathParam(SectionPathParams& params, const String& name, const String& value, String& error);
 
 	/// Variant index of a copy, chosen among the variants of the copy's role (shape.variantsByRole): candidate
 	/// Hash(seed, spanKey, copy) % candidateCount, or copy.sequence % candidateCount with sequentialVariants. Straight
@@ -224,7 +318,8 @@ namespace mmo::pcg
 
 	/// ProjectToPath on the shape's path, testing only the segments of the segment grid around the point. The
 	/// result is bit-identical to ProjectToPath(*shape.path, ...) (same per-segment arithmetic, nearest wins, ties
-	/// go to the lowest segment index). A maxAcross above the grid's reach falls back to the full scan.
+	/// go to the lowest segment index). A maxAcross above the grid's reach uses the nearest-segment grid of the mass
+	/// layer (also bit-identical) up to its reach, and the full scan beyond.
 	bool ProjectToSectionPath(const SectionPathShape& shape, float x, float z, float maxAcross, float& distance, float& across);
 
 	/// Stable key of a baked placement of `variant` stamped by `copy`: Hash(spanKey, copy, variant, sourceKey, sourceKind).
@@ -237,7 +332,19 @@ namespace mmo::pcg
 	/// (smoothstep) to 0 at halfWidth + sideFalloff (the distance is radial past the ends of an open path).
 	/// Paint = the variant's weights remapped to tile layers (unavailable layers dropped, the rest renormalised
 	/// to 255); paint weight = coverage x falloff. Within joinBlend of a copy boundary the two copies' targets are
-	/// cross-faded. setMaterial is always false. baseHeight is not used, so paint never depends on it.
+	/// cross-faded. setMaterial is always false. Without the mass layer baseHeight is not used.
+	/// Facade variety: a mirrored copy samples its variant at length - localZ, and section heights are multiplied by
+	/// the copy's heightScale (GetCopyFacade).
+	/// Mass layer (params.massEnabled), at u = (across + halfWidth) / massDepth:
+	/// - u < 0 (the floor side): exactly the target without mass;
+	/// - else rise = smoothstep(u / massRise), mass weight w = 1 - smoothstep over the last 30 % of the depth (or what
+	///   the rise leaves) and 0 from u = 1 on, faded past the ends of an open path over max(sideFalloff,
+	///   massRise x massDepth); mass height m = rise x max(0, massHeight + noise(x, z) + detail(x, z)) with
+	///   world-anchored FractalNoise; with S = the section result base + (centre + section - base) x sideFalloff and
+	///   M = base + (centre + m - base) x w the height is S + rise x max(0, M - S) at weight 1 (the mass only ever
+	///   raises the ground, and lifts the section's own slope less where it only starts to rise);
+	/// - paint: where the section height is at least m, the section's paint; else the mass paint layer at weight
+	///   w x slope factor (0 below 10 deg of the mass surface, 1 from 30 deg). Paint does not use baseHeight.
 	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 
@@ -245,6 +352,9 @@ namespace mmo::pcg
 	/// Hash(seed, spanKey, copy, p.key, p.kind), the placement's rule found by asset; no rule = no jitter, swap or keepChance,
 	/// propDensity still applies):
 	/// - kept if a hash is below keepChance x propDensity;
+	/// - in a mirrored copy (GetCopyFacade) the placement's local z becomes length - z and its authored rotation is
+	///   reflected across the copy's local XY plane (quaternion (w, x, y, z) -> (w, -x, -y, z), i.e. its yaw is
+	///   negated); connected runs are not mirrored;
 	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch, clamped to the
 	///   span's arc range (a corner copy's own range), and position = frame(s).position + right x localX,
 	///   y = ground(x, z) + heightAboveTerrain;
