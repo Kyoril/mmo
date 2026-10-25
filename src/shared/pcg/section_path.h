@@ -115,6 +115,24 @@ namespace mmo::pcg
 	/// layerRemap[sectionLayer] = target tile layer index, or -1 = not available on that tile.
 	using LayerRemapFunction = std::function<std::array<int8, 4>(float x, float z)>;
 
+	/// Uniform x/z grid of polyline segment indices, so a projection only tests the segments near the query.
+	/// Cell (i, j) covers [originX + i * cellSize, +cellSize) x [originZ + j * cellSize, +cellSize) and lists, in
+	/// ascending order, every segment whose bounding box touches it. cellSize >= reach, so every segment within
+	/// reach of a point is listed in the 3 x 3 cells around it.
+	struct SectionSegmentGrid
+	{
+		float originX = 0.0f;
+		float originZ = 0.0f;
+		float cellSize = 0.0f;
+		/// Largest maxAcross the grid answers exactly (larger queries fall back to the full scan).
+		float reach = 0.0f;
+		int32 columns = 0;
+		int32 rows = 0;
+		/// CSR layout: the segments of cell c are segments[cellStart[c] .. cellStart[c + 1]).
+		std::vector<uint32> cellStart;
+		std::vector<uint32> segments;
+	};
+
 	/// A section path ready to evaluate. Filled by PrepareSectionPath; treat every member as read-only.
 	struct SectionPathShape
 	{
@@ -130,6 +148,8 @@ namespace mmo::pcg
 		std::vector<float> centreHeights;
 		/// See GetInfluenceRect.
 		WorldRect influence;
+		/// Segment lookup for ProjectToSectionPath; reach = halfWidth + sideFalloff + 1 m.
+		SectionSegmentGrid segmentGrid;
 	};
 
 	/// Samples and lays out a section path.
@@ -153,6 +173,14 @@ namespace mmo::pcg
 	/// % variantCount with sequentialVariants.
 	uint32 GetVariant(const SectionPathShape& shape, const SectionCopy& copy);
 
+	/// ProjectToPath on the shape's path, testing only the segments of the segment grid around the point. The
+	/// result is bit-identical to ProjectToPath(*shape.path, ...) (same per-segment arithmetic, nearest wins, ties
+	/// go to the lowest segment index). A maxAcross above the grid's reach falls back to the full scan.
+	bool ProjectToSectionPath(const SectionPathShape& shape, float x, float z, float maxAcross, float& distance, float& across);
+
+	/// Stable key of placement `index` of `variant` stamped by `copy`: Hash(spanKey, copy, variant, index).
+	uint64 SectionPlacementKey(const SectionCopy& copy, uint32 variant, size_t index);
+
 	/// Terrain target of the path at a world position.
 	/// Height = centre line height + the variant's height; weight 1 within halfWidth of the path, fading
 	/// (smoothstep) to 0 at halfWidth + sideFalloff (the distance is radial past the ends of an open path).
@@ -163,17 +191,20 @@ namespace mmo::pcg
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 
 	/// Places the baked props of every copy along the path. Per copy and variant placement i (variation from
-	/// Hash(seed, spanKey, copy, i), the placement's rule found by asset; no rule = keep unchanged):
+	/// Hash(seed, spanKey, copy, i), the placement's rule found by asset; no rule = no jitter, swap or keepChance,
+	/// propDensity still applies):
 	/// - kept if a hash is below keepChance x propDensity;
-	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch and
-	///   position = frame(s).position + right x localX, y = ground(x, z) + heightAboveTerrain;
+	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch, clamped to the
+	///   span's arc range, and position = frame(s).position + right x localX, y = ground(x, z) + heightAboveTerrain;
+	///   the frame's direction is measured inside the span too, so a prop never depends on a neighbouring span;
 	/// - rotation = yaw of the frame and a yaw jitter (+-yawJitterDeg) about world up times the local rotation,
 	///   so props stay upright on slopes; scale x (1 +- scaleJitter);
 	/// - swapped to swapGroup[hash % n] when the group is not empty (a swap to another asset drops the material
 	///   overrides and prop kits, which belong to the original asset);
-	/// - key = Hash(spanKey, copy, variant, i), so editing one span leaves the keys of the others unchanged.
+	/// - key = SectionPlacementKey(copy, variant, i), so editing one span leaves the keys of the others unchanged.
 	/// All props lie inside GetInfluenceRect.
-	/// @param ground Final ground (base + this path's terrain); empty = the frame's centre line height.
+	/// @param ground Final ground (base + this path's terrain). Empty = the centre line height of the height mode
+	///        at the prop's arc position (spline height, or the base ground under the spline for FollowGround).
 	/// @param out Cleared, then receives the placements sorted by key; keys are unique.
 	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out);
 }

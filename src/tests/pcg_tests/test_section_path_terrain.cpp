@@ -2,6 +2,7 @@
 
 #include "catch.hpp"
 
+#include "pcg/pcg_random.h"
 #include "pcg/section_path.h"
 
 #include <cmath>
@@ -249,4 +250,56 @@ TEST_CASE("The influence covers the corridor", "[section_path_terrain]")
 	CHECK(r.maxX >= 7.0f);
 	CHECK(r.minZ <= -7.0f);
 	CHECK(r.maxZ >= 107.0f);
+}
+
+TEST_CASE("The accelerated projection matches the full scan exactly", "[section_path_terrain]")
+{
+	// Winding closed and open splines, including near-touching parts.
+	for (int closed = 0; closed < 2; ++closed)
+	{
+		PathSpline spline;
+		spline.interpolation = SplineInterpolation::CatmullRom;
+		spline.closed = closed == 1;
+		const float pts[8][2] = { { 0.0f, 0.0f }, { 40.0f, 10.0f }, { 50.0f, 60.0f }, { 10.0f, 70.0f }, { 5.0f, 30.0f },
+			{ 30.0f, 35.0f }, { 80.0f, 20.0f }, { 120.0f, 90.0f } };
+		for (const auto& p : pts)
+		{
+			SplinePoint sp;
+			sp.x = p[0];
+			sp.z = p[1];
+			spline.points.push_back(sp);
+		}
+
+		std::vector<uint64> ids;
+		for (size_t i = 0; i < spline.points.size(); ++i)
+		{
+			ids.push_back(10 + i);
+		}
+		SectionPathShape shape;
+		String error;
+		REQUIRE(PrepareSectionPath(spline, ids, MakeAsset({ 0.5f }), SectionPathParams(), Flat0, shape, error));
+
+		const WorldRect r = GetInfluenceRect(shape);
+		const float reach = shape.asset.halfWidth + shape.asset.sideFalloff;
+		size_t hits = 0;
+		for (int64 i = 0; i < 4000; ++i)
+		{
+			const float x = HashRange(Hash(77, i, closed, 1), r.minX - 5.0f, r.maxX + 5.0f);
+			const float z = HashRange(Hash(77, i, closed, 2), r.minZ - 5.0f, r.maxZ + 5.0f);
+			for (const float maxAcross : { reach, 0.5f * reach, 100.0f })
+			{
+				float d0 = -1.0f, a0 = -1.0f, d1 = -1.0f, a1 = -1.0f;
+				const bool full = ProjectToPath(*shape.path, x, z, maxAcross, d0, a0);
+				const bool fast = ProjectToSectionPath(shape, x, z, maxAcross, d1, a1);
+				REQUIRE(full == fast);
+				if (full)
+				{
+					REQUIRE(d0 == d1);
+					REQUIRE(a0 == a1);
+					++hits;
+				}
+			}
+		}
+		CHECK(hits > 1000);
+	}
 }

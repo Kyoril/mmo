@@ -230,10 +230,40 @@ TEST_CASE("Moving a control point keeps the props of untouched spans", "[section
 	rule.positionJitter = 1.0f;
 	rule.yawJitterDeg = 30.0f;
 	rule.scaleJitter = 0.2f;
-	const SectionAsset asset = MakeAsset({ Prop("rock", 2.0f, 6.0f, 0.0f), Prop("rock", -2.0f, 14.0f, 0.0f) }, { rule });
 
-	const std::vector<Placement> before = Build(Polyline({ { 0.0f, 0.0f }, { 0.0f, 40.0f }, { 0.0f, 80.0f }, { 0.0f, 120.0f }, { 0.0f, 160.0f } }), asset);
-	const std::vector<Placement> after = Build(Polyline({ { 0.0f, 0.0f }, { 0.0f, 40.0f }, { 15.0f, 85.0f }, { 0.0f, 120.0f }, { 0.0f, 160.0f } }), asset);
+	// Props baked at the copy ends, jittered far enough to cross into the neighbouring span.
+	PropRule edgeRule;
+	edgeRule.asset = "edge";
+	edgeRule.positionJitter = 1.5f;
+	std::vector<SectionPlacement> props = { Prop("rock", 2.0f, 6.0f, 0.0f), Prop("rock", -2.0f, 14.0f, 0.0f) };
+	for (int i = 0; i < 4; ++i)
+	{
+		const float offset = 0.1f * static_cast<float>(i);
+		props.push_back(Prop("edge", 2.0f - static_cast<float>(i), 19.9f - offset, 0.0f));
+		props.push_back(Prop("edge", -2.0f + static_cast<float>(i), 0.1f + offset, 0.0f));
+	}
+	const SectionAsset asset = MakeAsset(props, { rule, edgeRule });
+
+	const PathSpline beforeSpline = Polyline({ { 0.0f, 0.0f }, { 0.0f, 40.0f }, { 0.0f, 80.0f }, { 0.0f, 120.0f }, { 0.0f, 160.0f } });
+	const PathSpline afterSpline = Polyline({ { 0.0f, 0.0f }, { 0.0f, 40.0f }, { 15.0f, 85.0f }, { 0.0f, 120.0f }, { 0.0f, 160.0f } });
+	const std::vector<Placement> before = Build(beforeSpline, asset);
+	const std::vector<Placement> after = Build(afterSpline, asset);
+
+	// Keys of the props of span 0 and span 3, which do not touch the moved point.
+	SectionPathShape shape;
+	String error;
+	REQUIRE(PrepareSectionPath(beforeSpline, { 500, 501, 502, 503, 504 }, asset, SectionPathParams(), {}, shape, error));
+	std::set<uint64> untouched;
+	for (const SectionCopy& copy : shape.layout.copies)
+	{
+		if (copy.span == 0 || copy.span == 3)
+		{
+			for (size_t i = 0; i < props.size(); ++i)
+			{
+				untouched.insert(SectionPlacementKey(copy, GetVariant(shape, copy), i));
+			}
+		}
+	}
 
 	std::map<uint64, const Placement*> byKey;
 	for (const Placement& p : after)
@@ -241,12 +271,21 @@ TEST_CASE("Moving a control point keeps the props of untouched spans", "[section
 		byKey[p.key] = &p;
 	}
 
+	// Jitter never moves a prop out of its span's arc range (straight path: z = arc distance).
+	for (const Placement& p : before)
+	{
+		if (untouched.count(p.key) != 0)
+		{
+			const bool inSpan0 = p.position.z >= -1e-3f && p.position.z <= 40.0f + 1e-3f;
+			const bool inSpan3 = p.position.z >= 120.0f - 1e-3f && p.position.z <= 160.0f + 1e-3f;
+			CHECK((inSpan0 || inSpan3));
+		}
+	}
+
 	size_t checked = 0;
 	for (const Placement& p : before)
 	{
-		// Span 0 (z 0..40) and span 3 (z 120..160) touch neither moved point.
-		const bool untouched = p.position.z < 39.0f || p.position.z > 121.0f;
-		if (!untouched)
+		if (untouched.count(p.key) == 0)
 		{
 			continue;
 		}
@@ -262,5 +301,31 @@ TEST_CASE("Moving a control point keeps the props of untouched spans", "[section
 		CHECK(q.scale.x == Approx(p.scale.x).margin(1e-5f));
 		++checked;
 	}
-	CHECK(checked >= 6);
+	CHECK(checked >= 20);
+}
+
+TEST_CASE("Without a ground the props sit on the centre line height of the height mode", "[section_path_place]")
+{
+	const SectionAsset asset = MakeAsset({ Prop("rock", 2.0f, 10.0f, 0.5f) });
+	const PathSpline spline = Polyline({ { 0.0f, 0.0f }, { 0.0f, 100.0f } }, 40.0f, 40.0f);
+
+	SectionPathShape followSpline;
+	String error;
+	REQUIRE(PrepareSectionPath(spline, { 1, 2 }, asset, SectionPathParams(), {}, followSpline, error));
+	std::vector<Placement> out;
+	BuildSectionPlacements(followSpline, {}, out);
+	REQUIRE_FALSE(out.empty());
+	for (const Placement& p : out)
+	{
+		CHECK(p.position.y == Approx(40.5f));
+	}
+
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::FollowGround;
+	SectionPathShape ground;
+	REQUIRE(PrepareSectionPath(spline, { 1, 2 }, asset, params, [](float, const float z) { return z * 0.1f; }, ground, error));
+	BuildSectionPlacements(ground, {}, out);
+	const Placement* p = Near(out, 2.0f, 10.0f);
+	REQUIRE(p != nullptr);
+	CHECK(p->position.y == Approx(1.5f).margin(1e-3f));
 }

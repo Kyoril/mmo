@@ -40,6 +40,135 @@ namespace mmo::pcg
 			radius = (lab * lac * lbc) / (2.0f * cross);
 			return true;
 		}
+
+		/// Nearest segment found so far by a projection.
+		struct Projection
+		{
+			float bestSq = std::numeric_limits<float>::max();
+			float distance = 0.0f;
+			float across = 0.0f;
+			size_t segment = std::numeric_limits<size_t>::max();
+		};
+
+		/// Tests polyline segment i (sample i to the next, wrapping). Nearest wins, ties go to the lowest index, so
+		/// the result does not depend on the order segments are tested in.
+		void TestSegment(const std::vector<SplineSample>& samples, const size_t i, const float x, const float z, Projection& best)
+		{
+			const size_t n = samples.size();
+			const SplineSample& a = samples[i];
+			const SplineSample& b = samples[(i + 1) % n];
+			const float sx = b.x - a.x;
+			const float sz = b.z - a.z;
+			const float lenSq = sx * sx + sz * sz;
+			if (lenSq <= 0.0f)
+			{
+				return;
+			}
+
+			const float t = std::clamp(((x - a.x) * sx + (z - a.z) * sz) / lenSq, 0.0f, 1.0f);
+			const float px = x - (a.x + sx * t);
+			const float pz = z - (a.z + sz * t);
+			const float distSq = px * px + pz * pz;
+			if (distSq < best.bestSq || (distSq == best.bestSq && i < best.segment))
+			{
+				const float len = std::sqrt(lenSq);
+				best.bestSq = distSq;
+				best.segment = i;
+				best.distance = a.distance + len * t;
+
+				// Offset of the query from the path point, projected on the segment's right (sz, -sx).
+				best.across = (px * sz - pz * sx) / len;
+			}
+		}
+
+		/// Smallest cell size of the segment grid: keeps the grid coarse for narrow paths.
+		constexpr float kMinSegmentCell = 16.0f;
+		/// Slack between the grid's exact reach and its cell size, against float rounding at cell borders.
+		constexpr float kSegmentCellSlack = 0.5f;
+
+		/// Cell coordinate of v as a float (floor), so far-away queries never overflow an int.
+		float CellCoordinate(const float v, const float origin, const float cellSize)
+		{
+			return std::floor((v - origin) / cellSize);
+		}
+
+		void BuildSegmentGrid(const SampledPath& path, const float reach, SectionSegmentGrid& grid)
+		{
+			grid = SectionSegmentGrid();
+			const std::vector<SplineSample>& samples = path.GetSamples();
+			const size_t n = samples.size();
+			if (n < 2)
+			{
+				return;
+			}
+
+			float minX = 0.0f, minZ = 0.0f, maxX = 0.0f, maxZ = 0.0f;
+			path.GetBounds(minX, minZ, maxX, maxZ);
+			grid.cellSize = std::max(kMinSegmentCell, reach + kSegmentCellSlack);
+			grid.reach = grid.cellSize - kSegmentCellSlack;
+			grid.originX = minX - grid.cellSize;
+			grid.originZ = minZ - grid.cellSize;
+			grid.columns = static_cast<int32>(CellCoordinate(maxX, grid.originX, grid.cellSize)) + 2;
+			grid.rows = static_cast<int32>(CellCoordinate(maxZ, grid.originZ, grid.cellSize)) + 2;
+
+			const size_t segments = path.IsClosed() ? n : n - 1;
+			const auto cellRange = [&](const size_t i, int32& x0, int32& z0, int32& x1, int32& z1)
+			{
+				const SplineSample& a = samples[i];
+				const SplineSample& b = samples[(i + 1) % n];
+				x0 = std::clamp(static_cast<int32>(CellCoordinate(std::min(a.x, b.x), grid.originX, grid.cellSize)), 0, grid.columns - 1);
+				x1 = std::clamp(static_cast<int32>(CellCoordinate(std::max(a.x, b.x), grid.originX, grid.cellSize)), 0, grid.columns - 1);
+				z0 = std::clamp(static_cast<int32>(CellCoordinate(std::min(a.z, b.z), grid.originZ, grid.cellSize)), 0, grid.rows - 1);
+				z1 = std::clamp(static_cast<int32>(CellCoordinate(std::max(a.z, b.z), grid.originZ, grid.cellSize)), 0, grid.rows - 1);
+			};
+
+			const size_t cells = static_cast<size_t>(grid.columns) * static_cast<size_t>(grid.rows);
+			grid.cellStart.assign(cells + 1, 0);
+			for (size_t i = 0; i < segments; ++i)
+			{
+				int32 x0, z0, x1, z1;
+				cellRange(i, x0, z0, x1, z1);
+				for (int32 cz = z0; cz <= z1; ++cz)
+				{
+					for (int32 cx = x0; cx <= x1; ++cx)
+					{
+						++grid.cellStart[static_cast<size_t>(cz) * grid.columns + cx + 1];
+					}
+				}
+			}
+			for (size_t c = 0; c < cells; ++c)
+			{
+				grid.cellStart[c + 1] += grid.cellStart[c];
+			}
+
+			// Filled in ascending segment order, so every cell lists its segments ascending.
+			grid.segments.resize(grid.cellStart[cells]);
+			std::vector<uint32> cursor(grid.cellStart.begin(), grid.cellStart.end() - 1);
+			for (size_t i = 0; i < segments; ++i)
+			{
+				int32 x0, z0, x1, z1;
+				cellRange(i, x0, z0, x1, z1);
+				for (int32 cz = z0; cz <= z1; ++cz)
+				{
+					for (int32 cx = x0; cx <= x1; ++cx)
+					{
+						grid.segments[cursor[static_cast<size_t>(cz) * grid.columns + cx]++] = static_cast<uint32>(i);
+					}
+				}
+			}
+		}
+
+		bool FinishProjection(const Projection& best, const float maxAcross, float& distance, float& across)
+		{
+			if (best.segment == std::numeric_limits<size_t>::max() || std::sqrt(best.bestSq) > maxAcross)
+			{
+				return false;
+			}
+
+			distance = best.distance;
+			across = best.across;
+			return true;
+		}
 	}
 
 	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const float sectionLength)
@@ -133,44 +262,13 @@ namespace mmo::pcg
 		}
 
 		const size_t segments = path.IsClosed() ? n : n - 1;
-		float bestSq = std::numeric_limits<float>::max();
-		float bestDistance = 0.0f;
-		float bestAcross = 0.0f;
+		Projection best;
 		for (size_t i = 0; i < segments; ++i)
 		{
-			const SplineSample& a = samples[i];
-			const SplineSample& b = samples[(i + 1) % n];
-			const float sx = b.x - a.x;
-			const float sz = b.z - a.z;
-			const float lenSq = sx * sx + sz * sz;
-			if (lenSq <= 0.0f)
-			{
-				continue;
-			}
-
-			const float t = std::clamp(((x - a.x) * sx + (z - a.z) * sz) / lenSq, 0.0f, 1.0f);
-			const float px = x - (a.x + sx * t);
-			const float pz = z - (a.z + sz * t);
-			const float distSq = px * px + pz * pz;
-			if (distSq < bestSq)
-			{
-				const float len = std::sqrt(lenSq);
-				bestSq = distSq;
-				bestDistance = a.distance + len * t;
-
-				// Offset of the query from the path point, projected on the segment's right (sz, -sx).
-				bestAcross = (px * sz - pz * sx) / len;
-			}
+			TestSegment(samples, i, x, z, best);
 		}
 
-		if (bestSq == std::numeric_limits<float>::max() || std::sqrt(bestSq) > maxAcross)
-		{
-			return false;
-		}
-
-		distance = bestDistance;
-		across = bestAcross;
-		return true;
+		return FinishProjection(best, maxAcross, distance, across);
 	}
 
 	const SectionCopy* FindCopy(const SectionLayout& layout, const float distance, const float sectionLength, float& localZ)
@@ -384,6 +482,8 @@ namespace mmo::pcg
 			return false;
 		}
 
+		BuildSegmentGrid(*out.path, asset.halfWidth + asset.sideFalloff + kInfluenceMargin, out.segmentGrid);
+
 		out.asset = asset;
 		out.params = params;
 		out.params.joinBlend = params.joinBlend > 0.0f ? params.joinBlend : 0.0f;
@@ -462,7 +562,7 @@ namespace mmo::pcg
 		const SectionAsset& asset = shape.asset;
 		float distance = 0.0f;
 		float across = 0.0f;
-		if (!ProjectToPath(path, x, z, asset.halfWidth + asset.sideFalloff, distance, across))
+		if (!ProjectToSectionPath(shape, x, z, asset.halfWidth + asset.sideFalloff, distance, across))
 		{
 			return target;
 		}
@@ -571,6 +671,36 @@ namespace mmo::pcg
 		constexpr float kMinScaleFactor = 0.01f;
 		constexpr float kDegToRad = 3.14159265358979f / 180.0f;
 
+		/// FrameAt, but the direction probes stay inside [lo, hi], so the frame depends on that arc range only.
+		SectionFrame FrameInRange(const SampledPath& path, const float distance, const float lo, const float hi)
+		{
+			const float before = std::max(lo, distance - kFrameProbe);
+			const float after = std::min(hi, distance + kFrameProbe);
+			if (!(after > before))
+			{
+				return FrameAt(path, distance);
+			}
+
+			SectionFrame frame;
+			const SplineSample here = path.SampleAtDistance(distance);
+			frame.position = Vector3(here.x, here.y, here.z);
+			const SplineSample a = path.SampleAtDistance(before);
+			const SplineSample b = path.SampleAtDistance(after);
+			const float dx = b.x - a.x;
+			const float dz = b.z - a.z;
+			const float len = std::sqrt(dx * dx + dz * dz);
+			if (len > 1e-6f)
+			{
+				frame.forwardX = dx / len;
+				frame.forwardZ = dz / len;
+			}
+
+			// right = up x forward with up = +Y.
+			frame.rightX = frame.forwardZ;
+			frame.rightZ = -frame.forwardX;
+			return frame;
+		}
+
 		/// The rule of an asset (rules are sorted by asset), or nullptr.
 		const PropRule* FindRule(const std::vector<PropRule>& rules, const String& asset)
 		{
@@ -582,6 +712,51 @@ namespace mmo::pcg
 			}
 			return &*it;
 		}
+	}
+
+	uint64 SectionPlacementKey(const SectionCopy& copy, const uint32 variant, const size_t index)
+	{
+		return Hash(Hash(copy.spanKey, copy.copy, variant, kKeySalt), static_cast<int64>(index), 0, kKeySalt);
+	}
+
+	bool ProjectToSectionPath(const SectionPathShape& shape, const float x, const float z, const float maxAcross, float& distance, float& across)
+	{
+		if (!shape.path)
+		{
+			return false;
+		}
+
+		const SectionSegmentGrid& grid = shape.segmentGrid;
+		if (grid.columns <= 0 || grid.rows <= 0 || !(maxAcross <= grid.reach))
+		{
+			return ProjectToPath(*shape.path, x, z, maxAcross, distance, across);
+		}
+
+		// Every segment within reach lies in the 3 x 3 cells around the query; outside them nothing is near.
+		const float fx = CellCoordinate(x, grid.originX, grid.cellSize);
+		const float fz = CellCoordinate(z, grid.originZ, grid.cellSize);
+		if (!(fx >= -1.0f && fx <= static_cast<float>(grid.columns) && fz >= -1.0f && fz <= static_cast<float>(grid.rows)))
+		{
+			return false;
+		}
+
+		const int32 cx = static_cast<int32>(fx);
+		const int32 cz = static_cast<int32>(fz);
+		const std::vector<SplineSample>& samples = shape.path->GetSamples();
+		Projection best;
+		for (int32 z0 = std::max(0, cz - 1); z0 <= std::min(grid.rows - 1, cz + 1); ++z0)
+		{
+			for (int32 x0 = std::max(0, cx - 1); x0 <= std::min(grid.columns - 1, cx + 1); ++x0)
+			{
+				const size_t cell = static_cast<size_t>(z0) * grid.columns + x0;
+				for (uint32 k = grid.cellStart[cell]; k < grid.cellStart[cell + 1]; ++k)
+				{
+					TestSegment(samples, grid.segments[k], x, z, best);
+				}
+			}
+		}
+
+		return FinishProjection(best, maxAcross, distance, across);
 	}
 
 	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out)
@@ -599,7 +774,6 @@ namespace mmo::pcg
 			const uint32 variantIndex = GetVariant(shape, copy);
 			const SectionVariant& variant = asset.variants[variantIndex];
 			const uint64 copySeed = Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kPropSalt);
-			const uint64 copyKey = Hash(copy.spanKey, copy.copy, variantIndex, kKeySalt);
 			const float stretch = copy.stretchedLength / asset.length;
 
 			for (size_t i = 0; i < variant.placements.size(); ++i)
@@ -629,14 +803,18 @@ namespace mmo::pcg
 					scaleFactor = std::max(kMinScaleFactor, 1.0f + HashRange(Hash(h, 5), -scaleJitter, scaleJitter));
 				}
 
-				const SectionFrame frame = FrameAt(path, copy.startDistance + localZ * stretch);
+				// Clamped to the span so a jittered prop never takes its frame from a neighbouring span.
+				const float spanStart = path.GetControlPointDistance(copy.span);
+				const float spanEnd = path.GetControlPointDistance(copy.span + 1);
+				const float s = std::clamp(copy.startDistance + localZ * stretch, spanStart, std::max(spanStart, spanEnd));
+				const SectionFrame frame = FrameInRange(path, s, spanStart, spanEnd);
 				yaw += std::atan2(frame.forwardX, frame.forwardZ);
 
 				Placement placement = source.placement;
-				placement.key = Hash(copyKey, static_cast<int64>(i), 0, kKeySalt);
+				placement.key = SectionPlacementKey(copy, variantIndex, i);
 				placement.position.x = frame.position.x + frame.rightX * localX;
 				placement.position.z = frame.position.z + frame.rightZ * localX;
-				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : frame.position.y;
+				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : CentreHeightAt(shape, s);
 				placement.position.y = groundHeight + source.heightAboveTerrain;
 				placement.rotation = Quaternion(Radian(yaw), Vector3::UnitY) * source.placement.rotation;
 				placement.scale = source.placement.scale * scaleFactor;
