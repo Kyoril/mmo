@@ -83,27 +83,30 @@ namespace
 	/// Bytes per loop point a version 2 record adds (auto flag, in x/z, out x/z).
 	constexpr size_t V2PointExtraBytes = 17;
 
-	/// Rewrites a version 2 record of the given record into the version 1 layout: version field 1 and
-	/// loop points without tangents.
-	std::vector<char> ToVersion1(const std::vector<char>& v2, const OasisRecord& record)
+	/// Bytes per loop point a version 3 record adds (y, in y, out y).
+	constexpr size_t V3PointExtraBytes = 12;
+
+	/// Rewrites a current (version 3) record of the given record into an older layout: the version
+	/// field and loop points with only the fields that version had.
+	std::vector<char> ToOlderVersion(const std::vector<char>& current, const OasisRecord& record, const uint32 version)
 	{
 		// magic, version, id, name (length + chars), seed.
 		size_t offset = 4 + 4 + 8 + 4 + record.name.size() + 8;
 		uint32 paramsSize = 0;
-		std::memcpy(&paramsSize, &v2[offset], sizeof(paramsSize));
+		std::memcpy(&paramsSize, &current[offset], sizeof(paramsSize));
 		// params block, closed flag, interpolation, point count.
 		offset += 4 + paramsSize + 1 + 1 + 4;
 
-		std::vector<char> v1(v2.begin(), v2.begin() + offset);
-		const uint32 version = 1;
-		std::memcpy(&v1[4], &version, sizeof(version));
+		const size_t keep = version == 1 ? V1PointBytes : V1PointBytes + V2PointExtraBytes;
+		std::vector<char> older(current.begin(), current.begin() + offset);
+		std::memcpy(&older[4], &version, sizeof(version));
 		for (size_t i = 0; i < record.loop.points.size(); ++i)
 		{
-			v1.insert(v1.end(), v2.begin() + offset, v2.begin() + offset + V1PointBytes);
-			offset += V1PointBytes + V2PointExtraBytes;
+			older.insert(older.end(), current.begin() + offset, current.begin() + offset + keep);
+			offset += V1PointBytes + V2PointExtraBytes + V3PointExtraBytes;
 		}
-		v1.insert(v1.end(), v2.begin() + offset, v2.end());
-		return v1;
+		older.insert(older.end(), current.begin() + offset, current.end());
+		return older;
 	}
 }
 
@@ -141,12 +144,13 @@ TEST_CASE("Oasis record keeps manual tangents bit-identically", "[oasis_record]"
 TEST_CASE("Oasis record reads version 1 files with automatic tangents", "[oasis_record]")
 {
 	const OasisRecord in = MakePopulated();
-	const std::vector<char> v2 = Serialize(in);
-	const std::vector<char> v1 = ToVersion1(v2, in);
-	REQUIRE(v1.size() == v2.size() - in.loop.points.size() * V2PointExtraBytes);
+	const std::vector<char> current = Serialize(in);
+	const std::vector<char> v1 = ToOlderVersion(current, in, 1);
+	REQUIRE(v1.size() == current.size() - in.loop.points.size() * (V2PointExtraBytes + V3PointExtraBytes));
 
 	OasisRecord out;
 	REQUIRE(Deserialize(v1, out));
+	CHECK_FALSE(out.heightsValid);
 	REQUIRE(out.loop.points.size() == 4);
 	for (const SplinePoint& p : out.loop.points)
 	{
@@ -161,7 +165,69 @@ TEST_CASE("Oasis record reads version 1 files with automatic tangents", "[oasis_
 	CHECK(out.placements[2].written.asset == "Bush.hmsh");
 
 	// Written back, it is the current version.
-	CHECK(Serialize(out) == v2);
+	CHECK(Serialize(out) == current);
+}
+
+TEST_CASE("Oasis record keeps heights and tangent heights bit-identically", "[oasis_record]")
+{
+	OasisRecord in = MakePopulated();
+	for (size_t i = 0; i < in.loop.points.size(); ++i)
+	{
+		in.loop.points[i].y = 31.0f + 0.375f * static_cast<float>(i);
+	}
+	SplinePoint& manual = in.loop.points[2];
+	manual.autoTangents = false;
+	manual.inX = 2.0f;
+	manual.inY = -1.5f;
+	manual.inZ = 0.25f;
+	manual.outX = -2.0f;
+	manual.outY = 4.125f;
+	manual.outZ = -0.75f;
+
+	const std::vector<char> bytes = Serialize(in);
+	CHECK(bytes[4] == 3);
+
+	OasisRecord out;
+	REQUIRE(Deserialize(bytes, out));
+	CHECK(out.heightsValid);
+	REQUIRE(out.loop.points.size() == in.loop.points.size());
+	for (size_t i = 0; i < in.loop.points.size(); ++i)
+	{
+		CHECK(out.loop.points[i].y == in.loop.points[i].y);
+		CHECK(out.loop.points[i].inY == in.loop.points[i].inY);
+		CHECK(out.loop.points[i].outY == in.loop.points[i].outY);
+	}
+	CHECK(out.loop.points[2].outY == 4.125f);
+	CHECK(Serialize(out) == bytes);
+	CHECK(Serialize(in) == bytes);
+}
+
+TEST_CASE("Oasis record reads version 2 files without heights", "[oasis_record]")
+{
+	OasisRecord in = MakePopulated();
+	SplinePoint& manual = in.loop.points[1];
+	manual.autoTangents = false;
+	manual.inX = -1.25f;
+	manual.outZ = 6.5f;
+	const std::vector<char> current = Serialize(in);
+	const std::vector<char> v2 = ToOlderVersion(current, in, 2);
+	REQUIRE(v2.size() == current.size() - in.loop.points.size() * V3PointExtraBytes);
+
+	OasisRecord out;
+	REQUIRE(Deserialize(v2, out));
+	CHECK_FALSE(out.heightsValid);
+	REQUIRE(out.loop.points.size() == 4);
+	CHECK_FALSE(out.loop.points[1].autoTangents);
+	CHECK(out.loop.points[1].inX == -1.25f);
+	CHECK(out.loop.points[1].outZ == 6.5f);
+	for (const SplinePoint& p : out.loop.points)
+	{
+		CHECK(p.y == 0.0f);
+		CHECK(p.inY == 0.0f);
+		CHECK(p.outY == 0.0f);
+	}
+	REQUIRE(out.placements.size() == 3);
+	CHECK(out.placements[1].written.asset == "Palm01.hmsh");
 }
 
 TEST_CASE("Oasis record round trips", "[oasis_record]")

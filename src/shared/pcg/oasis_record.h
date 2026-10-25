@@ -35,6 +35,10 @@ namespace mmo::pcg
 		OasisParams params;
 		/// Closed, Catmull-Rom.
 		PathSpline loop;
+		/// False when the record was read from a file older than version 3, which stored no point
+		/// heights: the loop's y and tangent heights are zero and the editor fills them from the
+		/// terrain. Not serialized (writing always stores heights).
+		bool heightsValid = true;
 		/// Influence rect of the last build.
 		WorldRect influence{};
 		TerrainContribution terrain;
@@ -42,13 +46,14 @@ namespace mmo::pcg
 		std::vector<OwnedPlacement> placements;
 	};
 
-	/// Writes the record as chunked binary (magic PCGO, version 2). Deterministic: the same record
+	/// Writes the record as chunked binary (magic PCGO, version 3). Deterministic: the same record
 	/// produces the same bytes.
 	/// @return True on success.
 	bool WriteOasisRecord(io::Writer& writer, const OasisRecord& record);
 
 	/// Reads a record written by WriteOasisRecord.
-	/// Accepts versions 1 and 2; version 1 loop points get automatic tangents.
+	/// Accepts versions 1 to 3; version 1 loop points get automatic tangents, and records older than
+	/// version 3 have heightsValid = false.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadOasisRecord(io::Reader& reader, OasisRecord& out);
 }

@@ -13,8 +13,9 @@ namespace mmo::pcg
 	{
 		/// PCGO as little endian characters.
 		constexpr uint32 MagicPcgo = 0x4F474350;
-		/// 1: loop points x, z, width. 2: adds per-point auto flag and in/out tangent handles.
-		constexpr uint32 FormatVersion = 2;
+		/// 1: loop points x, z, width. 2: adds per-point auto flag and in/out tangent handles (x/z).
+		/// 3: adds per-point height and tangent heights.
+		constexpr uint32 FormatVersion = 3;
 		constexpr uint32 MinFormatVersion = 1;
 		constexpr uint32 MaxStringLength = 1u << 20;
 
@@ -264,6 +265,9 @@ namespace mmo::pcg
 			Put(writer, pt.inZ);
 			Put(writer, pt.outX);
 			Put(writer, pt.outZ);
+			Put(writer, pt.y);
+			Put(writer, pt.inY);
+			Put(writer, pt.outY);
 		}
 
 		PutRect(writer, record.influence);
@@ -331,11 +335,14 @@ namespace mmo::pcg
 		uint8 interp = 0;
 		uint32 pointCount = 0;
 		const bool hasTangents = version >= 2;
+		const bool hasHeights = version >= 3;
+		const size_t pointBytes = hasHeights ? 41 : (hasTangents ? 29 : 12);
 		if (!Get(reader, closed) || !Get(reader, interp) ||
-			interp > static_cast<uint8>(SplineInterpolation::CatmullRom) || !GetCount(reader, pointCount, hasTangents ? 29 : 12))
+			interp > static_cast<uint8>(SplineInterpolation::CatmullRom) || !GetCount(reader, pointCount, pointBytes))
 		{
 			return false;
 		}
+		out.heightsValid = hasHeights;
 		out.loop.closed = closed != 0;
 		out.loop.interpolation = static_cast<SplineInterpolation>(interp);
 		out.loop.points.resize(pointCount);
@@ -356,6 +363,12 @@ namespace mmo::pcg
 					return false;
 				}
 				pt.autoTangents = autoTangents != 0;
+			}
+
+			// Older points have no height (zero); heightsValid tells the editor to fill it.
+			if (hasHeights && (!Get(reader, pt.y) || !Get(reader, pt.inY) || !Get(reader, pt.outY)))
+			{
+				return false;
 			}
 		}
 
