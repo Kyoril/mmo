@@ -84,7 +84,6 @@ namespace mmo
 	  };
 	  void SelectPage(Page page);
 	  void BuildPageButtons();
-	  bool SaveSettings();
 	  std::vector<Button*> GetButtons();
 	  void DrawPage(Canvas& canvas);
 	  void DrawTextLine(Canvas& canvas, const std::string& text, Rect area, bool heading = false, bool gold = false, TextAlign align = TextAlign::Left);
@@ -155,9 +154,6 @@ namespace mmo
 	  int32 m_maxScroll = 0;
 	  int32 m_focus = -1;
 	  bool m_keepOpen = false;
-	  ClientDisplaySettings m_displaySettings;
-	  bool m_resolutionOpen = false;
-	  int32 m_resolutionHighlight = 1;
 	  bool m_settingsSaved = false;
 	  bool m_contentRefreshed = false;
 	  Button m_playButton;

@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000022;
+		constexpr uint32 ProtocolVersion = 0x00000023;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -909,8 +909,22 @@ namespace mmo
 				/// Private duel event: uint8 event/detail, uint64 opponent, string name, float x/y/z.
 				DuelUpdate,
 
+				/// Localizable whisper failure: uint8 chat_message_result, dynamic<uint8> target name.
+				ChatMessageResult,
+
 				/// Counter constant
 				Count_,
+			};
+		}
+
+		/// Localizable failures of a chat message request.
+		namespace chat_message_result
+		{
+			enum Type : uint8
+			{
+				SelfWhisper,
+				PlayerNotFound,
+				WrongFaction,
 			};
 		}
 

@@ -10,8 +10,6 @@
 
 #include <array>
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <windowsx.h>
 #include <ShlObj.h>
 #include <shellapi.h>
@@ -263,22 +261,6 @@ namespace mmo
 
 	void LauncherWindow::LaunchGame()
 	{
-		// Keep the player's main config intact; apply only the launcher's display choices.
-		const auto settings = GetDisplaySettings();
-		const auto configDirectory = std::filesystem::path(GetGameDirectory()) / "Config";
-		std::error_code error;
-		std::filesystem::create_directories(configDirectory, error);
-		const auto temporary = configDirectory / "Launcher.cfg.tmp";
-		const auto destination = configDirectory / "Launcher.cfg";
-		std::ofstream config(temporary, std::ios::binary | std::ios::trunc);
-		config << "set gxResolution " << settings.resolution << "\nset gxWindow " << (settings.windowed ? "1" : "0") << "\n";
-		config.close();
-		if (error || !config || !MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-		{
-			ShowMessage("Settings", "Could not save the game display settings. Please check write permissions for the game folder.");
-			return;
-		}
-
 		// The command line buffer must be writable for CreateProcessW.
 		std::array<wchar_t, MAX_PATH> commandLine = { L"mmo_client.exe -uptodate" };
 
@@ -322,26 +304,6 @@ namespace mmo
 	{
 		const std::string path = GetGameDirectory() + "/launcher.ini";
 		return WritePrivateProfileStringA("Launcher", "KeepOpen", keepOpen ? "1" : "0", path.c_str()) != FALSE;
-	}
-
-	ClientDisplaySettings LauncherWindow::GetDisplaySettings() const
-	{
-		const std::string path = GetGameDirectory() + "/launcher.ini";
-		std::array<char, 64> resolution{};
-		GetPrivateProfileStringA("Game", "Resolution", "1280x720", resolution.data(), static_cast<DWORD>(resolution.size()), path.c_str());
-		return { NormalizeClientResolution(resolution.data()).label,
-			GetPrivateProfileIntA("Game", "Windowed", 1, path.c_str()) != 0 };
-	}
-
-	bool LauncherWindow::SaveDisplaySettings(const ClientDisplaySettings& settings)
-	{
-		if (settings.resolution != NormalizeClientResolution(settings.resolution).label)
-		{
-			return false;
-		}
-		const std::string path = GetGameDirectory() + "/launcher.ini";
-		return WritePrivateProfileStringA("Game", "Resolution", settings.resolution.c_str(), path.c_str()) != FALSE
-			&& WritePrivateProfileStringA("Game", "Windowed", settings.windowed ? "1" : "0", path.c_str()) != FALSE;
 	}
 
 	void LauncherWindow::OpenGameDirectory()

@@ -3,28 +3,11 @@
 #include "catch.hpp"
 #include "launcher_content.h"
 #include "launcher_model.h"
-#include "base/client_display_settings.h"
 
 #include <filesystem>
 #include <fstream>
 
 using namespace mmo;
-
-TEST_CASE("Game display settings require one of four supported window sizes", "[launcher][display]")
-{
-	const ClientDisplaySettings defaults;
-	CHECK(defaults.resolution == "1280x720");
-	CHECK(defaults.windowed);
-	REQUIRE(ClientResolutions.size() == 4);
-	for (const auto& resolution : ClientResolutions)
-	{
-		CHECK(&NormalizeClientResolution(resolution.label) == &resolution);
-	}
-	for (const auto value : { "", "640x480", "800x600", "1024x768", "2560x1440", "1280x721", "1280x720junk", "-1x720" })
-	{
-		CHECK(std::string(NormalizeClientResolution(value).label) == "1280x720");
-	}
-}
 
 TEST_CASE("Launcher content parses UTF-8 and CRLF metadata", "[launcher][content]")
 {

@@ -819,7 +819,8 @@ namespace mmo
 		unit->StopAttack();
 		unit->CancelCast(spell_interrupt_flags::Any);
 		unit->Set<uint32>(object_fields::FactionTemplate, templateId);
-		m_connector.SendPlayerFaction(unit->GetGuid(), templateId);
+		// Reuse character updates for the realm's whisper and party checks.
+		SaveCharacterData();
 		if (IsTrading())
 		{
 			CancelTradeSession(static_cast<uint8>(game::trade_close_reason::Cancelled));

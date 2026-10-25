@@ -1089,32 +1089,20 @@ namespace mmo
 
 			if (IsWhisperToSelf(m_characterData->name, targetName))
 			{
-				SendSystemMessage("You cannot whisper yourself.");
+				SendChatMessageResult(game::chat_message_result::SelfWhisper, targetName);
 				return PacketParseResult::Pass;
 			}
 
 			Player* target = m_manager.GetPlayerByCharacterName(targetName);
 			if (target == nullptr)
 			{
-				// Target not found — send system error back to sender; skip DB log for failed whispers
-				const std::string errorMsg = "No player named '" + targetName + "' is currently online.";
-				SendPacket([this, &errorMsg](game::OutgoingPacket &outPacket)
-				{
-					outPacket.Start(game::realm_client_packet::ChatMessage);
-					outPacket
-						<< io::write_packed_guid(0)
-						<< io::write<uint8>(ChatType::System)
-						<< io::write_range(errorMsg) << io::write<uint8>(0)
-						<< io::write<uint8>(0)
-						<< io::write<uint8>(0);
-					outPacket.Finish();
-				});
+				SendChatMessageResult(game::chat_message_result::PlayerNotFound, targetName);
 				return PacketParseResult::Pass;
 			}
 
 			if (!CanInteractWithPlayer(*target))
 			{
-				SendSystemMessage("You cannot whisper players of another faction.");
+				SendChatMessageResult(game::chat_message_result::WrongFaction, targetName);
 				return PacketParseResult::Pass;
 			}
 
@@ -2979,6 +2967,16 @@ namespace mmo
 			m_project.factionTemplates.getById(*other.m_liveFactionTemplate));
 	}
 
+	void Player::SendChatMessageResult(const game::chat_message_result::Type result, const String& targetName)
+	{
+		SendPacket([result, &targetName](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ChatMessageResult);
+			packet << io::write<uint8>(result) << io::write_dynamic_range<uint8>(targetName);
+			packet.Finish();
+		});
+	}
+
 	void Player::SendSystemMessage(const String &message)
 	{
 		m_connection->sendSinglePacket([&message](game::OutgoingPacket &outPacket)
@@ -3411,6 +3409,7 @@ namespace mmo
 
 	void Player::NotifyCharacterUpdate(uint32 mapId, InstanceId instanceId, const GamePlayerS &character)
 	{
+		SetLiveFactionTemplate(character.Get<uint32>(object_fields::FactionTemplate));
 		const uint8 previousLevel = m_characterData->level;
 
 		m_characterData->mapId = mapId;
@@ -4190,7 +4189,8 @@ namespace mmo
 		}
 
 		m_characterData = characterData;
-		m_liveFactionTemplate.reset();
+		const auto* factionRace = m_project.races.getById(m_characterData->raceId);
+		m_liveFactionTemplate = factionRace ? std::optional<uint32>(factionRace->factiontemplate()) : std::nullopt;
 		m_characterData->isGameMaster = (m_gmLevel > 0);
 		m_characterData->gmFlags = SanitizeGmFlags(m_characterData->gmFlags, m_gmLevel);
 

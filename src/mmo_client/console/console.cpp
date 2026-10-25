@@ -1,7 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "console.h"
-#include "base/client_display_settings.h"
 #include "console_commands.h"
 #include "console_var.h"
 #include "event_loop.h"
@@ -167,8 +166,8 @@ namespace mmo
 		const std::vector<GxCVarHelper> s_gxCVars = 
 		{
 			{"gxApi",			"Which graphics api should be used.",					"",			&s_gxApiCVar },
-			{"gxResolution",	"Preset client size in windowed mode. Fullscreen covers the monitor.",	"1280x720",	&s_gxResolutionCVar },
-			{"gxWindow",		"Display mode: 1 = window, 0 = fullscreen (a borderless window covering the monitor). Applies immediately.",	"1",	&s_gxWindowedCVar },
+			{"gxResolution",	"Client size of the game window in windowed mode (WIDTHxHEIGHT). A fullscreen window always uses the monitor's resolution.",	"",	&s_gxResolutionCVar },
+			{"gxWindow",		"Display mode: 1 = window, 0 = fullscreen (a borderless window covering the monitor). Applies immediately.",	"0",	&s_gxWindowedCVar },
 			{"gxMonitor",		"Index of the monitor to show the game on: 0 = primary monitor, the others from left to right. Applies immediately.",	"0",	&s_gxMonitorCVar },
 			{"gxVSync",			"Whether the application will run with vsync enabled.",	"1",		&s_gxVSyncCVar },
 			{"gxAnisotropy",	"Maximum anisotropic texture filtering (1, 2, 4, 8 or 16). Lower values are faster, especially on integrated GPUs.",	"8",	&s_gxAnisotropyCVar },
@@ -296,6 +295,19 @@ namespace mmo
 			s_consoleScrollOffset = std::min(s_consoleScrollOffset, lineCount - maxVisibleLines);
 		}
 
+		void ExtractResolution(const std::string& resolutionString, uint16& out_width, uint16& out_height)
+		{
+			const auto delimiter = resolutionString.find('x');
+			if (delimiter == std::string::npos)
+			{
+				return;
+			}
+
+			// Split string and handle both parts separately
+			out_width = static_cast<uint16>(std::atoi(resolutionString.substr(0, delimiter).c_str()));
+			out_height = static_cast<uint16>(std::atoi(resolutionString.substr(delimiter + 1).c_str()));
+		}
+
 		void ApplyDisplayMode()
 		{
 			if (!GraphicsDevice::HasInstance())
@@ -309,13 +321,9 @@ namespace mmo
 				return;
 			}
 
-			const auto& resolution = NormalizeClientResolution(s_gxResolutionCVar->GetStringValue());
-			if (s_gxResolutionCVar->GetStringValue() != resolution.label)
-			{
-				s_gxResolutionCVar->Set(std::string(resolution.label));
-				return;
-			}
-			window->SetDisplayMode(!s_gxWindowedCVar->GetBoolValue(), static_cast<uint32>(std::max(0, s_gxMonitorCVar->GetIntValue())), resolution.width, resolution.height);
+			uint16 width = 1280, height = 720;
+			ExtractResolution(s_gxResolutionCVar->GetStringValue(), width, height);
+			window->SetDisplayMode(!s_gxWindowedCVar->GetBoolValue(), static_cast<uint32>(std::max(0, s_gxMonitorCVar->GetIntValue())), width, height);
 		}
 	}
 
@@ -350,16 +358,11 @@ namespace mmo
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", "Data");
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		ConsoleVarMgr::RegisterConsoleVar("lastCharacters", "Last played character per realm, as realmId:characterGuid;realmId:characterGuid.", "");
+		ConsoleVarMgr::RegisterConsoleVar("LockActionBars", "Require the assigned move-action-bar key when dragging skills and items off action bars. 1 locks, 0 allows dragging freely.", "1");
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 
 		console_commands::ConsoleCommand_Run("run", configFile);
-		const auto* savedResolution = ConsoleVarMgr::FindConsoleVar("gxResolution");
-		s_firstLaunch = !savedResolution || savedResolution->GetStringValue().empty();
-		if (std::filesystem::exists("Config/Launcher.cfg"))
-		{
-			console_commands::ConsoleCommand_Run("run", "Config/Launcher.cfg");
-		}
 
 		RegisterGraphicsCVars();
 
@@ -431,12 +434,19 @@ namespace mmo
 		{
 			api = GraphicsApi::OpenGL;
 		}
-		const auto& resolution = NormalizeClientResolution(s_gxResolutionCVar->GetStringValue());
-		s_gxResolutionCVar->Set(std::string(resolution.label));
+		// On first launch the resolution cvar is empty because no config has been saved yet.
+		// In that case, default to the native desktop resolution in fullscreen.
+		if (s_gxResolutionCVar->GetStringValue().empty())
+		{
+			const auto [w, h] = Platform::GetPrimaryDisplayResolution();
+			s_gxResolutionCVar->Set(std::to_string(w) + "x" + std::to_string(h));
+			s_gxWindowedCVar->Set("0");
+			s_firstLaunch = true;
+			ILOG("First launch: defaulting to native display resolution " << w << "x" << h << " fullscreen");
+		}
 
 		GraphicsDeviceDesc desc;
-		desc.width = resolution.width;
-		desc.height = resolution.height;
+		ExtractResolution(s_gxResolutionCVar->GetStringValue(), desc.width, desc.height);
 		desc.windowed = s_gxWindowedCVar->GetBoolValue();
 		desc.monitor = static_cast<uint32>(std::max(0, s_gxMonitorCVar->GetIntValue()));
 		desc.vsync = s_gxVSyncCVar->GetBoolValue();
@@ -463,8 +473,6 @@ namespace mmo
 		}
 		auto& device = GraphicsDevice::Get();
 		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
-		device.GetAutoCreatedWindow()->SetResizable(false);
-		ApplyDisplayMode();
 		device.SetMaxAnisotropy(static_cast<uint32>(std::max(1, s_gxAnisotropyCVar->GetIntValue())));
 
 		// Load the project-wide global shader parameter registry so every material can reference

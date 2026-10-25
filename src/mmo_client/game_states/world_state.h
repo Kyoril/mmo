@@ -422,6 +422,9 @@ namespace mmo
 
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 
+		/// Displays a localized chat failure received from the realm.
+		PacketParseResult OnChatMessageResult(game::IncomingPacket& packet);
+
 		PacketParseResult OnNameQueryResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnCreatureQueryResult(game::IncomingPacket &packet);

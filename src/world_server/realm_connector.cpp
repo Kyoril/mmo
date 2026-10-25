@@ -827,18 +827,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 			outPacket.Finish();
 		});
 		
-		SendPlayerFaction(characterObject->GetGuid(), characterObject->Get<uint32>(object_fields::FactionTemplate));
 		return PacketParseResult::Pass;
-	}
-
-	void RealmConnector::SendPlayerFaction(const uint64 characterGuid, const uint32 factionTemplateId)
-	{
-		sendSinglePacket([characterGuid, factionTemplateId](auth::OutgoingPacket& packet)
-		{
-			packet.Start(auth::world_realm_packet::PlayerFactionUpdate);
-			packet << io::write<uint64>(characterGuid) << io::write<uint32>(factionTemplateId);
-			packet.Finish();
-		});
 	}
 
 	PacketParseResult RealmConnector::OnPlayerCharacterLeave(auth::IncomingPacket& packet)

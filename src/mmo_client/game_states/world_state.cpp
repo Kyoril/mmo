@@ -2176,6 +2176,7 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessageResult, *this, &WorldState::OnChatMessageResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DuelUpdate, *this, &WorldState::OnDuelUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
@@ -2337,13 +2338,10 @@ namespace mmo
 								 { Command_TargetInfo(cmd, args); }, ConsoleCommandCategory::Gm, "Prints GUID, entry, level, health and position of the selected target.");
 		Console::RegisterCommand("morph", [this](const std::string &cmd, const std::string &args)
 								 { Command_Morph(cmd, args); }, ConsoleCommandCategory::Gm, "Changes the display model of the selected unit (or yourself) to the given display id.");
-		for (const auto* name : { "faction", "Faction" })
+		Console::RegisterCommand("faction", [this](const std::string &cmd, const std::string &args)
 		{
-			Console::RegisterCommand(name, [this](const std::string &cmd, const std::string &args)
-			{
-				Command_Faction(cmd, args);
-			}, ConsoleCommandCategory::Gm, "Sets your own faction template: faction <id>. Uses project faction-template IDs and their hostility rules, regardless of your selected target.");
-		}
+			Command_Faction(cmd, args);
+		}, ConsoleCommandCategory::Gm, "Changes your faction using a faction template ID and its hostility rules, regardless of your selected target.");
 		Console::RegisterCommand("kill", [this](const std::string &cmd, const std::string &args)
 								 { Command_Kill(cmd, args); }, ConsoleCommandCategory::Gm, "Instantly kills the selected target (or yourself if nothing is selected).");
 		Console::RegisterCommand("revive", [this](const std::string &cmd, const std::string &args)
@@ -2396,7 +2394,6 @@ namespace mmo
 		Console::UnregisterCommand("targetinfo");
 		Console::UnregisterCommand("morph");
 		Console::UnregisterCommand("faction");
-		Console::UnregisterCommand("Faction");
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
@@ -3184,7 +3181,7 @@ namespace mmo
 					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
 					if (oldFaction != obj->Get<uint32>(object_fields::FactionTemplate))
 					{
-						FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+						FrameManager::Get().TriggerLuaEvent("FACTION_CHANGED");
 					}
 				}
 
@@ -3644,6 +3641,40 @@ namespace mmo
 			FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
 		}
 		FrameManager::Get().TriggerLuaEvent("DUEL_UPDATE", static_cast<int32>(event), static_cast<int32>(detail), name);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChatMessageResult(game::IncomingPacket& packet)
+	{
+		uint8 result;
+		String targetName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(targetName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const char* key;
+		switch (result)
+		{
+		case game::chat_message_result::SelfWhisper:
+			key = "CHAT_ERROR_SELF_WHISPER";
+			break;
+		case game::chat_message_result::PlayerNotFound:
+			key = "CHAT_ERROR_PLAYER_NOT_FOUND";
+			break;
+		case game::chat_message_result::WrongFaction:
+			key = "CHAT_ERROR_WRONG_FACTION";
+			break;
+		default:
+			return PacketParseResult::Disconnect;
+		}
+
+		String message = Localize(FrameManager::Get().GetLocalization(), key);
+		if (const auto placeholder = message.find("%s"); placeholder != String::npos)
+		{
+			message.replace(placeholder, 2, targetName);
+		}
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
 		return PacketParseResult::Pass;
 	}
 

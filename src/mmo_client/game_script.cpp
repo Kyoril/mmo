@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
-#include "base/client_display_settings.h"
+#include "game/duel.h"
 #include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
@@ -1295,19 +1295,21 @@ namespace mmo
 						   }
 					   }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 
-					   // Returns the supported window presets as { width, height, label = "WxH" }.
-					   // The monitor argument is retained for existing UI callers.
-					   luabind::def<std::function<luabind::object(int)>>("GetScreenResolutions", [this](const int) -> luabind::object
+					   // Returns the window resolutions available on a monitor (0-based index as in
+					   // GetDisplayMonitors), each entry being a table with { width, height, label = "WxH" },
+					   // sorted ascending.
+					   luabind::def<std::function<luabind::object(int)>>("GetScreenResolutions", [this](const int monitorIndex) -> luabind::object
 					   {
 						   luabind::object result = luabind::newtable(m_luaState.get());
 
+						   const auto resolutions = GraphicsDevice::Get().GetMonitorResolutions(static_cast<uint32>(std::max(0, monitorIndex)));
 						   int i = 1;
-						   for (const auto& res : ClientResolutions)
+						   for (const auto& res : resolutions)
 						   {
 							   luabind::object entry = luabind::newtable(m_luaState.get());
-							   entry["width"] = static_cast<int>(res.width);
-							   entry["height"] = static_cast<int>(res.height);
-							   entry["label"] = res.label;
+							   entry["width"] = static_cast<int>(res.first);
+							   entry["height"] = static_cast<int>(res.second);
+							   entry["label"] = std::to_string(res.first) + "x" + std::to_string(res.second);
 							   result[i++] = entry;
 						   }
 
@@ -2142,6 +2144,23 @@ namespace mmo
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
 		m_talentClient.RegisterScriptFunctions(m_luaState.get());
 		m_tradeClient.RegisterScriptFunctions(m_luaState.get());
+
+		// Keep the Lua notification names tied to the wire enums.
+		auto duelEvents = luabind::newtable(m_luaState.get());
+		duelEvents["Pending"] = static_cast<int32>(DuelEvent::Pending);
+		duelEvents["Invited"] = static_cast<int32>(DuelEvent::Invited);
+		duelEvents["Countdown"] = static_cast<int32>(DuelEvent::Countdown);
+		duelEvents["Active"] = static_cast<int32>(DuelEvent::Active);
+		duelEvents["Finished"] = static_cast<int32>(DuelEvent::Finished);
+		duelEvents["Error"] = static_cast<int32>(DuelEvent::Error);
+		luabind::globals(m_luaState.get())["DuelEvent"] = duelEvents;
+		auto duelResults = luabind::newtable(m_luaState.get());
+		duelResults["Cancelled"] = static_cast<int32>(DuelResult::Cancelled);
+		duelResults["Won"] = static_cast<int32>(DuelResult::Won);
+		duelResults["Lost"] = static_cast<int32>(DuelResult::Lost);
+		duelResults["Declined"] = static_cast<int32>(DuelResult::Declined);
+		duelResults["Expired"] = static_cast<int32>(DuelResult::Expired);
+		luabind::globals(m_luaState.get())["DuelResult"] = duelResults;
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;

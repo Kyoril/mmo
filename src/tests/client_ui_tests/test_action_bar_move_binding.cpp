@@ -14,6 +14,8 @@ namespace
 			luaL_openlibs(lua);
 			Run(R"lua(
 				keys={"SHIFT"}; shift=false; control=false; alt=false;
+				lockSetting="1";
+				function GetCVar(name) assert(name=="LockActionBars"); return lockSetting; end
 				picked=0; used=0; button={id=1};
 				function GetKeysForBinding(name) assert(name=="MOVEACTIONBAR"); return keys; end
 				function IsShiftKeyDown() return shift; end
@@ -93,5 +95,31 @@ TEST_CASE("Hold combinations require their modifiers and dropping needs no hold 
 		ActionBar_MoveKeyBinding("F11","DOWN"); assert(ActionBar_IsMoveKeyDown());
 		ActionBar_MoveKeyBinding("F11","UP"); assert(not ActionBar_IsMoveKeyDown());
 		ActionBarButton_OnDrop(button,"LEFT"); assert(picked==1);
+	)lua");
+}
+
+TEST_CASE("Action bar lock setting changes dragging immediately without changing normal clicks", "[actionbar][bindings]")
+{
+	ActionBarMoveFixture fixture;
+	const std::string optionsPath = std::string(MMO_UI_SCRIPT_DIR) + "/OptionsFrame.lua";
+	REQUIRE(luaL_loadfile(fixture.lua, optionsPath.c_str()) == 0);
+	fixture.Call();
+	fixture.Run(R"lua(
+		keys={};
+		for _, id in ipairs({1,13}) do
+			button.id=id; picked=0; used=0;
+			lockSetting="1";
+			ActionBarButton_OnDrag(button,"LEFT"); assert(picked==0);
+			lockSetting="0";
+			ActionBarButton_OnDrag(button,"LEFT"); assert(picked==1 and lastSlot==id-1);
+			ActionBarButton_OnDrag(button,"RIGHT"); assert(picked==1);
+			ActionButton_OnClick(button,"LEFT"); assert(picked==1 and used==1);
+			lockSetting="1";
+			ActionBarButton_OnDrag(button,"LEFT"); assert(picked==1);
+			lockSetting="false";
+			ActionBarButton_OnDrag(button,"LEFT"); assert(picked==2);
+			lockSetting=nil;
+			ActionBarButton_OnDrag(button,"LEFT"); assert(picked==2);
+		end
 	)lua");
 }

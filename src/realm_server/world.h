@@ -231,9 +231,6 @@ namespace mmo
 		
 		PacketParseResult OnPlayerCharacterJoined(auth::IncomingPacket& packet);
 
-		/// Receives a faction update only for a player currently hosted by this node.
-		PacketParseResult OnPlayerFactionUpdate(auth::IncomingPacket& packet);
-
 		PacketParseResult OnPlayerCharacterLeft(auth::IncomingPacket& packet);
 		
 		PacketParseResult OnPlayerCharacterJoinFailed(auth::IncomingPacket& packet);

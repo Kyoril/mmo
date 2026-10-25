@@ -277,6 +277,9 @@ namespace mmo
 		/// Sends the availability of every subsystem for the player's current world node.
 		void SendFullSubsystemStatus();
 
+		/// Sends a chat failure code for localization by the client.
+		void SendChatMessageResult(game::chat_message_result::Type result, const String& targetName);
+
 		/// Sends a plain system chat message to the client.
 		/// @param message The message text.
 		void SendSystemMessage(const String &message);
