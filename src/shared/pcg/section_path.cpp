@@ -563,4 +563,101 @@ namespace mmo::pcg
 
 		return target;
 	}
+
+	namespace
+	{
+		constexpr uint64 kPropSalt = 0x50524f50u;
+		constexpr uint64 kKeySalt = 0x4b455953u;
+		constexpr float kMinScaleFactor = 0.01f;
+		constexpr float kDegToRad = 3.14159265358979f / 180.0f;
+
+		/// The rule of an asset (rules are sorted by asset), or nullptr.
+		const PropRule* FindRule(const std::vector<PropRule>& rules, const String& asset)
+		{
+			const auto it = std::lower_bound(rules.begin(), rules.end(), asset,
+				[](const PropRule& rule, const String& value) { return rule.asset < value; });
+			if (it == rules.end() || it->asset != asset)
+			{
+				return nullptr;
+			}
+			return &*it;
+		}
+	}
+
+	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out)
+	{
+		out.clear();
+		if (!shape.path || shape.asset.variants.empty() || !(shape.asset.length > 0.0f))
+		{
+			return;
+		}
+
+		const SampledPath& path = *shape.path;
+		const SectionAsset& asset = shape.asset;
+		for (const SectionCopy& copy : shape.layout.copies)
+		{
+			const uint32 variantIndex = GetVariant(shape, copy);
+			const SectionVariant& variant = asset.variants[variantIndex];
+			const uint64 copySeed = Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kPropSalt);
+			const uint64 copyKey = Hash(copy.spanKey, copy.copy, variantIndex, kKeySalt);
+			const float stretch = copy.stretchedLength / asset.length;
+
+			for (size_t i = 0; i < variant.placements.size(); ++i)
+			{
+				const SectionPlacement& source = variant.placements[i];
+				const PropRule* rule = FindRule(asset.rules, source.placement.asset);
+				const uint64 h = Hash(copySeed, static_cast<int64>(i));
+
+				const float keep = (rule != nullptr ? rule->keepChance : 1.0f) * shape.params.propDensity;
+				if (!(HashToUnit(Hash(h, 1)) < keep))
+				{
+					continue;
+				}
+
+				float localX = source.placement.position.x;
+				float localZ = source.placement.position.z;
+				float yaw = 0.0f;
+				float scaleFactor = 1.0f;
+				if (rule != nullptr)
+				{
+					const float jitter = std::fabs(rule->positionJitter);
+					localX += HashRange(Hash(h, 2), -jitter, jitter);
+					localZ += HashRange(Hash(h, 3), -jitter, jitter);
+					const float yawJitter = std::fabs(rule->yawJitterDeg);
+					yaw += HashRange(Hash(h, 4), -yawJitter, yawJitter) * kDegToRad;
+					const float scaleJitter = std::fabs(rule->scaleJitter);
+					scaleFactor = std::max(kMinScaleFactor, 1.0f + HashRange(Hash(h, 5), -scaleJitter, scaleJitter));
+				}
+
+				const SectionFrame frame = FrameAt(path, copy.startDistance + localZ * stretch);
+				yaw += std::atan2(frame.forwardX, frame.forwardZ);
+
+				Placement placement = source.placement;
+				placement.key = Hash(copyKey, static_cast<int64>(i), 0, kKeySalt);
+				placement.position.x = frame.position.x + frame.rightX * localX;
+				placement.position.z = frame.position.z + frame.rightZ * localX;
+				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : frame.position.y;
+				placement.position.y = groundHeight + source.heightAboveTerrain;
+				placement.rotation = Quaternion(Radian(yaw), Vector3::UnitY) * source.placement.rotation;
+				placement.scale = source.placement.scale * scaleFactor;
+
+				if (rule != nullptr && !rule->swapGroup.empty())
+				{
+					const String& swapped = rule->swapGroup[Hash(h, 6) % rule->swapGroup.size()];
+					if (swapped != placement.asset)
+					{
+						placement.asset = swapped;
+						placement.materialOverrides.clear();
+						placement.kitPaths.clear();
+					}
+				}
+
+				out.push_back(std::move(placement));
+			}
+		}
+
+		// Keys are 64-bit hashes; a collision is practically impossible, but keep the first one deterministically.
+		std::stable_sort(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key < b.key; });
+		out.erase(std::unique(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key == b.key; }), out.end());
+	}
 }

@@ -161,4 +161,19 @@ namespace mmo::pcg
 	/// cross-faded. setMaterial is always false. baseHeight is not used, so paint never depends on it.
 	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
+
+	/// Places the baked props of every copy along the path. Per copy and variant placement i (variation from
+	/// Hash(seed, spanKey, copy, i), the placement's rule found by asset; no rule = keep unchanged):
+	/// - kept if a hash is below keepChance x propDensity;
+	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch and
+	///   position = frame(s).position + right x localX, y = ground(x, z) + heightAboveTerrain;
+	/// - rotation = yaw of the frame and a yaw jitter (+-yawJitterDeg) about world up times the local rotation,
+	///   so props stay upright on slopes; scale x (1 +- scaleJitter);
+	/// - swapped to swapGroup[hash % n] when the group is not empty (a swap to another asset drops the material
+	///   overrides and prop kits, which belong to the original asset);
+	/// - key = Hash(spanKey, copy, variant, i), so editing one span leaves the keys of the others unchanged.
+	/// All props lie inside GetInfluenceRect.
+	/// @param ground Final ground (base + this path's terrain); empty = the frame's centre line height.
+	/// @param out Cleared, then receives the placements sorted by key; keys are unique.
+	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out);
 }
