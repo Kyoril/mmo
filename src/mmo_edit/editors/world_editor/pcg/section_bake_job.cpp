@@ -235,7 +235,38 @@ namespace mmo
 
 	String GetSectionWorldPath(const String& name)
 	{
-		return String(SectionWorldFolder) + "/" + name + "/" + name + ".hwld";
+		return GetSectionWorldPath(String(), name);
+	}
+
+	String GetSectionWorldPath(const String& folder, const String& name)
+	{
+		const String base = folder.empty() ? String(SectionWorldFolder) : folder;
+		return base + "/" + name + "/" + name + ".hwld";
+	}
+
+	bool IsValidSectionFolder(const String& folder, String& error)
+	{
+		const String prefix = "Editor/Pcg/";
+		if (folder.size() <= prefix.size() || folder.compare(0, prefix.size(), prefix) != 0)
+		{
+			error = "A section folder must lie below " + prefix;
+			return false;
+		}
+
+		size_t start = prefix.size();
+		while (start <= folder.size())
+		{
+			const size_t end = std::min(folder.find('/', start), folder.size());
+			String partError;
+			if (!IsValidSectionName(folder.substr(start, end - start), partError))
+			{
+				error = "Section folder " + folder + ": every part needs 1 to 64 of A-Z, a-z, 0-9, '_' and '-'";
+				return false;
+			}
+			start = end + 1;
+		}
+
+		return true;
 	}
 
 	String GetSectionName(const String& worldPath)
@@ -286,8 +317,17 @@ namespace mmo
 
 	bool CreateSectionWorld(const String& name, const String& terrainMaterial, String& error)
 	{
+		return CreateSectionWorld(String(), name, terrainMaterial, error);
+	}
+
+	bool CreateSectionWorld(const String& folder, const String& name, const String& terrainMaterial, String& error)
+	{
 		error.clear();
 		if (!IsValidSectionName(name, error))
+		{
+			return false;
+		}
+		if (!folder.empty() && !IsValidSectionFolder(folder, error))
 		{
 			return false;
 		}
@@ -299,7 +339,7 @@ namespace mmo
 			return false;
 		}
 
-		const String worldPath = GetSectionWorldPath(name);
+		const String worldPath = GetSectionWorldPath(folder, name);
 		const String definitionPath = GetSectionDefinitionPath(worldPath);
 		if (AssetRegistry::HasFile(worldPath) || AssetRegistry::HasFile(definitionPath))
 		{

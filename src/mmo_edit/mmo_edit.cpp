@@ -980,24 +980,29 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--new-section")
 			{
-				// mmo_edit --new-section <Name> [--material <asset>]
-				// Creates a section world like "New Section..." (Editor/Pcg/Sections/<Name>/) and exits
-				// (0 = success).
+				// mmo_edit --new-section <Name> [--material <asset>] [--folder <Editor/Pcg/...>]
+				// Creates a section world like "New Section..." (Editor/Pcg/Sections/<Name>/, or
+				// <folder>/<Name>/ with --folder) and exits (0 = success).
 				mmo::RedirectUnattendedLog("new_section");
 
-				const char* usage = "--new-section <Name> [--material <asset>]";
+				const char* usage = "--new-section <Name> [--material <asset>] [--folder <Editor/Pcg/...>]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
 				}
 
 				std::string material = mmo::DefaultSectionTerrainMaterial;
+				std::string folder;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
 					if (std::string(args[j]) == "--material" && j + 1 < argCount)
 					{
 						material = args[++j];
+					}
+					else if (std::string(args[j]) == "--folder" && j + 1 < argCount)
+					{
+						folder = args[++j];
 					}
 					else
 					{
@@ -1010,13 +1015,13 @@ int main(int argc, char* arg[])
 				if (argumentsValid)
 				{
 					std::string error;
-					if (!mmo::CreateSectionWorld(args[i + 1], material, error))
+					if (!mmo::CreateSectionWorld(folder, args[i + 1], material, error))
 					{
 						ELOG("--new-section: " << error);
 					}
 					else
 					{
-						ILOG("--new-section: created " << mmo::GetSectionWorldPath(args[i + 1]));
+						ILOG("--new-section: created " << mmo::GetSectionWorldPath(folder, args[i + 1]));
 						succeeded = true;
 					}
 				}

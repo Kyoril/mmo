@@ -175,6 +175,23 @@ namespace mmo
 				result.push_back(file);
 			}
 		}
+
+		// Biome sections: Editor/Pcg/Biomes/<Biome>/Sections/<Name>.hsec.
+		const String biomePrefix = "Editor/Pcg/Biomes/";
+		const String sectionsPart = "/Sections/";
+		for (const String& file : AssetRegistry::ListFiles(biomePrefix, ".hsec"))
+		{
+			const size_t biomeEnd = file.find('/', biomePrefix.size());
+			if (biomeEnd == String::npos || biomeEnd == biomePrefix.size() || file.compare(biomeEnd, sectionsPart.size(), sectionsPart) != 0)
+			{
+				continue;
+			}
+			const size_t nameStart = biomeEnd + sectionsPart.size();
+			if (file.size() > nameStart && file.find('/', nameStart) == String::npos)
+			{
+				result.push_back(file);
+			}
+		}
 		std::sort(result.begin(), result.end());
 		return result;
 	}

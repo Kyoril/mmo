@@ -29,6 +29,15 @@ namespace mmo
 	/// @brief Asset path of a section world: Editor/Pcg/Sections/<name>/<name>.hwld.
 	[[nodiscard]] String GetSectionWorldPath(const String& name);
 
+	/// @brief Asset path of a section world in another folder: <folder>/<name>/<name>.hwld (the baked
+	///        asset then goes to <folder>/<name>.hsec). An empty folder means SectionWorldFolder.
+	[[nodiscard]] String GetSectionWorldPath(const String& folder, const String& name);
+
+	/// @brief Checks a folder for section worlds: a relative asset path below Editor/Pcg/ made of names
+	///        allowed by IsValidSectionName, separated by '/'.
+	/// @param error Receives the reason if the folder is not valid.
+	bool IsValidSectionFolder(const String& folder, String& error);
+
 	/// @brief Name of a section: the stem of its world file (the .hsecdef name is kept equal to it).
 	[[nodiscard]] String GetSectionName(const String& worldPath);
 
@@ -55,6 +64,10 @@ namespace mmo
 	/// @param error Receives the reason on failure.
 	/// @return True when all files were written.
 	bool CreateSectionWorld(const String& name, const String& terrainMaterial, String& error);
+
+	/// @brief CreateSectionWorld in another folder (see GetSectionWorldPath(folder, name)); an empty
+	///        folder means SectionWorldFolder.
+	bool CreateSectionWorld(const String& folder, const String& name, const String& terrainMaterial, String& error);
 
 	/// @brief Reads the .hsecdef next to a world.
 	bool LoadSectionDefinition(const String& worldPath, pcg::SectionDefinition& out, String& error);

@@ -21,7 +21,8 @@ namespace mmo
 	/// @brief Asset folder (with trailing slash) holding the baked section assets (*.hsec).
 	extern const char* const SectionAssetFolder;
 
-	/// @brief Lists every baked section asset (Editor/Pcg/Sections/*.hsec), sorted.
+	/// @brief Lists every baked section asset (Editor/Pcg/Sections/*.hsec and the biome sections
+	///        Editor/Pcg/Biomes/<Biome>/Sections/*.hsec), sorted.
 	[[nodiscard]] std::vector<String> ListSectionAssets();
 
 	/// @brief Reads a baked section asset.
