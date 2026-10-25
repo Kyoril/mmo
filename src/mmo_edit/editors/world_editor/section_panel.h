@@ -17,8 +17,9 @@ namespace mmo
 {
 	class WorldEditorInstance;
 
-	/// @brief Authoring panel of a section world: section size, variants, prop variation rules and the
-	///        bake into the section asset. Also draws the variant rectangles into the viewport.
+	/// @brief Authoring panel of a section world: section size, variants, prop variation rules, connected prop
+	///        runs and the bake into the section asset. Also draws the variant rectangles and a line through each
+	///        run's members into the viewport.
 	/// @details Every edit is written to the .hsecdef right away (the definition is the editable source
 	///          besides the world). The stale indicator compares the baked asset's source stamp with a
 	///          stamp of the current files; it is refreshed on open, after saving, after baking, after a
@@ -35,8 +36,8 @@ namespace mmo
 		/// @param id ImGui window id.
 		void Draw(const String& id);
 
-		/// @brief Draws each variant rectangle, its falloff band and its centre line (+Z arrow) over the
-		///        viewport image.
+		/// @brief Draws each variant rectangle, its falloff band and its centre line (+Z arrow), and a line
+		///        through the members of each run, over the viewport image.
 		/// @param drawList Draw list of the viewport window.
 		/// @param viewportMin Screen position of the viewport image's top left corner.
 		/// @param viewportSize Size of the viewport image.
@@ -67,7 +68,24 @@ namespace mmo
 		void DrawSizeSection();
 		void DrawVariantSection();
 		void DrawRuleSection();
+		void DrawRunSection();
 		void DrawBakeSection();
+
+		/// @brief Index of the variant whose capture rectangle contains a world position, or -1.
+		[[nodiscard]] int32 FindVariantAt(float x, float z) const;
+
+		/// @brief Validates the selected map entities as run members: at least one, all of one variant and none
+		///        in another run than exceptRun. Sets the status message on failure.
+		/// @param ids Receives the selected unique ids, sorted.
+		/// @param exceptRun Run index whose members may be selected again (-1 = none).
+		/// @return True if the selection can be used.
+		bool CollectSelectionForRun(std::vector<uint64>& ids, int32 exceptRun);
+
+		/// @brief Creates a run "Run N" from the selected map entities.
+		void CreateRunFromSelection();
+
+		/// @brief Adds the selected map entities to an existing run.
+		void AddSelectionToRun(size_t runIndex);
 
 		/// @brief Projects a world position into the viewport. False if it lies behind the camera.
 		bool ProjectToScreen(const Vector3& position, ImVec2& out) const;

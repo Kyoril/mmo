@@ -5325,6 +5325,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		return nullptr;
 	}
 
+	void WorldEditorInstance::GetSelectedMapEntityIds(std::vector<uint64> &out) const
+	{
+		out.clear();
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto *selectedEntity = dynamic_cast<const SelectedMapEntity *>(selectable.get()))
+			{
+				out.push_back(selectedEntity->GetEntity().GetUniqueId());
+			}
+		}
+	}
+
 	bool WorldEditorInstance::CreatePlacementEntity(const pcg::Placement &placement, const uint64 uniqueId)
 	{
 		if (placement.kind == pcg::PlacementKind::Foliage)

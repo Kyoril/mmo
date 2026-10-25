@@ -199,6 +199,7 @@ namespace mmo
 			DrawSizeSection();
 			DrawVariantSection();
 			DrawRuleSection();
+			DrawRunSection();
 			DrawBakeSection();
 		}
 		ImGui::End();
@@ -296,7 +297,7 @@ namespace mmo
 			return;
 		}
 
-		ImGui::TextDisabled("Per asset, applied to every placement of it when the section is stamped.");
+		ImGui::TextDisabled("Per asset, applied to every placement of it when the section is stamped (run members excepted).");
 
 		const auto hasRule = [this](const String& asset)
 		{
@@ -441,6 +442,237 @@ namespace mmo
 		{
 			m_definition.rules.erase(m_definition.rules.begin() + removeIndex);
 			m_swapInputs.erase(m_swapInputs.begin() + removeIndex);
+			Commit();
+		}
+	}
+
+	int32 SectionPanel::FindVariantAt(const float x, const float z) const
+	{
+		if (z < 0.0f || z > m_definition.length)
+		{
+			return -1;
+		}
+
+		const float reach = m_definition.halfWidth + m_definition.sideFalloff;
+		for (size_t i = 0; i < m_definition.variants.size(); ++i)
+		{
+			if (std::fabs(x - m_definition.variants[i].originX) <= reach)
+			{
+				return static_cast<int32>(i);
+			}
+		}
+
+		return -1;
+	}
+
+	bool SectionPanel::CollectSelectionForRun(std::vector<uint64>& ids, const int32 exceptRun)
+	{
+		m_world.GetSelectedMapEntityIds(ids);
+		std::sort(ids.begin(), ids.end());
+		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+		const auto fail = [this](const String& message)
+		{
+			m_status = message;
+			m_statusIsError = true;
+			return false;
+		};
+
+		if (ids.empty())
+		{
+			return fail("Select the run's pieces (meshes or world models) in the viewport first; foliage cannot join a run.");
+		}
+
+		int32 variant = -1;
+		for (const uint64 id : ids)
+		{
+			const MapEntity* entity = m_world.FindMapEntity(id);
+			if (!entity)
+			{
+				return fail("A selected object is not a loaded map entity.");
+			}
+
+			const Vector3 position = entity->GetSceneNode().GetDerivedPosition();
+			const int32 owner = FindVariantAt(position.x, position.z);
+			if (owner < 0)
+			{
+				return fail("'" + entity->GetAssetName() + "' lies outside every variant rectangle.");
+			}
+			if (variant >= 0 && owner != variant)
+			{
+				return fail("The selection spans variant " + std::to_string(variant + 1) + " and variant " + std::to_string(owner + 1) + "; a run belongs to one variant.");
+			}
+			variant = owner;
+
+			for (size_t r = 0; r < m_definition.runs.size(); ++r)
+			{
+				if (static_cast<int32>(r) == exceptRun)
+				{
+					continue;
+				}
+				const std::vector<uint64>& members = m_definition.runs[r].members;
+				if (std::binary_search(members.begin(), members.end(), id))
+				{
+					return fail("'" + entity->GetAssetName() + "' already belongs to the run '" + m_definition.runs[r].name + "'.");
+				}
+			}
+		}
+
+		return true;
+	}
+
+	void SectionPanel::CreateRunFromSelection()
+	{
+		std::vector<uint64> ids;
+		if (!CollectSelectionForRun(ids, -1))
+		{
+			return;
+		}
+
+		pcg::SectionRunDef run;
+		for (uint32 n = static_cast<uint32>(m_definition.runs.size()) + 1;; ++n)
+		{
+			const String name = "Run " + std::to_string(n);
+			const bool used = std::any_of(m_definition.runs.begin(), m_definition.runs.end(), [&name](const pcg::SectionRunDef& other) { return other.name == name; });
+			if (!used)
+			{
+				run.name = name;
+				break;
+			}
+		}
+		run.members = std::move(ids);
+		m_status = "Created run '" + run.name + "' with " + std::to_string(run.members.size()) + " piece(s)";
+		m_statusIsError = false;
+		m_definition.runs.push_back(std::move(run));
+		Commit();
+	}
+
+	void SectionPanel::AddSelectionToRun(const size_t runIndex)
+	{
+		std::vector<uint64> ids;
+		if (runIndex >= m_definition.runs.size() || !CollectSelectionForRun(ids, static_cast<int32>(runIndex)))
+		{
+			return;
+		}
+
+		pcg::SectionRunDef& run = m_definition.runs[runIndex];
+		run.members.insert(run.members.end(), ids.begin(), ids.end());
+		std::sort(run.members.begin(), run.members.end());
+		run.members.erase(std::unique(run.members.begin(), run.members.end()), run.members.end());
+		m_status = "Run '" + run.name + "' has " + std::to_string(run.members.size()) + " piece(s)";
+		m_statusIsError = false;
+		Commit();
+	}
+
+	void SectionPanel::DrawRunSection()
+	{
+		if (!ImGui::CollapsingHeader("Runs", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			return;
+		}
+
+		ImGui::TextDisabled("Pieces laid end to end along the bent path, kept or dropped as a whole run.");
+		if (ImGui::Button("New run from selection##newRunFromSelection"))
+		{
+			CreateRunFromSelection();
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Turns the selected meshes / world models of one variant into a run. A run that covers the\n"
+				"whole section length (within 0.5 m) continues into the next copy's run of the same name.");
+		}
+
+		int32 removeIndex = -1;
+		int32 addIndex = -1;
+		for (size_t i = 0; i < m_definition.runs.size(); ++i)
+		{
+			pcg::SectionRunDef& run = m_definition.runs[i];
+			ImGui::PushID("run");
+			ImGui::PushID(static_cast<int>(i));
+
+			if (ImGui::TreeNodeEx("##runNode", ImGuiTreeNodeFlags_DefaultOpen, "%s", run.name.c_str()))
+			{
+				ImGui::InputText("Name##runName", &run.name);
+				if (ImGui::IsItemDeactivatedAfterEdit())
+				{
+					if (run.name.empty())
+					{
+						run.name = "Run " + std::to_string(i + 1);
+					}
+					Commit();
+				}
+
+				ImGui::SliderFloat("Keep chance##runKeep", &run.keepChance, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+				if (ImGui::IsItemDeactivatedAfterEdit())
+				{
+					Commit();
+				}
+
+				// Live footprint of the loaded members, as the bake will measure it.
+				size_t missing = 0;
+				int32 variant = -1;
+				float startZ = 0.0f;
+				float endZ = 0.0f;
+				bool any = false;
+				for (const uint64 member : run.members)
+				{
+					const MapEntity* entity = m_world.FindMapEntity(member);
+					pcg::SectionPieceExtent extent;
+					if (!entity || !ComputeRunPieceExtent(*entity, extent))
+					{
+						++missing;
+						continue;
+					}
+
+					const Vector3 position = entity->GetSceneNode().GetDerivedPosition();
+					variant = FindVariantAt(position.x, position.z);
+					const float start = position.z + extent.startOffset;
+					const float end = start + extent.length;
+					startZ = any ? std::min(startZ, start) : start;
+					endZ = any ? std::max(endZ, end) : end;
+					any = true;
+				}
+
+				ImGui::Text("%u piece(s)", static_cast<uint32>(run.members.size() - missing));
+				if (variant >= 0)
+				{
+					ImGui::SameLine();
+					ImGui::TextDisabled("in variant %d", variant + 1);
+				}
+				if (any)
+				{
+					const bool continuous = startZ <= pcg::kRunContinuityTolerance && endZ >= m_definition.length - pcg::kRunContinuityTolerance;
+					ImGui::TextDisabled("Covers z %.2f .. %.2f m: %s", startZ, endZ, continuous ? "continuous (joins the next copy)" : "stays in its copy");
+				}
+				if (missing > 0)
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "%u member(s) not loaded or deleted (skipped by the bake)", static_cast<uint32>(missing));
+				}
+
+				if (ImGui::SmallButton("Add selection##runAddSelection"))
+				{
+					addIndex = static_cast<int32>(i);
+				}
+				ImGui::SameLine();
+				if (ImGui::SmallButton("Remove run##runRemove"))
+				{
+					removeIndex = static_cast<int32>(i);
+				}
+
+				ImGui::TreePop();
+			}
+
+			ImGui::PopID();
+			ImGui::PopID();
+		}
+
+		if (addIndex >= 0)
+		{
+			AddSelectionToRun(static_cast<size_t>(addIndex));
+		}
+		if (removeIndex >= 0)
+		{
+			m_definition.runs.erase(m_definition.runs.begin() + removeIndex);
 			Commit();
 		}
 	}
@@ -625,6 +857,46 @@ namespace mmo
 				char label[48];
 				std::snprintf(label, sizeof(label), "Variant %u", static_cast<uint32>(i + 1));
 				drawList->AddText(labelPosition, color, label);
+			}
+		}
+
+		// Runs: a line from the first footprint start through every member's pivot to the last footprint end.
+		const ImU32 runColor = IM_COL32(255, 120, 40, 255);
+		for (const pcg::SectionRunDef& run : m_definition.runs)
+		{
+			std::vector<std::pair<Vector3, pcg::SectionPieceExtent>> members;
+			for (const uint64 member : run.members)
+			{
+				const MapEntity* entity = m_world.FindMapEntity(member);
+				pcg::SectionPieceExtent extent;
+				if (entity && ComputeRunPieceExtent(*entity, extent))
+				{
+					members.emplace_back(entity->GetSceneNode().GetDerivedPosition(), extent);
+				}
+			}
+			if (members.empty())
+			{
+				continue;
+			}
+
+			std::sort(members.begin(), members.end(), [](const auto& a, const auto& b) { return a.first.z < b.first.z; });
+			std::vector<std::pair<float, float>> points;
+			points.emplace_back(members.front().first.x, members.front().first.z + members.front().second.startOffset);
+			for (const auto& member : members)
+			{
+				points.emplace_back(member.first.x, member.first.z);
+			}
+			points.emplace_back(members.back().first.x, members.back().first.z + members.back().second.startOffset + members.back().second.length);
+			for (size_t p = 0; p + 1 < points.size(); ++p)
+			{
+				DrawGroundLine(drawList, points[p].first, points[p].second, points[p + 1].first, points[p + 1].second, runColor, 3.0f);
+			}
+
+			ImVec2 labelPosition;
+			const Vector3& first = members.front().first;
+			if (ProjectToScreen(Vector3(first.x, GroundHeight(first.x, first.z) + 1.0f, first.z), labelPosition))
+			{
+				drawList->AddText(labelPosition, runColor, run.name.c_str());
 			}
 		}
 

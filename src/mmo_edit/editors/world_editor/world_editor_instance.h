@@ -535,6 +535,10 @@ namespace mmo
 		/// @return The entity, or nullptr if no loaded entity has that id.
 		MapEntity *FindMapEntity(uint64 uniqueId) const;
 
+		/// @brief Unique ids of the selected map entities (meshes and world models), in selection order.
+		/// @param out Cleared, then receives the ids.
+		void GetSelectedMapEntityIds(std::vector<uint64> &out) const;
+
 		/// @brief Gets a prop of a kit as the world editor currently sees it: the unsaved working copy
 		///        if the kit was edited here, otherwise the cached kit.
 		/// @param kitPath Asset path of the kit.

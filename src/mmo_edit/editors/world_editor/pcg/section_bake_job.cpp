@@ -503,6 +503,63 @@ namespace mmo
 		return true;
 	}
 
+	bool ComputeRunPieceExtent(const MapEntity& entity, pcg::SectionPieceExtent& out)
+	{
+		out = pcg::SectionPieceExtent();
+		out.key = entity.GetUniqueId();
+
+		const MovableObject* movable = entity.GetMovableObject();
+		if (!movable || (entity.IsMeshEntity() && (!entity.GetEntity() || !entity.GetEntity()->GetMesh())))
+		{
+			return false;
+		}
+
+		const AABB& bounds = movable->GetBoundingBox();
+		if (bounds.IsNull())
+		{
+			return false;
+		}
+
+		const SceneNode& node = entity.GetSceneNode();
+		const Quaternion rotation = node.GetDerivedOrientation();
+		const Vector3 scale = node.GetDerivedScale();
+
+		Vector3 corners[8];
+		bounds.GetCorners(corners);
+		float minZ = 0.0f;
+		float maxZ = 0.0f;
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const float z = (rotation * (corners[i] * scale)).z;
+			minZ = i == 0 ? z : std::min(minZ, z);
+			maxZ = i == 0 ? z : std::max(maxZ, z);
+		}
+
+		out.length = maxZ - minZ;
+		out.startOffset = minZ;
+		return true;
+	}
+
+	void CollectRunPieceExtents(const WorldEditorInstance& world, const pcg::SectionDefinition& def, std::vector<pcg::SectionPieceExtent>& out)
+	{
+		out.clear();
+		for (const pcg::SectionRunDef& run : def.runs)
+		{
+			for (const uint64 member : run.members)
+			{
+				const MapEntity* entity = world.FindMapEntity(member);
+				pcg::SectionPieceExtent extent;
+				if (entity && ComputeRunPieceExtent(*entity, extent))
+				{
+					out.push_back(extent);
+				}
+			}
+		}
+
+		std::sort(out.begin(), out.end(), [](const pcg::SectionPieceExtent& a, const pcg::SectionPieceExtent& b) { return a.key < b.key; });
+		out.erase(std::unique(out.begin(), out.end(), [](const pcg::SectionPieceExtent& a, const pcg::SectionPieceExtent& b) { return a.key == b.key; }), out.end());
+	}
+
 	/// Bakes without releasing force-loaded pages (see BakeSectionWorld).
 	static bool BakeSectionWorldImpl(WorldEditorInstance& world, String& error)
 	{
@@ -586,12 +643,35 @@ namespace mmo
 
 		const uint64 stamp = ComputeSectionSourceStamp(worldPath);
 
+		std::vector<pcg::SectionPieceExtent> extents;
+		CollectRunPieceExtents(world, def, extents);
+
 		EditorTerrainAccess access(*terrain);
 		pcg::SectionAsset asset;
 		size_t ignored = 0;
-		if (!pcg::BakeSection(def, access, placements, SectionDefaultPaint, layerTextures, stamp, asset, error, &ignored))
+		size_t missingMembers = 0;
+		if (!pcg::BakeSection(def, access, placements, extents, SectionDefaultPaint, layerTextures, stamp, asset, error, &ignored, &missingMembers))
 		{
 			return false;
+		}
+
+		if (missingMembers > 0)
+		{
+			WLOG("Section " << def.name << ": " << missingMembers << " run member(s) are not in the section world any more and were skipped");
+		}
+		for (size_t v = 0; v < asset.variants.size(); ++v)
+		{
+			for (const pcg::SectionRun& run : asset.variants[v].runs)
+			{
+				ILOG("Section run '" << run.name << "' (variant " << (v + 1) << "): " << run.pieces.size() << " piece(s), x " << FormatMetres(run.x)
+					<< ", z " << FormatMetres(run.startZ) << ".." << FormatMetres(run.endZ) << ", "
+					<< (pcg::IsContinuousRun(run, asset.length) ? "continuous" : "not continuous") << ", keep " << run.keepChance);
+				for (const pcg::SectionRunPiece& piece : run.pieces)
+				{
+					ILOG("  piece " << piece.placement.key << " " << piece.placement.asset << " at z " << FormatMetres(piece.placement.position.z)
+						<< ": length " << FormatMetres(piece.length) << ", start offset " << FormatMetres(piece.startOffset));
+				}
+			}
 		}
 
 		// Paint of a layer without a texture key could never be matched when stamping: refuse instead of
@@ -636,16 +716,18 @@ namespace mmo
 		}
 
 		size_t captured = 0;
+		size_t runs = 0;
 		for (const pcg::SectionVariant& variant : asset.variants)
 		{
 			captured += variant.placements.size();
+			runs += variant.runs.size();
 		}
 
 		char stampText[32];
 		std::snprintf(stampText, sizeof(stampText), "%016llx", static_cast<unsigned long long>(stamp));
 		ILOG("Baked section " << def.name << " to " << assetPath << ": " << asset.variants.size() << " variant(s), "
 			<< captured << " placement(s) captured, " << ignored << " outside every variant, " << asset.rules.size()
-			<< " rule(s), " << bytes.size() << " bytes, source stamp " << stampText);
+			<< " rule(s), " << runs << " run(s), " << bytes.size() << " bytes, source stamp " << stampText);
 		return true;
 	}
 

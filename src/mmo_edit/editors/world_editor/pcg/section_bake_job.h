@@ -11,6 +11,7 @@
 namespace mmo
 {
 	class WorldEditorInstance;
+	class MapEntity;
 
 	/// @brief Asset folder holding every section world (editor-only, not shipped).
 	extern const char* const SectionWorldFolder;
@@ -94,6 +95,17 @@ namespace mmo
 	/// @brief GetTerrainLayerTextureKey for all four layers. Layers without a key stay empty.
 	/// @return False if the material is null.
 	bool GetSectionLayerTextures(const MaterialPtr& material, std::array<String, 4>& out);
+
+	/// @brief Footprint of a map entity along the run direction (+Z): the local bounds of its mesh (or of its
+	///        world model) scaled and rotated by the entity's derived transform, projected onto +Z.
+	/// @param entity The map entity.
+	/// @param out Receives the key (unique id), the length and the start offset from the pivot.
+	/// @return False if the entity has no mesh / world model or empty bounds.
+	bool ComputeRunPieceExtent(const MapEntity& entity, pcg::SectionPieceExtent& out);
+
+	/// @brief ComputeRunPieceExtent for every run member of the definition that is loaded in the world.
+	/// @param out Cleared, then receives one extent per loaded member, sorted by key.
+	void CollectRunPieceExtents(const WorldEditorInstance& world, const pcg::SectionDefinition& def, std::vector<pcg::SectionPieceExtent>& out);
 
 	/// @brief Bakes an open section world into its .hsec (GetSectionAssetPath).
 	/// @details Reads the .hsecdef, refuses if a variant rectangle (with side falloff) leaves the
