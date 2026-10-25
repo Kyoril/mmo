@@ -23,7 +23,7 @@ namespace mmo::pcg
 		String sectionAsset;
 		/// Per-path settings.
 		SectionPathParams params;
-		/// Open, Catmull-Rom, 3D. Writing always stores it as such.
+		/// Catmull-Rom, 3D, open or closed (a loop). Only the closed flag and the points are stored.
 		PathSpline spline;
 		/// Stable id per control point; must be parallel to spline.points.
 		std::vector<uint64> pointIds;
@@ -36,12 +36,13 @@ namespace mmo::pcg
 		std::vector<WorldRect> builtRects;
 	};
 
-	/// Writes the record as binary (magic PCGP, version 2; version 2 appends builtRects). Deterministic:
-	/// the same record produces the same bytes.
+	/// Writes the record as binary (magic PCGP, version 3; version 2 appends builtRects, version 3 the closed flag,
+	/// floorInside and groundSmoothing). Deterministic: the same record produces the same bytes.
 	/// @return False if pointIds is not parallel to spline.points.
 	bool WriteSectionPathRecord(io::Writer& writer, const SectionPathRecord& record);
 
-	/// Reads a record written by WriteSectionPathRecord (version 1 or 2; version 1 leaves builtRects empty).
+	/// Reads a record written by WriteSectionPathRecord (versions 1 to 3; version 1 leaves builtRects empty, versions 1
+	/// and 2 read as open paths with the default floorInside and groundSmoothing and refuse height mode SmoothedGround).
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadSectionPathRecord(io::Reader& reader, SectionPathRecord& out);
 

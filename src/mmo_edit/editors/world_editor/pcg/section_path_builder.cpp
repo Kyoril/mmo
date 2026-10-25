@@ -269,12 +269,26 @@ namespace mmo
 
 			const auto from = std::lower_bound(samples.begin(), samples.end(), begin,
 				[](const SplineSample& sample, const float distance) { return sample.distance < distance; });
+			const auto include = [&rect](const SplineSample& sample)
+			{
+				rect.minX = std::min(rect.minX, sample.x);
+				rect.minZ = std::min(rect.minZ, sample.z);
+				rect.maxX = std::max(rect.maxX, sample.x);
+				rect.maxZ = std::max(rect.maxZ, sample.z);
+			};
 			for (auto it = from; it != samples.end() && it->distance <= end; ++it)
 			{
-				rect.minX = std::min(rect.minX, it->x);
-				rect.minZ = std::min(rect.minZ, it->z);
-				rect.maxX = std::max(rect.maxX, it->x);
-				rect.maxZ = std::max(rect.maxZ, it->z);
+				include(*it);
+			}
+
+			// On a loop the corner copy at the first point wraps past the path end into its start.
+			const float loopLength = shape.layout.loopLength;
+			if (loopLength > 0.0f && end > loopLength)
+			{
+				for (auto it = samples.begin(); it != samples.end() && it->distance <= end - loopLength; ++it)
+				{
+					include(*it);
+				}
 			}
 
 			rect.minX -= grow;

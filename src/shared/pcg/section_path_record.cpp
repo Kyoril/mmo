@@ -15,7 +15,8 @@ namespace mmo::pcg
 		constexpr uint32 MagicPcgo = 0x4F474350;
 		/// 1: initial layout. Placements use the oasis record's version 4 layout.
 		/// 2: appends the per-copy rects of the last build (builtRects).
-		constexpr uint32 FormatVersion = 2;
+		/// 3: appends spline.closed, params.floorInside and params.groundSmoothing; height mode SmoothedGround.
+		constexpr uint32 FormatVersion = 3;
 		/// Bytes per rect written by PutRect.
 		constexpr size_t RectBytes = 16;
 		/// Placement layout version shared with the oasis record.
@@ -57,6 +58,10 @@ namespace mmo::pcg
 		{
 			PutRect(writer, rect);
 		}
+
+		Put<uint8>(writer, record.spline.closed ? 1 : 0);
+		Put<uint8>(writer, record.params.floorInside ? 1 : 0);
+		Put(writer, record.params.groundSmoothing);
 		return true;
 	}
 
@@ -72,10 +77,11 @@ namespace mmo::pcg
 		out = SectionPathRecord();
 		uint8 sequential = 0;
 		uint8 heightMode = 0;
+		const SectionHeightMode lastHeightMode = version >= 3 ? SectionHeightMode::SmoothedGround : SectionHeightMode::FollowGround;
 		if (!Get(reader, out.id) || !GetString(reader, out.name) || !GetString(reader, out.sectionAsset) ||
 			!Get(reader, out.params.seed) || !Get(reader, sequential) || sequential > 1 ||
 			!Get(reader, out.params.joinBlend) || !Get(reader, out.params.propDensity) || !Get(reader, heightMode) ||
-			heightMode > static_cast<uint8>(SectionHeightMode::FollowGround))
+			heightMode > static_cast<uint8>(lastHeightMode))
 		{
 			return false;
 		}
@@ -136,6 +142,22 @@ namespace mmo::pcg
 				return false;
 			}
 		}
+
+		if (version < 3)
+		{
+			// Version 2 paths are open, with the default loop settings.
+			return true;
+		}
+
+		uint8 closed = 0;
+		uint8 floorInside = 0;
+		if (!Get(reader, closed) || closed > 1 || !Get(reader, floorInside) || floorInside > 1 ||
+			!Get(reader, out.params.groundSmoothing))
+		{
+			return false;
+		}
+		out.spline.closed = closed != 0;
+		out.params.floorInside = floorInside != 0;
 		return true;
 	}
 

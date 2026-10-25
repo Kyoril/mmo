@@ -111,32 +111,77 @@ TEST_CASE("SectionPathRecord round trip is byte identical", "[section_path_recor
 	CHECK(Serialize(loaded) == bytes);
 }
 
-TEST_CASE("SectionPathRecord reads version 1 without built rects", "[section_path_record]")
+TEST_CASE("SectionPathRecord round trip keeps a closed loop and the loop settings", "[section_path_record]")
 {
-	// A version 1 file is the version 2 layout without the trailing rect list.
-	const SectionPathRecord original = MakePopulated();
-	std::vector<char> bytes = Serialize(original);
-	const size_t rectBytes = 4 + 16 * original.builtRects.size();
-	REQUIRE(bytes.size() > rectBytes + 8);
-	std::vector<char> v1(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(rectBytes));
-	REQUIRE(v1[4] == 2);
-	v1[4] = 1;
+	SectionPathRecord original = MakePopulated();
+	original.spline.closed = true;
+	original.params.heightMode = SectionHeightMode::SmoothedGround;
+	original.params.floorInside = false;
+	original.params.groundSmoothing = 35.5f;
+	const std::vector<char> bytes = Serialize(original);
 
 	SectionPathRecord loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(loaded.spline.closed);
+	CHECK(loaded.spline.interpolation == SplineInterpolation::CatmullRom);
+	CHECK(loaded.params.heightMode == SectionHeightMode::SmoothedGround);
+	CHECK_FALSE(loaded.params.floorInside);
+	CHECK(loaded.params.groundSmoothing == 35.5f);
+	CHECK(loaded.builtRects.size() == 2);
+	CHECK(Serialize(loaded) == bytes);
+
+	// An unknown height mode is refused (the mode byte follows id, name, asset, seed, sequential, blend, density).
+	const size_t modeOffset = 8 + 8 + (4 + original.name.size()) + (4 + original.sectionAsset.size()) + 8 + 1 + 4 + 4;
+	REQUIRE(bytes[modeOffset] == static_cast<char>(SectionHeightMode::SmoothedGround));
+	std::vector<char> badMode = bytes;
+	badMode[modeOffset] = 3;
+	CHECK_FALSE(Deserialize(badMode, loaded));
+}
+
+TEST_CASE("SectionPathRecord reads versions 1 and 2 as open paths with default loop settings", "[section_path_record]")
+{
+	// Version 3 appends closed, floorInside and groundSmoothing (6 bytes) after the rect list of version 2, which
+	// version 1 does not have.
+	const SectionPathRecord original = MakePopulated();
+	std::vector<char> bytes = Serialize(original);
+	REQUIRE(bytes[4] == 3);
+	const size_t loopBytes = 1 + 1 + 4;
+	const size_t rectBytes = 4 + 16 * original.builtRects.size();
+	REQUIRE(bytes.size() > loopBytes + rectBytes + 8);
+
+	std::vector<char> v2(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(loopBytes));
+	v2[4] = 2;
+	SectionPathRecord loaded;
+	REQUIRE(Deserialize(v2, loaded));
+	CHECK_FALSE(loaded.spline.closed);
+	CHECK(loaded.params.floorInside);
+	CHECK(loaded.params.groundSmoothing == SectionPathParams().groundSmoothing);
+	CHECK(loaded.builtRects.size() == 2);
+
+	// Version 2 does not know SmoothedGround.
+	std::vector<char> v2Smoothed = v2;
+	const size_t modeOffset = 8 + 8 + (4 + original.name.size()) + (4 + original.sectionAsset.size()) + 8 + 1 + 4 + 4;
+	v2Smoothed[modeOffset] = static_cast<char>(SectionHeightMode::SmoothedGround);
+	CHECK_FALSE(Deserialize(v2Smoothed, loaded));
+
+	// A version 1 file is the version 2 layout without the trailing rect list.
+	std::vector<char> v1(v2.begin(), v2.end() - static_cast<std::ptrdiff_t>(rectBytes));
+	v1[4] = 1;
 	REQUIRE(Deserialize(v1, loaded));
 	CHECK(loaded.builtRects.empty());
+	CHECK_FALSE(loaded.spline.closed);
 	CHECK(loaded.pointIds == original.pointIds);
 	CHECK(loaded.content.placements.size() == 1);
 
-	// Rewriting upgrades to version 2 with no rects.
+	// Rewriting upgrades to version 3 with no rects.
 	const std::vector<char> rewritten = Serialize(loaded);
-	CHECK(rewritten[4] == 2);
-	CHECK(rewritten.size() == v1.size() + 4);
+	CHECK(rewritten[4] == 3);
+	CHECK(rewritten.size() == v1.size() + 4 + loopBytes);
 
 	// Unknown future versions are refused.
-	std::vector<char> v3 = bytes;
-	v3[4] = 3;
-	CHECK_FALSE(Deserialize(v3, loaded));
+	std::vector<char> v4 = bytes;
+	v4[4] = 4;
+	CHECK_FALSE(Deserialize(v4, loaded));
 }
 
 TEST_CASE("SectionPathRecord rejects mismatched point ids and corrupt data", "[section_path_record]")

@@ -42,6 +42,12 @@ namespace mmo
 		/// Distance between the two points of a new section path, in metres.
 		constexpr float NewPathLength = 20.0f;
 
+		/// Radius of a new section loop, in metres.
+		constexpr float NewLoopRadius = 60.0f;
+
+		/// Control points of a new section loop.
+		constexpr uint32 NewLoopPointCount = 8;
+
 		/// Overlay frames between attempts to load the terrain under a loop without heights.
 		constexpr uint64 HeightAttemptIntervalFrames = 30;
 
@@ -210,7 +216,7 @@ namespace mmo
 
 	uint32 ProceduralEditMode::GetMinPoints(const Control& control)
 	{
-		return control.kind == ControlKind::Oasis ? MinLoopPoints : MinPathPoints;
+		return (control.kind == ControlKind::Oasis || control.path.spline.closed) ? MinLoopPoints : MinPathPoints;
 	}
 
 	void ProceduralEditMode::SetStatus(const String& text, const StatusLevel level)
@@ -674,7 +680,42 @@ namespace mmo
 
 		String error;
 		uint64 id = 0;
-		CreateSectionPath(points, m_newPathAsset, 1, "", id, error);
+		CreateSectionPath(points, m_newPathAsset, 1, false, "", id, error);
+	}
+
+	void ProceduralEditMode::CreateSectionLoopAtViewportCentre()
+	{
+		if (!m_worldEditor.HasTerrain())
+		{
+			SetStatus("This world has no terrain.", StatusLevel::Error);
+			return;
+		}
+
+		if (m_newPathAsset.empty())
+		{
+			SetStatus("Pick the section asset of the new loop first.", StatusLevel::Error);
+			return;
+		}
+
+		const Ray ray = m_camera.GetCameraToViewportRay(0.5f, 0.5f, 50000.0f);
+		const auto hit = m_worldEditor.GetTerrain()->RayIntersects(ray);
+		if (!hit.first)
+		{
+			SetStatus("No ground under the viewport centre. Look at the terrain and try again.", StatusLevel::Error);
+			return;
+		}
+
+		// Same winding as a new oasis loop; floorInside puts the floor side inside either way.
+		std::vector<std::pair<float, float>> points;
+		for (uint32 i = 0; i < NewLoopPointCount; ++i)
+		{
+			const float angle = 2.0f * PiValue * static_cast<float>(i) / static_cast<float>(NewLoopPointCount);
+			points.emplace_back(hit.second.position.x + NewLoopRadius * std::cos(angle), hit.second.position.z + NewLoopRadius * std::sin(angle));
+		}
+
+		String error;
+		uint64 id = 0;
+		CreateSectionPath(points, m_newPathAsset, 1, true, "", id, error);
 	}
 
 	bool ProceduralEditMode::CreateOasisAt(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
@@ -724,7 +765,7 @@ namespace mmo
 	}
 
 	bool ProceduralEditMode::CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, const uint64 seed,
-		const String& name, uint64& id, String& error)
+		const bool closed, const String& name, uint64& id, String& error)
 	{
 		id = 0;
 		if (!m_worldEditor.HasTerrain())
@@ -734,9 +775,10 @@ namespace mmo
 			return false;
 		}
 
-		if (points.size() < MinPathPoints)
+		const uint32 minPoints = closed ? MinLoopPoints : MinPathPoints;
+		if (points.size() < minPoints)
 		{
-			error = "A section path needs at least " + std::to_string(MinPathPoints) + " points.";
+			error = String(closed ? "A section loop" : "A section path") + " needs at least " + std::to_string(minPoints) + " points.";
 			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
@@ -754,10 +796,15 @@ namespace mmo
 		control.dirty = true;
 		pcg::SectionPathRecord& record = control.path;
 		record.id = m_worldEditor.GenerateEntityUniqueId();
-		record.name = name.empty() ? "Section Path " + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
+		record.name = name.empty() ? String(closed ? "Section Loop " : "Section Path ") + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
 		record.sectionAsset = sectionAsset;
 		record.params.seed = seed;
-		record.spline.closed = false;
+		if (closed)
+		{
+			// A loop follows the large shape of the hand-made ground and levels its bumps.
+			record.params.heightMode = pcg::SectionHeightMode::SmoothedGround;
+		}
+		record.spline.closed = closed;
 		record.spline.interpolation = SplineInterpolation::CatmullRom;
 
 		// Points on the ground: load the terrain under them first.
@@ -1136,7 +1183,18 @@ namespace mmo
 		{
 			CreateSectionPathAtViewportCentre();
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("New Section Loop"))
+		{
+			CreateSectionLoopAtViewportCentre();
+		}
 		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGui::SetTooltip("Closed 8 point loop of radius %.0f m around the viewport centre, height mode smoothed ground,\n"
+				"floor side inside. Sharp points get the section's corner variants; so do tight smooth curves\n"
+				"(radius below about section length / (2 x corner angle in radians)).", NewLoopRadius);
+		}
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		DrawSectionAssetCombo("##newPathAsset", m_newPathAsset);
@@ -1344,20 +1402,49 @@ namespace mmo
 			ImGui::TextDisabled("Section '%s': length %.1f m, half width %.1f m, side falloff %.1f m, %d variant(s).",
 				asset.name.c_str(), asset.length, asset.halfWidth, asset.sideFalloff, static_cast<int>(asset.variants.size()));
 
-			// Layout of the path as it is now (sampling and fitting only; cheap for editor-sized paths).
-			if (rec.spline.points.size() >= MinPathPoints && rec.pointIds.size() == rec.spline.points.size() && asset.length > 0.0f)
+			// Layout of the path as it is now, with its corner pieces, laid like a build lays it (flat ground; cheap for
+			// editor-sized paths).
+			pcg::SectionPathShape shape;
+			String layoutError;
+			if (rec.spline.points.size() >= GetMinPoints(control) && PrepareSectionPathProbe(rec, asset, shape, layoutError))
 			{
-				const SampledPath sampled(rec.spline, pcg::kSectionPathSampleStep);
-				const pcg::SectionLayout layout = pcg::LayOutSections(rec.spline, sampled, rec.pointIds, asset.length);
+				const pcg::SectionLayout& layout = shape.layout;
 				const float reach = asset.halfWidth + asset.sideFalloff;
+				size_t inner = 0;
+				size_t outer = 0;
+				for (const pcg::SectionCopy& copy : layout.copies)
+				{
+					inner += copy.role == pcg::SectionVariantRole::InnerCorner ? 1 : 0;
+					outer += copy.role == pcg::SectionVariantRole::OuterCorner ? 1 : 0;
+				}
+				const int straight = static_cast<int>(layout.copies.size() - inner - outer);
 				if (layout.minimumBendRadius >= std::numeric_limits<float>::max())
 				{
-					ImGui::TextDisabled("Length %.1f m, %d copies, no bends.", sampled.GetLength(), static_cast<int>(layout.copies.size()));
+					ImGui::TextDisabled("Length %.1f m, %d straight copies, %d inner / %d outer corners, no bends.", shape.path->GetLength(),
+						straight, static_cast<int>(inner), static_cast<int>(outer));
 				}
 				else
 				{
-					ImGui::TextDisabled("Length %.1f m, %d copies, tightest bend radius %.1f m.", sampled.GetLength(),
-						static_cast<int>(layout.copies.size()), layout.minimumBendRadius);
+					ImGui::TextDisabled("Length %.1f m, %d straight copies, %d inner / %d outer corners, tightest bend radius %.1f m.",
+						shape.path->GetLength(), straight, static_cast<int>(inner), static_cast<int>(outer), layout.minimumBendRadius);
+				}
+
+				const bool hasCornerVariants = std::any_of(asset.variants.begin(), asset.variants.end(),
+					[](const pcg::SectionVariant& v) { return v.role != pcg::SectionVariantRole::Straight; });
+				if (hasCornerVariants)
+				{
+					ImGui::TextDisabled("Corners at control points turning by %.1f deg or more (chords over half a section).", asset.cornerAngleDeg);
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("Tight smooth curves get corner pieces too: a curve with a radius below about\n"
+							"length / (2 x corner angle in radians) = %.0f m turns by the corner angle between the chords.\n"
+							"Overlay markers: green I = inner corner (towards the floor side), magenta O = outer corner.",
+							asset.cornerAngleDeg > 0.0f ? asset.length / (2.0f * asset.cornerAngleDeg * 0.01745329252f) : 0.0f);
+					}
+				}
+				if (shape.reversed)
+				{
+					ImGui::TextDisabled("The loop runs clockwise; it is laid against the point order to keep the floor side inside.");
 				}
 
 				if (layout.minimumBendRadius < reach)
@@ -1368,10 +1455,31 @@ namespace mmo
 					ImGui::PopStyleColor();
 				}
 			}
+			else if (!layoutError.empty())
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+				ImGui::TextWrapped("Invalid section path: %s", layoutError.c_str());
+				ImGui::PopStyleColor();
+			}
 		}
 
-		ImGui::TextWrapped("Path: %d points. The path is an open 3D curve. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
-			static_cast<int>(rec.spline.points.size()), MinPathPoints);
+		// Opening keeps the loop's last span; closing needs at least as many points as a loop.
+		bool closed = rec.spline.closed;
+		ImGui::BeginDisabled(!closed && rec.spline.points.size() < MinLoopPoints);
+		if (ImGui::Checkbox("Closed loop##sectionClosed", &closed))
+		{
+			rec.spline.closed = closed;
+			control.dirty = true;
+		}
+		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGui::SetTooltip("A closed loop joins the last point to the first and gets corner pieces at every sharp point.\n"
+				"Needs at least %u points.", MinLoopPoints);
+		}
+
+		ImGui::TextWrapped("Path: %d points. The path is %s 3D curve. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
+			static_cast<int>(rec.spline.points.size()), rec.spline.closed ? "a closed" : "an open", GetMinPoints(control));
 
 		DrawPointDetails(control);
 
@@ -1390,12 +1498,40 @@ namespace mmo
 			changed = ImGui::DragFloat("Join blend (m)", &rec.params.joinBlend, 0.05f, 0.0f, 50.0f, "%.2f") || changed;
 			changed = ImGui::SliderFloat("Prop density", &rec.params.propDensity, 0.0f, 1.0f, "%.2f") || changed;
 
-			const char* heightModes[] = { "Follow spline", "Follow ground" };
-			int heightMode = rec.params.heightMode == pcg::SectionHeightMode::FollowGround ? 1 : 0;
+			// Combo index = SectionHeightMode value.
+			const char* heightModes[] = { "Follow spline", "Follow ground", "Smoothed ground" };
+			int heightMode = std::clamp(static_cast<int>(rec.params.heightMode), 0, IM_ARRAYSIZE(heightModes) - 1);
 			if (ImGui::Combo("Height mode", &heightMode, heightModes, IM_ARRAYSIZE(heightModes)))
 			{
-				rec.params.heightMode = heightMode == 1 ? pcg::SectionHeightMode::FollowGround : pcg::SectionHeightMode::FollowSpline;
+				rec.params.heightMode = static_cast<pcg::SectionHeightMode>(heightMode);
 				changed = true;
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Follow spline: the centre line takes the curve's height.\n"
+					"Follow ground: the base ground under the centre line.\n"
+					"Smoothed ground: that ground averaged along the path over the smoothing window (keeps the\n"
+					"large shape of the hand-made ground, levels its bumps and steps).");
+			}
+
+			if (rec.params.heightMode == pcg::SectionHeightMode::SmoothedGround)
+			{
+				changed = ImGui::DragFloat("Smoothing window (m)##groundSmoothing", &rec.params.groundSmoothing, 0.25f, 0.0f, 500.0f, "%.1f",
+					ImGuiSliderFlags_AlwaysClamp) || changed;
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Length of path the base ground is averaged over, centred on each point (0 = follow ground).");
+				}
+			}
+
+			if (rec.spline.closed)
+			{
+				changed = ImGui::Checkbox("Floor inside##floorInside", &rec.params.floorInside) || changed;
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Lays the section with its floor side (-X) towards the loop's interior, whatever the winding.\n"
+						"Off: laid in point order, the floor on the left looking along it (inside or outside depending on the winding).");
+				}
 			}
 
 			if (changed)
@@ -1790,6 +1926,39 @@ namespace mmo
 			styles.push_back(std::move(style));
 		}
 		m_splineEditor.Draw(*drawList, viewportMin, viewportSize, splines, styles);
+
+		// The corner piece chosen at each control point of the selected section path (laid like a build, flat ground).
+		if (m_selected >= 0 && m_selected < static_cast<int32>(m_controls.size()) && m_controls[m_selected].kind == ControlKind::SectionPath)
+		{
+			const Control& control = m_controls[m_selected];
+			const CachedSectionAsset& cached = GetCachedSectionAsset(control.path.sectionAsset);
+			pcg::SectionPathShape shape;
+			String error;
+			if (cached.valid && control.path.spline.points.size() >= GetMinPoints(control) && PrepareSectionPathProbe(control.path, cached.asset, shape, error))
+			{
+				const std::vector<SplinePoint>& points = control.path.spline.points;
+				for (size_t i = 0; i < points.size() && i < shape.layout.pointRoles.size(); ++i)
+				{
+					const pcg::SectionVariantRole role = shape.layout.pointRoles[i];
+					ImVec2 screen;
+					if (role == pcg::SectionVariantRole::Straight || !ProjectToScreen(Vector3(points[i].x, points[i].y, points[i].z), screen))
+					{
+						continue;
+					}
+
+					// A small diamond above the point handle, lettered I (inner) or O (outer).
+					const bool inner = role == pcg::SectionVariantRole::InnerCorner;
+					const ImU32 color = inner ? IM_COL32(110, 230, 120, 230) : IM_COL32(235, 110, 235, 230);
+					const ImVec2 centre(screen.x, screen.y - 18.0f);
+					constexpr float size = 7.0f;
+					drawList->AddQuadFilled(ImVec2(centre.x, centre.y - size), ImVec2(centre.x + size, centre.y), ImVec2(centre.x, centre.y + size),
+						ImVec2(centre.x - size, centre.y), color);
+					const char* letter = inner ? "I" : "O";
+					const ImVec2 textSize = ImGui::CalcTextSize(letter);
+					drawList->AddText(ImVec2(centre.x - textSize.x * 0.5f, centre.y - textSize.y * 0.5f), IM_COL32(20, 20, 20, 255), letter);
+				}
+			}
+		}
 
 		drawList->PopClipRect();
 	}

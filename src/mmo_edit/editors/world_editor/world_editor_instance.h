@@ -758,15 +758,16 @@ namespace mmo
 		/// @brief Adds a section path through the given x/z points (at terrain height) like the "New
 		///        Section Path" button does, and builds it, for unattended runs. The world is not saved.
 		///        Refused before anything is added if the section asset is missing or unreadable.
-		/// @param points World x/z of the control points, in order (at least 2).
+		/// @param points World x/z of the control points, in order (at least 2, at least 3 for a loop).
 		/// @param sectionAsset Asset path of the baked section (.hsec).
 		/// @param seed Seed of the path.
+		/// @param closed True for a section loop (closed spline, height mode SmoothedGround, floor inside).
 		/// @param name Name of the path; empty picks the default name.
 		/// @param id Receives the id of the new path (also when only the build failed).
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if the path was added and built.
 		bool CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, uint64 seed,
-			const String& name, uint64& id, String& error);
+			bool closed, const String& name, uint64& id, String& error);
 
 		/// @brief Deletes a procedural control (oasis or section path) and everything it generated like
 		///        the "Delete" button does, for unattended runs. The world is not saved.

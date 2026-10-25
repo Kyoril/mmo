@@ -128,16 +128,17 @@ namespace mmo
 
 		/// @brief Adds a section path through the given x/z points (heights from the terrain, which is
 		///        loaded under the points first). Does not build it. Refused if the section asset is
-		///        missing or unreadable, or with fewer than 2 points.
+		///        missing or unreadable, or with fewer than 2 points (3 for a loop).
 		/// @param points World x/z of the control points, in order.
 		/// @param sectionAsset Asset path of the baked section (.hsec).
 		/// @param seed Seed of the path.
-		/// @param name Name of the path; empty picks "Section Path <n>".
+		/// @param closed True for a section loop: closed spline, height mode SmoothedGround, floor side inside.
+		/// @param name Name of the path; empty picks "Section Path <n>" ("Section Loop <n>" for a loop).
 		/// @param id Receives the id of the new path.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if the path was added.
 		bool CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, uint64 seed,
-			const String& name, uint64& id, String& error);
+			bool closed, const String& name, uint64& id, String& error);
 
 		/// @brief Removes the control's content from the world and the control from the list (its
 		///        record file is removed on the next save). The "Delete" button uses this.
@@ -240,6 +241,10 @@ namespace mmo
 		///        forward direction, with the section asset picked in the panel.
 		void CreateSectionPathAtViewportCentre();
 
+		/// @brief Adds an 8 point section loop of radius 60 m around the viewport's ground hit, with the
+		///        section asset picked in the panel (height mode SmoothedGround).
+		void CreateSectionLoopAtViewportCentre();
+
 		/// @brief Selects a control (-1 = none).
 		void SelectControl(int32 index);
 
@@ -277,7 +282,7 @@ namespace mmo
 		/// @return True if the selection changed.
 		bool DrawSectionAssetCombo(const char* label, String& assetPath);
 
-		/// @brief Minimum number of control points of a control.
+		/// @brief Minimum number of control points of a control (3 for an oasis or a section loop).
 		static uint32 GetMinPoints(const Control& control);
 
 		/// @brief Describes a report for the status line.

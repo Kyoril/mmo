@@ -240,7 +240,11 @@ namespace mmo
 		}
 		if (ImGui::IsItemHovered())
 		{
-			ImGui::SetTooltip("Turn angle above which a path uses a corner variant instead of bending the straight ones.");
+			ImGui::SetTooltip("Turn angle above which a path uses a corner variant instead of bending the straight ones.\n"
+				"Measured between the chords over half a section before and after each control point, so a tight smooth\n"
+				"curve gets a corner piece too: any curve with a radius below about length / (2 x angle in radians)\n"
+				"(%.0f m for this section).", m_definition.cornerAngleDeg > 0.0f
+					? m_definition.length / (2.0f * m_definition.cornerAngleDeg * 0.01745329252f) : 0.0f);
 		}
 	}
 

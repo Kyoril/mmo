@@ -1227,13 +1227,14 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--pcg-new-path")
 			{
-				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N]
+				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]
 				// Adds a section path through the points (at terrain height), builds it, saves the world and
 				// logs the new id (0 = success). A missing or unreadable section asset is refused before
-				// anything is added or saved.
+				// anything is added or saved. --closed makes it a section loop (at least three points, height
+				// mode SmoothedGround, floor side inside).
 				mmo::RedirectUnattendedLog("pcg_new_path");
 
-				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N]";
+				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1271,6 +1272,7 @@ int main(int argc, char* arg[])
 				std::string section;
 				uint64 seed = 1;
 				std::string name;
+				bool closed = false;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount && argumentsValid; ++j)
 				{
@@ -1292,6 +1294,10 @@ int main(int argc, char* arg[])
 					{
 						name = args[++j];
 					}
+					else if (option == "--closed")
+					{
+						closed = true;
+					}
 					else
 					{
 						argumentsValid = false;
@@ -1308,6 +1314,11 @@ int main(int argc, char* arg[])
 					ELOG("--pcg-new-path: --points (at least two x,z pairs) and --section are required, usage: " << usage);
 					argumentsValid = false;
 				}
+				if (argumentsValid && closed && points.size() < 3)
+				{
+					ELOG("--pcg-new-path: --closed needs at least three x,z pairs, usage: " << usage);
+					argumentsValid = false;
+				}
 
 				bool succeeded = false;
 				if (!argumentsValid)
@@ -1318,7 +1329,7 @@ int main(int argc, char* arg[])
 				{
 					uint64 id = 0;
 					std::string error;
-					if (!world->CreateProceduralSectionPath(points, section, seed, name, id, error))
+					if (!world->CreateProceduralSectionPath(points, section, seed, closed, name, id, error))
 					{
 						// The world is not saved: a refused or failed run leaves no record behind.
 						ELOG("--pcg-new-path: " << error);
@@ -1331,7 +1342,7 @@ int main(int argc, char* arg[])
 					{
 						char idText[32];
 						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
-						ILOG("--pcg-new-path: created section path " << idText);
+						ILOG("--pcg-new-path: created section " << (closed ? "loop " : "path ") << idText);
 						succeeded = true;
 					}
 				}
