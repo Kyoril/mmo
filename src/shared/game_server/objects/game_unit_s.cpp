@@ -2973,7 +2973,7 @@ namespace mmo
 	{
 		return m_canDualWield;
 	}
-	
+
 	int32 GameUnitS::GetMaxSkillValueForLevel(uint32 level) const
 	{
 		return 5 * level;
