@@ -610,3 +610,21 @@ TEST_CASE("Making tangents manual keeps the height of the curve", "[path_spline]
 		CHECK(MaxSampleDeviation(SampledPath(spline, 1.0f).GetSamples(), before) < 1e-4f);
 	}
 }
+
+TEST_CASE("Sampled paths report the arc distance of every control point", "[path_spline]")
+{
+	PathSpline open;
+	open.interpolation = SplineInterpolation::Linear;
+	open.points = { { 0.0f, 0.0f, 0.0f }, { 0.0f, 10.0f, 0.0f }, { 30.0f, 10.0f, 0.0f } };
+	const SampledPath openPath(open, 1.0f);
+	CHECK(openPath.GetControlPointDistance(0) == Approx(0.0f));
+	CHECK(openPath.GetControlPointDistance(1) == Approx(10.0f));
+	CHECK(openPath.GetControlPointDistance(2) == Approx(40.0f));
+	CHECK(openPath.GetControlPointDistance(2) == Approx(openPath.GetLength()));
+
+	const SampledPath square(MakeSquare(), 1.0f);
+	CHECK(square.GetControlPointDistance(0) == Approx(0.0f));
+	CHECK(square.GetControlPointDistance(1) == Approx(10.0f));
+	CHECK(square.GetControlPointDistance(3) == Approx(30.0f));
+	CHECK(square.GetLength() == Approx(40.0f));
+}

@@ -150,6 +150,11 @@ namespace mmo
 		/// @brief Whether any two non-adjacent polyline segments cross.
 		bool IsSelfIntersecting() const;
 
+		/// @brief Arc distance (x/z) of a control point from the first point. The end point of an open path
+		///        sits at the total length; a closed path's wrap-around is not a control point of its own.
+		/// @param index Index of the control point; an out of range index yields the total length.
+		float GetControlPointDistance(size_t index) const;
+
 	private:
 		/// @brief Finds the polyline segment containing the (already wrapped/clamped) distance.
 		size_t FindSegment(float distance) const;
@@ -166,6 +171,8 @@ namespace mmo
 	private:
 		std::vector<SplineSample> m_samples;
 		std::vector<uint32> m_controlSegments;
+		std::vector<size_t> m_controlSampleIndices;
+		std::vector<float> m_controlDistances;
 		float m_length = 0.0f;
 		bool m_closed = false;
 		bool m_windingPositive = true;

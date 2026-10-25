@@ -223,6 +223,10 @@ namespace mmo
 				}
 				sample.width = p1.width + (p2.width - p1.width) * t;
 				sample.distance = 0.0f;
+				if (k == 0)
+				{
+					m_controlSampleIndices.push_back(m_samples.size());
+				}
 				m_samples.push_back(sample);
 				m_controlSegments.push_back(static_cast<uint32>(s));
 			}
@@ -231,6 +235,7 @@ namespace mmo
 		if (!m_closed)
 		{
 			const SplinePoint& last = pts.back();
+			m_controlSampleIndices.push_back(m_samples.size());
 			m_samples.push_back({ last.x, last.z, last.width, 0.0f, last.y });
 			m_controlSegments.push_back(static_cast<uint32>(std::max(0, segmentCount - 1)));
 		}
@@ -242,6 +247,11 @@ namespace mmo
 			const float dz = m_samples[i].z - m_samples[i - 1].z;
 			accumulated += std::sqrt(dx * dx + dz * dz);
 			m_samples[i].distance = accumulated;
+		}
+
+		for (const size_t sampleIndex : m_controlSampleIndices)
+		{
+			m_controlDistances.push_back(m_samples[sampleIndex].distance);
 		}
 
 		if (m_closed)
@@ -460,6 +470,11 @@ namespace mmo
 		}
 
 		return m_controlSegments[FindSegment(Normalize(distance))];
+	}
+
+	float SampledPath::GetControlPointDistance(const size_t index) const
+	{
+		return index < m_controlDistances.size() ? m_controlDistances[index] : m_length;
 	}
 
 	bool SampledPath::IsSelfIntersecting() const
