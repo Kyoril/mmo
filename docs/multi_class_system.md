@@ -184,8 +184,11 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    is scaled by the active class level relative to `questlevel` (`ScaleQuestClassXp`,
    `src/shared/game_server/quest_class_xp.h`): an under-leveled class receives the same fraction of
    its own class-level bar that the full reward represents at the quest's level — the XP a quest
-   designed for the class level would grant — so banked high-level quests cannot power-level a
-   fresh class, while an over-leveled class steps down through the character quest XP factor table
+   designed for the class level would grant — but at least **half of its current class-level bar**
+   and never more than the designer-set reward, so a turn-in always beats a single kill (creature
+   class XP is not scaled down for a low class level at all) while a banked high-level quest still
+   cannot advance a fresh class by more than half a level,
+   while an over-leveled class steps down through the character quest XP factor table
    (full up to quest level + 5, then 80/60/40/20/10%). The per-class curve lives in `ClassEntry.classlevels` (repeated
    `ClassLevelEntry { xptonextlevel, talentpoints }`, editable in the class editor): the class max
    level is the entry count (clamped to 255, may exceed the character cap), and the talent-point

@@ -33,16 +33,42 @@ TEST_CASE("ScaleQuestClassXp - under-leveled class is rewarded as if the quest t
 
 	// Level-10 quest turned in at class level 1: same fraction of the level-1 bar
 	// that the full reward would have been of the level-10 bar (400 / 4000).
-	REQUIRE(ScaleQuestClassXp(1000, 1, 10, entry) == 100);
+	REQUIRE(ScaleQuestClassXp(3000, 1, 10, entry) == 300);
 
 	// Class level 5: 2000 / 4000 of the reward.
-	REQUIRE(ScaleQuestClassXp(1000, 5, 10, entry) == 500);
+	REQUIRE(ScaleQuestClassXp(3000, 5, 10, entry) == 1500);
+}
+
+TEST_CASE("ScaleQuestClassXp - under-leveled turn-in is worth at least half a class level", "[quest_class_xp]")
+{
+	const proto::ClassEntry entry = makeLinearCurveClass(10);
+
+	// The bare fraction of the level-1 bar (100) is less than a single creature kill grants the
+	// same class, so the floor of half the class's current level bar applies instead.
+	REQUIRE(ScaleQuestClassXp(1000, 1, 10, entry) == 200);
+
+	// Class level 5 of a level-10 quest: half of the level-5 bar (2000) beats the fraction (500).
+	REQUIRE(ScaleQuestClassXp(1000, 5, 10, entry) == 1000);
+
+	// The floor never hands out more than the designer-set reward.
+	REQUIRE(ScaleQuestClassXp(150, 1, 10, entry) == 150);
+
+	// ...and never more than the class would get at the quest's own level.
+	REQUIRE(ScaleQuestClassXp(1000, 1, 10, entry) <= ScaleQuestClassXp(1000, 10, 10, entry));
 }
 
 TEST_CASE("ScaleQuestClassXp - scaled reward never drops to zero", "[quest_class_xp]")
 {
+	// A reward below the floor is passed through whole - and never scaled away to nothing.
 	const proto::ClassEntry entry = makeLinearCurveClass(10);
-	REQUIRE(ScaleQuestClassXp(3, 1, 10, entry) == 1);
+	REQUIRE(ScaleQuestClassXp(3, 1, 10, entry) == 3);
+
+	// A class curve without an XP bar at the current level has no floor to fall back on, but a
+	// non-zero reward still grants at least a single point.
+	proto::ClassEntry barlessEntry;
+	barlessEntry.add_classlevels()->set_xptonextlevel(0);
+	barlessEntry.add_classlevels()->set_xptonextlevel(4000);
+	REQUIRE(ScaleQuestClassXp(3, 1, 2, barlessEntry) == 1);
 }
 
 TEST_CASE("ScaleQuestClassXp - over-leveled class within grace window grants full XP", "[quest_class_xp]")

@@ -80,6 +80,17 @@ namespace mmo
 		}
 
 		const uint64 scaled = static_cast<uint64>(rewardClassXp) * classLevelBar / questLevelBar;
-		return static_cast<uint32>(std::max<uint64>(1, scaled));
+
+		// On a steep class curve that fraction collapses to less than a single creature kill grants
+		// the same class - creature class XP is not scaled down for a low class level at all, it
+		// even gets the catch-up bonus for the level difference (CreatureAIDeathState) - which made
+		// turning quests in pointless while leveling a secondary class. Floor the reward at half of
+		// the class's current level bar: a turn-in is then always worth more than a kill, while a
+		// banked high-level quest still cannot advance a fresh class by more than half a level.
+		// Never more than the designer-set reward, so the floor cannot exceed what the quest would
+		// grant a class at its own level.
+		const uint64 floorXp = classLevelBar / 2;
+		const uint64 granted = std::min<uint64>(rewardClassXp, std::max<uint64>(scaled, floorXp));
+		return static_cast<uint32>(std::max<uint64>(1, granted));
 	}
 }
