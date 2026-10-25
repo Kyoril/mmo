@@ -28,7 +28,8 @@ FROM ubuntu:latest
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y libmariadb-dev-compat libssl-dev uuid-dev
+# ca-certificates: the crash report upload verifies TLS against the system trust store.
+RUN apt-get update && apt-get install -y ca-certificates libmariadb-dev-compat libssl-dev uuid-dev
 
 RUN mkdir -p /app/config
 # Release optimised, debug info stripped; same code layout as the binary in the symbols stage.
