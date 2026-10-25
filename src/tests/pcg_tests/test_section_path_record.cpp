@@ -7,6 +7,8 @@
 #include "binary_io/memory_source.h"
 #include "binary_io/vector_sink.h"
 
+#include <limits>
+
 using namespace mmo;
 using namespace mmo::pcg;
 
@@ -240,4 +242,40 @@ TEST_CASE("SectionPathRecord read raises a stale next point id", "[section_path_
 	original.nextPointId = 42;
 	REQUIRE(Deserialize(Serialize(original), loaded));
 	CHECK(loaded.nextPointId == 42);
+}
+
+TEST_CASE("SectionPathRecord validates the ground smoothing window on read", "[section_path_record]")
+{
+	// groundSmoothing is the last 4 bytes of a version 3 record.
+	const auto withSmoothing = [](float smoothing)
+	{
+		SectionPathRecord record = MakePopulated();
+		record.spline.closed = true;
+		record.params.heightMode = SectionHeightMode::SmoothedGround;
+		record.params.groundSmoothing = smoothing;
+		return record;
+	};
+
+	SectionPathRecord loaded;
+
+	SECTION("a non-finite window is refused")
+	{
+		CHECK_FALSE(Deserialize(Serialize(withSmoothing(std::numeric_limits<float>::quiet_NaN())), loaded));
+		CHECK_FALSE(Deserialize(Serialize(withSmoothing(std::numeric_limits<float>::infinity())), loaded));
+		CHECK_FALSE(Deserialize(Serialize(withSmoothing(-std::numeric_limits<float>::infinity())), loaded));
+	}
+
+	SECTION("a negative window is clamped to 0")
+	{
+		REQUIRE(Deserialize(Serialize(withSmoothing(-12.5f)), loaded));
+		CHECK(loaded.params.groundSmoothing == 0.0f);
+	}
+
+	SECTION("0 and positive windows are kept")
+	{
+		REQUIRE(Deserialize(Serialize(withSmoothing(0.0f)), loaded));
+		CHECK(loaded.params.groundSmoothing == 0.0f);
+		REQUIRE(Deserialize(Serialize(withSmoothing(80.0f)), loaded));
+		CHECK(loaded.params.groundSmoothing == 80.0f);
+	}
 }

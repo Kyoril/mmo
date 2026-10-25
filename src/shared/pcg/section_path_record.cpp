@@ -3,6 +3,8 @@
 #include "section_path_record.h"
 #include "record_io.h"
 
+#include <cmath>
+
 namespace mmo::pcg
 {
 	using namespace record_io;
@@ -155,6 +157,15 @@ namespace mmo::pcg
 			!Get(reader, out.params.groundSmoothing))
 		{
 			return false;
+		}
+		if (!std::isfinite(out.params.groundSmoothing))
+		{
+			return false;
+		}
+		if (out.params.groundSmoothing < 0.0f)
+		{
+			// A negative window means no smoothing (the layout treats w <= 0 as FollowGround).
+			out.params.groundSmoothing = 0.0f;
 		}
 		out.spline.closed = closed != 0;
 		out.params.floorInside = floorInside != 0;
