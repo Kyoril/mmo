@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace mmo
 {
@@ -71,11 +72,24 @@ namespace mmo
 		return ProjectToScreen(Vector3(x, m_height ? m_height(x, z) : 0.0f, z), screenPosition);
 	}
 
-	bool SplineEditController::ProjectHandle(const SplinePoint& point, const float offsetX, const float offsetZ, ImVec2& screenPosition) const
+	Vector3 SplineEditController::GetPointPosition(const PathSpline& spline, const SplinePoint& point) const
 	{
-		// At the point's height: that is the plane a handle is dragged on.
-		const float height = m_height ? m_height(point.x, point.z) : 0.0f;
-		return ProjectToScreen(Vector3(point.x + offsetX, height, point.z + offsetZ), screenPosition);
+		// Curved splines are 3D and keep their own heights; linear ones (rivers) lie on the surface.
+		if (HasTangents(spline))
+		{
+			return Vector3(point.x, point.y, point.z);
+		}
+		return Vector3(point.x, m_height ? m_height(point.x, point.z) : 0.0f, point.z);
+	}
+
+	bool SplineEditController::ProjectSplinePoint(const PathSpline& spline, const SplinePoint& point, ImVec2& screenPosition) const
+	{
+		return ProjectToScreen(GetPointPosition(spline, point), screenPosition);
+	}
+
+	bool SplineEditController::ProjectHandle(const SplinePoint& point, const float offsetX, const float offsetY, const float offsetZ, ImVec2& screenPosition) const
+	{
+		return ProjectToScreen(Vector3(point.x + offsetX, point.y + offsetY, point.z + offsetZ), screenPosition);
 	}
 
 	const SplinePoint* SplineEditController::GetSelectedCurvePoint(const std::vector<PathSpline*>& splines) const
@@ -103,24 +117,23 @@ namespace mmo
 		}
 
 		ImVec2 pointScreen;
-		if (!ProjectPlanePoint(point->x, point->z, pointScreen))
+		if (!ProjectSplinePoint(*splines[m_selectedSpline], *point, pointScreen))
 		{
 			return false;
 		}
 
-		float inX, inZ, outX, outZ;
-		GetEffectiveTangents(*splines[m_selectedSpline], static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+		const SplineTangents t = GetEffectiveTangents(*splines[m_selectedSpline], static_cast<size_t>(m_selectedPoint));
 
 		float best = PointPickRadius;
 		bool found = false;
-		const struct { TangentHandle which; float dx; float dz; } candidates[] = {
-			{ TangentHandle::In, inX, inZ },
-			{ TangentHandle::Out, outX, outZ },
+		const struct { TangentHandle which; float dx; float dy; float dz; } candidates[] = {
+			{ TangentHandle::In, t.inX, t.inY, t.inZ },
+			{ TangentHandle::Out, t.outX, t.outY, t.outZ },
 		};
 		for (const auto& candidate : candidates)
 		{
 			ImVec2 screen;
-			if (!ProjectHandle(*point, candidate.dx, candidate.dz, screen))
+			if (!ProjectHandle(*point, candidate.dx, candidate.dy, candidate.dz, screen))
 			{
 				continue;
 			}
@@ -142,7 +155,7 @@ namespace mmo
 		return found;
 	}
 
-	bool SplineEditController::GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& z) const
+	bool SplineEditController::GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& y, float& z) const
 	{
 		if (m_selectedSpline < 0 || m_selectedSpline >= static_cast<int32>(splines.size()))
 		{
@@ -156,14 +169,17 @@ namespace mmo
 		}
 
 		const SplinePoint& point = spline.points[m_selectedPoint];
-		x = point.x;
-		z = point.z;
+		const Vector3 position = GetPointPosition(spline, point);
+		x = position.x;
+		y = position.y;
+		z = position.z;
 		if (m_dragHandle != TangentHandle::None)
 		{
-			float inX, inZ, outX, outZ;
-			GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
-			x += m_dragHandle == TangentHandle::In ? inX : outX;
-			z += m_dragHandle == TangentHandle::In ? inZ : outZ;
+			const SplineTangents t = GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint));
+			const bool isIn = m_dragHandle == TangentHandle::In;
+			x += isIn ? t.inX : t.outX;
+			y += isIn ? t.inY : t.outY;
+			z += isIn ? t.inZ : t.outZ;
 		}
 		return true;
 	}
@@ -177,7 +193,7 @@ namespace mmo
 
 		SplinePoint& point = spline.points[pointIndex];
 		point.autoTangents = true;
-		point.inX = point.inZ = point.outX = point.outZ = 0.0f;
+		point.inX = point.inY = point.inZ = point.outX = point.outY = point.outZ = 0.0f;
 		return true;
 	}
 
@@ -287,7 +303,7 @@ namespace mmo
 					const SplineSample& a = samples[i];
 					const SplineSample& b = samples[(i + 1) % samples.size()];
 					ImVec2 sa, sb;
-					if (ProjectPlanePoint(a.x, a.z, sa) && ProjectPlanePoint(b.x, b.z, sb))
+					if (ProjectToScreen(Vector3(a.x, a.y, a.z), sa) && ProjectToScreen(Vector3(b.x, b.y, b.z), sb))
 					{
 						drawList.AddLine(sa, sb, mainColor, selectedSpline ? 3.0f : 2.0f);
 					}
@@ -297,9 +313,16 @@ namespace mmo
 			for (int32 p = 0; p < static_cast<int32>(points.size()); ++p)
 			{
 				ImVec2 screen;
-				if (!ProjectPlanePoint(points[p].x, points[p].z, screen))
+				if (!ProjectSplinePoint(spline, points[p], screen))
 				{
 					continue;
+				}
+
+				// A faint drop line to the ground makes a 3D point's height readable.
+				ImVec2 ground;
+				if (HasTangents(spline) && ProjectPlanePoint(points[p].x, points[p].z, ground))
+				{
+					drawList.AddLine(screen, ground, (mainColor & 0x00FFFFFFu) | (70u << 24), 1.0f);
 				}
 
 				const bool selectedPoint = selectedSpline && p == m_selectedPoint;
@@ -318,20 +341,19 @@ namespace mmo
 			if (selectedSpline && HasTangents(spline) && m_selectedPoint >= 0 && m_selectedPoint < static_cast<int32>(points.size()))
 			{
 				const SplinePoint& point = points[m_selectedPoint];
-				float inX, inZ, outX, outZ;
-				GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint), inX, inZ, outX, outZ);
+				const SplineTangents t = GetEffectiveTangents(spline, static_cast<size_t>(m_selectedPoint));
 
 				ImVec2 pointScreen;
-				if (ProjectPlanePoint(point.x, point.z, pointScreen))
+				if (ProjectSplinePoint(spline, point, pointScreen))
 				{
-					const struct { float dx; float dz; ImU32 color; } handles[] = {
-						{ inX, inZ, InHandleColor },
-						{ outX, outZ, OutHandleColor },
+					const struct { float dx; float dy; float dz; ImU32 color; } handles[] = {
+						{ t.inX, t.inY, t.inZ, InHandleColor },
+						{ t.outX, t.outY, t.outZ, OutHandleColor },
 					};
 					for (const auto& handle : handles)
 					{
 						ImVec2 handleScreen;
-						if (!ProjectHandle(point, handle.dx, handle.dz, handleScreen))
+						if (!ProjectHandle(point, handle.dx, handle.dy, handle.dz, handleScreen))
 						{
 							continue;
 						}
@@ -364,7 +386,7 @@ namespace mmo
 			for (int32 p = 0; p < static_cast<int32>(points.size()); ++p)
 			{
 				ImVec2 screen;
-				if (!ProjectPlanePoint(points[p].x, points[p].z, screen))
+				if (!ProjectSplinePoint(*splines[s], points[p], screen))
 				{
 					continue;
 				}
@@ -398,7 +420,7 @@ namespace mmo
 				const SplinePoint& a = points[p];
 				const SplinePoint& b = points[(p + 1) % points.size()];
 				ImVec2 sa, sb;
-				if (!ProjectPlanePoint(a.x, a.z, sa) || !ProjectPlanePoint(b.x, b.z, sb))
+				if (!ProjectSplinePoint(*splines[s], a, sa) || !ProjectSplinePoint(*splines[s], b, sb))
 				{
 					continue;
 				}
@@ -436,16 +458,53 @@ namespace mmo
 			return true;
 		}
 
-		if (alt && worldHit != nullptr && HitTestSegment(x, y, splines, splineIndex, pointIndex))
+		if (alt && HitTestSegment(x, y, splines, splineIndex, pointIndex))
 		{
 			auto& points = splines[splineIndex]->points;
 			const SplinePoint a = points[pointIndex];
 			const SplinePoint b = points[(pointIndex + 1) % points.size()];
 
 			SplinePoint inserted;
-			inserted.x = worldHit->x;
-			inserted.z = worldHit->z;
 			inserted.width = (a.width + b.width) * 0.5f;
+
+			// A curved (3D) spline gets the point on the drawn curve nearest the cursor, height included:
+			// the terrain under the cursor can lie far behind a raised curve.
+			bool placed = false;
+			if (HasTangents(*splines[splineIndex]))
+			{
+				const SampledPath sampled(*splines[splineIndex], CurveDrawStep * 0.25f);
+				float best = std::numeric_limits<float>::max();
+				for (const SplineSample& sample : sampled.GetSamples())
+				{
+					ImVec2 screen;
+					if (sampled.SegmentAtDistance(sample.distance) != static_cast<uint32>(pointIndex) ||
+						!ProjectToScreen(Vector3(sample.x, sample.y, sample.z), screen))
+					{
+						continue;
+					}
+
+					const float distance = std::hypot(screen.x - x, screen.y - y);
+					if (distance < best)
+					{
+						best = distance;
+						inserted.x = sample.x;
+						inserted.y = sample.y;
+						inserted.z = sample.z;
+						placed = true;
+					}
+				}
+			}
+
+			if (!placed)
+			{
+				if (worldHit == nullptr)
+				{
+					return false;
+				}
+				inserted.x = worldHit->x;
+				inserted.y = worldHit->y;
+				inserted.z = worldHit->z;
+			}
 			points.insert(points.begin() + pointIndex + 1, inserted);
 
 			m_selectedSpline = splineIndex;

@@ -80,13 +80,14 @@ namespace mmo
 		/// @param x Screen x of the mouse.
 		/// @param y Screen y of the mouse.
 		/// @param alt Whether the insert modifier is held.
-		/// @param worldHit World position under the cursor (terrain raycast), required for inserting.
+		/// @param worldHit World position under the cursor (terrain raycast). Linear splines need it to insert;
+		///	       curved (3D) ones insert on the drawn curve nearest the cursor and use it only as a fallback.
 		/// @return True if the click was consumed.
 		bool OnMouseDown(float x, float y, std::vector<PathSpline*>& splines, bool alt, const Vector3* worldHit = nullptr);
 
 		/// @brief Drags the selected point, or the grabbed tangent handle. The first move of a handle makes
 		///	       the point's tangents manual (keeping the other handle where it is); only the dragged handle
-		///	       changes.
+		///	       changes. Only x/z change; the point's or handle's height stays.
 		/// @param x World x the point or handle is dragged to.
 		/// @param y World z the point or handle is dragged to.
 		/// @return True if anything moved.
@@ -110,9 +111,10 @@ namespace mmo
 		/// @param handle Receives the handle when the call returns true.
 		bool HitTestTangentHandle(float x, float y, const std::vector<PathSpline*>& splines, TangentHandle& handle) const;
 
-		/// @brief Gets the world x/z of what is being dragged (the point or the grabbed handle).
+		/// @brief Gets the world position of what is being dragged (the point or the grabbed handle). Drags
+		///	       move on the horizontal plane through this height.
 		/// @return False when nothing valid is being dragged.
-		bool GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& z) const;
+		bool GetDragAnchor(const std::vector<PathSpline*>& splines, float& x, float& y, float& z) const;
 
 		/// @brief The tangent handle being dragged, or None while dragging a point (or not dragging).
 		TangentHandle GetDraggedHandle() const { return m_dragHandle; }
@@ -159,8 +161,15 @@ namespace mmo
 		/// @brief The selected point of a curved selected spline, or null.
 		const SplinePoint* GetSelectedCurvePoint(const std::vector<PathSpline*>& splines) const;
 
-		/// @brief Projects a tangent handle of a point; handles are drawn at the point's height.
-		bool ProjectHandle(const SplinePoint& point, float offsetX, float offsetZ, ImVec2& screenPosition) const;
+		/// @brief World position a point is shown at: its own height on curved (3D) splines, the height
+		///	       function's on linear ones.
+		Vector3 GetPointPosition(const PathSpline& spline, const SplinePoint& point) const;
+
+		/// @brief Projects a control point at GetPointPosition.
+		bool ProjectSplinePoint(const PathSpline& spline, const SplinePoint& point, ImVec2& screenPosition) const;
+
+		/// @brief Projects a 3D tangent handle of a curved spline's point (point + offset).
+		bool ProjectHandle(const SplinePoint& point, float offsetX, float offsetY, float offsetZ, ImVec2& screenPosition) const;
 
 		/// @brief Projects a point of the x/z plane, lifted by the height function.
 		bool ProjectPlanePoint(float x, float z, ImVec2& screenPosition) const;

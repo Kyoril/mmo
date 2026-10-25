@@ -4547,7 +4547,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		ImGui::Text("Type: Spline Point #%zu", selectable.GetPointIndex());
-		ImGui::TextDisabled("Translate moves it on the ground, Rotate turns its tangents. Tangent tools are in the mode panel.");
+		ImGui::TextDisabled("Translate moves it (height too), Rotate tilts and turns its tangents (yaw and pitch). Tangent tools are in the mode panel.");
 	}
 
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)

@@ -202,6 +202,11 @@ namespace mmo
 		/// @brief Draws the selected point's tangent tools in the details panel.
 		void DrawPointDetails(Oasis& oasis);
 
+		/// @brief Puts the loop points of a record without heights (read from a version 1/2 file, or just
+		///        created) on the terrain, with level tangents. Loads the terrain pages under the loop.
+		/// @return True if the record has valid heights afterwards.
+		bool EnsureHeights(Oasis& oasis);
+
 		/// @brief Tells the transform widget that the selected point's tangents changed (its local-space
 		///        orientation follows the out tangent).
 		void NotifyPointRotated();

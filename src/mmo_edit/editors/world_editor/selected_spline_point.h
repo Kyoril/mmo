@@ -38,10 +38,11 @@ namespace mmo
 	};
 
 	/// @brief Selection handle for one control point of a curved or linear PathSpline.
-	/// @details Translate moves the point on the x/z plane (it always sits on the ground; height changes are
-	///          ignored). Rotate turns both tangent handles around the world up axis (yaw only), switching
-	///          the point to manual tangents first so the curve does not jump. Scale is not supported.
-	///          The orientation is the yaw of the leaving (out) tangent.
+	/// @details On a curved (3D) spline Translate moves the point freely, height included; on a linear one
+	///          it moves on the x/z plane and the point sits on the ground. Rotate turns both tangent handles
+	///          together (yaw and pitch of the out tangent; a roll around it is ignored), switching the point
+	///          to manual tangents first so the curve does not jump. Scale is not supported. The orientation
+	///          is the roll-free frame of the leaving (out) tangent: +X along it, +Y in the vertical plane.
 	class SelectedSplinePoint final : public Selectable
 	{
 	public:
@@ -58,10 +59,10 @@ namespace mmo
 		/// @brief Not supported for spline points.
 		void Duplicate() override {}
 
-		/// @brief Moves the point on the x/z plane; the y component is ignored.
+		/// @brief Moves the point (height only on curved splines).
 		void Translate(const Vector3& delta) override;
 
-		/// @brief Turns both tangents of the point by the yaw part of the delta.
+		/// @brief Turns both tangents so the out tangent points where the delta turns it (yaw and pitch; no roll).
 		void Rotate(const Quaternion& delta) override;
 
 		/// @brief Not supported for spline points.
@@ -73,19 +74,20 @@ namespace mmo
 		/// @copydoc Selectable::Deselect
 		void Deselect() override;
 
-		/// @brief Moves the point to the x/z of the position; the height is ignored.
+		/// @brief Moves the point to the position (height only on curved splines).
 		void SetPosition(const Vector3& position) const override;
 
-		/// @brief Turns the tangents so the out tangent has the yaw of the orientation.
+		/// @brief Turns both tangents so the out tangent points along the orientation's +X; roll is ignored.
 		void SetOrientation(const Quaternion& orientation) const override;
 
 		/// @brief Not supported for spline points.
 		void SetScale(const Vector3& scale) const override {}
 
-		/// @brief Gets the point on the ground (zero when the point no longer exists).
+		/// @brief Gets the point (its own height on curved splines, the ground on linear ones; zero when the
+		///        point no longer exists).
 		[[nodiscard]] Vector3 GetPosition() const override;
 
-		/// @brief Gets the yaw of the point's out tangent.
+		/// @brief Gets the roll-free frame of the point's out tangent (yaw and pitch).
 		[[nodiscard]] Quaternion GetOrientation() const override;
 
 		/// @brief Always one.
@@ -114,8 +116,14 @@ namespace mmo
 		/// @brief Gets the spline if it still has the point, else null.
 		[[nodiscard]] PathSpline* Resolve() const;
 
-		/// @brief Rotates both tangents of the point by a yaw rotation.
-		void RotateTangents(const Quaternion& yaw) const;
+		/// @brief Rotates both tangents of the point (makes them manual first).
+		void RotateTangents(const Quaternion& rotation) const;
+
+		/// @brief The rotation from the current out tangent frame to the frame of a new out direction.
+		[[nodiscard]] Quaternion RotationToward(const Vector3& direction) const;
+
+		/// @brief Whether the spline's points carry a height (curved splines).
+		static bool HasHeight(const PathSpline& spline);
 
 	private:
 		ISplinePointOwner& m_owner;

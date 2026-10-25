@@ -224,6 +224,40 @@ namespace mmo
 		m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), -1);
 	}
 
+	bool ProceduralEditMode::EnsureHeights(Oasis& oasis)
+	{
+		pcg::OasisRecord& record = oasis.record;
+		if (record.heightsValid)
+		{
+			return true;
+		}
+
+		if (!m_worldEditor.HasTerrain())
+		{
+			// Nothing to stand on: the zero heights are as good as any.
+			record.heightsValid = true;
+			return true;
+		}
+
+		pcg::WorldRect bounds;
+		ComputeBounds(record.loop, bounds);
+		String error;
+		if (!m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, error))
+		{
+			// Try again later (the next frame, rebuild or save); until then the points sit at height 0.
+			return false;
+		}
+
+		for (SplinePoint& point : record.loop.points)
+		{
+			point.y = m_worldEditor.GetTerrain()->GetSmoothHeightAt(point.x, point.z);
+			point.inY = 0.0f;
+			point.outY = 0.0f;
+		}
+		record.heightsValid = true;
+		return true;
+	}
+
 	PathSpline* ProceduralEditMode::FindSelectableSpline(const uint64 splineId)
 	{
 		const int32 index = FindOasis(splineId);
@@ -386,6 +420,16 @@ namespace mmo
 			}
 
 			const String fileName = MakeFileName(pcgFolder, oasis.record.id);
+
+			// A record from before heights existed must not be written with zero heights: the file would
+			// then claim them as real.
+			if (!EnsureHeights(oasis))
+			{
+				ELOG("Oasis record " << fileName << " not written: the terrain under its loop is not loaded, so its point heights are unknown");
+				success = false;
+				continue;
+			}
+
 			const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(fileName);
 			if (!file)
 			{
@@ -467,6 +511,9 @@ namespace mmo
 			point.z = z + radius * std::sin(angle);
 			oasis.record.loop.points.push_back(point);
 		}
+		// Points start on the ground (the loop is a 3D curve; heights are free afterwards).
+		oasis.record.heightsValid = false;
+		EnsureHeights(oasis);
 
 		id = oasis.record.id;
 		m_oases.push_back(std::move(oasis));
@@ -559,6 +606,9 @@ namespace mmo
 		}
 
 		Oasis& oasis = m_oases[index];
+		// Before the build changes the terrain; the build itself only uses the loop's x/z. A failure is
+		// retried when the record is saved.
+		EnsureHeights(oasis);
 		if (!CheckOverlap(oasis, error))
 		{
 			m_status = error;
@@ -770,7 +820,7 @@ namespace mmo
 			current.dirty = true;
 		}
 
-		ImGui::TextWrapped("Loop: %d points. Click a point to select it (the gizmo moves it; Rotate turns its tangents) or drag it, Alt+click a segment to add a point, Delete or Ctrl+click removes a point (minimum %u).",
+		ImGui::TextWrapped("Loop: %d points. The loop is a 3D curve. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
 			static_cast<int>(rec.loop.points.size()), MinLoopPoints);
 
 		DrawPointDetails(current);
@@ -837,7 +887,7 @@ namespace mmo
 		{
 			const bool isAuto = loop.points[point].autoTangents;
 			ImGui::Text("Selected point: %d, tangents %s", point, isAuto ? "automatic" : "manual");
-			ImGui::TextDisabled("Drag the orange (in) or green (out) handle; hollow = automatic, filled = manual.");
+			ImGui::TextDisabled("Drag the orange (in) or green (out) handle (it keeps its height); hollow = automatic, filled = manual.");
 			ImGui::BeginDisabled(isAuto);
 			if (ImGui::Button("Reset tangents to auto") && SplineEditController::ResetTangents(loop, static_cast<size_t>(point)))
 			{
@@ -893,16 +943,17 @@ namespace mmo
 			return;
 		}
 
-		// Keep the grab offset, so the point (or handle) does not snap its centre to the cursor. A
-		// tangent handle moves on the same plane as its point: the one through the point's ground.
+		// Keep the grab offset, so the point (or handle) does not snap its centre to the cursor. The drag
+		// runs on the horizontal plane through the grabbed point's or handle's current height, so it
+		// keeps that height (the gizmo's Y arrow or a tangent pitch changes it).
 		const SplinePoint& grabbed = points[point];
-		m_dragPlaneY = GetSplinePointGroundHeight(grabbed.x, grabbed.z);
+		float anchorX = grabbed.x;
+		float anchorY = grabbed.y;
+		float anchorZ = grabbed.z;
+		m_splineEditor.GetDragAnchor(GetSplines(), anchorX, anchorY, anchorZ);
+		m_dragPlaneY = anchorY;
 		m_dragOffsetX = 0.0f;
 		m_dragOffsetZ = 0.0f;
-
-		float anchorX = grabbed.x;
-		float anchorZ = grabbed.z;
-		m_splineEditor.GetDragAnchor(GetSplines(), anchorX, anchorZ);
 
 		Vector3 hit;
 		if (m_cursorRayValid && IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
@@ -1094,6 +1145,12 @@ namespace mmo
 		if (!io.WantTextInput && ImGui::IsItemHovered() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
 		{
 			DeleteSelectedPoint();
+		}
+
+		// Records from before heights existed get their points put on the ground once it is loaded.
+		for (Oasis& oasis : m_oases)
+		{
+			EnsureHeights(oasis);
 		}
 
 		// The selection must not outlive its point (e.g. after an oasis was deleted).
