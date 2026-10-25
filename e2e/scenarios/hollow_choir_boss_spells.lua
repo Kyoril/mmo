@@ -80,6 +80,10 @@ Log("Guttering Candle dealt " .. (before - GetHealth(dummy)))
 resetMyCooldowns()
 healDummy()
 before = GetHealth(dummy)
+-- Face the dummy explicitly: the cone is evaluated on the facing at cast time, and relying on the
+-- cast to turn the player in time missed the cone on a slow CI runner.
+FaceUnit(dummy)
+Sleep(500)
 castAndWait(GRAVE_STRIKE, dummy)
 Assert(WaitUntil(function() return GetHealth(dummy) < before - 60 end, 3000, "cone hits"),
 	"Grave Strike should hit the dummy in front of the caster (" .. before .. " -> " .. GetHealth(dummy) .. ")")
