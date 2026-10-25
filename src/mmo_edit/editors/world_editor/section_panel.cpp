@@ -497,7 +497,9 @@ namespace mmo
 
 		const String problem = ValidateDefinition();
 		ImGui::BeginDisabled(!problem.empty());
-		if (ImGui::Button("Bake"))
+		// The collapsing header above is also labelled "Bake": without its own ID the button would
+		// share the header's ID and never fire.
+		if (ImGui::Button("Bake##bakeSection"))
 		{
 			Bake();
 		}
