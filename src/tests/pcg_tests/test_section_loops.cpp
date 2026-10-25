@@ -224,8 +224,20 @@ TEST_CASE("Two sharp points closer than a corner piece get only one corner", "[s
 	CHECK(((roles[1] != SectionVariantRole::Straight) != (roles[2] != SectionVariantRole::Straight)));
 	CHECK(((roles[3] != SectionVariantRole::Straight) != (roles[0] != SectionVariantRole::Straight)));
 
-	// Copies tile the loop without overlap.
+	// The 2 m left of each short side next to its corner is no sliver copy: the corner piece is stretched over it
+	// (22 m), the short sides get no straight copy, the long sides 4 (between two corners) and 5 copies.
 	const std::vector<SectionCopy>& copies = shape.layout.copies;
+	CHECK(CountRole(shape.layout, SectionVariantRole::Straight) == 9);
+	for (const SectionCopy& copy : copies)
+	{
+		CHECK(copy.stretchedLength >= 10.0f);
+		if (copy.role != SectionVariantRole::Straight)
+		{
+			CHECK(copy.stretchedLength == Approx(22.0f).margin(1e-3f));
+		}
+	}
+
+	// Copies tile the loop without overlap.
 	for (size_t i = 0; i + 1 < copies.size(); ++i)
 	{
 		CHECK(copies[i].stretchedLength > 0.0f);
@@ -233,6 +245,58 @@ TEST_CASE("Two sharp points closer than a corner piece get only one corner", "[s
 	}
 	CHECK(copies.back().startDistance + copies.back().stretchedLength
 		== Approx(copies.front().startDistance + shape.path->GetLength()).margin(1e-3f));
+}
+
+TEST_CASE("A short straight remainder before a corner on an open path stretches the corner", "[section_loops]")
+{
+	// 14 m to a sharp left turn, then 100 m: the corner piece takes [4, 24]; the 4 m before it would be a sliver.
+	PathSpline spline = Loop({ { 0.0f, 0.0f }, { 14.0f, 0.0f }, { 14.0f, 100.0f } });
+	spline.closed = false;
+	SectionPathShape shape;
+	Prepare(spline, MakeWall(true, true), SectionPathParams(), shape);
+
+	const std::vector<SectionCopy>& copies = shape.layout.copies;
+	REQUIRE(shape.layout.pointRoles.size() == 3);
+	CHECK(shape.layout.pointRoles[1] == SectionVariantRole::InnerCorner);
+	REQUIRE(!copies.empty());
+	CHECK(copies.front().role == SectionVariantRole::InnerCorner);
+	CHECK(copies.front().span == 1);
+	CHECK(copies.front().startDistance == Approx(0.0f).margin(1e-3f));
+	CHECK(copies.front().stretchedLength == Approx(24.0f).margin(1e-3f));
+
+	// The 90 m after the corner: 5 copies of 18 m, tiling to the path end.
+	CHECK(CountRole(shape.layout, SectionVariantRole::Straight) == 5);
+	for (size_t i = 0; i + 1 < copies.size(); ++i)
+	{
+		CHECK(copies[i].startDistance + copies[i].stretchedLength == Approx(copies[i + 1].startDistance).margin(1e-3f));
+	}
+	CHECK(copies.back().startDistance + copies.back().stretchedLength == Approx(shape.path->GetLength()).margin(1e-3f));
+
+	// The stretched corner covers the path start.
+	float localZ = 0.0f;
+	const SectionCopy* first = FindCopy(shape.layout, 1.0f, 20.0f, localZ);
+	REQUIRE(first != nullptr);
+	CHECK(first->role == SectionVariantRole::InnerCorner);
+	CHECK(localZ == Approx(20.0f / 24.0f).margin(1e-3f));
+}
+
+TEST_CASE("A corner's key does not depend on the remainder it absorbs", "[section_loops]")
+{
+	// Moving the first point changes the remainder before the corner; the corner keeps its key.
+	const SectionAsset asset = MakeWall(true, true);
+	uint64 keys[2] = {};
+	const float starts[2] = { 0.0f, 3.0f };
+	for (int k = 0; k < 2; ++k)
+	{
+		PathSpline spline = Loop({ { starts[k], 0.0f }, { 14.0f, 0.0f }, { 14.0f, 100.0f } });
+		spline.closed = false;
+		SectionPathShape shape;
+		Prepare(spline, asset, SectionPathParams(), shape);
+		REQUIRE(!shape.layout.copies.empty());
+		CHECK(shape.layout.copies.front().role == SectionVariantRole::InnerCorner);
+		keys[k] = shape.layout.copies.front().spanKey;
+	}
+	CHECK(keys[0] == keys[1]);
 }
 
 TEST_CASE("A loop without corner variants lays by bending only", "[section_loops]")

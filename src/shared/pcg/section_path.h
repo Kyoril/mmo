@@ -36,7 +36,7 @@ namespace mmo::pcg
 		/// Index of the control point span (segment) this copy lies in; for a corner copy the index of its control point.
 		uint32 span = 0;
 
-		/// Index of the copy inside its span (0 for a corner copy).
+		/// Index of the copy inside its span (0 for a corner copy, which may be stretched over a short straight remainder).
 		uint32 copy = 0;
 
 		/// Arc distance of the copy's start from the path start.
@@ -94,6 +94,10 @@ namespace mmo::pcg
 	/// [d_i - L/2, d_i + L/2] with spanKey = Hash(point id, role). Points are decided in index order; a corner falls
 	/// back to bending if it would leave less than L/2 of straight path to an earlier corner, or would not fit into
 	/// one of its spans. The straight copies of each span fill what remains (max(1, round(remaining / L)) copies).
+	/// A remainder shorter than L/2 next to a corner gets no straight copy: the corner copy is stretched over it (it
+	/// then starts that much earlier or covers that much more; its spanKey does not change).
+	/// A smooth curve of radius R turns by L / (2R) radians between the two chords, so a curve tighter than
+	/// R = L / (2 x cornerAngle in radians) also gets a corner (L 20 m, 35 deg: R ~ 16 m).
 	/// An asset without corner variants lays exactly like the length overload.
 	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const SectionAsset& asset);
 

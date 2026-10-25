@@ -277,14 +277,43 @@ namespace mmo::pcg
 				}
 			}
 
+			// Straight part of each span between the half corners at its ends. A part shorter than half a section next to
+			// a corner would become a sliver copy: the corner piece is stretched over it instead (by construction such a
+			// span has a corner at one end only, since a span between two corners keeps at least half a section).
+			std::vector<float> straightStart(spanCount, 0.0f);
+			std::vector<float> straightEnd(spanCount, 0.0f);
+			std::vector<float> absorbBefore(pointCount, 0.0f);
+			std::vector<float> absorbAfter(pointCount, 0.0f);
+			for (size_t span = 0; span < spanCount; ++span)
+			{
+				const size_t endPoint = (span + 1) % pointCount;
+				straightStart[span] = spanStart(span) + (isCorner[span] ? half : 0.0f);
+				straightEnd[span] = spanEnd(span) - (isCorner[endPoint] ? half : 0.0f);
+				const float length = straightEnd[span] - straightStart[span];
+				if (!(length > 0.0f) || !(length < half) || !(isCorner[span] || isCorner[endPoint]))
+				{
+					continue;
+				}
+
+				if (isCorner[span])
+				{
+					absorbAfter[span] += length;
+				}
+				else
+				{
+					absorbBefore[endPoint] += length;
+				}
+				straightEnd[span] = straightStart[span];
+			}
+
 			std::array<uint32, 3> sequence{};
-			const auto addCorner = [&](const size_t point, const float start)
+			const auto addCorner = [&](const size_t point, const float centre)
 			{
 				SectionCopy c;
 				c.span = static_cast<uint32>(point);
 				c.copy = 0;
-				c.startDistance = start;
-				c.stretchedLength = sectionLength;
+				c.startDistance = centre - half - absorbBefore[point];
+				c.stretchedLength = sectionLength + absorbBefore[point] + absorbAfter[point];
 				c.role = layout.pointRoles[point];
 				c.spanKey = Hash(pointIds[point], static_cast<int64>(c.role), 0, kCornerSalt);
 				c.sequence = sequence[static_cast<size_t>(c.role)]++;
@@ -296,12 +325,11 @@ namespace mmo::pcg
 				// The corner at the start of a closed loop wraps past the path end; it is laid after the last span.
 				if (isCorner[span] && (span > 0 || !closed))
 				{
-					addCorner(span, spanStart(span) - half);
+					addCorner(span, spanStart(span));
 				}
 
-				const float start = spanStart(span) + (isCorner[span] ? half : 0.0f);
-				const float end = spanEnd(span) - (isCorner[(span + 1) % pointCount] ? half : 0.0f);
-				const float length = end - start;
+				const float start = straightStart[span];
+				const float length = straightEnd[span] - start;
 				if (length <= 0.0f)
 				{
 					continue;
@@ -324,7 +352,7 @@ namespace mmo::pcg
 			}
 			if (closed && isCorner[0])
 			{
-				addCorner(0, path.GetLength() - half);
+				addCorner(0, path.GetLength());
 			}
 
 			const size_t n = samples.size();
