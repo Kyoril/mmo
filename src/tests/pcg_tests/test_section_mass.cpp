@@ -7,6 +7,7 @@
 #include "pcg/section_path.h"
 #include "pcg/terrain_contribution.h"
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <set>
@@ -282,6 +283,25 @@ TEST_CASE("Mass noise is anchored to the world", "[section_mass]")
 		}
 	}
 	CHECK(heights.size() > 10);
+
+	// The same world point behind a translated, longer or reversed path at the same distance across gets the same
+	// mass: the noise belongs to the world, not to the arc length (all three run along x = 0 or x = 50, the point
+	// lies 25 m to their right in the hold zone).
+	SectionPathParams hold = Mass(30.0f, 60.0f);
+	hold.massNoiseAmplitude = 15.0f;
+	hold.massDetailAmplitude = 3.0f;
+	SectionPathShape base;
+	Prepare(Polyline({ { 0.0f, 0.0f }, { 0.0f, 200.0f } }), asset, hold, base);
+	SectionPathShape longer;
+	Prepare(Polyline({ { 0.0f, -100.0f }, { 0.0f, 300.0f } }), asset, hold, longer);
+	SectionPathShape reversed;
+	Prepare(Polyline({ { 50.0f, 300.0f }, { 50.0f, -100.0f } }), asset, hold, reversed);
+	for (float z = 40.0f; z <= 160.0f; z += 7.0f)
+	{
+		const float h = Written(EvaluateSectionTerrain(base, 25.0f, z, kCentre, Identity), kCentre);
+		CHECK(Written(EvaluateSectionTerrain(longer, 25.0f, z, kCentre, Identity), kCentre) == Approx(h).margin(1e-4f));
+		CHECK(Written(EvaluateSectionTerrain(reversed, 25.0f, z, kCentre, Identity), kCentre) == Approx(h).margin(1e-4f));
+	}
 }
 
 TEST_CASE("Facade variety is off by default", "[section_mass]")
@@ -530,4 +550,93 @@ TEST_CASE("Copies are counted per role", "[section_mass]")
 	CHECK(counts.straight == 2);
 	CHECK(counts.inner == 2);
 	CHECK(counts.outer == 1);
+}
+
+TEST_CASE("Corner copies are never mirrored", "[section_mass]")
+{
+	const SectionAsset asset = MakeAsset({ Zero });
+	SectionPathParams params;
+	params.mirrorCopies = true;
+	SectionPathShape shape;
+	Prepare(kStraight, asset, params, shape);
+
+	uint32 straightMirrored = 0;
+	for (uint64 key = 1; key <= 64; ++key)
+	{
+		SectionCopy copy;
+		copy.spanKey = key * 0x9E3779B97F4A7C15ull;
+		copy.role = SectionVariantRole::Straight;
+		straightMirrored += GetCopyFacade(shape, copy).mirrored ? 1 : 0;
+		copy.role = SectionVariantRole::InnerCorner;
+		CHECK_FALSE(GetCopyFacade(shape, copy).mirrored);
+		copy.role = SectionVariantRole::OuterCorner;
+		CHECK_FALSE(GetCopyFacade(shape, copy).mirrored);
+	}
+	CHECK(straightMirrored > 0);
+}
+
+TEST_CASE("Height jitter keeps the copy seams continuous", "[section_mass]")
+{
+	const SectionAsset asset = MakeAsset({ [](float, float) { return 10.0f; } });
+	SectionPathParams params;
+	params.facadeHeightJitter = 0.5f;
+	params.joinBlend = 1.0f;
+	SectionPathShape shape;
+	Prepare(kStraight, asset, params, shape);
+
+	// A 10 m high section scaled by up to +-50 % per copy: without easing a seam steps by several metres over the 2 m
+	// cross-fade. Each copy's scale eases to 1 over a quarter of its length at both ends instead.
+	float steepest = 0.0f;
+	float previous = EvaluateSectionTerrain(shape, 0.0f, 1.0f, kCentre, Identity).height;
+	for (float z = 1.25f; z <= 199.0f; z += 0.25f)
+	{
+		const float h = EvaluateSectionTerrain(shape, 0.0f, z, kCentre, Identity).height;
+		steepest = std::max(steepest, std::fabs(h - previous) / 0.25f);
+		previous = h;
+	}
+	CHECK(steepest < 2.0f);
+
+	// The middle of every copy keeps its full scale.
+	for (const SectionCopy& copy : shape.layout.copies)
+	{
+		const TerrainTarget t = EvaluateSectionTerrain(shape, 0.0f, copy.startDistance + 10.0f, kCentre, Identity);
+		CHECK(t.height == Approx(kCentre + 10.0f * GetCopyFacade(shape, copy).heightScale).margin(1e-3f));
+	}
+}
+
+TEST_CASE("Section paint fades out only where the mass really overrides it", "[section_mass]")
+{
+	// Flat painted road (height 0, layers 0 = 55 / 2 = 200 for |x| <= 2); the mass rises from the floor edge x = -3.
+	const SectionAsset asset = MakeAsset({ Zero });
+	SectionPathShape plain;
+	Prepare(kStraight, asset, SectionPathParams(), plain);
+	SectionPathParams params = Mass(30.0f, 60.0f);
+	params.massPaintLayer = 1;
+	SectionPathShape shape;
+	Prepare(kStraight, asset, params, shape);
+
+	// Just inside u > 0 the mass lifts the ground by centimetres: the road keeps (nearly all of) its paint.
+	const TerrainTarget foot = EvaluateSectionTerrain(shape, -1.5f, 100.0f, 0.0f, Identity);
+	const TerrainTarget footPlain = EvaluateSectionTerrain(plain, -1.5f, 100.0f, 0.0f, Identity);
+	CHECK(foot.splatWeight > 0.9f * footPlain.splatWeight);
+	CHECK(foot.splat[2] > foot.splat[0]);
+	CHECK(foot.splat[1] < 10);
+
+	// A steep mass rising right over the road overrides it by metres: the mass paint wins.
+	SectionPathParams steep = params;
+	steep.massRise = 0.1f;
+	SectionPathShape over;
+	Prepare(kStraight, asset, steep, over);
+	const TerrainTarget deep = EvaluateSectionTerrain(over, 1.5f, 100.0f, 0.0f, Identity);
+	CHECK(deep.splat[1] == 255);
+	CHECK(deep.splatWeight == Approx(1.0f).margin(1e-3f));
+
+	// The paint changes smoothly across the floor edge (no seam at u = 0).
+	float previous = EvaluateSectionTerrain(shape, -3.2f, 100.0f, 0.0f, Identity).splatWeight;
+	for (float x = -3.1f; x <= 2.0f; x += 0.1f)
+	{
+		const float w = EvaluateSectionTerrain(shape, x, 100.0f, 0.0f, Identity).splatWeight;
+		CHECK(std::fabs(w - previous) < 0.3f);
+		previous = w;
+	}
 }

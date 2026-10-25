@@ -302,7 +302,8 @@ namespace mmo::pcg
 	/// @param out Cleared, then receives one rect per copy, in layout order.
 	void GetSectionCopyRects(const SectionPathShape& shape, std::vector<WorldRect>& out);
 
-	/// How a copy is laid: mirrored if params.mirrorCopies and Hash(seed, spanKey, copy) says so; heights scaled by
+	/// How a copy is laid: mirrored if params.mirrorCopies, the copy is a straight one (corner pieces are never
+	/// mirrored) and Hash(seed, spanKey, copy) says so; heights scaled by
 	/// 1 + HashRange(-j, j) with j = params.facadeHeightJitter (1 when j is 0).
 	SectionCopyFacade GetCopyFacade(const SectionPathShape& shape, const SectionCopy& copy);
 
@@ -334,7 +335,8 @@ namespace mmo::pcg
 	/// to 255); paint weight = coverage x falloff. Within joinBlend of a copy boundary the two copies' targets are
 	/// cross-faded. setMaterial is always false. Without the mass layer baseHeight is not used.
 	/// Facade variety: a mirrored copy samples its variant at length - localZ, and section heights are multiplied by
-	/// the copy's heightScale (GetCopyFacade).
+	/// the copy's heightScale (GetCopyFacade) eased to 1 (smoothstep) over a quarter of the length at both ends, so
+	/// copies of different scales meet at the same height.
 	/// Mass layer (params.massEnabled), at u = (across + halfWidth) / massDepth:
 	/// - u < 0 (the floor side): exactly the target without mass;
 	/// - else rise = smoothstep(u / massRise), mass weight w = 1 - smoothstep over the last 30 % of the depth (or what
@@ -343,8 +345,10 @@ namespace mmo::pcg
 	///   halfWidth + sideFalloff of the distance beyond the end; with S = the section result base + (centre + section - base) x sideFalloff and
 	///   M = base + (centre + m - base) x w the height is S + rise x max(0, M - S) at weight 1 (the mass only ever
 	///   raises the ground, and lifts the section's own slope less where it only starts to rise);
-	/// - paint: where the section height is at least m, the section's paint; else the mass paint layer at weight
-	///   w x slope factor (0 below 10 deg of the mass surface, 1 from 30 deg). Paint does not use baseHeight.
+	/// - paint: with lift = rise x max(0, m x w - section x sideFalloff) (how far the mass raises the ground over the
+	///   section, measured over the centre line) and k = smoothstep(lift / 1 m), the section's paint at (1 - k) of its
+	///   weight blended with the mass paint layer at w x k x slope factor (0 below 10 deg of the mass surface, 1 from
+	///   30 deg). Paint does not use baseHeight.
 	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 

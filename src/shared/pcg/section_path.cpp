@@ -769,7 +769,11 @@ namespace mmo::pcg
 			out.height = SampleHeight(variant.heights, across, localZ);
 			if (facade.heightScale != 1.0f)
 			{
-				out.height *= facade.heightScale;
+				// Eased to 1 (smoothstep) over a quarter of the length at both ends, so neighbouring copies with different
+				// scales meet at the same height.
+				constexpr float easeFraction = 0.25f;
+				const float t = std::clamp(std::min(localZ, shape.asset.length - localZ) / (easeFraction * shape.asset.length), 0.0f, 1.0f);
+				out.height *= 1.0f + (facade.heightScale - 1.0f) * t * t * (3.0f - 2.0f * t);
 			}
 			SamplePaint(variant.paint, across, localZ, out.weights, out.coverage);
 			return out;
@@ -930,6 +934,8 @@ namespace mmo::pcg
 		constexpr float kWallHeight = 1.0f;
 		/// Facade height jitter is clamped to this.
 		constexpr float kMaxHeightJitter = 0.9f;
+		/// Lift (m) of the mass over the section over which the section's paint hands over to the mass paint.
+		constexpr float kPaintHandover = 1.0f;
 
 		float FiniteOr(const float value, const float fallback)
 		{
@@ -1198,7 +1204,8 @@ namespace mmo::pcg
 	{
 		SectionCopyFacade facade;
 		const SectionPathParams& params = shape.params;
-		if (params.mirrorCopies)
+		// Corner pieces are laid as authored: their apex and turn are not symmetric in general.
+		if (params.mirrorCopies && copy.role == SectionVariantRole::Straight)
 		{
 			facade.mirrored = HashToUnit(Hash(params.seed, static_cast<int64>(copy.spanKey), copy.copy, kMirrorSalt)) < 0.5f;
 		}
@@ -1589,22 +1596,28 @@ namespace mmo::pcg
 		const float section = baseHeight + (centre + sample.height - baseHeight) * sectionFalloff;
 		const float massTarget = baseHeight + (centre + massHeight - baseHeight) * weight;
 		target.height = section + rise * std::max(0.0f, massTarget - section);
+		// The height already is the blend of base, section and mass; weight 1 writes it as is (a height equal to the
+		// base is skipped by Apply, so the mass never touches what it does not raise).
 		target.heightWeight = 1.0f;
 		target.setMaterial = false;
 
-		// Paint: the section's where it stands above the mass, else the mass layer on the mass's slopes.
-		const bool sectionOnTop = sectionFalloff > 0.0f && sample.height >= massHeight;
-		const float sectionPaint = sectionFalloff > 0.0f ? sample.coverage / 255.0f * sectionFalloff : 0.0f;
-		if (sectionOnTop)
+		// Paint: the section's paint hands over to the mass paint as the mass lifts the ground above the section, over
+		// kPaintHandover metres of lift. Measured over the centre line (base-free, as paint must not depend on the base).
+		const float lift = rise * std::max(0.0f, massHeight * weight - sample.height * sectionFalloff);
+		const float handover = Smooth(lift / kPaintHandover);
+		const float sectionPaint = sectionFalloff > 0.0f ? sample.coverage / 255.0f * sectionFalloff * (1.0f - handover) : 0.0f;
+		std::array<int8, 4> map{ 0, 1, 2, 3 };
+		const bool massPaints = shape.massLayer >= 0 && weight > 0.0f && handover > 0.0f;
+		if (remap && (sectionPaint > 0.0f || massPaints))
+		{
+			map = remap(x, z);
+		}
+		if (!massPaints)
 		{
 			if (sectionPaint > 0.0f)
 			{
-				PaintSection(sample, sectionFalloff, remap ? remap(x, z) : std::array<int8, 4>{ 0, 1, 2, 3 }, target);
+				PaintSection(sample, sectionFalloff * (1.0f - handover), map, target);
 			}
-			return target;
-		}
-		if (shape.massLayer < 0 || !(weight > 0.0f))
-		{
 			return target;
 		}
 
@@ -1618,25 +1631,46 @@ namespace mmo::pcg
 		const float gx = rise * dx + amplitude * riseSlope * frame.rightX;
 		const float gz = rise * dz + amplitude * riseSlope * frame.rightZ;
 		const float slopeDeg = std::atan(std::sqrt(gx * gx + gz * gz)) * kRadToDeg;
-		const float paintWeight = weight * Smooth((slopeDeg - kMassPaintSlopeLow) / (kMassPaintSlopeHigh - kMassPaintSlopeLow));
-		if (!(paintWeight > 0.0f))
-		{
-			return target;
-		}
-
-		std::array<int8, 4> map{ 0, 1, 2, 3 };
-		if (remap)
-		{
-			map = remap(x, z);
-		}
 		const int8 to = map[static_cast<size_t>(shape.massLayer)];
-		if (to < 0 || to > 3)
+		const float massPaint = to >= 0 && to <= 3
+			? weight * handover * Smooth((slopeDeg - kMassPaintSlopeLow) / (kMassPaintSlopeHigh - kMassPaintSlopeLow))
+			: 0.0f;
+
+		// Both paints blended by their weights.
+		std::array<float, 4> tile{};
+		float total = 0.0f;
+		if (sectionPaint > 0.0f)
 		{
-			return target;
+			float sum = 0.0f;
+			std::array<float, 4> own{};
+			for (size_t layer = 0; layer < 4; ++layer)
+			{
+				const int8 into = map[layer];
+				if (into >= 0 && into <= 3 && sample.weights[layer] > 0.0f)
+				{
+					own[static_cast<size_t>(into)] += sample.weights[layer];
+					sum += sample.weights[layer];
+				}
+			}
+			if (sum > 0.0f)
+			{
+				for (size_t i = 0; i < 4; ++i)
+				{
+					tile[i] += own[i] / sum * sectionPaint;
+				}
+				total += sectionPaint;
+			}
 		}
-		target.splat = std::array<uint8, 4>{};
-		target.splat[static_cast<size_t>(to)] = 255;
-		target.splatWeight = std::min(1.0f, paintWeight);
+		if (massPaint > 0.0f)
+		{
+			tile[static_cast<size_t>(to)] += massPaint;
+			total += massPaint;
+		}
+		if (total > 0.0f)
+		{
+			target.splat = NormalizeTo255(tile, total);
+			target.splatWeight = std::min(1.0f, total);
+		}
 		return target;
 	}
 
