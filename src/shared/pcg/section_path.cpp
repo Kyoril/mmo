@@ -12,7 +12,6 @@ namespace mmo::pcg
 {
 	namespace
 	{
-		constexpr float kSampleStep = 0.5f;
 		constexpr float kFrameProbe = 0.25f;
 
 		/// Samples between the three points a bend radius is measured on (2 m at the sample step), so that
@@ -43,7 +42,7 @@ namespace mmo::pcg
 		}
 	}
 
-	SectionLayout LayOutSections(const PathSpline& spline, const std::vector<uint64>& pointIds, const float sectionLength)
+	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, const float sectionLength)
 	{
 		SectionLayout layout;
 		layout.minimumBendRadius = std::numeric_limits<float>::max();
@@ -54,7 +53,6 @@ namespace mmo::pcg
 			return layout;
 		}
 
-		const SampledPath path(spline, kSampleStep);
 		const std::vector<SplineSample>& samples = path.GetSamples();
 
 		const bool closed = path.IsClosed();
@@ -178,18 +176,23 @@ namespace mmo::pcg
 	const SectionCopy* FindCopy(const SectionLayout& layout, const float distance, const float sectionLength, float& localZ)
 	{
 		localZ = 0.0f;
-		for (size_t i = 0; i < layout.copies.size(); ++i)
+		if (layout.copies.empty() || distance < layout.copies.front().startDistance)
 		{
-			const SectionCopy& copy = layout.copies[i];
-			const float end = copy.startDistance + copy.stretchedLength;
-			const bool last = i + 1 == layout.copies.size();
-			if (distance >= copy.startDistance && (distance < end || (last && distance <= end + 1e-4f)))
-			{
-				const float t = copy.stretchedLength > 0.0f ? (distance - copy.startDistance) / copy.stretchedLength : 0.0f;
-				localZ = std::clamp(t, 0.0f, 1.0f) * sectionLength;
-				return &copy;
-			}
+			return nullptr;
 		}
-		return nullptr;
+
+		// Last copy whose start is not beyond the distance; closes the sub-ulp gaps between copies.
+		const auto it = std::upper_bound(layout.copies.begin(), layout.copies.end(), distance,
+			[](const float value, const SectionCopy& copy) { return value < copy.startDistance; });
+		const SectionCopy& copy = *(it - 1);
+		const float end = copy.startDistance + copy.stretchedLength;
+		if (&copy == &layout.copies.back() && distance > end + 1e-4f)
+		{
+			return nullptr;
+		}
+
+		const float t = copy.stretchedLength > 0.0f ? (distance - copy.startDistance) / copy.stretchedLength : 0.0f;
+		localZ = std::clamp(t, 0.0f, 1.0f) * sectionLength;
+		return &copy;
 	}
 }

@@ -26,6 +26,13 @@ namespace
 		return spline;
 	}
 
+	/// Builds the path once with the contract step and lays the sections along it.
+	SectionLayout Lay(const PathSpline& spline, const std::vector<uint64>& ids, const float length)
+	{
+		const SampledPath path(spline, kSectionPathSampleStep);
+		return LayOutSections(spline, path, ids, length);
+	}
+
 	std::vector<uint64> Ids(const size_t n, const uint64 first = 100)
 	{
 		std::vector<uint64> ids;
@@ -52,7 +59,7 @@ namespace
 
 TEST_CASE("A straight spline gets evenly stretched copies", "[section_path_map]")
 {
-	const SectionLayout layout = LayOutSections(Straight({ 0.0f, 100.0f }), Ids(2), 20.0f);
+	const SectionLayout layout = Lay(Straight({ 0.0f, 100.0f }), Ids(2), 20.0f);
 	REQUIRE(layout.copies.size() == 5);
 	for (size_t i = 0; i < 5; ++i)
 	{
@@ -63,7 +70,7 @@ TEST_CASE("A straight spline gets evenly stretched copies", "[section_path_map]"
 
 TEST_CASE("Every span is fitted on its own", "[section_path_map]")
 {
-	const SectionLayout layout = LayOutSections(Straight({ 0.0f, 45.0f, 100.0f }), Ids(3), 20.0f);
+	const SectionLayout layout = Lay(Straight({ 0.0f, 45.0f, 100.0f }), Ids(3), 20.0f);
 	REQUIRE(layout.copies.size() == 5);
 	CHECK(layout.copies[0].span == 0);
 	CHECK(layout.copies[1].stretchedLength == Approx(22.5f));
@@ -75,14 +82,14 @@ TEST_CASE("Every span is fitted on its own", "[section_path_map]")
 
 TEST_CASE("A span shorter than a section still gets one copy", "[section_path_map]")
 {
-	const SectionLayout layout = LayOutSections(Straight({ 0.0f, 7.0f }), Ids(2), 20.0f);
+	const SectionLayout layout = Lay(Straight({ 0.0f, 7.0f }), Ids(2), 20.0f);
 	REQUIRE(layout.copies.size() == 1);
 	CHECK(layout.copies[0].stretchedLength == Approx(7.0f));
 }
 
 TEST_CASE("Frames follow the spline", "[section_path_map]")
 {
-	const SampledPath flat(Straight({ 0.0f, 100.0f }), 0.5f);
+	const SampledPath flat(Straight({ 0.0f, 100.0f }), kSectionPathSampleStep);
 	const SectionFrame f = FrameAt(flat, 50.0f);
 	CHECK(f.forwardX == Approx(0.0f));
 	CHECK(f.forwardZ == Approx(1.0f));
@@ -90,7 +97,7 @@ TEST_CASE("Frames follow the spline", "[section_path_map]")
 	CHECK(f.rightZ == Approx(0.0f));
 	CHECK(f.position.z == Approx(50.0f));
 
-	const SampledPath rising(Straight({ 0.0f, 100.0f }, 0.0f, 10.0f), 0.5f);
+	const SampledPath rising(Straight({ 0.0f, 100.0f }, 0.0f, 10.0f), kSectionPathSampleStep);
 	const SectionFrame r = FrameAt(rising, 50.0f);
 	CHECK(r.position.y == Approx(5.0f));
 	CHECK(r.forwardZ == Approx(1.0f));
@@ -111,13 +118,13 @@ TEST_CASE("The minimum bend radius is reported", "[section_path_map]")
 		spline.points.push_back(p);
 	}
 
-	const SectionLayout layout = LayOutSections(spline, Ids(spline.points.size()), 20.0f);
+	const SectionLayout layout = Lay(spline, Ids(spline.points.size()), 20.0f);
 	CHECK(layout.minimumBendRadius == Approx(30.0f).margin(2.0f));
 }
 
 TEST_CASE("Points project onto the path", "[section_path_map]")
 {
-	const SampledPath path(Straight({ 0.0f, 100.0f }), 0.5f);
+	const SampledPath path(Straight({ 0.0f, 100.0f }), kSectionPathSampleStep);
 	float distance = 0.0f;
 	float across = 0.0f;
 	REQUIRE(ProjectToPath(path, 3.0f, 40.0f, 10.0f, distance, across));
@@ -132,7 +139,7 @@ TEST_CASE("Points project onto the path", "[section_path_map]")
 
 TEST_CASE("Copies are found by arc distance", "[section_path_map]")
 {
-	const SectionLayout layout = LayOutSections(Straight({ 0.0f, 45.0f, 100.0f }), Ids(3), 20.0f);
+	const SectionLayout layout = Lay(Straight({ 0.0f, 45.0f, 100.0f }), Ids(3), 20.0f);
 	float localZ = 0.0f;
 	const SectionCopy* copy = FindCopy(layout, 11.25f, 20.0f, localZ);
 	REQUIRE(copy != nullptr);
@@ -149,8 +156,8 @@ TEST_CASE("Copies are found by arc distance", "[section_path_map]")
 TEST_CASE("Moving a point only touches the adjacent spans", "[section_path_map]")
 {
 	// Points 1..3 at z 30, 60/45, 60; moving point 2 keeps the summed length of spans 1 and 2.
-	const SectionLayout before = LayOutSections(FourPoints(30.0f, 30.0f), Ids(5), 20.0f);
-	const SectionLayout after = LayOutSections(FourPoints(0.0f, 60.0f), Ids(5), 20.0f);
+	const SectionLayout before = Lay(FourPoints(30.0f, 30.0f), Ids(5), 20.0f);
+	const SectionLayout after = Lay(FourPoints(0.0f, 60.0f), Ids(5), 20.0f);
 	REQUIRE(before.copies.size() == after.copies.size());
 
 	for (size_t i = 0; i < before.copies.size(); ++i)
@@ -168,10 +175,10 @@ TEST_CASE("Moving a point only touches the adjacent spans", "[section_path_map]"
 
 TEST_CASE("Inserting a point keeps the other span keys", "[section_path_map]")
 {
-	const SectionLayout before = LayOutSections(Straight({ 0.0f, 30.0f, 60.0f, 90.0f }), Ids(4), 20.0f);
+	const SectionLayout before = Lay(Straight({ 0.0f, 30.0f, 60.0f, 90.0f }), Ids(4), 20.0f);
 
 	std::vector<uint64> ids = { 100, 101, 999, 102, 103 };
-	const SectionLayout after = LayOutSections(Straight({ 0.0f, 30.0f, 45.0f, 60.0f, 90.0f }), ids, 20.0f);
+	const SectionLayout after = Lay(Straight({ 0.0f, 30.0f, 45.0f, 60.0f, 90.0f }), ids, 20.0f);
 
 	auto keyOfSpan = [](const SectionLayout& layout, const uint32 span)
 	{
@@ -188,4 +195,26 @@ TEST_CASE("Inserting a point keeps the other span keys", "[section_path_map]")
 	CHECK(keyOfSpan(before, 0) == keyOfSpan(after, 0));
 	CHECK(keyOfSpan(before, 2) == keyOfSpan(after, 3));
 	CHECK(keyOfSpan(before, 1) != keyOfSpan(after, 1));
+}
+
+TEST_CASE("Copy lookup has no gaps at boundaries or at the path end", "[section_path_map]")
+{
+	const PathSpline spline = Straight({ 0.0f, 45.0f, 100.0f });
+	const SampledPath path(spline, kSectionPathSampleStep);
+	const SectionLayout layout = LayOutSections(spline, path, Ids(3), 20.0f);
+
+	float localZ = 0.0f;
+	for (const SectionCopy& expected : layout.copies)
+	{
+		const SectionCopy* found = FindCopy(layout, expected.startDistance, 20.0f, localZ);
+		REQUIRE(found != nullptr);
+		CHECK(found->span == expected.span);
+		CHECK(found->copy == expected.copy);
+		CHECK(localZ == Approx(0.0f).margin(1e-3f));
+	}
+
+	const SectionCopy* last = FindCopy(layout, path.GetLength(), 20.0f, localZ);
+	REQUIRE(last != nullptr);
+	CHECK(last == &layout.copies.back());
+	CHECK(localZ == Approx(20.0f).margin(1e-2f));
 }

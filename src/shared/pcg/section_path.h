@@ -54,12 +54,18 @@ namespace mmo::pcg
 		float minimumBendRadius = 0.0f;
 	};
 
+	/// Sample step every path handed to this API must be built with, so arc distances agree between the
+	/// layout, frames, projection and copy lookup.
+	constexpr float kSectionPathSampleStep = 0.5f;
+
 	/// Fits whole copies of a section into every control point span; each span gets
 	/// max(1, round(spanLength / sectionLength)) copies stretched evenly to the span.
-	/// @param spline The path.
+	/// With Catmull-Rom auto tangents moving a point also reshapes the neighbouring spans (span keys stay stable).
+	/// @param spline The control points the path was sampled from.
+	/// @param path The spline sampled with kSectionPathSampleStep.
 	/// @param pointIds Stable id per control point (same size as spline.points); spanKey = Hash(id_j, id_{j+1}).
 	/// @param sectionLength Authored length of the section along +Z; must be positive.
-	SectionLayout LayOutSections(const PathSpline& spline, const std::vector<uint64>& pointIds, float sectionLength);
+	SectionLayout LayOutSections(const PathSpline& spline, const SampledPath& path, const std::vector<uint64>& pointIds, float sectionLength);
 
 	/// Upright frame at an arc distance (clamped or wrapped like SampledPath).
 	SectionFrame FrameAt(const SampledPath& path, float distance);
