@@ -198,7 +198,7 @@ namespace mmo
 		/// Deletes an owned object. Returns false if it no longer exists.
 		bool RemoveOwned(IWorldEditor& editor, const uint64 uniqueId, const pcg::PlacementKind kind)
 		{
-			if (kind == pcg::PlacementKind::Entity)
+			if (kind != pcg::PlacementKind::Foliage)
 			{
 				return editor.RemoveMapEntityById(uniqueId);
 			}
@@ -217,6 +217,13 @@ namespace mmo
 		/// Creates the world object of a placement. Returns its unique id, or 0 on failure.
 		uint64 CreatePlacement(IWorldEditor& editor, const uint64 oasisId, const pcg::Placement& placement)
 		{
+			if (placement.kind == pcg::PlacementKind::WorldModel)
+			{
+				// Section template world models are created by a later editor step.
+				WLOG("PCG: world model placements are not supported yet: " << placement.asset);
+				return 0;
+			}
+
 			if (placement.kind == pcg::PlacementKind::Entity)
 			{
 				const uint64 uniqueId = editor.GenerateEntityUniqueId();
@@ -255,7 +262,7 @@ namespace mmo
 		bool UpdatePlacement(IWorldEditor& editor, const pcg::OwnedPlacement& owned)
 		{
 			const pcg::Placement& p = owned.written;
-			if (owned.kind == pcg::PlacementKind::Entity)
+			if (owned.kind != pcg::PlacementKind::Foliage)
 			{
 				return editor.SetMapEntityTransform(owned.uniqueId, p.position, p.rotation, p.scale);
 			}
@@ -391,7 +398,7 @@ namespace mmo
 		const pcg::ReconcileResult reconciled = pcg::Reconcile(record.placements, placements,
 			[&editor, &foliage](const uint64 uniqueId, const pcg::PlacementKind kind)
 			{
-				return kind == pcg::PlacementKind::Entity ? editor.HasMapEntity(uniqueId) : FoliageExists(foliage, uniqueId);
+				return kind != pcg::PlacementKind::Foliage ? editor.HasMapEntity(uniqueId) : FoliageExists(foliage, uniqueId);
 			});
 
 		std::map<uint64, pcg::PlacementKind> ownedKinds;

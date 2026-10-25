@@ -38,7 +38,8 @@ namespace mmo::pcg
 			}
 
 			const Placement& want = *nit->second;
-			if (prev->written.asset != want.asset || prev->kind != want.kind)
+			if (prev->written.asset != want.asset || prev->kind != want.kind ||
+				prev->written.kitPaths != want.kitPaths || prev->written.materialOverrides != want.materialOverrides)
 			{
 				if (present)
 				{

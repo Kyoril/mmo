@@ -120,3 +120,57 @@ TEST_CASE("Reconcile passes the owned kind to exists", "[reconcile]")
 	Reconcile({ MakeOwned(1, 101, "P", 1.0f, PlacementKind::Foliage) }, { MakePlacement(1, "P", 1.0f, PlacementKind::Foliage) }, exists);
 	CHECK(asked.count({ 101, PlacementKind::Foliage }) == 1);
 }
+
+TEST_CASE("Reconcile replaces a placement whose kit paths changed", "[reconcile]")
+{
+	OwnedPlacement owned = MakeOwned(1, 101, "W.wmo", 1.0f, PlacementKind::WorldModel);
+	owned.written.kitPaths = { "Kits/A.hkit" };
+	Placement want = MakePlacement(1, "W.wmo", 1.0f, PlacementKind::WorldModel);
+	want.kitPaths = { "Kits/A.hkit", "Kits/B.hkit" };
+
+	const auto result = Reconcile({ owned }, { want }, ExistsAll());
+	REQUIRE(result.remove.size() == 1);
+	CHECK(result.remove[0] == 101);
+	REQUIRE(result.create.size() == 1);
+	CHECK(result.create[0].kitPaths.size() == 2);
+	CHECK(result.keep.empty());
+	CHECK(result.update.empty());
+}
+
+TEST_CASE("Reconcile replaces a placement whose material overrides changed", "[reconcile]")
+{
+	OwnedPlacement owned = MakeOwned(1, 101, "A", 1.0f);
+	owned.written.materialOverrides = { { 0, "M1.hmat" } };
+	Placement want = MakePlacement(1, "A", 1.0f);
+	want.materialOverrides = { { 0, "M2.hmat" } };
+
+	const auto result = Reconcile({ owned }, { want }, ExistsAll());
+	REQUIRE(result.remove.size() == 1);
+	REQUIRE(result.create.size() == 1);
+	CHECK(result.create[0].materialOverrides[0].materialName == "M2.hmat");
+	CHECK(result.keep.empty());
+	CHECK(result.update.empty());
+}
+
+TEST_CASE("Reconcile replaces a placement whose kind changed from entity to world model", "[reconcile]")
+{
+	const auto result = Reconcile({ MakeOwned(1, 101, "A", 1.0f) }, { MakePlacement(1, "A", 1.0f, PlacementKind::WorldModel) }, ExistsAll());
+	REQUIRE(result.remove.size() == 1);
+	REQUIRE(result.create.size() == 1);
+	CHECK(result.create[0].kind == PlacementKind::WorldModel);
+	CHECK(result.keep.empty());
+	CHECK(result.update.empty());
+}
+
+TEST_CASE("Reconcile keeps identical placements with kits and overrides", "[reconcile]")
+{
+	OwnedPlacement owned = MakeOwned(1, 101, "W.wmo", 1.0f, PlacementKind::WorldModel);
+	owned.written.kitPaths = { "Kits/A.hkit" };
+	Placement want = MakePlacement(1, "W.wmo", 1.0f, PlacementKind::WorldModel);
+	want.kitPaths = { "Kits/A.hkit" };
+
+	const auto result = Reconcile({ owned }, { want }, ExistsAll());
+	REQUIRE(result.keep.size() == 1);
+	CHECK(result.remove.empty());
+	CHECK(result.create.empty());
+}

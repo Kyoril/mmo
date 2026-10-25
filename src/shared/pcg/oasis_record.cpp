@@ -15,7 +15,8 @@ namespace mmo::pcg
 		constexpr uint32 MagicPcgo = 0x4F474350;
 		/// 1: loop points x, z, width. 2: adds per-point auto flag and in/out tangent handles (x/z).
 		/// 3: adds per-point height and tangent heights.
-		constexpr uint32 FormatVersion = 3;
+		/// 4: placements add material overrides and prop kit paths (and the WorldModel kind).
+		constexpr uint32 FormatVersion = 4;
 		constexpr uint32 MinFormatVersion = 1;
 		constexpr uint32 MaxStringLength = 1u << 20;
 
@@ -209,13 +210,25 @@ namespace mmo::pcg
 			Put(w, p.scale.y);
 			Put(w, p.scale.z);
 			Put<uint8>(w, p.collides ? 1 : 0);
+
+			Put<uint32>(w, static_cast<uint32>(p.materialOverrides.size()));
+			for (const PlacementMaterialOverride& o : p.materialOverrides)
+			{
+				Put(w, o.materialIndex);
+				PutString(w, o.materialName);
+			}
+			Put<uint32>(w, static_cast<uint32>(p.kitPaths.size()));
+			for (const String& kit : p.kitPaths)
+			{
+				PutString(w, kit);
+			}
 		}
 
-		bool GetPlacement(io::Reader& r, Placement& p)
+		bool GetPlacement(io::Reader& r, Placement& p, const uint32 version)
 		{
 			uint8 kind = 0;
 			uint8 collides = 0;
-			if (!Get(r, p.key) || !Get(r, kind) || kind > static_cast<uint8>(PlacementKind::Foliage) || !GetString(r, p.asset))
+			if (!Get(r, p.key) || !Get(r, kind) || kind > static_cast<uint8>(PlacementKind::WorldModel) || !GetString(r, p.asset))
 			{
 				return false;
 			}
@@ -227,6 +240,39 @@ namespace mmo::pcg
 				return false;
 			}
 			p.collides = collides != 0;
+			if (version < 4)
+			{
+				return true;
+			}
+
+			uint32 overrideCount = 0;
+			// Index byte plus string length prefix at minimum.
+			if (!GetCount(r, overrideCount, 5))
+			{
+				return false;
+			}
+			p.materialOverrides.resize(overrideCount);
+			for (PlacementMaterialOverride& o : p.materialOverrides)
+			{
+				if (!Get(r, o.materialIndex) || !GetString(r, o.materialName))
+				{
+					return false;
+				}
+			}
+
+			uint32 kitCount = 0;
+			if (!GetCount(r, kitCount, 4))
+			{
+				return false;
+			}
+			p.kitPaths.resize(kitCount);
+			for (String& kit : p.kitPaths)
+			{
+				if (!GetString(r, kit))
+				{
+					return false;
+				}
+			}
 			return true;
 		}
 	}
@@ -397,7 +443,7 @@ namespace mmo::pcg
 			OwnedPlacement op;
 			uint8 kind = 0;
 			if (!Get(reader, op.key) || !Get(reader, op.uniqueId) || !Get(reader, kind) ||
-				kind > static_cast<uint8>(PlacementKind::Foliage) || !GetPlacement(reader, op.written))
+				kind > static_cast<uint8>(PlacementKind::WorldModel) || !GetPlacement(reader, op.written, version))
 			{
 				return false;
 			}

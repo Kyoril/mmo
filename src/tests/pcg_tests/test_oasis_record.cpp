@@ -86,8 +86,30 @@ namespace
 	/// Bytes per loop point a version 3 record adds (y, in y, out y).
 	constexpr size_t V3PointExtraBytes = 12;
 
-	/// Rewrites a current (version 3) record of the given record into an older layout: the version
-	/// field and loop points with only the fields that version had.
+	/// Bytes the version 4 layout adds to one placement (override and kit lists).
+	size_t PlacementExtraBytes(const Placement& p)
+	{
+		size_t bytes = 4 + 4;
+		for (const PlacementMaterialOverride& o : p.materialOverrides)
+		{
+			bytes += 1 + 4 + o.materialName.size();
+		}
+		for (const String& kit : p.kitPaths)
+		{
+			bytes += 4 + kit.size();
+		}
+		return bytes;
+	}
+
+	/// Total bytes of one placement in the current (version 4) layout.
+	size_t PlacementBytes(const OwnedPlacement& op)
+	{
+		// key, unique id, kind, then key, kind, asset, transform (10 floats), collides.
+		return 8 + 8 + 1 + 8 + 1 + 4 + op.written.asset.size() + 40 + 1 + PlacementExtraBytes(op.written);
+	}
+
+	/// Rewrites a current (version 4) record of the given record into an older layout: the version
+	/// field, loop points with only the fields that version had, and placements without version 4 data.
 	std::vector<char> ToOlderVersion(const std::vector<char>& current, const OasisRecord& record, const uint32 version)
 	{
 		// magic, version, id, name (length + chars), seed.
@@ -97,7 +119,22 @@ namespace
 		// params block, closed flag, interpolation, point count.
 		offset += 4 + paramsSize + 1 + 1 + 4;
 
-		const size_t keep = version == 1 ? V1PointBytes : V1PointBytes + V2PointExtraBytes;
+		size_t placementBytes = 0;
+		for (const OwnedPlacement& op : record.placements)
+		{
+			placementBytes += PlacementBytes(op);
+		}
+		const size_t placementsStart = current.size() - placementBytes;
+
+		size_t keep = V1PointBytes + V2PointExtraBytes + V3PointExtraBytes;
+		if (version == 1)
+		{
+			keep = V1PointBytes;
+		}
+		else if (version == 2)
+		{
+			keep = V1PointBytes + V2PointExtraBytes;
+		}
 		std::vector<char> older(current.begin(), current.begin() + offset);
 		std::memcpy(&older[4], &version, sizeof(version));
 		for (size_t i = 0; i < record.loop.points.size(); ++i)
@@ -105,11 +142,19 @@ namespace
 			older.insert(older.end(), current.begin() + offset, current.begin() + offset + keep);
 			offset += V1PointBytes + V2PointExtraBytes + V3PointExtraBytes;
 		}
-		older.insert(older.end(), current.begin() + offset, current.end());
+		older.insert(older.end(), current.begin() + offset, current.begin() + placementsStart);
+
+		// Placements: drop the trailing override and kit lists.
+		size_t cursor = placementsStart;
+		for (const OwnedPlacement& op : record.placements)
+		{
+			const size_t total = PlacementBytes(op);
+			older.insert(older.end(), current.begin() + cursor, current.begin() + cursor + total - PlacementExtraBytes(op.written));
+			cursor += total;
+		}
 		return older;
 	}
 }
-
 TEST_CASE("Oasis record keeps manual tangents bit-identically", "[oasis_record]")
 {
 	OasisRecord in = MakePopulated();
@@ -146,7 +191,7 @@ TEST_CASE("Oasis record reads version 1 files with automatic tangents", "[oasis_
 	const OasisRecord in = MakePopulated();
 	const std::vector<char> current = Serialize(in);
 	const std::vector<char> v1 = ToOlderVersion(current, in, 1);
-	REQUIRE(v1.size() == current.size() - in.loop.points.size() * (V2PointExtraBytes + V3PointExtraBytes));
+	REQUIRE(v1.size() == current.size() - in.loop.points.size() * (V2PointExtraBytes + V3PointExtraBytes) - 3 * 8);
 
 	OasisRecord out;
 	REQUIRE(Deserialize(v1, out));
@@ -185,7 +230,7 @@ TEST_CASE("Oasis record keeps heights and tangent heights bit-identically", "[oa
 	manual.outZ = -0.75f;
 
 	const std::vector<char> bytes = Serialize(in);
-	CHECK(bytes[4] == 3);
+	CHECK(bytes[4] == 4);
 
 	OasisRecord out;
 	REQUIRE(Deserialize(bytes, out));
@@ -211,7 +256,7 @@ TEST_CASE("Oasis record reads version 2 files without heights", "[oasis_record]"
 	manual.outZ = 6.5f;
 	const std::vector<char> current = Serialize(in);
 	const std::vector<char> v2 = ToOlderVersion(current, in, 2);
-	REQUIRE(v2.size() == current.size() - in.loop.points.size() * V3PointExtraBytes);
+	REQUIRE(v2.size() == current.size() - in.loop.points.size() * V3PointExtraBytes - 3 * 8);
 
 	OasisRecord out;
 	REQUIRE(Deserialize(v2, out));
@@ -364,4 +409,57 @@ TEST_CASE("Oasis recipe rejects malformed JSON", "[oasis_recipe]")
 	CHECK_FALSE(ParseOasisRecipe("{ not json", params, assets));
 	CHECK_FALSE(ParseOasisRecipe("[1,2]", params, assets));
 	CHECK_FALSE(ParseOasisRecipe("", params, assets));
+}
+
+TEST_CASE("Oasis record keeps world models, kits and material overrides bit-identically", "[oasis_record]")
+{
+	OasisRecord in = MakePopulated();
+	OwnedPlacement wmo = MakeOwned(40, 400, PlacementKind::WorldModel, "World/Hut.wmo", 4.0f);
+	wmo.written.kitPaths = { "Kits/Hut/Interior.hkit", "Kits/Hut/Props.hkit" };
+	OwnedPlacement entity = MakeOwned(50, 500, PlacementKind::Entity, "Rock02.hmsh", 5.0f);
+	entity.written.materialOverrides = { { 0, "Mat/Sand.hmat" }, { 3, "Mat/Moss.hmat" } };
+	in.placements.push_back(wmo);
+	in.placements.push_back(entity);
+
+	const std::vector<char> bytes = Serialize(in);
+	CHECK(bytes[4] == 4);
+
+	OasisRecord out;
+	REQUIRE(Deserialize(bytes, out));
+	REQUIRE(out.placements.size() == 5);
+	CHECK(out.placements[3].kind == PlacementKind::WorldModel);
+	CHECK(out.placements[3].written.kind == PlacementKind::WorldModel);
+	REQUIRE(out.placements[3].written.kitPaths.size() == 2);
+	CHECK(out.placements[3].written.kitPaths[0] == "Kits/Hut/Interior.hkit");
+	CHECK(out.placements[3].written.kitPaths[1] == "Kits/Hut/Props.hkit");
+	CHECK(out.placements[3].written.materialOverrides.empty());
+	REQUIRE(out.placements[4].written.materialOverrides.size() == 2);
+	CHECK(out.placements[4].written.materialOverrides[1].materialIndex == 3);
+	CHECK(out.placements[4].written.materialOverrides[1].materialName == "Mat/Moss.hmat");
+	CHECK(out.placements[4].written.kitPaths.empty());
+
+	CHECK(Serialize(out) == bytes);
+	CHECK(Serialize(in) == bytes);
+}
+
+TEST_CASE("Oasis record reads version 3 files without overrides or kits", "[oasis_record]")
+{
+	const OasisRecord in = MakePopulated();
+	const std::vector<char> current = Serialize(in);
+	const std::vector<char> v3 = ToOlderVersion(current, in, 3);
+	REQUIRE(v3.size() == current.size() - 3 * 8);
+
+	OasisRecord out;
+	REQUIRE(Deserialize(v3, out));
+	CHECK(out.heightsValid);
+	REQUIRE(out.placements.size() == 3);
+	for (const OwnedPlacement& op : out.placements)
+	{
+		CHECK(op.written.materialOverrides.empty());
+		CHECK(op.written.kitPaths.empty());
+	}
+	CHECK(out.placements[1].written.asset == "Palm01.hmsh");
+
+	// Written back, it is the current version.
+	CHECK(Serialize(out) == current);
 }
