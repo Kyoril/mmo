@@ -37,6 +37,12 @@ namespace mmo
 		constexpr float DefaultRadius = 40.0f;
 		constexpr uint32 DefaultPointCount = 8;
 
+		/// Overlay frames between attempts to load the terrain under a loop without heights.
+		constexpr uint64 HeightAttemptIntervalFrames = 30;
+
+		/// Failed attempts after which a loop without heights takes them from the loaded terrain.
+		constexpr uint32 HeightAttemptLimit = 10;
+
 		/// An oasis keeps at least this many loop points.
 		constexpr uint32 MinLoopPoints = 3;
 
@@ -224,7 +230,7 @@ namespace mmo
 		m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), -1);
 	}
 
-	bool ProceduralEditMode::EnsureHeights(Oasis& oasis)
+	bool ProceduralEditMode::EnsureHeights(Oasis& oasis, const bool retry)
 	{
 		pcg::OasisRecord& record = oasis.record;
 		if (record.heightsValid)
@@ -239,15 +245,27 @@ namespace mmo
 			return true;
 		}
 
+		if (retry && m_overlayFrame < oasis.nextHeightAttemptFrame)
+		{
+			return false;
+		}
+
 		pcg::WorldRect bounds;
 		ComputeBounds(record.loop, bounds);
 		String error;
 		if (!m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, error))
 		{
-			// Try again later (the next frame, rebuild or save); until then the points sit at height 0.
+			++oasis.heightAttempts;
+			oasis.nextHeightAttemptFrame = m_overlayFrame + HeightAttemptIntervalFrames;
+			if (!retry || oasis.heightAttempts >= HeightAttemptLimit)
+			{
+				FillHeightsFallback(oasis);
+				return true;
+			}
 			return false;
 		}
 
+		// No edit can have happened in between: the loop is not editable until now (IsLoopEditable).
 		for (SplinePoint& point : record.loop.points)
 		{
 			point.y = m_worldEditor.GetTerrain()->GetSmoothHeightAt(point.x, point.z);
@@ -258,10 +276,53 @@ namespace mmo
 		return true;
 	}
 
+	void ProceduralEditMode::FillHeightsFallback(Oasis& oasis)
+	{
+		pcg::OasisRecord& record = oasis.record;
+		size_t missing = 0;
+		for (SplinePoint& point : record.loop.points)
+		{
+			float height = 0.0f;
+			if (!m_worldEditor.GetTerrain() || !m_worldEditor.GetTerrain()->TryGetSmoothHeightAt(point.x, point.z, height))
+			{
+				height = 0.0f;
+				++missing;
+			}
+			point.y = height;
+			point.inY = 0.0f;
+			point.outY = 0.0f;
+		}
+		record.heightsValid = true;
+
+		m_status = "'" + record.name + "': the terrain under its loop could not be loaded; point heights were taken from the loaded terrain ("
+			+ std::to_string(missing) + " of " + std::to_string(record.loop.points.size()) + " point(s) without terrain were put at height 0). Check them before saving.";
+		m_statusIsError = true;
+		WLOG(m_status);
+	}
+
+	bool ProceduralEditMode::IsLoopEditable(const int32 index) const
+	{
+		return index >= 0 && index < static_cast<int32>(m_oases.size()) && m_oases[index].record.heightsValid;
+	}
+
+	std::vector<PathSpline*> ProceduralEditMode::GetEditableSplines()
+	{
+		m_lockedSpline.points.clear();
+		std::vector<PathSpline*> splines = GetSplines();
+		for (size_t i = 0; i < splines.size(); ++i)
+		{
+			if (!IsLoopEditable(static_cast<int32>(i)))
+			{
+				splines[i] = &m_lockedSpline;
+			}
+		}
+		return splines;
+	}
+
 	PathSpline* ProceduralEditMode::FindSelectableSpline(const uint64 splineId)
 	{
 		const int32 index = FindOasis(splineId);
-		return index >= 0 ? &m_oases[index].record.loop : nullptr;
+		return IsLoopEditable(index) ? &m_oases[index].record.loop : nullptr;
 	}
 
 	float ProceduralEditMode::GetSplinePointGroundHeight(const float x, const float z) const
@@ -281,7 +342,7 @@ namespace mmo
 	bool ProceduralEditMode::RemoveSplinePoint(const uint64 splineId, const size_t pointIndex)
 	{
 		const int32 index = FindOasis(splineId);
-		if (index < 0)
+		if (!IsLoopEditable(index))
 		{
 			return false;
 		}
@@ -421,19 +482,16 @@ namespace mmo
 
 			const String fileName = MakeFileName(pcgFolder, oasis.record.id);
 
-			// A record from before heights existed must not be written with zero heights: the file would
-			// then claim them as real.
-			if (!EnsureHeights(oasis))
-			{
-				ELOG("Oasis record " << fileName << " not written: the terrain under its loop is not loaded, so its point heights are unknown");
-				success = false;
-				continue;
-			}
+			// A record from before heights existed gets them first (at worst from the loaded terrain, with a
+			// warning), so a file never claims zero heights as real ones.
+			EnsureHeights(oasis, false);
 
 			const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(fileName);
 			if (!file)
 			{
-				ELOG("Failed to write oasis record " << fileName);
+				m_status = "Could not save oasis '" + oasis.record.name + "': cannot create " + fileName + ".";
+				m_statusIsError = true;
+				ELOG(m_status);
 				success = false;
 				continue;
 			}
@@ -442,7 +500,9 @@ namespace mmo
 			io::Writer writer{ sink };
 			if (!pcg::WriteOasisRecord(writer, oasis.record))
 			{
-				ELOG("Failed to serialize oasis record " << fileName);
+				m_status = "Could not save oasis '" + oasis.record.name + "': writing " + fileName + " failed.";
+				m_statusIsError = true;
+				ELOG(m_status);
 				success = false;
 				continue;
 			}
@@ -513,7 +573,7 @@ namespace mmo
 		}
 		// Points start on the ground (the loop is a 3D curve; heights are free afterwards).
 		oasis.record.heightsValid = false;
-		EnsureHeights(oasis);
+		EnsureHeights(oasis, false);
 
 		id = oasis.record.id;
 		m_oases.push_back(std::move(oasis));
@@ -606,9 +666,8 @@ namespace mmo
 		}
 
 		Oasis& oasis = m_oases[index];
-		// Before the build changes the terrain; the build itself only uses the loop's x/z. A failure is
-		// retried when the record is saved.
-		EnsureHeights(oasis);
+		// Before the build changes the terrain; the build itself only uses the loop's x/z.
+		EnsureHeights(oasis, false);
 		if (!CheckOverlap(oasis, error))
 		{
 			m_status = error;
@@ -877,6 +936,12 @@ namespace mmo
 	void ProceduralEditMode::DrawPointDetails(Oasis& oasis)
 	{
 		PathSpline& loop = oasis.record.loop;
+		if (!oasis.record.heightsValid)
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Waiting for the terrain to load before the loop can be edited.");
+			return;
+		}
+
 		if (!SplineEditController::HasTangents(loop))
 		{
 			return;
@@ -995,7 +1060,7 @@ namespace mmo
 		}
 
 		const ImGuiIO& io = ImGui::GetIO();
-		auto splines = GetSplines();
+		auto splines = GetEditableSplines();
 
 		// Ctrl+click on a point deletes it.
 		int32 oasisIndex, pointIndex;
@@ -1045,7 +1110,7 @@ namespace mmo
 			return;
 		}
 
-		auto splines = GetSplines();
+		auto splines = GetEditableSplines();
 		if (m_splineEditor.OnMouseMoved(hit.x + m_dragOffsetX, hit.z + m_dragOffsetZ, splines))
 		{
 			const int32 selected = m_splineEditor.GetSelectedSpline();
@@ -1094,7 +1159,7 @@ namespace mmo
 
 	void ProceduralEditMode::DeleteSelectedPoint()
 	{
-		auto splines = GetSplines();
+		auto splines = GetEditableSplines();
 		const int32 selected = m_splineEditor.GetSelectedSpline();
 		const int32 point = m_splineEditor.GetSelectedPoint();
 		if (selected < 0 || selected >= static_cast<int32>(m_oases.size()) || point < 0)
@@ -1147,10 +1212,12 @@ namespace mmo
 			DeleteSelectedPoint();
 		}
 
-		// Records from before heights existed get their points put on the ground once it is loaded.
+		// Records from before heights existed get their points put on the ground once it is loaded
+		// (attempts spaced out, then the fallback).
+		++m_overlayFrame;
 		for (Oasis& oasis : m_oases)
 		{
-			EnsureHeights(oasis);
+			EnsureHeights(oasis, true);
 		}
 
 		// The selection must not outlive its point (e.g. after an oasis was deleted).

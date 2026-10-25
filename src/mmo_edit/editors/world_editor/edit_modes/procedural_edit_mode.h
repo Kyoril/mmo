@@ -157,6 +157,10 @@ namespace mmo
 		{
 			pcg::OasisRecord record;
 			bool dirty = false;
+			/// Failed attempts to load the terrain under a loop without heights (see EnsureHeights).
+			uint32 heightAttempts = 0;
+			/// Overlay frame of the next attempt.
+			uint64 nextHeightAttemptFrame = 0;
 		};
 
 		/// @brief Asset path of the file of an oasis: "<folder>/<id as 16 hex digits>.hpcg".
@@ -203,9 +207,22 @@ namespace mmo
 		void DrawPointDetails(Oasis& oasis);
 
 		/// @brief Puts the loop points of a record without heights (read from a version 1/2 file, or just
-		///        created) on the terrain, with level tangents. Loads the terrain pages under the loop.
+		///        created) on the terrain, with level tangents, after loading the terrain pages under the
+		///        loop. Until then the loop cannot be edited (overwriting edits would lose them).
+		/// @param retry Overlay use: attempts are spaced out, and after HeightAttemptLimit failures the
+		///        fallback is used. Otherwise (rebuild, save, creation) a failure falls back at once.
 		/// @return True if the record has valid heights afterwards.
-		bool EnsureHeights(Oasis& oasis);
+		bool EnsureHeights(Oasis& oasis, bool retry);
+
+		/// @brief Fills heights from whatever terrain is available (zero elsewhere), with a warning.
+		void FillHeightsFallback(Oasis& oasis);
+
+		/// @brief Whether the loop of the oasis at the index can be edited (its heights are valid).
+		bool IsLoopEditable(int32 index) const;
+
+		/// @brief Spline pointers for the spline editor's input handling: oases whose loop cannot be edited
+		///        yet stand in as an empty spline (same indices), so nothing on them can be hit.
+		std::vector<PathSpline*> GetEditableSplines();
 
 		/// @brief Tells the transform widget that the selected point's tangents changed (its local-space
 		///        orientation follows the out tangent).
@@ -222,6 +239,12 @@ namespace mmo
 		/// The selected point's handle while the editor selection holds it (owned by the selection;
 		/// reset through OnSplinePointDeselected when the selection drops it).
 		SelectedSplinePoint* m_pointSelectable = nullptr;
+
+		/// Stand-in for loops that cannot be edited yet (GetEditableSplines). Never has points.
+		PathSpline m_lockedSpline;
+
+		/// Counts overlay frames, to space out height attempts.
+		uint64 m_overlayFrame = 0;
 
 		/// Defaults of the recipe, used for new oases.
 		pcg::OasisParams m_defaultParams;

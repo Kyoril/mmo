@@ -458,7 +458,9 @@ namespace mmo
 			return true;
 		}
 
-		if (alt && HitTestSegment(x, y, splines, splineIndex, pointIndex))
+		// Linear splines (rivers) need the terrain hit to insert, as always; curved ones insert on the curve.
+		if (alt && HitTestSegment(x, y, splines, splineIndex, pointIndex) &&
+			(worldHit != nullptr || HasTangents(*splines[splineIndex])))
 		{
 			auto& points = splines[splineIndex]->points;
 			const SplinePoint a = points[pointIndex];
@@ -502,7 +504,8 @@ namespace mmo
 					return false;
 				}
 				inserted.x = worldHit->x;
-				inserted.y = worldHit->y;
+				// Linear points keep the default height, as before heights existed.
+				inserted.y = HasTangents(*splines[splineIndex]) ? worldHit->y : 0.0f;
 				inserted.z = worldHit->z;
 			}
 			points.insert(points.begin() + pointIndex + 1, inserted);

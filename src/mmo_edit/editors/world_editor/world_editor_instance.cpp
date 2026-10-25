@@ -1435,15 +1435,18 @@ namespace mmo
 		// Oasis records last: they hold the base values needed to undo what the oasis generated into the
 		// pages, entities and foliage saved above. A record must never be newer than the data it
 		// describes, or the next rebuild would undo a contribution that was not saved.
+		bool oasesSaved = true;
 		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
 		{
+			// The procedural mode's status line names the oasis and the reason.
 			ELOG("Some oasis records could not be saved");
+			oasesSaved = false;
 		}
 
 		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.
 		SaveDirtyKits();
 
-		return true;
+		return oasesSaved;
 	}
 
 	void WorldEditorInstance::OnTerrainMouseMoved(const float viewportX, const float viewportY)

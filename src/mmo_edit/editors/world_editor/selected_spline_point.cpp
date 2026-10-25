@@ -13,6 +13,9 @@ namespace mmo
 		/// Smallest squared length a direction may have to define an orientation.
 		constexpr float MinDirectionLengthSq = 1.0e-8f;
 
+		/// Squared sin(angle / 2) below which a rotation counts as none (about 0.006 degrees).
+		constexpr float MinRotationSinHalfAngleSq = 2.5e-9f;
+
 		/// The roll-free frame of a direction: yaw around world up turns +X to the direction's ground
 		/// projection, then pitch around the horizontal axis perpendicular to it tilts +X onto the
 		/// direction. Its +X is the direction and its +Y stays in the vertical plane through it.
@@ -132,7 +135,15 @@ namespace mmo
 	void SelectedSplinePoint::RotateTangents(const Quaternion& rotation) const
 	{
 		PathSpline* spline = Resolve();
-		if (!spline || rotation == Quaternion::Identity)
+		if (!spline)
+		{
+			return;
+		}
+
+		// A (numerically) zero rotation, e.g. a roll or an unchanged orientation, must not switch an
+		// automatic point to manual. The vector part is sin(angle / 2) times the axis.
+		const float sinHalfAngleSq = rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z;
+		if (sinHalfAngleSq < MinRotationSinHalfAngleSq)
 		{
 			return;
 		}
