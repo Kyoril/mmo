@@ -28,6 +28,9 @@ namespace mmo
 	/// @brief Asset path of a section world: Editor/Pcg/Sections/<name>/<name>.hwld.
 	[[nodiscard]] String GetSectionWorldPath(const String& name);
 
+	/// @brief Name of a section: the stem of its world file (the .hsecdef name is kept equal to it).
+	[[nodiscard]] String GetSectionName(const String& worldPath);
+
 	/// @brief Asset path of the section definition next to a world: <dir>/<name>.hsecdef.
 	[[nodiscard]] String GetSectionDefinitionPath(const String& worldPath);
 
@@ -72,9 +75,23 @@ namespace mmo
 	/// @return False if the file is missing or not a readable section asset.
 	bool ReadSectionAssetStamp(const String& assetPath, uint64& stamp);
 
-	/// @brief Albedo texture path per paint layer of a terrain material, from the material's layer
-	///        bindings (albedoTextureParam) and its texture parameter values. Layers without a binding or
-	///        value stay empty.
+	/// @brief The texture key of one terrain paint layer: the albedo texture asset path that identifies
+	///        the layer when section paint is matched against the layers of a target tile.
+	/// @details The single place this is resolved, for the section bake and the stamping remap alike:
+	///          1. the material's layer binding: GetLayerBinding(layer).albedoTextureParam, resolved
+	///             through GetTextureParameter (a material instance answers with its own value or its
+	///             parent's);
+	///          2. if the binding names no parameter, the conventional parameter "Albedo0<layer + 1>"
+	///             (Albedo01..Albedo04), resolved the same way.
+	///          A binding that names a parameter without a value does not fall back.
+	/// @param material The terrain material (may be null).
+	/// @param layer Paint layer 0..3.
+	/// @param parameter Receives the parameter that was used if not null (empty when none was found).
+	/// @param fromBinding Receives whether the parameter came from the layer binding if not null.
+	/// @return The texture asset path, or an empty string if the layer has none.
+	[[nodiscard]] String GetTerrainLayerTextureKey(const MaterialPtr& material, uint8 layer, String* parameter = nullptr, bool* fromBinding = nullptr);
+
+	/// @brief GetTerrainLayerTextureKey for all four layers. Layers without a key stay empty.
 	/// @return False if the material is null.
 	bool GetSectionLayerTextures(const MaterialPtr& material, std::array<String, 4>& out);
 
@@ -82,8 +99,11 @@ namespace mmo
 	/// @details Reads the .hsecdef, refuses if a variant rectangle (with side falloff) leaves the
 	///          terrain or covers a page without terrain, loads the covered pages, collects every map
 	///          entity and authored foliage instance as world-space placements, takes the layer textures
-	///          from the terrain default material, stamps the files (ComputeSectionSourceStamp) and writes
-	///          the asset. The world is not saved first: the bake captures what is loaded, and the stamp
+	///          from the terrain default material (GetTerrainLayerTextureKey, logged per layer), stamps the
+	///          files (ComputeSectionSourceStamp), refuses if a layer without a texture key is painted
+	///          (non-zero coverage with weight in that layer) in any variant, and writes the asset. The
+	///          section name is the world's stem whatever the .hsecdef says. Entities and foliage the bake
+	///          force-loaded are released afterwards (unless pages were already force-loaded). The world is not saved first: the bake captures what is loaded, and the stamp
 	///          describes the files on disk, so callers with unsaved edits save before baking.
 	/// @param world The open section world.
 	/// @param error Receives the reason on failure.

@@ -784,6 +784,10 @@ namespace mmo
 		/// @brief Whether this world is a section world (a .hsecdef next to the .hwld, see section_bake_job.h).
 		[[nodiscard]] bool IsSectionWorld() const { return m_sectionPanel != nullptr; }
 
+		/// @brief Whether ForceLoadPages (or the minimap bake) loaded entities or foliage that
+		///        ReleaseForcedPages would unload.
+		[[nodiscard]] bool HasForcedPages() const { return !m_bakeEntityPages.empty() || !m_bakeFoliagePages.empty(); }
+
 		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
 		///        heights, layers and water. Null when the world has no terrain, the page is out of
 		///        range or it has no .tile file.

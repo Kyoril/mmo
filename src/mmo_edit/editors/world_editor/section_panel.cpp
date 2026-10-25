@@ -52,6 +52,12 @@ namespace mmo
 			m_statusIsError = true;
 			ELOG(error);
 		}
+		else if (m_definition.name != GetSectionName(m_worldPath))
+		{
+			// The name follows the folder; keep the definition in sync.
+			m_definition.name = GetSectionName(m_worldPath);
+			Commit();
+		}
 
 		RefreshStamp();
 		RefreshPlacedAssets();
@@ -205,11 +211,8 @@ namespace mmo
 			return;
 		}
 
-		ImGui::InputText("Name", &m_definition.name);
-		if (ImGui::IsItemDeactivatedAfterEdit())
-		{
-			Commit();
-		}
+		// Read-only: the name is the world's file name (and the baked asset's).
+		ImGui::Text("Name: %s", m_definition.name.c_str());
 
 		ImGui::DragFloat("Length (m)", &m_definition.length, 0.1f, MinLength, 500.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 		if (ImGui::IsItemDeactivatedAfterEdit())
@@ -480,7 +483,7 @@ namespace mmo
 		{
 			if (m_layerTextures[layer].empty())
 			{
-				ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "  Layer %u: no albedo binding in the terrain material", static_cast<uint32>(layer + 1));
+				ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "  Layer %u: no texture (no layer binding, no Albedo0%u parameter); painting it fails the bake", static_cast<uint32>(layer + 1), static_cast<uint32>(layer + 1));
 			}
 			else
 			{
@@ -489,7 +492,7 @@ namespace mmo
 		}
 		if (ImGui::IsItemHovered())
 		{
-			ImGui::SetTooltip("Set the layer bindings (Base Color) of the terrain material in the material editor, or paint of unbound layers is skipped.");
+			ImGui::SetTooltip("Resolved from the terrain material's layer binding (Base Color), else its Albedo01..Albedo04 parameter.");
 		}
 
 		const String problem = ValidateDefinition();

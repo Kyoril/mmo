@@ -196,6 +196,10 @@ namespace mmo
 					return false;
 				}
 
+				// The upper bound is closed on purpose: a rect ending exactly on a page edge samples the
+				// seam vertex and splat pixel there, and Terrain::GetAt / GetLayersAt resolve a seam index to
+				// the page AFTER the edge (index / steps per page). Without that page the bake would read
+				// height 0 and paint 0 at the seam instead of the shared value.
 				const int32 minPageX = static_cast<int32>(std::floor(rect.minX / pageSize)) + width / 2;
 				const int32 maxPageX = std::min(width - 1, static_cast<int32>(std::floor(rect.maxX / pageSize)) + width / 2);
 				const int32 minPageZ = static_cast<int32>(std::floor(rect.minZ / pageSize)) + height / 2;
@@ -223,6 +227,11 @@ namespace mmo
 	String GetSectionWorldPath(const String& name)
 	{
 		return String(SectionWorldFolder) + "/" + name + "/" + name + ".hwld";
+	}
+
+	String GetSectionName(const String& worldPath)
+	{
+		return std::filesystem::path(Normalize(worldPath)).stem().string();
 	}
 
 	String GetSectionDefinitionPath(const String& worldPath)
@@ -432,6 +441,43 @@ namespace mmo
 		return true;
 	}
 
+	String GetTerrainLayerTextureKey(const MaterialPtr& material, const uint8 layer, String* parameter, bool* fromBinding)
+	{
+		if (parameter)
+		{
+			parameter->clear();
+		}
+		if (fromBinding)
+		{
+			*fromBinding = false;
+		}
+
+		if (!material || layer >= MaterialLayerBindingCount)
+		{
+			return String();
+		}
+
+		const String& bound = material->GetLayerBinding(layer).albedoTextureParam;
+		const bool useBinding = !bound.empty();
+		const String name = useBinding ? bound : "Albedo0" + std::to_string(layer + 1);
+
+		String texture;
+		if (!material->GetTextureParameter(name, texture) || texture.empty())
+		{
+			return String();
+		}
+
+		if (parameter)
+		{
+			*parameter = name;
+		}
+		if (fromBinding)
+		{
+			*fromBinding = useBinding;
+		}
+		return texture;
+	}
+
 	bool GetSectionLayerTextures(const MaterialPtr& material, std::array<String, 4>& out)
 	{
 		out = {};
@@ -442,20 +488,15 @@ namespace mmo
 
 		for (uint8 layer = 0; layer < 4; ++layer)
 		{
-			const String& parameter = material->GetLayerBinding(layer).albedoTextureParam;
-			String texture;
-			if (!parameter.empty() && material->GetTextureParameter(parameter, texture))
-			{
-				out[layer] = texture;
-			}
+			out[layer] = GetTerrainLayerTextureKey(material, layer);
 		}
 
 		return true;
 	}
 
-	bool BakeSectionWorld(WorldEditorInstance& world, String& error)
+	/// Bakes without releasing force-loaded pages (see BakeSectionWorld).
+	static bool BakeSectionWorldImpl(WorldEditorInstance& world, String& error)
 	{
-		error.clear();
 		const String worldPath = Normalize(world.GetAssetPath().generic_string());
 
 		pcg::SectionDefinition def;
@@ -463,6 +504,9 @@ namespace mmo
 		{
 			return false;
 		}
+
+		// The section is named after its world (the asset is <name>.hsec next to the folder).
+		def.name = GetSectionName(worldPath);
 
 		terrain::Terrain* terrain = world.GetTerrain();
 		if (!terrain || !world.HasTerrain())
@@ -507,11 +551,28 @@ namespace mmo
 		std::vector<pcg::Placement> placements;
 		world.CollectWorldPlacements(placements);
 
-		std::array<String, 4> layerTextures;
-		if (!GetSectionLayerTextures(terrain->GetDefaultMaterial(), layerTextures))
+		const MaterialPtr material = terrain->GetDefaultMaterial();
+		if (!material)
 		{
 			error = "The section terrain has no default material";
 			return false;
+		}
+
+		std::array<String, 4> layerTextures;
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			String parameter;
+			bool fromBinding = false;
+			layerTextures[layer] = GetTerrainLayerTextureKey(material, layer, &parameter, &fromBinding);
+			if (layerTextures[layer].empty())
+			{
+				ILOG("Section paint layer " << static_cast<uint32>(layer) << ": no texture key in " << material->GetName());
+			}
+			else
+			{
+				ILOG("Section paint layer " << static_cast<uint32>(layer) << ": " << layerTextures[layer] << " (" << (fromBinding ? "layer binding" : "fallback")
+					<< " parameter " << parameter << " of " << material->GetName() << ")");
+			}
 		}
 
 		const uint64 stamp = ComputeSectionSourceStamp(worldPath);
@@ -522,6 +583,31 @@ namespace mmo
 		if (!pcg::BakeSection(def, access, placements, SectionDefaultPaint, layerTextures, stamp, asset, error, &ignored))
 		{
 			return false;
+		}
+
+		// Paint of a layer without a texture key could never be matched when stamping: refuse instead of
+		// silently dropping it. Untouched default paint has coverage 0 and does not count.
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			if (!layerTextures[layer].empty())
+			{
+				continue;
+			}
+
+			for (size_t v = 0; v < asset.variants.size(); ++v)
+			{
+				const pcg::SectionPaint& paint = asset.variants[v].paint;
+				for (size_t i = 0; i < paint.packed.size() && i < paint.coverage.size(); ++i)
+				{
+					if (paint.coverage[i] != 0 && ((paint.packed[i] >> (8 * layer)) & 0xFFu) != 0)
+					{
+						error = "Paint layer " + std::to_string(layer + 1) + " is painted in variant " + std::to_string(v + 1) +
+							", but the terrain material " + String(material->GetName()) + " has no texture for it (no layer binding and no Albedo0" +
+							std::to_string(layer + 1) + " parameter)";
+						return false;
+					}
+				}
+			}
 		}
 
 		std::vector<char> bytes;
@@ -551,15 +637,22 @@ namespace mmo
 		ILOG("Baked section " << def.name << " to " << assetPath << ": " << asset.variants.size() << " variant(s), "
 			<< captured << " placement(s) captured, " << ignored << " outside every variant, " << asset.rules.size()
 			<< " rule(s), " << bytes.size() << " bytes, source stamp " << stampText);
-		for (uint8 layer = 0; layer < 4; ++layer)
+		return true;
+	}
+
+	bool BakeSectionWorld(WorldEditorInstance& world, String& error)
+	{
+		error.clear();
+
+		// Entities and foliage the bake has to load are released again afterwards, unless pages were
+		// already force-loaded before (an unsaved generator build may still own those).
+		const bool hadForcedPages = world.HasForcedPages();
+		const bool baked = BakeSectionWorldImpl(world, error);
+		if (!hadForcedPages)
 		{
-			if (layerTextures[layer].empty())
-			{
-				WLOG("Section terrain material has no albedo texture for paint layer " << static_cast<uint32>(layer)
-					<< "; paint of that layer cannot be matched when the section is stamped");
-			}
+			world.ReleaseForcedPages();
 		}
 
-		return true;
+		return baked;
 	}
 }
