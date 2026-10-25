@@ -12,6 +12,7 @@
 #include "math/ray.h"
 #include "math/vector4.h"
 #include "pcg/oasis_recipe.h"
+#include "pcg/section_path.h"
 #include "pcg/terrain_contribution.h"
 #include "scene_graph/camera.h"
 #include "terrain/terrain.h"
@@ -20,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <limits>
 #include <random>
 #include <sstream>
 
@@ -30,12 +32,15 @@ namespace mmo
 		/// Asset path of the shared recipe.
 		const char* const RecipeFileName = "Editor/Pcg/OasisRecipe.json";
 
-		/// Extension of oasis record files.
+		/// Extension of control record files.
 		const char* const RecordExtension = ".hpcg";
 
 		constexpr float PiValue = 3.14159265358979f;
 		constexpr float DefaultRadius = 40.0f;
 		constexpr uint32 DefaultPointCount = 8;
+
+		/// Distance between the two points of a new section path, in metres.
+		constexpr float NewPathLength = 20.0f;
 
 		/// Overlay frames between attempts to load the terrain under a loop without heights.
 		constexpr uint64 HeightAttemptIntervalFrames = 30;
@@ -45,6 +50,13 @@ namespace mmo
 
 		/// An oasis keeps at least this many loop points.
 		constexpr uint32 MinLoopPoints = 3;
+
+		/// A section path keeps at least this many points.
+		constexpr uint32 MinPathPoints = 2;
+
+		const ImVec4 StatusOkColor(0.6f, 0.9f, 0.6f, 1.0f);
+		const ImVec4 StatusWarningColor(1.0f, 0.8f, 0.3f, 1.0f);
+		const ImVec4 StatusErrorColor(1.0f, 0.4f, 0.3f, 1.0f);
 
 		String ToAssetPath(const std::filesystem::path& path)
 		{
@@ -151,6 +163,31 @@ namespace mmo
 				rect.maxZ = std::max(rect.maxZ, point.z);
 			}
 		}
+
+		/// Randomized seed for the "Randomize" buttons. Only picks an input; the generated result stays a
+		/// pure function of the seed.
+		uint64 RandomSeed()
+		{
+			std::random_device device;
+			return (static_cast<uint64>(device()) << 32) | static_cast<uint64>(device());
+		}
+
+		/// Draws an influence rect on the ground.
+		template<typename Project, typename Height>
+		void DrawRect(ImDrawList& drawList, const pcg::WorldRect& rect, const ImU32 color, const Project& project, const Height& height)
+		{
+			const float corners[4][2] = { { rect.minX, rect.minZ }, { rect.maxX, rect.minZ }, { rect.maxX, rect.maxZ }, { rect.minX, rect.maxZ } };
+			ImVec2 screen[4];
+			for (int c = 0; c < 4; ++c)
+			{
+				if (!project(Vector3(corners[c][0], height(corners[c][0], corners[c][1]), corners[c][1]), screen[c]))
+				{
+					return;
+				}
+			}
+
+			drawList.AddQuad(screen[0], screen[1], screen[2], screen[3], color, 1.0f);
+		}
 	}
 
 	ProceduralEditMode::ProceduralEditMode(IWorldEditor& editor, Camera& camera)
@@ -171,11 +208,28 @@ namespace mmo
 		return ToAssetPath(folder) + "/" + FormatId(id) + RecordExtension;
 	}
 
-	int32 ProceduralEditMode::FindOasis(const uint64 id) const
+	uint32 ProceduralEditMode::GetMinPoints(const Control& control)
 	{
-		for (size_t i = 0; i < m_oases.size(); ++i)
+		return control.kind == ControlKind::Oasis ? MinLoopPoints : MinPathPoints;
+	}
+
+	void ProceduralEditMode::SetStatus(const String& text, const StatusLevel level)
+	{
+		m_status = text;
+		m_statusLevel = level;
+	}
+
+	size_t ProceduralEditMode::GetOasisCount() const
+	{
+		return static_cast<size_t>(std::count_if(m_controls.begin(), m_controls.end(),
+			[](const Control& control) { return control.kind == ControlKind::Oasis; }));
+	}
+
+	int32 ProceduralEditMode::FindControl(const uint64 id) const
+	{
+		for (size_t i = 0; i < m_controls.size(); ++i)
 		{
-			if (m_oases[i].record.id == id)
+			if (m_controls[i].Id() == id)
 			{
 				return static_cast<int32>(i);
 			}
@@ -184,7 +238,7 @@ namespace mmo
 		return -1;
 	}
 
-	void ProceduralEditMode::SelectOasis(const int32 index)
+	void ProceduralEditMode::SelectControl(const int32 index)
 	{
 		m_selected = index;
 		m_splineEditor.CancelDrag();
@@ -201,20 +255,20 @@ namespace mmo
 		m_brushPositionValid = false;
 	}
 
-	void ProceduralEditMode::SelectPointInEditor(const int32 oasisIndex, const int32 pointIndex)
+	void ProceduralEditMode::SelectPointInEditor(const int32 controlIndex, const int32 pointIndex)
 	{
 		// Forget the old handle first: its Deselect() must not reset the point that was just picked.
 		m_pointSelectable = nullptr;
 		m_worldEditor.ClearSelection();
-		m_splineEditor.Select(oasisIndex, pointIndex);
+		m_splineEditor.Select(controlIndex, pointIndex);
 
-		if (oasisIndex < 0 || oasisIndex >= static_cast<int32>(m_oases.size()) ||
-			pointIndex < 0 || pointIndex >= static_cast<int32>(m_oases[oasisIndex].record.loop.points.size()))
+		if (controlIndex < 0 || controlIndex >= static_cast<int32>(m_controls.size()) ||
+			pointIndex < 0 || pointIndex >= static_cast<int32>(m_controls[controlIndex].Spline().points.size()))
 		{
 			return;
 		}
 
-		auto selectable = std::make_unique<SelectedSplinePoint>(*this, m_oases[oasisIndex].record.id, static_cast<size_t>(pointIndex));
+		auto selectable = std::make_unique<SelectedSplinePoint>(*this, m_controls[controlIndex].Id(), static_cast<size_t>(pointIndex));
 		m_pointSelectable = selectable.get();
 		m_worldEditor.AddToSelection(std::move(selectable));
 	}
@@ -230,9 +284,15 @@ namespace mmo
 		m_splineEditor.Select(m_splineEditor.GetSelectedSpline(), -1);
 	}
 
-	bool ProceduralEditMode::EnsureHeights(Oasis& oasis, const bool retry)
+	bool ProceduralEditMode::EnsureHeights(Control& control, const bool retry)
 	{
-		pcg::OasisRecord& record = oasis.record;
+		if (control.kind != ControlKind::Oasis)
+		{
+			// Section paths are created with heights.
+			return true;
+		}
+
+		pcg::OasisRecord& record = control.oasis;
 		if (record.heightsValid)
 		{
 			return true;
@@ -245,7 +305,7 @@ namespace mmo
 			return true;
 		}
 
-		if (retry && m_overlayFrame < oasis.nextHeightAttemptFrame)
+		if (retry && m_overlayFrame < control.nextHeightAttemptFrame)
 		{
 			return false;
 		}
@@ -255,11 +315,11 @@ namespace mmo
 		String error;
 		if (!m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, error))
 		{
-			++oasis.heightAttempts;
-			oasis.nextHeightAttemptFrame = m_overlayFrame + HeightAttemptIntervalFrames;
-			if (!retry || oasis.heightAttempts >= HeightAttemptLimit)
+			++control.heightAttempts;
+			control.nextHeightAttemptFrame = m_overlayFrame + HeightAttemptIntervalFrames;
+			if (!retry || control.heightAttempts >= HeightAttemptLimit)
 			{
-				FillHeightsFallback(oasis);
+				FillHeightsFallback(control);
 				return true;
 			}
 			return false;
@@ -276,9 +336,9 @@ namespace mmo
 		return true;
 	}
 
-	void ProceduralEditMode::FillHeightsFallback(Oasis& oasis)
+	void ProceduralEditMode::FillHeightsFallback(Control& control)
 	{
-		pcg::OasisRecord& record = oasis.record;
+		pcg::OasisRecord& record = control.oasis;
 		size_t missing = 0;
 		for (SplinePoint& point : record.loop.points)
 		{
@@ -294,15 +354,21 @@ namespace mmo
 		}
 		record.heightsValid = true;
 
-		m_status = "'" + record.name + "': the terrain under its loop could not be loaded; point heights were taken from the loaded terrain ("
-			+ std::to_string(missing) + " of " + std::to_string(record.loop.points.size()) + " point(s) without terrain were put at height 0). Check them before saving.";
-		m_statusIsError = true;
+		SetStatus("'" + record.name + "': the terrain under its loop could not be loaded; point heights were taken from the loaded terrain ("
+			+ std::to_string(missing) + " of " + std::to_string(record.loop.points.size()) + " point(s) without terrain were put at height 0). Check them before saving.",
+			StatusLevel::Error);
 		WLOG(m_status);
 	}
 
 	bool ProceduralEditMode::IsLoopEditable(const int32 index) const
 	{
-		return index >= 0 && index < static_cast<int32>(m_oases.size()) && m_oases[index].record.heightsValid;
+		if (index < 0 || index >= static_cast<int32>(m_controls.size()))
+		{
+			return false;
+		}
+
+		const Control& control = m_controls[index];
+		return control.kind != ControlKind::Oasis || control.oasis.heightsValid;
 	}
 
 	std::vector<PathSpline*> ProceduralEditMode::GetEditableSplines()
@@ -321,8 +387,8 @@ namespace mmo
 
 	PathSpline* ProceduralEditMode::FindSelectableSpline(const uint64 splineId)
 	{
-		const int32 index = FindOasis(splineId);
-		return IsLoopEditable(index) ? &m_oases[index].record.loop : nullptr;
+		const int32 index = FindControl(splineId);
+		return IsLoopEditable(index) ? &m_controls[index].Spline() : nullptr;
 	}
 
 	float ProceduralEditMode::GetSplinePointGroundHeight(const float x, const float z) const
@@ -332,36 +398,43 @@ namespace mmo
 
 	void ProceduralEditMode::OnSplinePointEdited(const uint64 splineId)
 	{
-		const int32 index = FindOasis(splineId);
+		const int32 index = FindControl(splineId);
 		if (index >= 0)
 		{
-			m_oases[index].dirty = true;
+			m_controls[index].dirty = true;
 		}
 	}
 
 	bool ProceduralEditMode::RemoveSplinePoint(const uint64 splineId, const size_t pointIndex)
 	{
-		const int32 index = FindOasis(splineId);
+		const int32 index = FindControl(splineId);
 		if (!IsLoopEditable(index))
 		{
 			return false;
 		}
 
-		auto& points = m_oases[index].record.loop.points;
+		Control& control = m_controls[index];
+		auto& points = control.Spline().points;
 		if (pointIndex >= points.size())
 		{
 			return false;
 		}
 
-		if (points.size() <= MinLoopPoints)
+		const uint32 minPoints = GetMinPoints(control);
+		if (points.size() <= minPoints)
 		{
-			m_status = "An oasis loop keeps at least " + std::to_string(MinLoopPoints) + " points.";
-			m_statusIsError = true;
+			SetStatus(String(control.kind == ControlKind::Oasis ? "An oasis loop" : "A section path") + " keeps at least "
+				+ std::to_string(minPoints) + " points.", StatusLevel::Error);
 			return false;
 		}
 
 		points.erase(points.begin() + static_cast<std::ptrdiff_t>(pointIndex));
-		m_oases[index].dirty = true;
+		if (control.kind == ControlKind::SectionPath && pointIndex < control.path.pointIds.size())
+		{
+			// The id leaves with its point and is never handed out again.
+			control.path.pointIds.erase(control.path.pointIds.begin() + static_cast<std::ptrdiff_t>(pointIndex));
+		}
+		control.dirty = true;
 		m_splineEditor.CancelDrag();
 		if (m_splineEditor.GetSelectedSpline() == index)
 		{
@@ -390,14 +463,15 @@ namespace mmo
 			return true;
 		}
 
-		return std::any_of(m_oases.begin(), m_oases.end(), [](const Oasis& oasis) { return oasis.dirty; });
+		return std::any_of(m_controls.begin(), m_controls.end(), [](const Control& control) { return control.dirty; });
 	}
 
 	void ProceduralEditMode::Load(const std::filesystem::path& pcgFolder)
 	{
 		ClearPointSelection();
-		m_oases.clear();
+		m_controls.clear();
 		m_deletedIds.clear();
+		m_sectionAssets.clear();
 		m_selected = -1;
 		m_splineEditor.Select(-1, -1);
 		m_splineEditor.CancelDrag();
@@ -432,24 +506,62 @@ namespace mmo
 			const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(fileName);
 			if (!file)
 			{
-				WLOG("Cannot open oasis record " << fileName);
+				WLOG("Cannot open procedural record " << fileName);
 				continue;
 			}
 
 			io::StreamSource source{ *file };
 			io::Reader reader{ source };
-			Oasis oasis;
-			if (!pcg::ReadOasisRecord(reader, oasis.record))
+			Control control;
+			switch (pcg::PeekRecordKind(reader))
 			{
-				ELOG("Oasis record " << fileName << " is corrupt or from an unsupported version, skipping it");
+			case pcg::RecordKind::Oasis:
+				control.kind = ControlKind::Oasis;
+				if (!pcg::ReadOasisRecord(reader, control.oasis))
+				{
+					ELOG("Oasis record " << fileName << " is corrupt or from an unsupported version, skipping it");
+					continue;
+				}
+				break;
+
+			case pcg::RecordKind::SectionPath:
+				control.kind = ControlKind::SectionPath;
+				if (!pcg::ReadSectionPathRecord(reader, control.path))
+				{
+					ELOG("Section path record " << fileName << " is corrupt or from an unsupported version, skipping it");
+					continue;
+				}
+				break;
+
+			default:
+				ELOG("Procedural record " << fileName << " is of an unknown kind, skipping it");
 				continue;
 			}
 
-			m_oases.push_back(std::move(oasis));
+			m_controls.push_back(std::move(control));
 		}
 
-		std::stable_sort(m_oases.begin(), m_oases.end(), [](const Oasis& a, const Oasis& b) { return a.record.id < b.record.id; });
-		DLOG("Loaded " << m_oases.size() << " oasis record(s) from " << folder);
+		std::stable_sort(m_controls.begin(), m_controls.end(), [](const Control& a, const Control& b) { return a.Id() < b.Id(); });
+
+		// The per-copy rects of built section paths, from the spline as saved with the build (for the
+		// overlap check; the last influence stands in when the asset cannot be read).
+		for (Control& control : m_controls)
+		{
+			if (control.kind != ControlKind::SectionPath || control.path.content.IsEmpty())
+			{
+				continue;
+			}
+
+			const CachedSectionAsset& cached = GetCachedSectionAsset(control.path.sectionAsset);
+			pcg::SectionPathShape probe;
+			String error;
+			if (cached.valid && PrepareSectionPathProbe(control.path, cached.asset, probe, error))
+			{
+				GetSectionCopyRects(probe, control.builtRects);
+			}
+		}
+
+		DLOG("Loaded " << m_controls.size() << " procedural record(s) from " << folder);
 	}
 
 	bool ProceduralEditMode::Save(const std::filesystem::path& pcgFolder)
@@ -462,7 +574,7 @@ namespace mmo
 			const String fileName = MakeFileName(pcgFolder, id);
 			if (AssetRegistry::HasFile(fileName) && !AssetRegistry::RemoveFile(fileName))
 			{
-				ELOG("Failed to remove oasis record " << fileName);
+				ELOG("Failed to remove procedural record " << fileName);
 				deletionsFailed = true;
 				success = false;
 			}
@@ -473,24 +585,23 @@ namespace mmo
 			m_deletedIds.clear();
 		}
 
-		for (Oasis& oasis : m_oases)
+		for (Control& control : m_controls)
 		{
-			if (!oasis.dirty)
+			if (!control.dirty)
 			{
 				continue;
 			}
 
-			const String fileName = MakeFileName(pcgFolder, oasis.record.id);
+			const String fileName = MakeFileName(pcgFolder, control.Id());
 
 			// A record from before heights existed gets them first (at worst from the loaded terrain, with a
 			// warning), so a file never claims zero heights as real ones.
-			EnsureHeights(oasis, false);
+			EnsureHeights(control, false);
 
 			const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(fileName);
 			if (!file)
 			{
-				m_status = "Could not save oasis '" + oasis.record.name + "': cannot create " + fileName + ".";
-				m_statusIsError = true;
+				SetStatus("Could not save '" + control.Name() + "': cannot create " + fileName + ".", StatusLevel::Error);
 				ELOG(m_status);
 				success = false;
 				continue;
@@ -498,16 +609,18 @@ namespace mmo
 
 			io::StreamSink sink{ *file };
 			io::Writer writer{ sink };
-			if (!pcg::WriteOasisRecord(writer, oasis.record))
+			const bool written = control.kind == ControlKind::Oasis
+				? pcg::WriteOasisRecord(writer, control.oasis)
+				: pcg::WriteSectionPathRecord(writer, control.path);
+			if (!written)
 			{
-				m_status = "Could not save oasis '" + oasis.record.name + "': writing " + fileName + " failed.";
-				m_statusIsError = true;
+				SetStatus("Could not save '" + control.Name() + "': writing " + fileName + " failed.", StatusLevel::Error);
 				ELOG(m_status);
 				success = false;
 				continue;
 			}
 			sink.Flush();
-			oasis.dirty = false;
+			control.dirty = false;
 		}
 
 		return success;
@@ -517,8 +630,7 @@ namespace mmo
 	{
 		if (!m_worldEditor.HasTerrain())
 		{
-			m_status = "This world has no terrain.";
-			m_statusIsError = true;
+			SetStatus("This world has no terrain.", StatusLevel::Error);
 			return;
 		}
 
@@ -527,8 +639,7 @@ namespace mmo
 		const auto hit = m_worldEditor.GetTerrain()->RayIntersects(ray);
 		if (!hit.first)
 		{
-			m_status = "No ground under the viewport centre. Look at the terrain and try again.";
-			m_statusIsError = true;
+			SetStatus("No ground under the viewport centre. Look at the terrain and try again.", StatusLevel::Error);
 			return;
 		}
 
@@ -537,84 +648,227 @@ namespace mmo
 		CreateOasisAt(hit.second.position.x, hit.second.position.z, DefaultRadius, 1, "", id, error);
 	}
 
+	void ProceduralEditMode::CreateSectionPathAtViewportCentre()
+	{
+		if (!m_worldEditor.HasTerrain())
+		{
+			SetStatus("This world has no terrain.", StatusLevel::Error);
+			return;
+		}
+
+		if (m_newPathAsset.empty())
+		{
+			SetStatus("Pick the section asset of the new path first.", StatusLevel::Error);
+			return;
+		}
+
+		const Ray ray = m_camera.GetCameraToViewportRay(0.5f, 0.5f, 50000.0f);
+		const auto hit = m_worldEditor.GetTerrain()->RayIntersects(ray);
+		if (!hit.first)
+		{
+			SetStatus("No ground under the viewport centre. Look at the terrain and try again.", StatusLevel::Error);
+			return;
+		}
+
+		// Along the camera's forward direction on the ground (straight down: along +Z).
+		const Vector3 direction = m_camera.GetDerivedDirection();
+		float forwardX = direction.x;
+		float forwardZ = direction.z;
+		const float length = std::sqrt(forwardX * forwardX + forwardZ * forwardZ);
+		if (length > 1e-4f)
+		{
+			forwardX /= length;
+			forwardZ /= length;
+		}
+		else
+		{
+			forwardX = 0.0f;
+			forwardZ = 1.0f;
+		}
+
+		const float x = hit.second.position.x;
+		const float z = hit.second.position.z;
+		const std::vector<std::pair<float, float>> points = { { x, z }, { x + forwardX * NewPathLength, z + forwardZ * NewPathLength } };
+
+		String error;
+		uint64 id = 0;
+		CreateSectionPath(points, m_newPathAsset, 1, "", id, error);
+	}
+
 	bool ProceduralEditMode::CreateOasisAt(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
 	{
 		if (!m_worldEditor.HasTerrain())
 		{
 			error = "This world has no terrain.";
-			m_status = error;
-			m_statusIsError = true;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
 		if (!(radius > 0.0f))
 		{
 			error = "The oasis radius must be positive.";
-			m_status = error;
-			m_statusIsError = true;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
-		Oasis oasis;
-		oasis.dirty = true;
-		oasis.record.id = m_worldEditor.GenerateEntityUniqueId();
-		oasis.record.name = name.empty() ? "Oasis " + std::to_string(m_oases.size() + 1) : name;
-		oasis.record.seed = seed;
-		oasis.record.params = m_defaultParams;
-		oasis.record.loop.closed = true;
-		oasis.record.loop.interpolation = SplineInterpolation::CatmullRom;
+		Control control;
+		control.kind = ControlKind::Oasis;
+		control.dirty = true;
+		pcg::OasisRecord& record = control.oasis;
+		record.id = m_worldEditor.GenerateEntityUniqueId();
+		record.name = name.empty() ? "Oasis " + std::to_string(GetOasisCount() + 1) : name;
+		record.seed = seed;
+		record.params = m_defaultParams;
+		record.loop.closed = true;
+		record.loop.interpolation = SplineInterpolation::CatmullRom;
 		for (uint32 i = 0; i < DefaultPointCount; ++i)
 		{
 			const float angle = 2.0f * PiValue * static_cast<float>(i) / static_cast<float>(DefaultPointCount);
 			SplinePoint point;
 			point.x = x + radius * std::cos(angle);
 			point.z = z + radius * std::sin(angle);
-			oasis.record.loop.points.push_back(point);
+			record.loop.points.push_back(point);
 		}
 		// Points start on the ground (the loop is a 3D curve; heights are free afterwards).
-		oasis.record.heightsValid = false;
-		EnsureHeights(oasis, false);
+		record.heightsValid = false;
+		EnsureHeights(control, false);
 
-		id = oasis.record.id;
-		m_oases.push_back(std::move(oasis));
-		SelectOasis(static_cast<int32>(m_oases.size()) - 1);
-		m_status = "Created '" + m_oases.back().record.name + "' (" + FormatId(id) + "). Edit the loop, then Rebuild.";
-		m_statusIsError = false;
+		id = record.id;
+		m_controls.push_back(std::move(control));
+		SelectControl(static_cast<int32>(m_controls.size()) - 1);
+		SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + "). Edit the loop, then Rebuild.", StatusLevel::Ok);
 		ILOG(m_status);
 		return true;
 	}
 
-	bool ProceduralEditMode::CheckOverlap(const Oasis& oasis, String& error) const
+	bool ProceduralEditMode::CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, const uint64 seed,
+		const String& name, uint64& id, String& error)
 	{
-		// The influence of the loop as it is now (does not depend on the heights).
-		pcg::OasisShape shape;
-		const pcg::OasisError loopError = pcg::PrepareOasis(oasis.record.loop, oasis.record.seed, oasis.record.params,
-			[](float, float) { return 0.0f; }, shape);
-		if (loopError != pcg::OasisError::None)
+		id = 0;
+		if (!m_worldEditor.HasTerrain())
 		{
-			// The rebuild reports the invalid loop itself.
-			return true;
+			error = "This world has no terrain.";
+			SetStatus(error, StatusLevel::Error);
+			return false;
 		}
 
-		const pcg::WorldRect influence = pcg::GetInfluenceRect(shape);
-		for (const Oasis& other : m_oases)
+		if (points.size() < MinPathPoints)
 		{
-			if (other.record.id == oasis.record.id)
+			error = "A section path needs at least " + std::to_string(MinPathPoints) + " points.";
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		// Refused before anything is added: a path without its section cannot be built.
+		pcg::SectionAsset asset;
+		if (!LoadSectionAsset(sectionAsset, asset, error))
+		{
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		Control control;
+		control.kind = ControlKind::SectionPath;
+		control.dirty = true;
+		pcg::SectionPathRecord& record = control.path;
+		record.id = m_worldEditor.GenerateEntityUniqueId();
+		record.name = name.empty() ? "Section Path " + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
+		record.sectionAsset = sectionAsset;
+		record.params.seed = seed;
+		record.spline.closed = false;
+		record.spline.interpolation = SplineInterpolation::CatmullRom;
+
+		// Points on the ground: load the terrain under them first.
+		pcg::WorldRect bounds{ points.front().first, points.front().second, points.front().first, points.front().second };
+		for (const auto& [x, z] : points)
+		{
+			bounds.minX = std::min(bounds.minX, x);
+			bounds.minZ = std::min(bounds.minZ, z);
+			bounds.maxX = std::max(bounds.maxX, x);
+			bounds.maxZ = std::max(bounds.maxZ, z);
+		}
+		String loadError;
+		const bool loaded = m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, loadError);
+
+		size_t missing = 0;
+		for (const auto& [x, z] : points)
+		{
+			SplinePoint point;
+			point.x = x;
+			point.z = z;
+			if (!m_worldEditor.GetTerrain()->TryGetSmoothHeightAt(x, z, point.y))
+			{
+				point.y = 0.0f;
+				++missing;
+			}
+			record.spline.points.push_back(point);
+			record.pointIds.push_back(record.nextPointId++);
+		}
+
+		pcg::SectionPathShape probe;
+		if (!PrepareSectionPathProbe(record, asset, probe, error))
+		{
+			error = "Invalid section path: " + error;
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		m_sectionAssets[sectionAsset] = CachedSectionAsset{ true, asset, String() };
+
+		id = record.id;
+		m_controls.push_back(std::move(control));
+		SelectControl(static_cast<int32>(m_controls.size()) - 1);
+		if (missing > 0 || !loaded)
+		{
+			SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + "), but the terrain under it could not be loaded: "
+				+ std::to_string(missing) + " point(s) were put at height 0. Check them before Rebuild.", StatusLevel::Warning);
+			WLOG(m_status);
+		}
+		else
+		{
+			SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + "). Edit the path, then Rebuild.", StatusLevel::Ok);
+			ILOG(m_status);
+		}
+		return true;
+	}
+
+	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(Control& control)
+	{
+		if (control.Content().IsEmpty())
+		{
+			return {};
+		}
+
+		if (control.kind == ControlKind::SectionPath && !control.builtRects.empty())
+		{
+			return control.builtRects;
+		}
+
+		return { control.Content().influence };
+	}
+
+	bool ProceduralEditMode::CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error)
+	{
+		for (Control& other : m_controls)
+		{
+			if (other.Id() == control.Id())
 			{
 				continue;
 			}
 
-			// Only oases that put something into the world can be in the way.
-			if (other.record.content.IsEmpty())
+			// Only controls that put something into the world can be in the way.
+			const std::vector<pcg::WorldRect> otherRects = GetBuiltRects(other);
+			for (const pcg::WorldRect& rect : rects)
 			{
-				continue;
-			}
-
-			if (pcg::RectsOverlap(influence, other.record.content.influence))
-			{
-				error = "Rebuild refused: the influence area of '" + oasis.record.name + "' overlaps the one of '"
-					+ other.record.name + "' (" + FormatId(other.record.id) + "). Move the loops apart first.";
-				return false;
+				for (const pcg::WorldRect& otherRect : otherRects)
+				{
+					if (pcg::RectsOverlap(rect, otherRect))
+					{
+						error = "Rebuild refused: the influence area of '" + control.Name() + "' overlaps the one of '"
+							+ other.Name() + "' (" + FormatId(other.Id()) + "). Move them apart first.";
+						return false;
+					}
+				}
 			}
 		}
 
@@ -645,132 +899,246 @@ namespace mmo
 		// Without the recipe's asset lists a rebuild would reconcile every owned object away.
 		error = String("Rebuild refused: the oasis recipe '") + RecipeFileName
 			+ "' is missing or not valid JSON, so there are no asset lists. Fix it and reopen the world.";
-		m_status = error;
-		m_statusIsError = true;
+		SetStatus(error, StatusLevel::Error);
 		ELOG(error);
 		return false;
 	}
 
-	bool ProceduralEditMode::Rebuild(const uint64 oasisId, String& error)
+	bool ProceduralEditMode::Rebuild(const uint64 controlId, String& error)
+	{
+		const int32 index = FindControl(controlId);
+		if (index < 0)
+		{
+			error = "No procedural control with id " + FormatId(controlId);
+			return false;
+		}
+
+		Control& control = m_controls[index];
+		return control.kind == ControlKind::Oasis ? RebuildOasisControl(control, error) : RebuildSectionPathControl(control, error);
+	}
+
+	bool ProceduralEditMode::RebuildOasisControl(Control& control, String& error)
 	{
 		if (!CheckRecipe(error))
 		{
 			return false;
 		}
 
-		const int32 index = FindOasis(oasisId);
-		if (index < 0)
-		{
-			error = "No oasis with id " + FormatId(oasisId);
-			return false;
-		}
+		pcg::OasisRecord& record = control.oasis;
 
-		Oasis& oasis = m_oases[index];
 		// Before the build changes the terrain; the build itself only uses the loop's x/z.
-		EnsureHeights(oasis, false);
-		if (!CheckOverlap(oasis, error))
+		EnsureHeights(control, false);
+
+		// The influence of the loop as it is now (does not depend on the heights). An invalid loop is
+		// reported by the rebuild itself.
+		pcg::OasisShape shape;
+		if (pcg::PrepareOasis(record.loop, record.seed, record.params, [](float, float) { return 0.0f; }, shape) == pcg::OasisError::None &&
+			!CheckOverlap(control, { pcg::GetInfluenceRect(shape) }, error))
 		{
-			m_status = error;
-			m_statusIsError = true;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
-		const OasisBuildReport report = RebuildOasis(m_worldEditor, oasis.record, m_assets);
+		const OasisBuildReport report = RebuildOasis(m_worldEditor, record, m_assets);
 		if (!report.ok)
 		{
-			error = "Rebuild of '" + oasis.record.name + "' failed: " + report.error;
-			m_status = error;
-			m_statusIsError = true;
+			error = "Rebuild of '" + record.name + "' failed: " + report.error;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
-		oasis.dirty = true;
-		m_status = DescribeReport(report, "Rebuilt '" + oasis.record.name + "'");
-		m_statusIsError = false;
+		control.dirty = true;
+		SetStatus(DescribeReport(report, "Rebuilt '" + record.name + "'"), StatusLevel::Ok);
 		ILOG(m_status);
+		return true;
+	}
+
+	bool ProceduralEditMode::RebuildSectionPathControl(Control& control, String& error)
+	{
+		pcg::SectionPathRecord& record = control.path;
+
+		// Always read from disk: the panel's copy may be older than the last bake.
+		pcg::SectionAsset asset;
+		String assetError;
+		if (!LoadSectionAsset(record.sectionAsset, asset, assetError))
+		{
+			m_sectionAssets[record.sectionAsset] = CachedSectionAsset{ false, pcg::SectionAsset(), assetError };
+			error = "Rebuild of '" + record.name + "' refused: " + assetError;
+			SetStatus(error, StatusLevel::Error);
+			ELOG(error);
+			return false;
+		}
+		m_sectionAssets[record.sectionAsset] = CachedSectionAsset{ true, asset, String() };
+
+		std::vector<String> warnings;
+		String staleWarning;
+		if (IsSectionAssetStale(record.sectionAsset, asset, staleWarning))
+		{
+			warnings.push_back(staleWarning);
+			WLOG("'" << record.name << "': " << staleWarning);
+		}
+
+		pcg::SectionPathShape probe;
+		String probeError;
+		if (!PrepareSectionPathProbe(record, asset, probe, probeError))
+		{
+			error = "Rebuild of '" + record.name + "' failed: Invalid section path: " + probeError;
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		std::vector<pcg::WorldRect> rects;
+		GetSectionCopyRects(probe, rects);
+		if (!CheckOverlap(control, rects, error))
+		{
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		const OasisBuildReport report = RebuildSectionPath(m_worldEditor, record, asset);
+		if (!report.ok)
+		{
+			error = "Rebuild of '" + record.name + "' failed: " + report.error;
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		control.builtRects = record.content.IsEmpty() ? std::vector<pcg::WorldRect>() : rects;
+		control.dirty = true;
+		warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
+
+		String text = DescribeReport(report, "Rebuilt '" + record.name + "'");
+		for (const String& warning : warnings)
+		{
+			text += "\nWarning: " + warning;
+		}
+		SetStatus(text, warnings.empty() ? StatusLevel::Ok : StatusLevel::Warning);
+		if (warnings.empty())
+		{
+			ILOG(m_status);
+		}
+		else
+		{
+			WLOG(m_status);
+		}
 		return true;
 	}
 
 	bool ProceduralEditMode::RebuildAll(String& error)
 	{
 		error.clear();
-		if (!CheckRecipe(error))
-		{
-			return false;
-		}
 
 		std::vector<uint64> ids;
-		for (const Oasis& oasis : m_oases)
+		for (const Control& control : m_controls)
 		{
-			ids.push_back(oasis.record.id);
+			ids.push_back(control.Id());
 		}
 
 		uint32 rebuilt = 0;
+		bool warned = false;
 		for (const uint64 id : ids)
 		{
-			String oasisError;
-			if (Rebuild(id, oasisError))
+			String controlError;
+			if (Rebuild(id, controlError))
 			{
 				++rebuilt;
+				warned = warned || m_statusLevel == StatusLevel::Warning;
 			}
 			else
 			{
-				error += (error.empty() ? "" : "\n") + oasisError;
+				error += (error.empty() ? "" : "\n") + controlError;
 			}
 		}
 
 		if (!error.empty())
 		{
-			m_status = error;
-			m_statusIsError = true;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
-		m_status = "Rebuilt " + std::to_string(rebuilt) + " oasis/oases.";
-		m_statusIsError = false;
+		SetStatus("Rebuilt " + std::to_string(rebuilt) + " procedural control(s)."
+			+ (warned ? " Some builds reported warnings (see the log)." : ""), warned ? StatusLevel::Warning : StatusLevel::Ok);
 		return true;
 	}
 
-	bool ProceduralEditMode::DeleteOasis(const uint64 id, String& error)
+	bool ProceduralEditMode::DeleteControl(const uint64 id, String& error)
 	{
-		const int32 index = FindOasis(id);
+		const int32 index = FindControl(id);
 		if (index < 0)
 		{
-			error = "No oasis with id " + FormatId(id);
+			error = "No procedural control with id " + FormatId(id);
 			return false;
 		}
 
-		Oasis& oasis = m_oases[index];
-		const OasisBuildReport report = DeleteOasisContent(m_worldEditor, oasis.record);
+		Control& control = m_controls[index];
+		const OasisBuildReport report = control.kind == ControlKind::Oasis
+			? DeleteOasisContent(m_worldEditor, control.oasis)
+			: DeleteSectionPathContent(m_worldEditor, control.path);
 		if (!report.ok)
 		{
-			error = "Delete of '" + oasis.record.name + "' failed: " + report.error;
-			m_status = error;
-			m_statusIsError = true;
+			error = "Delete of '" + control.Name() + "' failed: " + report.error;
+			SetStatus(error, StatusLevel::Error);
 			return false;
 		}
 
-		m_status = DescribeReport(report, "Deleted '" + oasis.record.name + "'");
-		m_statusIsError = false;
+		SetStatus(DescribeReport(report, "Deleted '" + control.Name() + "'"), StatusLevel::Ok);
 		ILOG(m_status);
 
 		m_deletedIds.push_back(id);
-		m_oases.erase(m_oases.begin() + index);
-		SelectOasis(m_oases.empty() ? -1 : std::min(index, static_cast<int32>(m_oases.size()) - 1));
+		m_controls.erase(m_controls.begin() + index);
+		SelectControl(m_controls.empty() ? -1 : std::min(index, static_cast<int32>(m_controls.size()) - 1));
 		return true;
+	}
+
+	const ProceduralEditMode::CachedSectionAsset& ProceduralEditMode::GetCachedSectionAsset(const String& assetPath)
+	{
+		const auto found = m_sectionAssets.find(assetPath);
+		if (found != m_sectionAssets.end())
+		{
+			return found->second;
+		}
+
+		CachedSectionAsset cached;
+		cached.valid = LoadSectionAsset(assetPath, cached.asset, cached.error);
+		return m_sectionAssets.emplace(assetPath, std::move(cached)).first->second;
+	}
+
+	bool ProceduralEditMode::DrawSectionAssetCombo(const char* label, String& assetPath)
+	{
+		bool changed = false;
+		if (ImGui::BeginCombo(label, assetPath.empty() ? "(none)" : assetPath.c_str()))
+		{
+			// Listed only while the combo is open (the registry is scanned).
+			const std::vector<String> assets = ListSectionAssets();
+			if (assets.empty())
+			{
+				ImGui::TextDisabled("No baked sections in %s", SectionAssetFolder);
+			}
+			for (const String& asset : assets)
+			{
+				const bool selected = asset == assetPath;
+				if (ImGui::Selectable(asset.c_str(), selected) && !selected)
+				{
+					assetPath = asset;
+					changed = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		return changed;
 	}
 
 	void ProceduralEditMode::DrawDetails()
 	{
 		ImGui::Separator();
-		ImGui::Text("Procedural Oases");
+		ImGui::Text("Procedural Controls");
 
 		if (ImGui::Button("New Oasis"))
 		{
 			CreateOasisAtViewportCentre();
 		}
 		ImGui::SameLine();
-		ImGui::BeginDisabled(m_oases.empty());
+		ImGui::BeginDisabled(m_controls.empty());
 		if (ImGui::Button("Rebuild All"))
 		{
 			String error;
@@ -778,35 +1146,59 @@ namespace mmo
 		}
 		ImGui::EndDisabled();
 
+		ImGui::BeginDisabled(m_newPathAsset.empty());
+		if (ImGui::Button("New Section Path"))
+		{
+			CreateSectionPathAtViewportCentre();
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		DrawSectionAssetCombo("##newPathAsset", m_newPathAsset);
+
 		if (!m_status.empty())
 		{
-			ImGui::PushStyleColor(ImGuiCol_Text, m_statusIsError ? ImVec4(1.0f, 0.4f, 0.3f, 1.0f) : ImVec4(0.6f, 0.9f, 0.6f, 1.0f));
+			const ImVec4& color = m_statusLevel == StatusLevel::Error ? StatusErrorColor
+				: (m_statusLevel == StatusLevel::Warning ? StatusWarningColor : StatusOkColor);
+			ImGui::PushStyleColor(ImGuiCol_Text, color);
 			ImGui::TextWrapped("%s", m_status.c_str());
 			ImGui::PopStyleColor();
 		}
 
 		if (HasUnsavedChanges())
 		{
-			ImGui::TextDisabled("Oasis records changed. Save the world to keep them.");
+			ImGui::TextDisabled("Procedural records changed. Save the world to keep them.");
 		}
 
-		if (ImGui::BeginListBox("##oases", ImVec2(-FLT_MIN, 6 * ImGui::GetTextLineHeightWithSpacing())))
+		const ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY;
+		if (ImGui::BeginTable("##controls", 3, tableFlags, ImVec2(-FLT_MIN, 7 * ImGui::GetTextLineHeightWithSpacing())))
 		{
-			for (size_t i = 0; i < m_oases.size(); ++i)
+			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Kind", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Id", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableHeadersRow();
+			for (size_t i = 0; i < m_controls.size(); ++i)
 			{
-				const Oasis& oasis = m_oases[i];
+				const Control& control = m_controls[i];
 				ImGui::PushID(static_cast<int>(i));
-				const String label = oasis.record.name + (oasis.dirty ? " *" : "") + "  [" + FormatId(oasis.record.id) + "]";
-				if (ImGui::Selectable(label.c_str(), static_cast<int32>(i) == m_selected))
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				const String label = control.Name() + (control.dirty ? " *" : "");
+				if (ImGui::Selectable(label.c_str(), static_cast<int32>(i) == m_selected, ImGuiSelectableFlags_SpanAllColumns))
 				{
-					SelectOasis(static_cast<int32>(i));
+					SelectControl(static_cast<int32>(i));
 				}
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(control.kind == ControlKind::Oasis ? "Oasis" : "Section Path");
+				ImGui::TableNextColumn();
+				ImGui::TextDisabled("%s", FormatId(control.Id()).c_str());
 				ImGui::PopID();
 			}
-			ImGui::EndListBox();
+			ImGui::EndTable();
 		}
 
-		if (m_selected < 0 || m_selected >= static_cast<int32>(m_oases.size()))
+		if (m_selected < 0 || m_selected >= static_cast<int32>(m_controls.size()))
 		{
 			return;
 		}
@@ -816,24 +1208,24 @@ namespace mmo
 		if (ImGui::Button("Rebuild"))
 		{
 			String error;
-			Rebuild(m_oases[m_selected].record.id, error);
+			Rebuild(m_controls[m_selected].Id(), error);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Delete"))
 		{
-			m_pendingDeleteId = m_oases[m_selected].record.id;
-			ImGui::OpenPopup("Delete Oasis?");
+			m_pendingDeleteId = m_controls[m_selected].Id();
+			ImGui::OpenPopup("Delete Control?");
 		}
 
-		if (ImGui::BeginPopupModal("Delete Oasis?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		if (ImGui::BeginPopupModal("Delete Control?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
-			const int32 pending = FindOasis(m_pendingDeleteId);
+			const int32 pending = FindControl(m_pendingDeleteId);
 			ImGui::Text("Remove '%s' and everything it generated\n(terrain changes, paint, water, objects)?",
-				pending >= 0 ? m_oases[pending].record.name.c_str() : "?");
+				pending >= 0 ? m_controls[pending].Name().c_str() : "?");
 			if (ImGui::Button("Delete"))
 			{
 				String error;
-				DeleteOasis(m_pendingDeleteId, error);
+				DeleteControl(m_pendingDeleteId, error);
 				m_pendingDeleteId = 0;
 				ImGui::CloseCurrentPopup();
 			}
@@ -847,48 +1239,60 @@ namespace mmo
 		}
 
 		// Rebuild/Delete may have changed the list.
-		if (m_selected < 0 || m_selected >= static_cast<int32>(m_oases.size()))
+		if (m_selected < 0 || m_selected >= static_cast<int32>(m_controls.size()))
 		{
 			return;
 		}
-		Oasis& current = m_oases[m_selected];
-		pcg::OasisRecord& rec = current.record;
+		Control& current = m_controls[m_selected];
 
-		ImGui::Text("Id: %s", FormatId(rec.id).c_str());
+		ImGui::Text("Id: %s", FormatId(current.Id()).c_str());
 
 		char nameBuffer[128];
-		std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", rec.name.c_str());
+		std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", current.Name().c_str());
 		if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)))
 		{
-			rec.name = nameBuffer;
+			current.Name() = nameBuffer;
 			current.dirty = true;
 		}
 
-		uint64 seed = rec.seed;
+		uint64& seedRef = current.kind == ControlKind::Oasis ? current.oasis.seed : current.path.params.seed;
+		uint64 seed = seedRef;
 		if (ImGui::InputScalar("Seed", ImGuiDataType_U64, &seed))
 		{
-			rec.seed = seed;
+			seedRef = seed;
 			current.dirty = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Randomize"))
 		{
-			// Only picks an input; the generated result stays a pure function of the seed.
-			std::random_device device;
-			rec.seed = (static_cast<uint64>(device()) << 32) | static_cast<uint64>(device());
+			seedRef = RandomSeed();
 			current.dirty = true;
 		}
+
+		if (current.kind == ControlKind::Oasis)
+		{
+			DrawOasisDetails(current);
+		}
+		else
+		{
+			DrawSectionPathDetails(current);
+		}
+	}
+
+	void ProceduralEditMode::DrawOasisDetails(Control& control)
+	{
+		pcg::OasisRecord& rec = control.oasis;
 
 		ImGui::TextWrapped("Loop: %d points. The loop is a 3D curve. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
 			static_cast<int>(rec.loop.points.size()), MinLoopPoints);
 
-		DrawPointDetails(current);
+		DrawPointDetails(control);
 
 		if (ImGui::Button("Reset parameters from recipe"))
 		{
 			// Only the parameters; the world is not touched until Rebuild.
 			rec.params = m_defaultParams;
-			current.dirty = true;
+			control.dirty = true;
 		}
 
 		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
@@ -928,17 +1332,100 @@ namespace mmo
 
 			if (changed)
 			{
-				current.dirty = true;
+				control.dirty = true;
 			}
 		}
 	}
 
-	void ProceduralEditMode::DrawPointDetails(Oasis& oasis)
+	void ProceduralEditMode::DrawSectionPathDetails(Control& control)
 	{
-		PathSpline& loop = oasis.record.loop;
-		if (!oasis.record.heightsValid)
+		pcg::SectionPathRecord& rec = control.path;
+
+		if (DrawSectionAssetCombo("Section", rec.sectionAsset))
 		{
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "Waiting for the terrain to load before the loop can be edited.");
+			control.dirty = true;
+		}
+
+		const CachedSectionAsset& cached = GetCachedSectionAsset(rec.sectionAsset);
+		if (!cached.valid)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+			ImGui::TextWrapped("%s", cached.error.c_str());
+			ImGui::PopStyleColor();
+		}
+		else
+		{
+			const pcg::SectionAsset& asset = cached.asset;
+			ImGui::TextDisabled("Section '%s': length %.1f m, half width %.1f m, side falloff %.1f m, %d variant(s).",
+				asset.name.c_str(), asset.length, asset.halfWidth, asset.sideFalloff, static_cast<int>(asset.variants.size()));
+
+			// Layout of the path as it is now (sampling and fitting only; cheap for editor-sized paths).
+			if (rec.spline.points.size() >= MinPathPoints && rec.pointIds.size() == rec.spline.points.size() && asset.length > 0.0f)
+			{
+				const SampledPath sampled(rec.spline, pcg::kSectionPathSampleStep);
+				const pcg::SectionLayout layout = pcg::LayOutSections(rec.spline, sampled, rec.pointIds, asset.length);
+				const float reach = asset.halfWidth + asset.sideFalloff;
+				if (layout.minimumBendRadius >= std::numeric_limits<float>::max())
+				{
+					ImGui::TextDisabled("Length %.1f m, %d copies, no bends.", sampled.GetLength(), static_cast<int>(layout.copies.size()));
+				}
+				else
+				{
+					ImGui::TextDisabled("Length %.1f m, %d copies, tightest bend radius %.1f m.", sampled.GetLength(),
+						static_cast<int>(layout.copies.size()), layout.minimumBendRadius);
+				}
+
+				if (layout.minimumBendRadius < reach)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, StatusWarningColor);
+					ImGui::TextWrapped("Warning: the path bends tighter (radius %.1f m) than the section's half width + side falloff (%.1f m). On the inner side of that bend the terrain comes from the nearest part of the path. Widen the bend to avoid a fold.",
+						layout.minimumBendRadius, reach);
+					ImGui::PopStyleColor();
+				}
+			}
+		}
+
+		ImGui::TextWrapped("Path: %d points. The path is an open 3D curve. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
+			static_cast<int>(rec.spline.points.size()), MinPathPoints);
+
+		DrawPointDetails(control);
+
+		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			bool changed = false;
+
+			const char* variantModes[] = { "Random (seeded per copy)", "Sequence" };
+			int variantMode = rec.params.sequentialVariants ? 1 : 0;
+			if (ImGui::Combo("Variant mode", &variantMode, variantModes, IM_ARRAYSIZE(variantModes)))
+			{
+				rec.params.sequentialVariants = variantMode == 1;
+				changed = true;
+			}
+
+			changed = ImGui::DragFloat("Join blend (m)", &rec.params.joinBlend, 0.05f, 0.0f, 50.0f, "%.2f") || changed;
+			changed = ImGui::SliderFloat("Prop density", &rec.params.propDensity, 0.0f, 1.0f, "%.2f") || changed;
+
+			const char* heightModes[] = { "Follow spline", "Follow ground" };
+			int heightMode = rec.params.heightMode == pcg::SectionHeightMode::FollowGround ? 1 : 0;
+			if (ImGui::Combo("Height mode", &heightMode, heightModes, IM_ARRAYSIZE(heightModes)))
+			{
+				rec.params.heightMode = heightMode == 1 ? pcg::SectionHeightMode::FollowGround : pcg::SectionHeightMode::FollowSpline;
+				changed = true;
+			}
+
+			if (changed)
+			{
+				control.dirty = true;
+			}
+		}
+	}
+
+	void ProceduralEditMode::DrawPointDetails(Control& control)
+	{
+		PathSpline& loop = control.Spline();
+		if (control.kind == ControlKind::Oasis && !control.oasis.heightsValid)
+		{
+			ImGui::TextColored(StatusWarningColor, "Waiting for the terrain to load before the loop can be edited.");
 			return;
 		}
 
@@ -956,7 +1443,7 @@ namespace mmo
 			ImGui::BeginDisabled(isAuto);
 			if (ImGui::Button("Reset tangents to auto") && SplineEditController::ResetTangents(loop, static_cast<size_t>(point)))
 			{
-				oasis.dirty = true;
+				control.dirty = true;
 				NotifyPointRotated();
 			}
 			ImGui::EndDisabled();
@@ -967,7 +1454,7 @@ namespace mmo
 		ImGui::BeginDisabled(!anyManual);
 		if (ImGui::Button("Reset all tangents") && SplineEditController::ResetAllTangents(loop))
 		{
-			oasis.dirty = true;
+			control.dirty = true;
 			NotifyPointRotated();
 		}
 		ImGui::EndDisabled();
@@ -997,12 +1484,12 @@ namespace mmo
 	{
 		const int32 spline = m_splineEditor.GetSelectedSpline();
 		const int32 point = m_splineEditor.GetSelectedPoint();
-		if (spline < 0 || spline >= static_cast<int32>(m_oases.size()))
+		if (spline < 0 || spline >= static_cast<int32>(m_controls.size()))
 		{
 			return;
 		}
 
-		const auto& points = m_oases[spline].record.loop.points;
+		const auto& points = m_controls[spline].Spline().points;
 		if (point < 0 || point >= static_cast<int32>(points.size()))
 		{
 			return;
@@ -1031,10 +1518,10 @@ namespace mmo
 	std::vector<PathSpline*> ProceduralEditMode::GetSplines()
 	{
 		std::vector<PathSpline*> splines;
-		splines.reserve(m_oases.size());
-		for (Oasis& oasis : m_oases)
+		splines.reserve(m_controls.size());
+		for (Control& control : m_controls)
 		{
-			splines.push_back(&oasis.record.loop);
+			splines.push_back(&control.Spline());
 		}
 		return splines;
 	}
@@ -1063,23 +1550,43 @@ namespace mmo
 		auto splines = GetEditableSplines();
 
 		// Ctrl+click on a point deletes it.
-		int32 oasisIndex, pointIndex;
-		if (io.KeyCtrl && m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, oasisIndex, pointIndex))
+		int32 controlIndex, pointIndex;
+		if (io.KeyCtrl && m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, controlIndex, pointIndex))
 		{
-			m_splineEditor.Select(oasisIndex, pointIndex);
-			m_selected = oasisIndex;
+			m_splineEditor.Select(controlIndex, pointIndex);
+			m_selected = controlIndex;
 			DeleteSelectedPoint();
 			return;
+		}
+
+		// Point counts before the click, to find a point the click inserts (it needs an id on a section path).
+		std::vector<size_t> pointCounts;
+		pointCounts.reserve(m_controls.size());
+		for (const Control& control : m_controls)
+		{
+			pointCounts.push_back(control.Spline().points.size());
 		}
 
 		const Vector3* worldHit = m_brushPositionValid ? &m_brushPosition : nullptr;
 		if (m_splineEditor.OnMouseDown(io.MousePos.x, io.MousePos.y, splines, io.KeyAlt, worldHit))
 		{
 			m_selected = m_splineEditor.GetSelectedSpline();
-			if (m_selected >= 0 && m_selected < static_cast<int32>(m_oases.size()) && m_splineEditor.DragMoved())
+			if (m_selected >= 0 && m_selected < static_cast<int32>(m_controls.size()))
 			{
-				// An inserted point is a change right away.
-				m_oases[m_selected].dirty = true;
+				Control& control = m_controls[m_selected];
+				const int32 inserted = m_splineEditor.GetSelectedPoint();
+				if (control.kind == ControlKind::SectionPath && control.Spline().points.size() == pointCounts[m_selected] + 1 &&
+					inserted >= 0 && static_cast<size_t>(inserted) <= control.path.pointIds.size())
+				{
+					// A new point gets a new id; ids are never reused.
+					control.path.pointIds.insert(control.path.pointIds.begin() + inserted, control.path.nextPointId++);
+				}
+
+				if (m_splineEditor.DragMoved())
+				{
+					// An inserted point is a change right away.
+					control.dirty = true;
+				}
 			}
 
 			// A grabbed tangent handle belongs to the point that is already selected.
@@ -1095,7 +1602,7 @@ namespace mmo
 		}
 		else if (m_splineEditor.GetSelectedPoint() >= 0 || m_pointSelectable)
 		{
-			// A click next to the loop deselects the point (the oasis stays selected).
+			// A click next to the spline deselects the point (the control stays selected).
 			ClearPointSelection();
 		}
 	}
@@ -1114,9 +1621,9 @@ namespace mmo
 		if (m_splineEditor.OnMouseMoved(hit.x + m_dragOffsetX, hit.z + m_dragOffsetZ, splines))
 		{
 			const int32 selected = m_splineEditor.GetSelectedSpline();
-			if (selected >= 0 && selected < static_cast<int32>(m_oases.size()))
+			if (selected >= 0 && selected < static_cast<int32>(m_controls.size()))
 			{
-				m_oases[selected].dirty = true;
+				m_controls[selected].dirty = true;
 			}
 
 			// The transform widget follows a dragged point, and (in local space) the out tangent's yaw.
@@ -1150,9 +1657,9 @@ namespace mmo
 			const bool moved = m_splineEditor.DragMoved();
 			m_splineEditor.OnMouseUp();
 			const int32 selected = m_splineEditor.GetSelectedSpline();
-			if (moved && selected >= 0 && selected < static_cast<int32>(m_oases.size()))
+			if (moved && selected >= 0 && selected < static_cast<int32>(m_controls.size()))
 			{
-				m_oases[selected].dirty = true;
+				m_controls[selected].dirty = true;
 			}
 		}
 	}
@@ -1162,19 +1669,27 @@ namespace mmo
 		auto splines = GetEditableSplines();
 		const int32 selected = m_splineEditor.GetSelectedSpline();
 		const int32 point = m_splineEditor.GetSelectedPoint();
-		if (selected < 0 || selected >= static_cast<int32>(m_oases.size()) || point < 0)
+		if (selected < 0 || selected >= static_cast<int32>(m_controls.size()) || point < 0)
 		{
 			return;
 		}
 
-		if (!m_splineEditor.DeleteSelectedPoint(splines, MinLoopPoints))
+		Control& control = m_controls[selected];
+		const uint32 minPoints = GetMinPoints(control);
+		if (!m_splineEditor.DeleteSelectedPoint(splines, minPoints))
 		{
-			m_status = "An oasis loop keeps at least " + std::to_string(MinLoopPoints) + " points.";
-			m_statusIsError = true;
+			SetStatus(String(control.kind == ControlKind::Oasis ? "An oasis loop" : "A section path") + " keeps at least "
+				+ std::to_string(minPoints) + " points.", StatusLevel::Error);
 			return;
 		}
 
-		m_oases[selected].dirty = true;
+		if (control.kind == ControlKind::SectionPath && static_cast<size_t>(point) < control.path.pointIds.size())
+		{
+			// The id leaves with its point and is never handed out again.
+			control.path.pointIds.erase(control.path.pointIds.begin() + point);
+		}
+
+		control.dirty = true;
 		// Indices behind the deleted point shifted; nothing stays selected. This also keeps the same
 		// Delete key press, which the viewport applies to the editor selection, from deleting again.
 		ClearPointSelection();
@@ -1215,12 +1730,12 @@ namespace mmo
 		// Records from before heights existed get their points put on the ground once it is loaded
 		// (attempts spaced out, then the fallback).
 		++m_overlayFrame;
-		for (Oasis& oasis : m_oases)
+		for (Control& control : m_controls)
 		{
-			EnsureHeights(oasis, true);
+			EnsureHeights(control, true);
 		}
 
-		// The selection must not outlive its point (e.g. after an oasis was deleted).
+		// The selection must not outlive its point (e.g. after a control was deleted).
 		if (m_pointSelectable && !m_pointSelectable->IsValid())
 		{
 			ClearPointSelection();
@@ -1228,49 +1743,65 @@ namespace mmo
 
 		drawList->PushClipRect(viewportMin, ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y), true);
 
-		// Influence rects, faintly: the last built one, else the area the loop's bounds would reach.
-		for (size_t i = 0; i < m_oases.size(); ++i)
+		const auto project = [this](const Vector3& world, ImVec2& screen) { return ProjectToScreen(world, screen); };
+		const auto height = [this](const float x, const float z) { return GetHandleHeight(x, z); };
+
+		// Influence rects, faintly: the last built ones, else (oases) the area the loop's bounds would reach.
+		for (size_t i = 0; i < m_controls.size(); ++i)
 		{
-			const pcg::OasisRecord& record = m_oases[i].record;
-			pcg::WorldRect rect = record.content.influence;
-			if (record.content.IsEmpty())
+			const Control& control = m_controls[i];
+			const bool selected = static_cast<int32>(i) == m_selected;
+			if (control.kind == ControlKind::Oasis)
 			{
-				ComputeBounds(record.loop, rect);
-				const float margin = record.params.outerFalloff + 2.0f;
-				rect.minX -= margin;
-				rect.minZ -= margin;
-				rect.maxX += margin;
-				rect.maxZ += margin;
-			}
+				const pcg::OasisRecord& record = control.oasis;
+				pcg::WorldRect rect = record.content.influence;
+				if (record.content.IsEmpty())
+				{
+					ComputeBounds(record.loop, rect);
+					const float margin = record.params.outerFalloff + 2.0f;
+					rect.minX -= margin;
+					rect.minZ -= margin;
+					rect.maxX += margin;
+					rect.maxZ += margin;
+				}
 
-			const float corners[4][2] = { { rect.minX, rect.minZ }, { rect.maxX, rect.minZ }, { rect.maxX, rect.maxZ }, { rect.minX, rect.maxZ } };
-			ImVec2 screen[4];
-			bool visible = true;
-			for (int c = 0; c < 4 && visible; ++c)
-			{
-				visible = ProjectToScreen(Vector3(corners[c][0], GetHandleHeight(corners[c][0], corners[c][1]), corners[c][1]), screen[c]);
+				DrawRect(*drawList, rect, selected ? IM_COL32(120, 200, 255, 90) : IM_COL32(120, 200, 255, 45), project, height);
 			}
-
-			if (visible)
+			else if (!control.path.content.IsEmpty())
 			{
-				const ImU32 color = static_cast<int32>(i) == m_selected ? IM_COL32(120, 200, 255, 90) : IM_COL32(120, 200, 255, 45);
-				drawList->AddQuad(screen[0], screen[1], screen[2], screen[3], color, 1.0f);
+				const ImU32 color = selected ? IM_COL32(255, 190, 110, 90) : IM_COL32(255, 190, 110, 45);
+				if (control.builtRects.empty())
+				{
+					DrawRect(*drawList, control.path.content.influence, color, project, height);
+				}
+				for (const pcg::WorldRect& rect : control.builtRects)
+				{
+					DrawRect(*drawList, rect, color, project, height);
+				}
 			}
 		}
 
 		std::vector<const PathSpline*> splines;
 		std::vector<SplineEditController::Style> styles;
-		for (const Oasis& oasis : m_oases)
+		for (const Control& control : m_controls)
 		{
-			splines.push_back(&oasis.record.loop);
+			splines.push_back(&control.Spline());
 
 			SplineEditController::Style style;
-			style.lineColor = IM_COL32(80, 200, 255, 200);
-			style.selectedColor = IM_COL32(120, 240, 255, 255);
+			if (control.kind == ControlKind::Oasis)
+			{
+				style.lineColor = IM_COL32(80, 200, 255, 200);
+				style.selectedColor = IM_COL32(120, 240, 255, 255);
+			}
+			else
+			{
+				style.lineColor = IM_COL32(255, 170, 70, 200);
+				style.selectedColor = IM_COL32(255, 210, 120, 255);
+			}
 			style.pointColor = IM_COL32(255, 255, 255, 255);
 			style.drawWidthRibbon = false;
 			style.drawDirection = false;
-			style.label = oasis.record.name;
+			style.label = control.Name();
 			styles.push_back(std::move(style));
 		}
 		m_splineEditor.Draw(*drawList, viewportMin, viewportSize, splines, styles);

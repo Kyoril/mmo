@@ -352,7 +352,7 @@ namespace mmo
 		/// Asset path of the world's river flow paths (.hflow next to the world file).
 		[[nodiscard]] String GetFlowPathsFileName() const;
 
-		/// @brief Asset path of the folder holding this world's oasis records (.hpcg).
+		/// @brief Asset path of the folder holding this world's procedural records (.hpcg).
 		[[nodiscard]] String GetPcgFolderName() const;
 
 	private:
@@ -733,8 +733,8 @@ namespace mmo
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
-		/// @brief Rebuilds procedural content (oases) without any UI, for unattended runs.
-		/// @param idOrZero Id of the oasis to rebuild, or 0 for all of them.
+		/// @brief Rebuilds procedural content (oases and section paths) without any UI, for unattended runs.
+		/// @param idOrZero Id of the control to rebuild, or 0 for all of them.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if everything requested was rebuilt.
 		bool RebuildProcedural(uint64 idOrZero, String& error);
@@ -751,15 +751,31 @@ namespace mmo
 		/// @return True if the oasis was added and built.
 		bool CreateProceduralOasis(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
 
-		/// @brief Deletes an oasis and everything it generated like the "Delete" button does, for
-		///        unattended runs. The world is not saved.
-		/// @param id Id of the oasis.
+		/// @brief Adds a section path through the given x/z points (at terrain height) like the "New
+		///        Section Path" button does, and builds it, for unattended runs. The world is not saved.
+		///        Refused before anything is added if the section asset is missing or unreadable.
+		/// @param points World x/z of the control points, in order (at least 2).
+		/// @param sectionAsset Asset path of the baked section (.hsec).
+		/// @param seed Seed of the path.
+		/// @param name Name of the path; empty picks the default name.
+		/// @param id Receives the id of the new path (also when only the build failed).
 		/// @param error Receives the reason when the call returns false.
-		/// @return True if the oasis was deleted.
-		bool DeleteProceduralOasis(uint64 id, String& error);
+		/// @return True if the path was added and built.
+		bool CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, uint64 seed,
+			const String& name, uint64& id, String& error);
+
+		/// @brief Deletes a procedural control (oasis or section path) and everything it generated like
+		///        the "Delete" button does, for unattended runs. The world is not saved.
+		/// @param id Id of the control.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the control was deleted.
+		bool DeleteProceduralControl(uint64 id, String& error);
 
 		/// @brief Number of oases of the world.
 		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
+
+		/// @brief Number of procedural controls (oases and section paths) of the world.
+		size_t GetProceduralControlCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetControlCount() : 0; }
 
 		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
 		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and

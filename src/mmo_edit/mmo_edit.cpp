@@ -26,6 +26,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
@@ -1044,11 +1047,12 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--pcg-rebuild")
 			{
-				// mmo_edit --pcg-rebuild <world.hwld> [--oasis <id hex>]
-				// Opens the world, rebuilds one or all oases, saves the world and exits (0 = success).
+				// mmo_edit --pcg-rebuild <world.hwld> [--oasis|--id <id hex>]
+				// Opens the world, rebuilds one or all procedural controls (oases and section paths), saves
+				// the world and exits (0 = success).
 				mmo::RedirectUnattendedLog("pcg_rebuild");
 
-				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis <id hex>]"))
+				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis|--id <id hex>]"))
 				{
 					break;
 				}
@@ -1057,11 +1061,11 @@ int main(int argc, char* arg[])
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
-					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
+					if ((std::string(args[j]) == "--oasis" || std::string(args[j]) == "--id") && j + 1 < argCount)
 					{
 						if (!mmo::ParseOasisId(args[++j], oasisId))
 						{
-							ELOG("--pcg-rebuild: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							ELOG("--pcg-rebuild: --oasis/--id expects a non-zero hexadecimal id, got '" << args[j] << "'");
 							argumentsValid = false;
 						}
 					}
@@ -1079,10 +1083,10 @@ int main(int argc, char* arg[])
 				}
 				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-rebuild", args[i + 1]))
 				{
-					if (world->GetProceduralOasisCount() == 0)
+					if (world->GetProceduralControlCount() == 0)
 					{
 						// Nothing to rebuild: leave the world untouched instead of rewriting it.
-						ILOG("--pcg-rebuild: " << args[i + 1] << " has no oases, nothing to do");
+						ILOG("--pcg-rebuild: " << args[i + 1] << " has no procedural controls, nothing to do");
 						succeeded = true;
 					}
 					else
@@ -1204,14 +1208,131 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-new-path")
+			{
+				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N]
+				// Adds a section path through the points (at terrain height), builds it, saves the world and
+				// logs the new id (0 = success). A missing or unreadable section asset is refused before
+				// anything is added or saved.
+				mmo::RedirectUnattendedLog("pcg_new_path");
+
+				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				const auto parseFloat = [](const std::string& text, float& out)
+				{
+					char* end = nullptr;
+					out = std::strtof(text.c_str(), &end);
+					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
+				};
+
+				// "x,z;x,z;..." -> points.
+				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
+				{
+					out.clear();
+					size_t start = 0;
+					while (start <= text.size())
+					{
+						const size_t end = std::min(text.find(';', start), text.size());
+						const std::string pair = text.substr(start, end - start);
+						const size_t comma = pair.find(',');
+						float x = 0.0f, z = 0.0f;
+						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
+						{
+							return false;
+						}
+						out.emplace_back(x, z);
+						start = end + 1;
+					}
+					return out.size() >= 2;
+				};
+
+				std::vector<std::pair<float, float>> points;
+				std::string section;
+				uint64 seed = 1;
+				std::string name;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = parsePoints(args[++j], points);
+					}
+					else if (option == "--section" && j + 1 < argCount)
+					{
+						section = args[++j];
+						argumentsValid = !section.empty();
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						char* end = nullptr;
+						seed = std::strtoull(args[++j], &end, 10);
+						argumentsValid = end != args[j] && *end == '\0';
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-path: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || section.empty()))
+				{
+					ELOG("--pcg-new-path: --points (at least two x,z pairs) and --section are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-path", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralSectionPath(points, section, seed, name, id, error))
+					{
+						// The world is not saved: a refused or failed run leaves no record behind.
+						ELOG("--pcg-new-path: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-path: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-path: created section path " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--pcg-delete")
 			{
-				// mmo_edit --pcg-delete <world.hwld> --oasis <id hex>
-				// Deletes an oasis and everything it generated like the "Delete" button, saves the
-				// world and exits (0 = success).
+				// mmo_edit --pcg-delete <world.hwld> --oasis|--id <id hex>
+				// Deletes a procedural control (oasis or section path) and everything it generated like the
+				// "Delete" button, saves the world and exits (0 = success).
 				mmo::RedirectUnattendedLog("pcg_delete");
 
-				const char* usage = "--pcg-delete <world.hwld> --oasis <id hex>";
+				const char* usage = "--pcg-delete <world.hwld> --oasis|--id <id hex>";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1221,11 +1342,11 @@ int main(int argc, char* arg[])
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
-					if (std::string(args[j]) == "--oasis" && j + 1 < argCount)
+					if ((std::string(args[j]) == "--oasis" || std::string(args[j]) == "--id") && j + 1 < argCount)
 					{
 						if (!mmo::ParseOasisId(args[++j], oasisId))
 						{
-							ELOG("--pcg-delete: --oasis expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							ELOG("--pcg-delete: --oasis/--id expects a non-zero hexadecimal id, got '" << args[j] << "'");
 							argumentsValid = false;
 						}
 					}
@@ -1238,7 +1359,7 @@ int main(int argc, char* arg[])
 
 				if (argumentsValid && oasisId == 0)
 				{
-					ELOG("--pcg-delete: --oasis is required, usage: " << usage);
+					ELOG("--pcg-delete: --oasis or --id is required, usage: " << usage);
 					argumentsValid = false;
 				}
 
@@ -1250,7 +1371,7 @@ int main(int argc, char* arg[])
 				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-delete", args[i + 1]))
 				{
 					std::string error;
-					if (!world->DeleteProceduralOasis(oasisId, error))
+					if (!world->DeleteProceduralControl(oasisId, error))
 					{
 						ELOG("--pcg-delete: " << error);
 					}

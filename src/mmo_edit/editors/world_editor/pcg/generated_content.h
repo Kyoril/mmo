@@ -38,6 +38,9 @@ namespace mmo
 		///        far-terrain bake (.tlod) is stale: the world save does not re-bake it, run
 		///        mmo_edit --bake-terrain-lod afterwards.
 		std::vector<uint16> touchedPages;
+		/// @brief Non-fatal notes of a successful build (e.g. paint layers a generator had to skip
+		///        on some tiles). Empty for most builds.
+		std::vector<String> warnings;
 	};
 
 	/// @brief Report of any PCG generator build (same type as the oasis report).

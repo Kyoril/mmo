@@ -1102,7 +1102,7 @@ namespace mmo
 		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
 	}
 
-	bool WorldEditorInstance::DeleteProceduralOasis(const uint64 id, String& error)
+	bool WorldEditorInstance::DeleteProceduralControl(const uint64 id, String& error)
 	{
 		if (!m_proceduralEditMode)
 		{
@@ -1110,7 +1110,26 @@ namespace mmo
 			return false;
 		}
 
-		return m_proceduralEditMode->DeleteOasis(id, error);
+		return m_proceduralEditMode->DeleteControl(id, error);
+	}
+
+	bool WorldEditorInstance::CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
+		const uint64 seed, const String& name, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Refuses a missing or unreadable section asset before anything is added.
+		if (!m_proceduralEditMode->CreateSectionPath(points, sectionAsset, seed, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->Rebuild(id, error);
 	}
 
 	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
@@ -1464,8 +1483,8 @@ namespace mmo
 		bool oasesSaved = true;
 		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
 		{
-			// The procedural mode's status line names the oasis and the reason.
-			ELOG("Some oasis records could not be saved");
+			// The procedural mode's status line names the control and the reason.
+			ELOG("Some procedural records could not be saved");
 			oasesSaved = false;
 		}
 
@@ -3899,7 +3918,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		if (mapEntity.GetCategory() == "Pcg")
 		{
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.2f, 1.0f));
-			ImGui::TextWrapped("Owned by an oasis (procedural). Hand edits are overwritten when the oasis is rebuilt.");
+			ImGui::TextWrapped("Owned by a procedural control (oasis or section path). Hand edits are overwritten when it is rebuilt.");
 			ImGui::PopStyleColor();
 		}
 

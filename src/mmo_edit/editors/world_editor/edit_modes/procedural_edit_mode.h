@@ -9,23 +9,30 @@
 #include "math/vector3.h"
 #include "pcg/oasis.h"
 #include "pcg/oasis_record.h"
+#include "pcg/section_asset.h"
+#include "pcg/section_path_record.h"
 #include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
 #include "../pcg/oasis_builder.h"
+#include "../pcg/section_path_builder.h"
 
 #include <imgui.h>
 
 #include <filesystem>
+#include <map>
+#include <utility>
 #include <vector>
 
 namespace mmo
 {
 	class Camera;
 
-	/// @brief Edit mode for procedurally generated content. An oasis is a control object: a closed
-	///        spline, a seed and parameters. Rebuilding writes terrain, paint, water and placed
-	///        objects into the world; the record is persisted next to the world as .hpcg.
-	///        A clicked loop point becomes the editor selection (SelectedSplinePoint), so the transform
+	/// @brief Edit mode for procedurally generated content. Two kinds of control objects:
+	///        - an oasis: a closed spline, a seed and parameters (terrain, paint, water and objects);
+	///        - a section path: an open 3D spline that lays a baked section asset (.hsec) along it.
+	///        Rebuilding writes the generated content into the world; every control's record is
+	///        persisted next to the world as .hpcg (the record kind is peeked from the file).
+	///        A clicked spline point becomes the editor selection (SelectedSplinePoint), so the transform
 	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport.
 	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner
 	{
@@ -72,19 +79,19 @@ namespace mmo
 		/// @brief Whether a spline point is being dragged (the camera must not rotate then).
 		bool IsDragging() const { return m_splineEditor.IsDragging(); }
 
-		/// @brief Loads every *.hpcg record of the folder and the shared recipe
-		///        (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to OasisParams
-		///        defaults and empty asset lists, and rebuilds are refused until a valid recipe is
-		///        loaded. Replaces the current oases.
+		/// @brief Loads every *.hpcg record of the folder (oases and section paths) and the shared
+		///        oasis recipe (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to
+		///        OasisParams defaults and empty asset lists, and oasis rebuilds are refused until a
+		///        valid recipe is loaded. Replaces the current controls.
 		/// @param pcgFolder Asset path of the world's folder, e.g. Editor/Pcg/Worlds/Development.
 		void Load(const std::filesystem::path& pcgFolder);
 
-		/// @brief Writes changed records and removes the files of deleted oases.
+		/// @brief Writes changed records and removes the files of deleted controls.
 		/// @param pcgFolder Asset path of the world's folder.
 		/// @return False if a file could not be written.
 		bool Save(const std::filesystem::path& pcgFolder);
 
-		/// @brief Whether the recipe was loaded and parsed. Rebuilds are refused otherwise.
+		/// @brief Whether the recipe was loaded and parsed. Oasis rebuilds are refused otherwise.
 		bool IsRecipeLoaded() const { return m_recipeLoaded; }
 
 		/// @brief Refuses (status, log, error) when the recipe is not loaded.
@@ -92,18 +99,19 @@ namespace mmo
 		/// @return True if the recipe is loaded.
 		bool CheckRecipe(String& error);
 
-		/// @brief Rebuilds every oasis. Continues after a failure; all errors are joined. Refused
-		///        when the recipe is not loaded.
+		/// @brief Rebuilds every control (oases and section paths). Continues after a failure; all
+		///        errors are joined.
 		/// @param error Receives the reason when the call returns false.
-		/// @return True if all oases were rebuilt (also when there are none).
+		/// @return True if all controls were rebuilt (also when there are none).
 		bool RebuildAll(String& error);
 
-		/// @brief Rebuilds one oasis. Refused if the recipe is not loaded or the loop's influence
-		///        overlaps another built oasis.
-		/// @param oasisId Id of the oasis.
+		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
+		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
+		///        are refused if their influence overlaps another built control.
+		/// @param controlId Id of the control.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
-		bool Rebuild(uint64 oasisId, String& error);
+		bool Rebuild(uint64 controlId, String& error);
 
 		/// @brief Adds an oasis with the recipe's default parameters: a closed 8 point Catmull-Rom
 		///        loop of the given radius around (x, z). Does not build it. The "New Oasis" button
@@ -118,71 +126,165 @@ namespace mmo
 		/// @return True if the oasis was added.
 		bool CreateOasisAt(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
 
-		/// @brief Removes the oasis' content from the world and the oasis from the list (its record
-		///        file is removed on the next save). The "Delete" button uses this.
-		/// @param id Id of the oasis.
+		/// @brief Adds a section path through the given x/z points (heights from the terrain, which is
+		///        loaded under the points first). Does not build it. Refused if the section asset is
+		///        missing or unreadable, or with fewer than 2 points.
+		/// @param points World x/z of the control points, in order.
+		/// @param sectionAsset Asset path of the baked section (.hsec).
+		/// @param seed Seed of the path.
+		/// @param name Name of the path; empty picks "Section Path <n>".
+		/// @param id Receives the id of the new path.
 		/// @param error Receives the reason when the call returns false.
-		/// @return True if the oasis was deleted.
-		bool DeleteOasis(uint64 id, String& error);
+		/// @return True if the path was added.
+		bool CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, uint64 seed,
+			const String& name, uint64& id, String& error);
 
-		/// @brief Whether a record changed since it was loaded or saved, or an oasis was deleted.
+		/// @brief Removes the control's content from the world and the control from the list (its
+		///        record file is removed on the next save). The "Delete" button uses this.
+		/// @param id Id of the control.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the control was deleted.
+		bool DeleteControl(uint64 id, String& error);
+
+		/// @brief Whether a record changed since it was loaded or saved, or a control was deleted.
 		bool HasUnsavedChanges() const;
 
 		/// @brief Number of oases in the world.
-		size_t GetOasisCount() const { return m_oases.size(); }
+		size_t GetOasisCount() const;
+
+		/// @brief Number of controls (oases and section paths) in the world.
+		size_t GetControlCount() const { return m_controls.size(); }
 
 		/// @brief One-line summary of the last operation, for logs.
 		const String& GetStatus() const { return m_status; }
 
 	public:
-		/// @brief Gets the loop of the oasis with the id, or null.
+		/// @brief Gets the spline of the control with the id, or null.
 		PathSpline* FindSelectableSpline(uint64 splineId) override;
 
 		/// @brief Gets the terrain height at x/z (zero without terrain).
 		float GetSplinePointGroundHeight(float x, float z) const override;
 
-		/// @brief Marks the oasis changed.
+		/// @brief Marks the control changed.
 		void OnSplinePointEdited(uint64 splineId) override;
 
-		/// @brief Deletes a loop point, keeping at least the minimum point count. Does not touch the
-		///        editor selection.
+		/// @brief Deletes a control point (and its point id on a section path), keeping at least the
+		///        minimum point count. Does not touch the editor selection.
 		bool RemoveSplinePoint(uint64 splineId, size_t pointIndex) override;
 
 		/// @brief Drops the point selection when the editor selection drops the point.
 		void OnSplinePointDeselected(const SelectedSplinePoint& selectable) override;
 
 	private:
-		/// @brief An oasis in the list and whether it must be written on the next save.
-		struct Oasis
+		/// @brief Kind of a control object.
+		enum class ControlKind : uint8
 		{
-			pcg::OasisRecord record;
+			Oasis,
+			SectionPath
+		};
+
+		/// @brief A control in the list and whether it must be written on the next save.
+		struct Control
+		{
+			ControlKind kind = ControlKind::Oasis;
+			/// Used when kind is Oasis.
+			pcg::OasisRecord oasis;
+			/// Used when kind is SectionPath.
+			pcg::SectionPathRecord path;
 			bool dirty = false;
 			/// Failed attempts to load the terrain under a loop without heights (see EnsureHeights).
 			uint32 heightAttempts = 0;
 			/// Overlay frame of the next attempt.
 			uint64 nextHeightAttemptFrame = 0;
+			/// Section paths: per-copy influence rects of the built content (empty = not known yet).
+			std::vector<pcg::WorldRect> builtRects;
+
+			/// @brief Id of the control.
+			uint64 Id() const { return kind == ControlKind::Oasis ? oasis.id : path.id; }
+			/// @brief Display name.
+			const String& Name() const { return kind == ControlKind::Oasis ? oasis.name : path.name; }
+			/// @brief Display name.
+			String& Name() { return kind == ControlKind::Oasis ? oasis.name : path.name; }
+			/// @brief The edited spline (oasis loop or section path).
+			PathSpline& Spline() { return kind == ControlKind::Oasis ? oasis.loop : path.spline; }
+			/// @brief The edited spline (oasis loop or section path).
+			const PathSpline& Spline() const { return kind == ControlKind::Oasis ? oasis.loop : path.spline; }
+			/// @brief What the control has in the world.
+			const pcg::OwnedContent& Content() const { return kind == ControlKind::Oasis ? oasis.content : path.content; }
 		};
 
-		/// @brief Asset path of the file of an oasis: "<folder>/<id as 16 hex digits>.hpcg".
+		/// @brief A section asset as read for the details panel, with the read error.
+		struct CachedSectionAsset
+		{
+			bool valid = false;
+			pcg::SectionAsset asset;
+			String error;
+		};
+
+		/// @brief Severity of the status line.
+		enum class StatusLevel : uint8
+		{
+			Ok,
+			Warning,
+			Error
+		};
+
+		/// @brief Asset path of the file of a control: "<folder>/<id as 16 hex digits>.hpcg".
 		static String MakeFileName(const std::filesystem::path& folder, uint64 id);
 
-		/// @brief Index of the oasis with the id or -1.
-		int32 FindOasis(uint64 id) const;
+		/// @brief Index of the control with the id or -1.
+		int32 FindControl(uint64 id) const;
 
 		/// @brief Adds a default 8 point loop of radius 40 around the viewport's ground hit.
 		void CreateOasisAtViewportCentre();
 
-		/// @brief Selects an oasis (-1 = none).
-		void SelectOasis(int32 index);
+		/// @brief Adds a 2 point section path from the viewport's ground hit, 20 m along the camera's
+		///        forward direction, with the section asset picked in the panel.
+		void CreateSectionPathAtViewportCentre();
 
-		/// @brief Checks the loop's influence against the other built oases.
-		/// @param error Names the oasis in the way when the call returns false.
-		bool CheckOverlap(const Oasis& oasis, String& error) const;
+		/// @brief Selects a control (-1 = none).
+		void SelectControl(int32 index);
+
+		/// @brief Rebuilds one oasis (see Rebuild).
+		bool RebuildOasisControl(Control& control, String& error);
+
+		/// @brief Rebuilds one section path (see Rebuild).
+		bool RebuildSectionPathControl(Control& control, String& error);
+
+		/// @brief The influence rects a built control occupies: an oasis' last influence, a section
+		///        path's per-copy rects (computed from its current spline and asset when not known yet,
+		///        falling back to its last influence). Empty if the control has nothing in the world.
+		std::vector<pcg::WorldRect> GetBuiltRects(Control& control);
+
+		/// @brief Checks influence rects against every other built control.
+		/// @param control The control being rebuilt.
+		/// @param rects Its new influence rects.
+		/// @param error Names the control in the way when the call returns false.
+		bool CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error);
+
+		/// @brief Sets the status line (no logging).
+		void SetStatus(const String& text, StatusLevel level);
+
+		/// @brief Gets the section asset for the details panel (read once, refreshed by Rebuild).
+		const CachedSectionAsset& GetCachedSectionAsset(const String& assetPath);
+
+		/// @brief Draws the details of a selected oasis.
+		void DrawOasisDetails(Control& control);
+
+		/// @brief Draws the details of a selected section path.
+		void DrawSectionPathDetails(Control& control);
+
+		/// @brief Draws a combo of the baked section assets.
+		/// @return True if the selection changed.
+		bool DrawSectionAssetCombo(const char* label, String& assetPath);
+
+		/// @brief Minimum number of control points of a control.
+		static uint32 GetMinPoints(const Control& control);
 
 		/// @brief Describes a report for the status line.
 		static String DescribeReport(const OasisBuildReport& report, const String& what);
 
-		/// @brief Spline pointers of all oases, in list order, for the spline editor.
+		/// @brief Spline pointers of all controls, in list order, for the spline editor.
 		std::vector<PathSpline*> GetSplines();
 
 		/// @brief Height to draw spline handles at.
@@ -191,37 +293,39 @@ namespace mmo
 		/// @brief Projects a world position to the screen with the last drawn viewport.
 		bool ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const;
 
-		/// @brief Deletes the selected spline point (keeps at least 3 points).
+		/// @brief Deletes the selected spline point (keeps at least the control's minimum).
 		void DeleteSelectedPoint();
 
-		/// @brief Makes a loop point the editor selection (replacing whatever was selected).
-		/// @param oasisIndex Index of the oasis in the list.
-		/// @param pointIndex Index of the point in its loop.
-		void SelectPointInEditor(int32 oasisIndex, int32 pointIndex);
+		/// @brief Makes a spline point the editor selection (replacing whatever was selected).
+		/// @param controlIndex Index of the control in the list.
+		/// @param pointIndex Index of the point in its spline.
+		void SelectPointInEditor(int32 controlIndex, int32 pointIndex);
 
-		/// @brief Deselects the loop point: in the spline editor, and in the editor selection if the
+		/// @brief Deselects the spline point: in the spline editor, and in the editor selection if the
 		///        selection holds it.
 		void ClearPointSelection();
 
 		/// @brief Draws the selected point's tangent tools in the details panel.
-		void DrawPointDetails(Oasis& oasis);
+		void DrawPointDetails(Control& control);
 
-		/// @brief Puts the loop points of a record without heights (read from a version 1/2 file, or just
-		///        created) on the terrain, with level tangents, after loading the terrain pages under the
-		///        loop. Until then the loop cannot be edited (overwriting edits would lose them).
+		/// @brief Puts the loop points of an oasis record without heights (read from a version 1/2 file,
+		///        or just created) on the terrain, with level tangents, after loading the terrain pages
+		///        under the loop. Until then the loop cannot be edited (overwriting edits would lose them).
+		///        Section paths always have heights.
 		/// @param retry Overlay use: attempts are spaced out, and after HeightAttemptLimit failures the
 		///        fallback is used. Otherwise (rebuild, save, creation) a failure falls back at once.
 		/// @return True if the record has valid heights afterwards.
-		bool EnsureHeights(Oasis& oasis, bool retry);
+		bool EnsureHeights(Control& control, bool retry);
 
 		/// @brief Fills heights from whatever terrain is available (zero elsewhere), with a warning.
-		void FillHeightsFallback(Oasis& oasis);
+		void FillHeightsFallback(Control& control);
 
-		/// @brief Whether the loop of the oasis at the index can be edited (its heights are valid).
+		/// @brief Whether the spline of the control at the index can be edited (oasis loop heights are
+		///        valid; section paths always).
 		bool IsLoopEditable(int32 index) const;
 
-		/// @brief Spline pointers for the spline editor's input handling: oases whose loop cannot be edited
-		///        yet stand in as an empty spline (same indices), so nothing on them can be hit.
+		/// @brief Spline pointers for the spline editor's input handling: controls whose spline cannot be
+		///        edited yet stand in as an empty spline (same indices), so nothing on them can be hit.
 		std::vector<PathSpline*> GetEditableSplines();
 
 		/// @brief Tells the transform widget that the selected point's tangents changed (its local-space
@@ -232,7 +336,7 @@ namespace mmo
 		Camera& m_camera;
 		SplineEditController m_splineEditor;
 
-		std::vector<Oasis> m_oases;
+		std::vector<Control> m_controls;
 		std::vector<uint64> m_deletedIds;
 		int32 m_selected = -1;
 
@@ -245,6 +349,12 @@ namespace mmo
 
 		/// Counts overlay frames, to space out height attempts.
 		uint64 m_overlayFrame = 0;
+
+		/// Section assets read for the details panel, by asset path.
+		std::map<String, CachedSectionAsset> m_sectionAssets;
+
+		/// Section asset the "New Section Path" button uses.
+		String m_newPathAsset;
 
 		/// Defaults of the recipe, used for new oases.
 		pcg::OasisParams m_defaultParams;
@@ -269,7 +379,7 @@ namespace mmo
 		float m_dragOffsetZ = 0.0f;
 
 		String m_status;
-		bool m_statusIsError = false;
+		StatusLevel m_statusLevel = StatusLevel::Ok;
 		uint64 m_pendingDeleteId = 0;
 
 		Matrix4 m_overlayViewProj = Matrix4::Identity;
