@@ -338,9 +338,9 @@ namespace mmo::pcg
 	/// Mass layer (params.massEnabled), at u = (across + halfWidth) / massDepth:
 	/// - u < 0 (the floor side): exactly the target without mass;
 	/// - else rise = smoothstep(u / massRise), mass weight w = 1 - smoothstep over the last 30 % of the depth (or what
-	///   the rise leaves) and 0 from u = 1 on, faded past the ends of an open path over max(sideFalloff,
-	///   massRise x massDepth); mass height m = rise x max(0, massHeight + noise(x, z) + detail(x, z)) with
-	///   world-anchored FractalNoise; with S = the section result base + (centre + section - base) x sideFalloff and
+	///   the rise leaves) and 0 from u = 1 on; mass height m = rise x max(0, massHeight + noise(x, z) + detail(x, z))
+	///   with world-anchored FractalNoise; past the ends of an open path both taper out (1 - smoothstep) over
+	///   halfWidth + sideFalloff of the distance beyond the end; with S = the section result base + (centre + section - base) x sideFalloff and
 	///   M = base + (centre + m - base) x w the height is S + rise x max(0, M - S) at weight 1 (the mass only ever
 	///   raises the ground, and lifts the section's own slope less where it only starts to rise);
 	/// - paint: where the section height is at least m, the section's paint; else the mass paint layer at weight

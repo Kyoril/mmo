@@ -225,14 +225,19 @@ TEST_CASE("The mass fades out past the ends of an open path", "[section_mass]")
 	SectionPathShape shape;
 	Prepare(kStraight, asset, Mass(30.0f, 60.0f), shape);
 
-	// End fade over max(sideFalloff 4, 0.25 x 60) = 15 m.
+	// The mass tapers out over halfWidth + sideFalloff = 7 m past the ends, like the section itself.
 	const float inside = Written(EvaluateSectionTerrain(shape, 25.0f, 199.0f, kCentre, Identity), kCentre);
-	const float near = Written(EvaluateSectionTerrain(shape, 25.0f, 205.0f, kCentre, Identity), kCentre);
+	const float near = Written(EvaluateSectionTerrain(shape, 25.0f, 203.0f, kCentre, Identity), kCentre);
 	CHECK(inside == Approx(kCentre + 30.0f).margin(1e-3f));
 	CHECK(near < inside);
 	CHECK(near > kCentre);
-	CHECK(EvaluateSectionTerrain(shape, 25.0f, 216.0f, kCentre, Identity).heightWeight == 0.0f);
-	CHECK(EvaluateSectionTerrain(shape, 25.0f, -16.0f, kCentre, Identity).heightWeight == 0.0f);
+	CHECK(EvaluateSectionTerrain(shape, 25.0f, 207.5f, kCentre, Identity).heightWeight == 0.0f);
+	CHECK(EvaluateSectionTerrain(shape, 25.0f, -7.5f, kCentre, Identity).heightWeight == 0.0f);
+
+	// The height tapers too (not only the weight): over a base below the centre the end slopes down to the base
+	// instead of keeping the full mass height at a lower weight.
+	const float half = Written(EvaluateSectionTerrain(shape, 25.0f, 203.5f, 0.0f, Identity), 0.0f);
+	CHECK(half < 0.5f * (kCentre + 30.0f));
 }
 
 TEST_CASE("The facade keeps its detail where it rises above the mass", "[section_mass]")

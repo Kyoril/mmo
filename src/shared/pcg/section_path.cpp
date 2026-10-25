@@ -1561,23 +1561,24 @@ namespace mmo::pcg
 		}
 
 		// Mass: rises over massRise of the depth, holds, and its weight falls over the last kMassFall of it; past the ends of an
-		// open path it fades out over the rise length (at least the side falloff).
+		// open path its height and weight taper out over halfWidth + sideFalloff, like the section's own end.
 		const SectionPathParams& p = shape.params;
 		const float rise = Smooth(u / p.massRise);
 		float weight = u >= 1.0f ? 0.0f : 1.0f - Smooth((u - (1.0f - kMassFall)) / kMassFall);
+		float taper = 1.0f;
 		const float length = path.GetLength();
 		if (!path.IsClosed() && (distance <= 0.0f || distance >= length))
 		{
 			const float beyond = std::sqrt(std::max(0.0f, radialSq - across * across));
-			const float endFalloff = std::max(asset.sideFalloff, p.massRise * p.massDepth);
-			weight *= 1.0f - Smooth(beyond / endFalloff);
+			taper = 1.0f - Smooth(beyond / sectionReach);
+			weight *= taper;
 		}
 		if (falloff <= 0.0f && weight <= 0.0f)
 		{
 			return target;
 		}
 
-		const float amplitude = MassAmplitude(shape, x, z);
+		const float amplitude = MassAmplitude(shape, x, z) * taper;
 		const float massHeight = rise * amplitude;
 
 		CopySample sample;
