@@ -582,6 +582,81 @@ namespace mmo::pcg
 			return 0.5 * twice;
 		}
 
+		/// Replaces every value (one per path sample, linear in between) by its mean over the arc window
+		/// [d - window / 2, d + window / 2] around the sample: clamped to the path on open paths, wrapping on closed ones
+		/// (a window longer than a loop averages the whole loop). A window <= 0 keeps the values.
+		void SmoothAlongPath(const SampledPath& path, const float window, std::vector<float>& values)
+		{
+			const std::vector<SplineSample>& samples = path.GetSamples();
+			const size_t n = samples.size();
+			const bool closed = path.IsClosed();
+			const double length = path.GetLength();
+			if (!(window > 0.0f) || n < 2 || values.size() != n || !(length > 0.0))
+			{
+				return;
+			}
+
+			// Segment k runs from sample k to the next (a closed path's last one back to sample 0 at the path length).
+			const size_t segments = closed ? n : n - 1;
+			const auto segmentEnd = [&](const size_t k)
+			{
+				return k + 1 < n ? static_cast<double>(samples[k + 1].distance) : length;
+			};
+			std::vector<double> prefix(segments + 1, 0.0);
+			for (size_t k = 0; k < segments; ++k)
+			{
+				const double span = segmentEnd(k) - samples[k].distance;
+				prefix[k + 1] = prefix[k] + 0.5 * (static_cast<double>(values[k]) + values[(k + 1) % n]) * span;
+			}
+
+			// Integral of the values from 0 to an arc distance in [0, length].
+			const auto integralTo = [&](const double distance)
+			{
+				const auto it = std::upper_bound(samples.begin(), samples.end(), distance,
+					[](const double value, const SplineSample& sample) { return value < sample.distance; });
+				size_t k = it == samples.begin() ? 0 : static_cast<size_t>(it - samples.begin()) - 1;
+				k = std::min(k, segments - 1);
+				const double start = samples[k].distance;
+				const double span = segmentEnd(k) - start;
+				const double t = std::clamp(distance - start, 0.0, span);
+				const double a = values[k];
+				const double b = values[(k + 1) % n];
+				const double at = span > 0.0 ? a + (b - a) * t / span : a;
+				return prefix[k] + 0.5 * (a + at) * t;
+			};
+
+			// Closed paths: the integral continues periodically past both ends.
+			const double total = prefix[segments];
+			const auto wrappedIntegralTo = [&](const double distance)
+			{
+				const double turns = std::floor(distance / length);
+				return turns * total + integralTo(distance - turns * length);
+			};
+
+			const double half = 0.5 * (closed ? std::min(static_cast<double>(window), length) : static_cast<double>(window));
+			std::vector<float> smoothed(n);
+			for (size_t i = 0; i < n; ++i)
+			{
+				const double d = samples[i].distance;
+				double a = d - half;
+				double b = d + half;
+				if (!closed)
+				{
+					a = std::max(0.0, a);
+					b = std::min(length, b);
+				}
+				if (!(b - a > 0.0))
+				{
+					smoothed[i] = values[i];
+					continue;
+				}
+
+				const double integral = closed ? wrappedIntegralTo(b) - wrappedIntegralTo(a) : integralTo(b) - integralTo(a);
+				smoothed[i] = static_cast<float>(integral / (b - a));
+			}
+			values = std::move(smoothed);
+		}
+
 		/// The same closed curve traversed the other way, still starting at point 0: point k = point (n - k) % n, with
 		/// its arriving and leaving handles swapped.
 		PathSpline ReverseLoop(const PathSpline& spline)
@@ -637,9 +712,9 @@ namespace mmo::pcg
 			error = "The section needs a positive length and half width and a non-negative side falloff.";
 			return false;
 		}
-		if (params.heightMode == SectionHeightMode::FollowGround && !baseGround)
+		if ((params.heightMode == SectionHeightMode::FollowGround || params.heightMode == SectionHeightMode::SmoothedGround) && !baseGround)
 		{
-			error = "Follow-ground mode needs the base ground.";
+			error = "Follow-ground and smoothed-ground modes need the base ground.";
 			return false;
 		}
 
@@ -708,7 +783,12 @@ namespace mmo::pcg
 		out.centreHeights.reserve(samples.size());
 		for (const SplineSample& sample : samples)
 		{
-			out.centreHeights.push_back(params.heightMode == SectionHeightMode::FollowGround ? baseGround(sample.x, sample.z) : sample.y);
+			out.centreHeights.push_back(params.heightMode == SectionHeightMode::FollowSpline ? sample.y : baseGround(sample.x, sample.z));
+		}
+		if (params.heightMode == SectionHeightMode::SmoothedGround)
+		{
+			out.params.groundSmoothing = params.groundSmoothing > 0.0f ? params.groundSmoothing : 0.0f;
+			SmoothAlongPath(*out.path, out.params.groundSmoothing, out.centreHeights);
 		}
 
 		// Influence: everything a terrain sample or a prop can reach from the path.

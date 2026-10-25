@@ -303,3 +303,126 @@ TEST_CASE("The accelerated projection matches the full scan exactly", "[section_
 		CHECK(hits > 1000);
 	}
 }
+
+namespace
+{
+	/// Prepares a path with a base ground; ids 1..n.
+	void PrepareOnBase(const PathSpline& spline, const SectionAsset& asset, const SectionPathParams& params,
+		const std::function<float(float, float)>& base, SectionPathShape& shape)
+	{
+		std::vector<uint64> ids;
+		for (size_t i = 0; i < spline.points.size(); ++i)
+		{
+			ids.push_back(1 + i);
+		}
+		String error;
+		REQUIRE(PrepareSectionPath(spline, ids, asset, params, base, shape, error));
+	}
+
+	float StepBase(float, const float z)
+	{
+		return z < 50.0f ? 0.0f : 10.0f;
+	}
+}
+
+TEST_CASE("Smoothed ground ramps over a base step without spikes", "[section_path_terrain]")
+{
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::SmoothedGround;
+	params.groundSmoothing = 20.0f;
+	SectionPathShape shape;
+	PrepareOnBase(Line(0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f), MakeAsset({ 0.0f }), params, StepBase, shape);
+
+	const std::vector<SplineSample>& samples = shape.path->GetSamples();
+	REQUIRE(shape.centreHeights.size() == samples.size());
+	for (size_t i = 0; i < samples.size(); ++i)
+	{
+		const float h = shape.centreHeights[i];
+		const float d = samples[i].distance;
+		if (d <= 39.0f)
+		{
+			CHECK(h == Approx(0.0f).margin(1e-3f));
+		}
+		if (d >= 61.0f)
+		{
+			CHECK(h == Approx(10.0f).margin(1e-3f));
+		}
+		if (i > 0)
+		{
+			// Monotonic, and never steeper than the step spread over the window.
+			const float rise = h - shape.centreHeights[i - 1];
+			CHECK(rise >= -1e-4f);
+			CHECK(rise <= (d - samples[i - 1].distance) * 10.0f / 20.0f + 1e-3f);
+		}
+	}
+
+	// The terrain target carries the smoothed centre height.
+	const TerrainTarget mid = EvaluateSectionTerrain(shape, 0.0f, 50.0f, 0.0f, Identity);
+	CHECK(mid.height == Approx(5.0f).margin(0.2f));
+}
+
+TEST_CASE("Smoothed ground on a flat base is the base", "[section_path_terrain]")
+{
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::SmoothedGround;
+	SectionPathShape shape;
+	PrepareOnBase(Line(0.0f, 0.0f, 30.0f, 80.0f, 3.0f, 9.0f), MakeAsset({ 0.0f }), params, [](float, float) { return 7.5f; }, shape);
+	for (const float h : shape.centreHeights)
+	{
+		CHECK(h == Approx(7.5f).margin(1e-4f));
+	}
+}
+
+TEST_CASE("Smoothed ground with a zero window equals follow-ground", "[section_path_terrain]")
+{
+	const auto bumpy = [](const float x, const float z) { return std::sin(x * 0.3f) * 4.0f + StepBase(x, z); };
+	const PathSpline spline = Line(0.0f, 0.0f, 20.0f, 100.0f, 0.0f, 0.0f);
+
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::FollowGround;
+	SectionPathShape ground;
+	PrepareOnBase(spline, MakeAsset({ 0.0f }), params, bumpy, ground);
+
+	params.heightMode = SectionHeightMode::SmoothedGround;
+	params.groundSmoothing = 0.0f;
+	SectionPathShape smoothed;
+	PrepareOnBase(spline, MakeAsset({ 0.0f }), params, bumpy, smoothed);
+
+	CHECK(smoothed.centreHeights == ground.centreHeights);
+}
+
+TEST_CASE("Smoothed ground wraps around a closed loop", "[section_path_terrain]")
+{
+	PathSpline spline;
+	spline.interpolation = SplineInterpolation::Linear;
+	spline.closed = true;
+	for (const auto& p : { std::make_pair(0.0f, 0.0f), std::make_pair(100.0f, 0.0f), std::make_pair(100.0f, 100.0f), std::make_pair(0.0f, 100.0f) })
+	{
+		SplinePoint sp;
+		sp.x = p.first;
+		sp.z = p.second;
+		spline.points.push_back(sp);
+	}
+
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::SmoothedGround;
+	params.groundSmoothing = 20.0f;
+	SectionPathShape shape;
+	PrepareOnBase(spline, MakeAsset({ 0.0f }), params, [](const float x, float) { return x < 0.1f ? 10.0f : 0.0f; }, shape);
+	REQUIRE_FALSE(shape.reversed);
+	REQUIRE(shape.path->GetSamples().front().distance == 0.0f);
+
+	// The window around the loop start covers the last 10 m of the closing side (10 high) and the first 10 m of the
+	// first side (10 at its start, 0 from 0.5 m on): (100 + 2.5) / 20.
+	CHECK(shape.centreHeights.front() == Approx(5.125f).margin(0.01f));
+}
+
+TEST_CASE("Smoothed ground needs the base ground", "[section_path_terrain]")
+{
+	SectionPathParams params;
+	params.heightMode = SectionHeightMode::SmoothedGround;
+	SectionPathShape shape;
+	String error;
+	CHECK_FALSE(PrepareSectionPath(Line(0.0f, 0.0f, 0.0f, 100.0f, 0.0f, 0.0f), { 1, 2 }, MakeAsset({ 0.0f }), params, {}, shape, error));
+	CHECK_FALSE(error.empty());
+}

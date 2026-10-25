@@ -118,7 +118,10 @@ namespace mmo::pcg
 		/// Centre line height = the spline's height.
 		FollowSpline,
 		/// Centre line height = the base ground under the spline.
-		FollowGround
+		FollowGround,
+		/// Centre line height = the base ground under the spline averaged along the path over groundSmoothing metres
+		/// (follows the large shape of the hand-made base, levels its bumps and steps).
+		SmoothedGround
 	};
 
 	/// Per-path settings of a section path.
@@ -140,6 +143,9 @@ namespace mmo::pcg
 		/// (the path then runs against the control point order when the loop is clockwise). False lays it in control
 		/// point order. Ignored for open paths.
 		bool floorInside = true;
+		/// SmoothedGround: length (m) of the window the base ground is averaged over, centred on each centre line
+		/// point (clamped to the path on open paths, wrapping on closed ones). 0 = FollowGround.
+		float groundSmoothing = 20.0f;
 	};
 
 	/// layerRemap[sectionLayer] = target tile layer index, or -1 = not available on that tile.
@@ -177,9 +183,9 @@ namespace mmo::pcg
 		SectionAsset asset;
 		/// Indices of the asset's variants per SectionVariantRole, ascending.
 		std::array<std::vector<uint32>, 3> variantsByRole;
-		/// Sanitised parameters (joinBlend >= 0, propDensity in 0..1).
+		/// Sanitised parameters (joinBlend >= 0, propDensity in 0..1, groundSmoothing >= 0 in SmoothedGround mode).
 		SectionPathParams params;
-		/// Centre line height per path sample (spline height, or the base ground under it).
+		/// Centre line height per path sample (spline height, the base ground under it, or that ground smoothed).
 		std::vector<float> centreHeights;
 		/// See GetInfluenceRect.
 		WorldRect influence;
@@ -193,7 +199,8 @@ namespace mmo::pcg
 	/// @param asset The section; needs at least one Straight variant, length > 0 and halfWidth > 0. Corner variants are
 	///        laid at sharp control points (see the asset overload of LayOutSections).
 	/// @param params Path settings; out-of-range values are clamped.
-	/// @param baseGround Base terrain height at a world position; required for FollowGround, may be empty otherwise.
+	/// @param baseGround Base terrain height at a world position; required for FollowGround and SmoothedGround, may be
+	///        empty otherwise.
 	/// @param out Receives the shape.
 	/// @param error Receives a message on failure.
 	/// @return False on invalid input.
@@ -262,7 +269,8 @@ namespace mmo::pcg
 	/// - no prop rule, jitter or swap applies; key = Hash(chainKey, piece index in the chain).
 	/// All props lie inside GetInfluenceRect.
 	/// @param ground Final ground (base + this path's terrain). Empty = the centre line height of the height mode
-	///        at the prop's arc position (spline height, or the base ground under the spline for FollowGround).
+	///        at the prop's arc position (spline height, the base ground under the spline for FollowGround, or that
+	///        ground smoothed for SmoothedGround).
 	/// @param out Cleared, then receives the placements sorted by key; keys are unique.
 	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out);
 }
