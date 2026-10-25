@@ -2,10 +2,15 @@
 
 #pragma once
 
+#include "section_asset.h"
+#include "terrain_contribution.h"
 #include "base/typedefs.h"
 #include "math/path_spline.h"
 #include "math/vector3.h"
 
+#include <array>
+#include <functional>
+#include <optional>
 #include <vector>
 
 namespace mmo::pcg
@@ -80,4 +85,80 @@ namespace mmo::pcg
 	/// @param localZ Receives the position inside the copy mapped to 0..sectionLength.
 	/// @return The copy, or nullptr if the distance is outside every copy.
 	const SectionCopy* FindCopy(const SectionLayout& layout, float distance, float sectionLength, float& localZ);
+
+	/// Where the centre line of a section path gets its height from.
+	enum class SectionHeightMode : uint8
+	{
+		/// Centre line height = the spline's height.
+		FollowSpline,
+		/// Centre line height = the base ground under the spline.
+		FollowGround
+	};
+
+	/// Per-path settings of a section path.
+	struct SectionPathParams
+	{
+		/// Seed of the variant choice and the prop variation.
+		uint64 seed = 1;
+		/// Variants in layout order (copy n gets variant n % count) instead of hashed per copy. This is not
+		/// local: inserting a copy shifts the variants of every later copy.
+		bool sequentialVariants = false;
+		/// Distance (m) on either side of a copy boundary over which the terrain targets of the two copies
+		/// cross-fade (clamped to half of each copy's length).
+		float joinBlend = 2.0f;
+		/// Multiplies every rule's keep chance (0..1).
+		float propDensity = 1.0f;
+		/// Where the centre line height comes from.
+		SectionHeightMode heightMode = SectionHeightMode::FollowSpline;
+	};
+
+	/// layerRemap[sectionLayer] = target tile layer index, or -1 = not available on that tile.
+	using LayerRemapFunction = std::function<std::array<int8, 4>(float x, float z)>;
+
+	/// A section path ready to evaluate. Filled by PrepareSectionPath; treat every member as read-only.
+	struct SectionPathShape
+	{
+		/// The spline sampled with kSectionPathSampleStep (empty until prepared).
+		std::optional<SampledPath> path;
+		/// Copies fitted to the spline's spans.
+		SectionLayout layout;
+		/// Copy of the section asset, so the shape does not depend on the caller keeping it alive.
+		SectionAsset asset;
+		/// Sanitised parameters (joinBlend >= 0, propDensity in 0..1).
+		SectionPathParams params;
+		/// Centre line height per path sample (spline height, or the base ground under it).
+		std::vector<float> centreHeights;
+		/// See GetInfluenceRect.
+		WorldRect influence;
+	};
+
+	/// Samples and lays out a section path.
+	/// @param spline Control points (at least two).
+	/// @param pointIds Stable, unique id per control point (same size as spline.points).
+	/// @param asset The section; needs at least one variant, length > 0 and halfWidth > 0.
+	/// @param params Path settings; out-of-range values are clamped.
+	/// @param baseGround Base terrain height at a world position; required for FollowGround, may be empty otherwise.
+	/// @param out Receives the shape.
+	/// @param error Receives a message on failure.
+	/// @return False on invalid input.
+	bool PrepareSectionPath(const PathSpline& spline, const std::vector<uint64>& pointIds, const SectionAsset& asset,
+		const SectionPathParams& params, const std::function<float(float, float)>& baseGround, SectionPathShape& out, String& error);
+
+	/// Rectangle containing every terrain sample the path may change and every prop it may place: the path's
+	/// sample bounds grown by max(halfWidth + sideFalloff, largest |x| of any baked placement), plus the largest
+	/// position jitter of any rule times sqrt(2) (jitter is per local axis), plus a 1 m margin.
+	WorldRect GetInfluenceRect(const SectionPathShape& shape);
+
+	/// Variant index of a copy: Hash(seed, spanKey, copy) % variantCount, or the copy's position in the layout
+	/// % variantCount with sequentialVariants.
+	uint32 GetVariant(const SectionPathShape& shape, const SectionCopy& copy);
+
+	/// Terrain target of the path at a world position.
+	/// Height = centre line height + the variant's height; weight 1 within halfWidth of the path, fading
+	/// (smoothstep) to 0 at halfWidth + sideFalloff (the distance is radial past the ends of an open path).
+	/// Paint = the variant's weights remapped to tile layers (unavailable layers dropped, the rest renormalised
+	/// to 255); paint weight = coverage x falloff. Within joinBlend of a copy boundary the two copies' targets are
+	/// cross-faded. setMaterial is always false. baseHeight is not used, so paint never depends on it.
+	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
+	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 }
