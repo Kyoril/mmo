@@ -166,6 +166,12 @@ namespace mmo
 			return "Length and half width must be positive, the side falloff at least 0.";
 		}
 
+		if (std::none_of(m_definition.variants.begin(), m_definition.variants.end(),
+			[](const pcg::SectionVariantDef& v) { return v.role == pcg::SectionVariantRole::Straight; }))
+		{
+			return "The section needs at least one straight variant (paths lay their straight copies from them); the bake refuses it.";
+		}
+
 		const float span = 2.0f * (m_definition.halfWidth + m_definition.sideFalloff);
 		for (size_t i = 0; i < m_definition.variants.size(); ++i)
 		{

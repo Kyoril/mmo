@@ -201,6 +201,14 @@ TEST_CASE("BakeSection rejects invalid definitions", "[section_bake]")
 		CHECK_FALSE(BakeSection(def, terrain, {}, kDefaultPaint, kTextures, 0, asset, error));
 		CHECK_FALSE(error.empty());
 	}
+	SECTION("no straight variant")
+	{
+		SectionDefinition def = MakeDefinition();
+		def.variants[0].role = SectionVariantRole::InnerCorner;
+		def.variants[1].role = SectionVariantRole::OuterCorner;
+		CHECK_FALSE(BakeSection(def, terrain, {}, kDefaultPaint, kTextures, 0, asset, error));
+		CHECK(error.find("straight") != String::npos);
+	}
 	SECTION("non-positive length")
 	{
 		SectionDefinition def = MakeDefinition();

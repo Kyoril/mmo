@@ -2,6 +2,7 @@
 
 #include "section_bake.h"
 
+#include "log/default_log_levels.h"
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
@@ -107,6 +108,10 @@ namespace mmo::pcg
 			if (name == "outerCorner")
 			{
 				return SectionVariantRole::OuterCorner;
+			}
+			if (name != "straight")
+			{
+				WLOG("Section definition: unknown variant role '" << name << "', read as straight (known: straight, innerCorner, outerCorner)");
 			}
 			return SectionVariantRole::Straight;
 		}
@@ -220,6 +225,11 @@ namespace mmo::pcg
 		if (def.variants.empty())
 		{
 			error = "The section has no variants.";
+			return false;
+		}
+		if (std::none_of(def.variants.begin(), def.variants.end(), [](const SectionVariantDef& v) { return v.role == SectionVariantRole::Straight; }))
+		{
+			error = "The section has no straight variant (a path lays its straight copies from them); set at least one variant's role to straight.";
 			return false;
 		}
 		if (!(def.length > 0.0f) || !(def.halfWidth > 0.0f) || !(def.sideFalloff >= 0.0f))
