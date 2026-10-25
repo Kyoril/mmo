@@ -203,6 +203,11 @@ character, like godmode)
   gives the scenario a dedicated character so it does not share progression state with
   other scenarios of the same class (see `quest_path_1_to_10.lua`, which must start
   at level 1).
+- Where a scenario leaves the character is shared state too: the next scenario of the
+  same class starts there, and most scenarios port only relative to where they stand
+  (`GM.Worldport(0, GetPosX(me) + 3, ...)`). A scenario that travels to another
+  settlement or into a dungeon must therefore take its own character, or every later
+  scenario of that class runs from there (see `haven_day_night.lua`, `hollow_choir_*`).
 - The runner retries a scenario **once** on infrastructure failures (exit 2/3/4 —
   connect, timeout, disconnect) because a reconnect within ~1s of the previous
   session can race server-side session cleanup. Assertion failures (exit 1) are

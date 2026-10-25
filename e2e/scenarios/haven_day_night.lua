@@ -1,3 +1,5 @@
+-- e2e-own-character: hvn
+--
 -- Haven's day/night routine. The chain under test is:
 --
 --   GM settime to a full hour -> OnHourOfDay instance trigger "Haven - Day/Night Routine"
@@ -8,7 +10,11 @@
 --   with a voice line (SoundEntry 416 at 22:00).
 --
 -- The services (binder, bankers, trainers) must be there at any hour.
+--
 -- The time of day is realm state that outlives this scenario, so it is always reset at the end.
+-- The character position outlives it too, and Haven is a thousand units from where the shared
+-- character works: this scenario therefore takes its own, so that every later scenario of the
+-- same class does not find itself standing in Haven.
 
 local HERALD, CITIZEN, WATCHMAN, LAMPLIGHTER, PATRON = 106, 109, 107, 108, 110
 local CALLORAN, BANKER, WARRIOR_TRAINER = 25, 104, 111
