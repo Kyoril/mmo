@@ -207,6 +207,8 @@ class FakePortainer:
 		self.ping_error = None
 		self.redeploy_error = None
 		self.redeploy_error_tags = None
+		# Portainer carries on with an update whose request timed out: the tag still changes.
+		self.redeploy_applies_despite_error = False
 
 	def ping(self):
 		if self.ping_error:
@@ -218,6 +220,8 @@ class FakePortainer:
 	def redeploy(self, tag):
 		self.deploys.append(tag)
 		if self.redeploy_error and (self.redeploy_error_tags is None or tag in self.redeploy_error_tags):
+			if self.redeploy_applies_despite_error:
+				self.tag = tag
 			raise self.redeploy_error
 		self.tag = tag
 
