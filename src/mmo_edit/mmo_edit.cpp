@@ -23,6 +23,7 @@
 #include "null_audio/null_audio.h"
 #endif
 
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -236,6 +237,24 @@ namespace mmo
 		}
 
 		return WorldEditorInstance::GetLastCreated();
+	}
+
+	/// @brief Parses a seed: the whole text is a decimal number without sign (strtoull would wrap a
+	///        leading '-' around instead of refusing it).
+	/// @param text The command line argument.
+	/// @param seed Receives the seed.
+	/// @return True if the text is a valid seed.
+	bool ParseSeed(const char* text, uint64& seed)
+	{
+		if (text == nullptr || *text < '0' || *text > '9')
+		{
+			return false;
+		}
+
+		errno = 0;
+		char* end = nullptr;
+		seed = std::strtoull(text, &end, 10);
+		return end != text && *end == '\0' && errno != ERANGE;
 	}
 
 	/// @brief Parses an oasis id: the whole text is a non-zero hexadecimal number.
@@ -1152,9 +1171,7 @@ int main(int argc, char* arg[])
 					}
 					else if (option == "--seed" && j + 1 < argCount)
 					{
-						char* end = nullptr;
-						seed = std::strtoull(args[++j], &end, 10);
-						argumentsValid = end != args[j] && *end == '\0';
+						argumentsValid = mmo::ParseSeed(args[++j], seed);
 					}
 					else if (option == "--name" && j + 1 < argCount)
 					{
@@ -1269,9 +1286,7 @@ int main(int argc, char* arg[])
 					}
 					else if (option == "--seed" && j + 1 < argCount)
 					{
-						char* end = nullptr;
-						seed = std::strtoull(args[++j], &end, 10);
-						argumentsValid = end != args[j] && *end == '\0';
+						argumentsValid = mmo::ParseSeed(args[++j], seed);
 					}
 					else if (option == "--name" && j + 1 < argCount)
 					{

@@ -14,7 +14,10 @@ namespace mmo::pcg
 		/// PCGO as little endian characters (the oasis record's magic).
 		constexpr uint32 MagicPcgo = 0x4F474350;
 		/// 1: initial layout. Placements use the oasis record's version 4 layout.
-		constexpr uint32 FormatVersion = 1;
+		/// 2: appends the per-copy rects of the last build (builtRects).
+		constexpr uint32 FormatVersion = 2;
+		/// Bytes per rect written by PutRect.
+		constexpr size_t RectBytes = 16;
 		/// Placement layout version shared with the oasis record.
 		constexpr uint32 PlacementVersion = 4;
 	}
@@ -48,6 +51,12 @@ namespace mmo::pcg
 		Put(writer, record.nextPointId);
 
 		PutOwnedContent(writer, record.content);
+
+		Put<uint32>(writer, static_cast<uint32>(record.builtRects.size()));
+		for (const WorldRect& rect : record.builtRects)
+		{
+			PutRect(writer, rect);
+		}
 		return true;
 	}
 
@@ -55,7 +64,7 @@ namespace mmo::pcg
 	{
 		uint32 magic = 0;
 		uint32 version = 0;
-		if (!Get(reader, magic) || magic != MagicPcgp || !Get(reader, version) || version != FormatVersion)
+		if (!Get(reader, magic) || magic != MagicPcgp || !Get(reader, version) || version < 1 || version > FormatVersion)
 		{
 			return false;
 		}
@@ -94,7 +103,31 @@ namespace mmo::pcg
 			return false;
 		}
 
-		return GetOwnedContent(reader, out.content, PlacementVersion);
+		if (!GetOwnedContent(reader, out.content, PlacementVersion))
+		{
+			return false;
+		}
+
+		if (version < 2)
+		{
+			// Version 1 has no per-copy rects; the overlap check falls back to the influence box.
+			return true;
+		}
+
+		uint32 rectCount = 0;
+		if (!GetCount(reader, rectCount, RectBytes))
+		{
+			return false;
+		}
+		out.builtRects.resize(rectCount);
+		for (WorldRect& rect : out.builtRects)
+		{
+			if (!GetRect(reader, rect))
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 
 	RecordKind PeekRecordKind(io::Reader& reader)

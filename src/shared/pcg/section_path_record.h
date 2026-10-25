@@ -31,14 +31,17 @@ namespace mmo::pcg
 		uint64 nextPointId = 1;
 		/// What the last build put into the world (influence, terrain contribution, owned objects).
 		OwnedContent content;
+		/// Influence rect per section copy of the last build, in layout order (empty = never built, or
+		/// read from a version 1 file). Used by the overlap check instead of the single influence box.
+		std::vector<WorldRect> builtRects;
 	};
 
-	/// Writes the record as binary (magic PCGP, version 1). Deterministic: the same record produces the
-	/// same bytes.
+	/// Writes the record as binary (magic PCGP, version 2; version 2 appends builtRects). Deterministic:
+	/// the same record produces the same bytes.
 	/// @return False if pointIds is not parallel to spline.points.
 	bool WriteSectionPathRecord(io::Writer& writer, const SectionPathRecord& record);
 
-	/// Reads a record written by WriteSectionPathRecord.
+	/// Reads a record written by WriteSectionPathRecord (version 1 or 2; version 1 leaves builtRects empty).
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadSectionPathRecord(io::Reader& reader, SectionPathRecord& out);
 

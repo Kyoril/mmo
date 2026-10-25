@@ -352,6 +352,11 @@ namespace mmo
 
 	OasisBuildReport DeleteSectionPathContent(IWorldEditor& editor, pcg::SectionPathRecord& record)
 	{
-		return RemoveGeneratedContent(editor, record.content);
+		OasisBuildReport report = RemoveGeneratedContent(editor, record.content);
+		if (report.ok)
+		{
+			record.builtRects.clear();
+		}
+		return report;
 	}
 }

@@ -50,6 +50,7 @@ namespace
 		op.written.position = Vector3(1.0f, 2.0f, 3.0f);
 		op.written.kitPaths = { "Kits/Lamp.hkit" };
 		r.content.placements.push_back(op);
+		r.builtRects = { WorldRect{ -5.0f, -6.0f, 22.0f, 14.0f }, WorldRect{ 15.0f, -12.0f, 45.0f, 13.0f } };
 		return r;
 	}
 
@@ -101,8 +102,41 @@ TEST_CASE("SectionPathRecord round trip is byte identical", "[section_path_recor
 	CHECK(loaded.content.placements.size() == 1);
 	CHECK(loaded.content.placements[0].written.kitPaths.size() == 1);
 	CHECK(loaded.content.terrain.materials[0].written == "Road.hmat");
+	REQUIRE(loaded.builtRects.size() == 2);
+	CHECK(loaded.builtRects[0].minX == -5.0f);
+	CHECK(loaded.builtRects[0].maxZ == 14.0f);
+	CHECK(loaded.builtRects[1].minZ == -12.0f);
+	CHECK(loaded.builtRects[1].maxX == 45.0f);
 
 	CHECK(Serialize(loaded) == bytes);
+}
+
+TEST_CASE("SectionPathRecord reads version 1 without built rects", "[section_path_record]")
+{
+	// A version 1 file is the version 2 layout without the trailing rect list.
+	const SectionPathRecord original = MakePopulated();
+	std::vector<char> bytes = Serialize(original);
+	const size_t rectBytes = 4 + 16 * original.builtRects.size();
+	REQUIRE(bytes.size() > rectBytes + 8);
+	std::vector<char> v1(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(rectBytes));
+	REQUIRE(v1[4] == 2);
+	v1[4] = 1;
+
+	SectionPathRecord loaded;
+	REQUIRE(Deserialize(v1, loaded));
+	CHECK(loaded.builtRects.empty());
+	CHECK(loaded.pointIds == original.pointIds);
+	CHECK(loaded.content.placements.size() == 1);
+
+	// Rewriting upgrades to version 2 with no rects.
+	const std::vector<char> rewritten = Serialize(loaded);
+	CHECK(rewritten[4] == 2);
+	CHECK(rewritten.size() == v1.size() + 4);
+
+	// Unknown future versions are refused.
+	std::vector<char> v3 = bytes;
+	v3[4] = 3;
+	CHECK_FALSE(Deserialize(v3, loaded));
 }
 
 TEST_CASE("SectionPathRecord rejects mismatched point ids and corrupt data", "[section_path_record]")

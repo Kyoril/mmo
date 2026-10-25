@@ -196,8 +196,6 @@ namespace mmo
 			uint32 heightAttempts = 0;
 			/// Overlay frame of the next attempt.
 			uint64 nextHeightAttemptFrame = 0;
-			/// Section paths: per-copy influence rects of the built content (empty = not known yet).
-			std::vector<pcg::WorldRect> builtRects;
 
 			/// @brief Id of the control.
 			uint64 Id() const { return kind == ControlKind::Oasis ? oasis.id : path.id; }
@@ -251,16 +249,17 @@ namespace mmo
 		/// @brief Rebuilds one section path (see Rebuild).
 		bool RebuildSectionPathControl(Control& control, String& error);
 
-		/// @brief The influence rects a built control occupies: an oasis' last influence, a section
-		///        path's per-copy rects (computed from its current spline and asset when not known yet,
-		///        falling back to its last influence). Empty if the control has nothing in the world.
-		std::vector<pcg::WorldRect> GetBuiltRects(Control& control);
+		/// @brief The influence rects a built control occupies in the world: an oasis' last influence; a
+		///        section path's per-copy rects of its last build as stored in its record, or its last
+		///        influence box when the record has none (version 1 file). Empty if the control has nothing
+		///        in the world.
+		static std::vector<pcg::WorldRect> GetBuiltRects(const Control& control);
 
 		/// @brief Checks influence rects against every other built control.
 		/// @param control The control being rebuilt.
 		/// @param rects Its new influence rects.
 		/// @param error Names the control in the way when the call returns false.
-		bool CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error);
+		bool CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error) const;
 
 		/// @brief Sets the status line (no logging).
 		void SetStatus(const String& text, StatusLevel level);

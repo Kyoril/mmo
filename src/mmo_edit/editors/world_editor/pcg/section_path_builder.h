@@ -64,7 +64,7 @@ namespace mmo
 	///        Section paint layers are matched per target tile by texture (GetTerrainLayerTextureKey of
 	///        the tile material's layers against asset.layerTextures); painted section layers without a
 	///        match on a tile are skipped there and listed in report.warnings as (tile, layer) pairs.
-	///        Updates the record's owned content.
+	///        Updates the record's owned content (the caller stores the per-copy rects in builtRects).
 	/// @param editor The world editor to work on. Must have a terrain.
 	/// @param record The section path to rebuild.
 	/// @param asset The section asset of the path (read by the caller, see LoadSectionAsset).
@@ -72,8 +72,8 @@ namespace mmo
 	OasisBuildReport RebuildSectionPath(IWorldEditor& editor, pcg::SectionPathRecord& record, const pcg::SectionAsset& asset);
 
 	/// @brief Removes everything a section path put into the world (RemoveGeneratedContent on its
-	///        owned content). Leaves the record's owned content empty (spline, asset and parameters
-	///        are kept).
+	///        owned content). Leaves the record's owned content and builtRects empty (spline, asset
+	///        and parameters are kept).
 	/// @param editor The world editor to work on.
 	/// @param record The section path whose content to delete.
 	/// @return The report (removed = number of owned objects deleted).

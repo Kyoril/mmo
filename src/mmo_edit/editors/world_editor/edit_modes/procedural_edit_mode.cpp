@@ -543,24 +543,6 @@ namespace mmo
 
 		std::stable_sort(m_controls.begin(), m_controls.end(), [](const Control& a, const Control& b) { return a.Id() < b.Id(); });
 
-		// The per-copy rects of built section paths, from the spline as saved with the build (for the
-		// overlap check; the last influence stands in when the asset cannot be read).
-		for (Control& control : m_controls)
-		{
-			if (control.kind != ControlKind::SectionPath || control.path.content.IsEmpty())
-			{
-				continue;
-			}
-
-			const CachedSectionAsset& cached = GetCachedSectionAsset(control.path.sectionAsset);
-			pcg::SectionPathShape probe;
-			String error;
-			if (cached.valid && PrepareSectionPathProbe(control.path, cached.asset, probe, error))
-			{
-				GetSectionCopyRects(probe, control.builtRects);
-			}
-		}
-
 		DLOG("Loaded " << m_controls.size() << " procedural record(s) from " << folder);
 	}
 
@@ -832,24 +814,26 @@ namespace mmo
 		return true;
 	}
 
-	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(Control& control)
+	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(const Control& control)
 	{
 		if (control.Content().IsEmpty())
 		{
 			return {};
 		}
 
-		if (control.kind == ControlKind::SectionPath && !control.builtRects.empty())
+		// What the last build covered, as recorded with it (not recomputed from the current spline or
+		// asset, which may have changed since).
+		if (control.kind == ControlKind::SectionPath && !control.path.builtRects.empty())
 		{
-			return control.builtRects;
+			return control.path.builtRects;
 		}
 
 		return { control.Content().influence };
 	}
 
-	bool ProceduralEditMode::CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error)
+	bool ProceduralEditMode::CheckOverlap(const Control& control, const std::vector<pcg::WorldRect>& rects, String& error) const
 	{
-		for (Control& other : m_controls)
+		for (const Control& other : m_controls)
 		{
 			if (other.Id() == control.Id())
 			{
@@ -1003,7 +987,8 @@ namespace mmo
 			return false;
 		}
 
-		control.builtRects = record.content.IsEmpty() ? std::vector<pcg::WorldRect>() : rects;
+		// Persisted with the record: the overlap check of other controls uses what this build covers.
+		record.builtRects = record.content.IsEmpty() ? std::vector<pcg::WorldRect>() : rects;
 		control.dirty = true;
 		warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
 
@@ -1770,11 +1755,11 @@ namespace mmo
 			else if (!control.path.content.IsEmpty())
 			{
 				const ImU32 color = selected ? IM_COL32(255, 190, 110, 90) : IM_COL32(255, 190, 110, 45);
-				if (control.builtRects.empty())
+				if (control.path.builtRects.empty())
 				{
 					DrawRect(*drawList, control.path.content.influence, color, project, height);
 				}
-				for (const pcg::WorldRect& rect : control.builtRects)
+				for (const pcg::WorldRect& rect : control.path.builtRects)
 				{
 					DrawRect(*drawList, rect, color, project, height);
 				}
