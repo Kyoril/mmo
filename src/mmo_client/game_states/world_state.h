@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "shared/audio/audio.h"
 #include "mmo_client/char_creation//char_select.h"
 #include "mmo_client/data/client_cache.h"
@@ -819,6 +821,15 @@ namespace mmo
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
 		std::thread m_backgroundLoader;
+
+		/// Bumped by OnLeave() whenever the world (and its Terrain/Page objects) is torn down.
+		/// m_workQueue and m_dispatcher are stopped and reset there, not recreated, so a handler
+		/// queued before the stop can still be lying in one of their queues the next time this
+		/// state is entered; such a handler captures raw Page pointers that are dangling by then.
+		/// Async continuations that hold a raw Page pointer across m_workQueue/m_dispatcher must
+		/// capture the generation at post time and compare it here before touching that pointer.
+		std::atomic<uint64> m_worldGeneration{ 0 };
+
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;

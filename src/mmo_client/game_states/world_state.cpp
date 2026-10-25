@@ -652,6 +652,12 @@ namespace mmo
 		m_workQueue.reset();
 		m_dispatcher.reset();
 
+		// Invalidates any page-prepare continuation still sitting in m_workQueue/m_dispatcher from
+		// this world: stop()+reset() does not discard their queued handlers, only the "stopped"
+		// flag, so one of those can still run after the next OnEnter against the Page/Terrain being
+		// destroyed below. See the matching generation check in OnPageAvailabilityChanged.
+		++m_worldGeneration;
+
 		if (m_projectileManager)
 		{
 			m_projectileManager->Clear();
@@ -6440,8 +6446,17 @@ namespace mmo
 					// page-boundary crossing. Only material resolution and tile creation (spread
 					// over frames by EnsurePageIsLoaded) remain on the main thread.
 					const String pageFileName = m_worldInstance->GetTerrain()->GetBaseFileName() + "/" + std::to_string(pos.x()) + "_" + std::to_string(pos.y()) + ".tile";
-					m_workQueue.post([this, pos, page, pageFileName]()
+					const uint64 generation = m_worldGeneration;
+					m_workQueue.post([this, pos, page, pageFileName, generation]()
 					{
+						// The world may have been left (and a different one entered) while this
+						// was queued: m_workQueue.stop()/reset() in OnLeave() do not drop a handler
+						// already queued here, so `page` can by now point into a destroyed Terrain.
+						if (generation != m_worldGeneration)
+						{
+							return;
+						}
+
 						const bool parsed = page->PrepareParse();
 
 						// The page's materials and their textures, which FinalizePrepare loads on the main thread.
@@ -6450,8 +6465,16 @@ namespace mmo
 							AssetRegistry::PrefetchReferences(pageFileName);
 						}
 
-						m_dispatcher.post([this, pos, page, parsed]()
+						m_dispatcher.post([this, pos, page, parsed, generation]()
 						{
+							// Same staleness check as above, re-done here: this continuation can
+							// equally have survived an OnLeave() that happened after PrepareParse()
+							// finished but before this ran.
+							if (generation != m_worldGeneration)
+							{
+								return;
+							}
+
 							if (!parsed)
 							{
 								page->AbortPrepare();
