@@ -398,4 +398,24 @@ namespace mmo::pcg
 
 		return root.dump(2);
 	}
+
+	String CanonicalSectionDefinitionText(const String& json)
+	{
+		SectionDefinition def;
+		if (ParseSectionDefinition(json, def))
+		{
+			return WriteSectionDefinition(def);
+		}
+
+		String stripped;
+		stripped.reserve(json.size());
+		for (const char c : json)
+		{
+			if (c != '\r')
+			{
+				stripped.push_back(c);
+			}
+		}
+		return stripped;
+	}
 }

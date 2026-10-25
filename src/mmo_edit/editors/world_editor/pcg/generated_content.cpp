@@ -25,6 +25,10 @@ namespace mmo
 	{
 		constexpr float RadToDeg = 57.2957795131f;
 
+		/// Margin around GeneratedContent::writeRects when materialising ocean pages: a seam sample is
+		/// written into both pages sharing it.
+		constexpr float WriteRectSeamMargin = 1.0f;
+
 		/// Category of every map entity a generator creates.
 		const String PcgCategory = "Pcg";
 
@@ -303,8 +307,23 @@ namespace mmo
 		}
 
 		// The terrain brushes turn ocean placeholder pages into real terrain before writing; do the
-		// same so no write of the contribution is silently dropped.
-		terrain->MaterializeOceanPages(content.influence.minX, content.influence.minZ, content.influence.maxX, content.influence.maxZ);
+		// same so no write of the contribution is silently dropped. Only where the build may write:
+		// a page that stays open ocean is neither changed nor saved.
+		if (content.writeRects.empty())
+		{
+			terrain->MaterializeOceanPages(content.influence.minX, content.influence.minZ, content.influence.maxX, content.influence.maxZ);
+		}
+		else
+		{
+			for (const pcg::WorldRect& rect : content.writeRects)
+			{
+				terrain->MaterializeOceanPages(
+					std::max(rect.minX - WriteRectSeamMargin, content.influence.minX),
+					std::max(rect.minZ - WriteRectSeamMargin, content.influence.minZ),
+					std::min(rect.maxX + WriteRectSeamMargin, content.influence.maxX),
+					std::min(rect.maxZ + WriteRectSeamMargin, content.influence.maxZ));
+			}
+		}
 
 		EditorTerrainAccess access(*terrain);
 		access.SetDefaultWaterMaterial(content.waterMaterial);
@@ -316,6 +335,10 @@ namespace mmo
 			return report;
 		}
 		pcg::Unapply(access, owned.terrain);
+
+		// The contribution is gone from the world now; the record must not claim it even if prepare
+		// fails below (Unapply clears it already, this keeps the invariant explicit).
+		owned.terrain.Clear();
 
 		// 3. Let the generator prepare on the current ground, then write the new contribution.
 		const GroundFunction groundHeight = [terrain](const float x, const float z)

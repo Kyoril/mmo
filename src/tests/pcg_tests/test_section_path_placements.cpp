@@ -14,9 +14,14 @@ using namespace mmo::pcg;
 
 namespace
 {
-	SectionPlacement Prop(const String& asset, const float x, const float z, const float above)
+	/// Baked placements carry the section object's unique id as key; every prop gets a fresh one.
+	uint64 g_nextPropKey = 1000;
+
+	SectionPlacement Prop(const String& asset, const float x, const float z, const float above, const PlacementKind kind = PlacementKind::Entity)
 	{
 		SectionPlacement p;
+		p.placement.key = g_nextPropKey++;
+		p.placement.kind = kind;
 		p.placement.asset = asset;
 		p.placement.position = Vector3(x, 123.0f, z);
 		p.heightAboveTerrain = above;
@@ -199,7 +204,7 @@ TEST_CASE("Keep chance and prop density thin out the props", "[section_path_plac
 	CHECK(thinned.size() <= 115);
 }
 
-TEST_CASE("Swap groups pick only listed assets", "[section_path_place]")
+TEST_CASE("Swap groups pick the original or a listed asset", "[section_path_place]")
 {
 	PropRule rule;
 	rule.asset = "lantern";
@@ -213,13 +218,113 @@ TEST_CASE("Swap groups pick only listed assets", "[section_path_place]")
 	}
 	const std::vector<Placement> out = Build(Polyline({ { 0.0f, 0.0f }, { 0.0f, 200.0f } }), MakeAsset(props, { rule }));
 	REQUIRE(out.size() == 80);
+	std::map<String, size_t> seen;
+	for (const Placement& p : out)
+	{
+		CHECK((p.asset == "lantern" || p.asset == "lantern_a" || p.asset == "lantern_b"));
+		++seen[p.asset];
+
+		// Overrides belong to the original asset only.
+		CHECK(p.materialOverrides.empty() == (p.asset != "lantern"));
+	}
+	REQUIRE(seen.size() == 3);
+	for (const auto& entry : seen)
+	{
+		CHECK(entry.second >= 10);
+	}
+}
+
+TEST_CASE("A swap takes the kind from the new asset", "[section_path_place]")
+{
+	PropRule entityRule;
+	entityRule.asset = "crate";
+	entityRule.swapGroup = { "Models/Tower.HWMO" };
+	PropRule modelRule;
+	modelRule.asset = "hut.hwmo";
+	modelRule.swapGroup = { "rock" };
+	PropRule foliageRule;
+	foliageRule.asset = "bush";
+	foliageRule.swapGroup = { "bush_b", "tree.hwmo" };
+
+	std::vector<SectionPlacement> props;
+	for (int i = 0; i < 6; ++i)
+	{
+		const float z = 1.0f + 3.0f * static_cast<float>(i);
+		props.push_back(Prop("crate", -2.5f, z, 0.0f));
+		SectionPlacement hut = Prop("hut.hwmo", 0.0f, z, 0.0f, PlacementKind::WorldModel);
+		hut.placement.kitPaths.push_back("Kits/hut.hkit");
+		props.push_back(hut);
+		props.push_back(Prop("bush", 2.5f, z, 0.0f, PlacementKind::Foliage));
+	}
+	const std::vector<Placement> out = Build(Polyline({ { 0.0f, 0.0f }, { 0.0f, 200.0f } }), MakeAsset(props, { entityRule, modelRule, foliageRule }));
+	REQUIRE(out.size() == 180);
+
 	std::set<String> seen;
 	for (const Placement& p : out)
 	{
-		CHECK((p.asset == "lantern_a" || p.asset == "lantern_b"));
 		seen.insert(p.asset);
+		if (p.asset == "crate" || p.asset == "rock")
+		{
+			CHECK(p.kind == PlacementKind::Entity);
+		}
+		else if (p.asset == "Models/Tower.HWMO" || p.asset == "hut.hwmo")
+		{
+			CHECK(p.kind == PlacementKind::WorldModel);
+		}
+		else
+		{
+			// Foliage stays foliage and never becomes a world model.
+			CHECK((p.asset == "bush" || p.asset == "bush_b"));
+			CHECK(p.kind == PlacementKind::Foliage);
+		}
+		CHECK(p.kitPaths.empty() == (p.asset != "hut.hwmo"));
 	}
-	CHECK(seen.size() == 2);
+	CHECK(seen == std::set<String>{ "crate", "Models/Tower.HWMO", "hut.hwmo", "rock", "bush", "bush_b" });
+}
+
+TEST_CASE("Prop keys follow the baked placement, not its index", "[section_path_place]")
+{
+	PropRule rule;
+	rule.asset = "rock";
+	rule.keepChance = 0.8f;
+	rule.positionJitter = 1.0f;
+	rule.yawJitterDeg = 30.0f;
+	rule.scaleJitter = 0.2f;
+	rule.swapGroup = { "rock_b" };
+
+	const SectionPlacement a = Prop("rock", 2.0f, 4.0f, 0.0f);
+	const SectionPlacement b = Prop("rock", -2.0f, 12.0f, 0.0f);
+	const SectionPlacement added = Prop("bush", 1.0f, 8.0f, 0.0f);
+	const PathSpline spline = Polyline({ { 0.0f, 0.0f }, { 20.0f, 60.0f }, { 0.0f, 140.0f } });
+
+	// Inserting a prop in front of the others shifts their indices but not their keys or variation.
+	const std::vector<Placement> before = Build(spline, MakeAsset({ a, b }));
+	const std::vector<Placement> after = Build(spline, MakeAsset({ added, a, b }));
+	REQUIRE_FALSE(before.empty());
+
+	std::map<uint64, const Placement*> byKey;
+	for (const Placement& p : after)
+	{
+		byKey[p.key] = &p;
+	}
+	for (const Placement& p : before)
+	{
+		const auto it = byKey.find(p.key);
+		REQUIRE(it != byKey.end());
+		CHECK(it->second->asset == p.asset);
+		CHECK(it->second->position.x == p.position.x);
+		CHECK(it->second->position.z == p.position.z);
+		CHECK(it->second->rotation.w == p.rotation.w);
+		CHECK(it->second->scale.x == p.scale.x);
+	}
+
+	size_t bushes = 0;
+	for (const Placement& p : after)
+	{
+		bushes += p.asset == "bush" ? 1 : 0;
+	}
+	CHECK(after.size() == before.size() + bushes);
+	CHECK(bushes > 0);
 }
 
 TEST_CASE("Moving a control point keeps the props of untouched spans", "[section_path_place]")
@@ -260,7 +365,7 @@ TEST_CASE("Moving a control point keeps the props of untouched spans", "[section
 		{
 			for (size_t i = 0; i < props.size(); ++i)
 			{
-				untouched.insert(SectionPlacementKey(copy, GetVariant(shape, copy), i));
+				untouched.insert(SectionPlacementKey(copy, GetVariant(shape, copy), props[i].placement.key, props[i].placement.kind));
 			}
 		}
 	}

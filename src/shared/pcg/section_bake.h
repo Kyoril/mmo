@@ -69,4 +69,9 @@ namespace mmo::pcg
 	/// Writes a .hsecdef JSON document. Deterministic: keys in alphabetical order, rules and
 	/// variants in definition order.
 	String WriteSectionDefinition(const SectionDefinition& def);
+
+	/// Canonical form of a .hsecdef document, used to hash it into the source stamp: WriteSectionDefinition of
+	/// the parsed definition, so line endings (CRLF checkouts), whitespace and key order do not matter. Text that
+	/// does not parse is returned with every '\r' removed.
+	String CanonicalSectionDefinitionText(const String& json);
 }

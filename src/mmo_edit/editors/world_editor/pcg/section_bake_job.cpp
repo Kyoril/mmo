@@ -67,7 +67,8 @@ namespace mmo
 			}
 		}
 
-		void HashFile(uint64& hash, const String& assetPath)
+		/// Hashes a file's path, size and contents; canonicalDefinition hashes a .hsecdef in its canonical form.
+		void HashFile(uint64& hash, const String& assetPath, const bool canonicalDefinition = false)
 		{
 			HashBytes(hash, assetPath.data(), assetPath.size());
 			const char zero = 0;
@@ -77,6 +78,14 @@ namespace mmo
 			if (std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(assetPath))
 			{
 				contents.assign(std::istreambuf_iterator<char>(*file), std::istreambuf_iterator<char>());
+			}
+
+			// The section definition is text and may be checked out with CRLF line endings: hash its canonical
+			// form so the stamp is the same on every checkout. Binary files are hashed as they are.
+			if (canonicalDefinition)
+			{
+				const String canonical = pcg::CanonicalSectionDefinitionText(String(contents.begin(), contents.end()));
+				contents.assign(canonical.begin(), canonical.end());
 			}
 
 			uint64 size = contents.size();
@@ -399,7 +408,7 @@ namespace mmo
 		const String world = Normalize(worldPath);
 		uint64 hash = FnvOffset;
 		HashFile(hash, world);
-		HashFile(hash, GetSectionDefinitionPath(world));
+		HashFile(hash, GetSectionDefinitionPath(world), true);
 
 		std::vector<String> files;
 		for (String file : AssetRegistry::ListFiles(GetWorldDataFolder(world) + "/", ""))

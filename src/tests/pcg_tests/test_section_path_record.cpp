@@ -181,3 +181,18 @@ TEST_CASE("PeekRecordKind identifies the record type", "[section_path_record]")
 	SectionPathRecord loaded;
 	CHECK(ReadSectionPathRecord(reader, loaded));
 }
+
+TEST_CASE("SectionPathRecord read raises a stale next point id", "[section_path_record]")
+{
+	SectionPathRecord original = MakePopulated();
+	original.nextPointId = 3;
+
+	SectionPathRecord loaded;
+	REQUIRE(Deserialize(Serialize(original), loaded));
+	CHECK(loaded.nextPointId == 10);
+
+	// A next id above every point id is kept as is.
+	original.nextPointId = 42;
+	REQUIRE(Deserialize(Serialize(original), loaded));
+	CHECK(loaded.nextPointId == 42);
+}

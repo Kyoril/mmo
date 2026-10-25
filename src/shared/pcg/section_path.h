@@ -178,8 +178,10 @@ namespace mmo::pcg
 	/// go to the lowest segment index). A maxAcross above the grid's reach falls back to the full scan.
 	bool ProjectToSectionPath(const SectionPathShape& shape, float x, float z, float maxAcross, float& distance, float& across);
 
-	/// Stable key of placement `index` of `variant` stamped by `copy`: Hash(spanKey, copy, variant, index).
-	uint64 SectionPlacementKey(const SectionCopy& copy, uint32 variant, size_t index);
+	/// Stable key of a baked placement of `variant` stamped by `copy`: Hash(spanKey, copy, variant, sourceKey, sourceKind).
+	/// sourceKey is the baked placement's key (the section world object's unique id), so adding or removing another
+	/// prop in the section leaves the keys of the others unchanged.
+	uint64 SectionPlacementKey(const SectionCopy& copy, uint32 variant, uint64 sourceKey, PlacementKind sourceKind);
 
 	/// Terrain target of the path at a world position.
 	/// Height = centre line height + the variant's height; weight 1 within halfWidth of the path, fading
@@ -190,8 +192,8 @@ namespace mmo::pcg
 	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 
-	/// Places the baked props of every copy along the path. Per copy and variant placement i (variation from
-	/// Hash(seed, spanKey, copy, i), the placement's rule found by asset; no rule = no jitter, swap or keepChance,
+	/// Places the baked props of every copy along the path. Per copy and baked placement p (variation from
+	/// Hash(seed, spanKey, copy, p.key, p.kind), the placement's rule found by asset; no rule = no jitter, swap or keepChance,
 	/// propDensity still applies):
 	/// - kept if a hash is below keepChance x propDensity;
 	/// - local x/z jittered by up to +-positionJitter each, then s = copy start + localZ x stretch, clamped to the
@@ -199,9 +201,12 @@ namespace mmo::pcg
 	///   the frame's direction is measured inside the span too, so a prop never depends on a neighbouring span;
 	/// - rotation = yaw of the frame and a yaw jitter (+-yawJitterDeg) about world up times the local rotation,
 	///   so props stay upright on slopes; scale x (1 +- scaleJitter);
-	/// - swapped to swapGroup[hash % n] when the group is not empty (a swap to another asset drops the material
-	///   overrides and prop kits, which belong to the original asset);
-	/// - key = SectionPlacementKey(copy, variant, i), so editing one span leaves the keys of the others unchanged.
+	/// - when the swap group is not empty, one of {original} + swapGroup is picked by hash (index 0 keeps the
+	///   original). A swap to another asset drops the material overrides and prop kits, which belong to the
+	///   original asset, and takes the kind from the new asset (".hwmo" = WorldModel, else Entity); foliage stays
+	///   foliage and never swaps to a world model;
+	/// - key = SectionPlacementKey(copy, variant, p.key, p.kind), so editing one span leaves the keys of the others
+	///   unchanged, and so does adding or removing another prop in the section.
 	/// All props lie inside GetInfluenceRect.
 	/// @param ground Final ground (base + this path's terrain). Empty = the centre line height of the height mode
 	///        at the prop's arc position (spline height, or the base ground under the spline for FollowGround).

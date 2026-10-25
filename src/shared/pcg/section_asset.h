@@ -102,4 +102,10 @@ namespace mmo::pcg
 
 	/// Bilinear paint at a local position, clamped at the edges. Weights and coverage are in 0..255.
 	void SamplePaint(const SectionPaint& paint, float localX, float localZ, std::array<float, 4>& weights, float& coverage);
+
+	/// Texture key in the form layer textures are compared in: lower case, '\' replaced by '/'.
+	String NormalizeTextureKey(const String& key);
+
+	/// True if two texture keys name the same texture (compared via NormalizeTextureKey).
+	bool TextureKeysMatch(const String& a, const String& b);
 }

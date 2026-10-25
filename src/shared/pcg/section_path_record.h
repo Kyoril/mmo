@@ -27,7 +27,7 @@ namespace mmo::pcg
 		PathSpline spline;
 		/// Stable id per control point; must be parallel to spline.points.
 		std::vector<uint64> pointIds;
-		/// Next id handed out to a new control point.
+		/// Next id handed out to a new control point. Reading raises it to max(pointIds) + 1 if it is lower.
 		uint64 nextPointId = 1;
 		/// What the last build put into the world (influence, terrain contribution, owned objects).
 		OwnedContent content;

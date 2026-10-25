@@ -282,3 +282,14 @@ TEST_CASE("SamplePaint interpolates weights and coverage and clamps", "[section_
 	CHECK(w[0] == Approx(200.0f));
 	CHECK(cov == Approx(0.0f));
 }
+
+TEST_CASE("Texture keys compare case-insensitively with either slash", "[section_asset]")
+{
+	CHECK(NormalizeTextureKey("Textures\\Ground\\Grass.HTEX") == "textures/ground/grass.htex");
+	CHECK(TextureKeysMatch("Textures\\Ground\\Grass.HTEX", "textures/ground/grass.htex"));
+	CHECK(TextureKeysMatch("a/b.htex", "a/b.htex"));
+	CHECK_FALSE(TextureKeysMatch("a/b.htex", "a/c.htex"));
+	CHECK_FALSE(TextureKeysMatch("a/b.htex", "a/b.htex2"));
+	CHECK_FALSE(TextureKeysMatch("", "a"));
+	CHECK(TextureKeysMatch("", ""));
+}

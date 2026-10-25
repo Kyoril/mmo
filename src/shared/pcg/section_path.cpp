@@ -5,6 +5,7 @@
 #include "pcg_random.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 
@@ -712,11 +713,67 @@ namespace mmo::pcg
 			}
 			return &*it;
 		}
+
+		/// True if the asset path names a world model (".hwmo", case-insensitive).
+		bool IsWorldModelAsset(const String& asset)
+		{
+			static const char suffix[] = ".hwmo";
+			constexpr size_t length = sizeof(suffix) - 1;
+			if (asset.size() < length)
+			{
+				return false;
+			}
+
+			for (size_t i = 0; i < length; ++i)
+			{
+				const char c = static_cast<char>(std::tolower(static_cast<unsigned char>(asset[asset.size() - length + i])));
+				if (c != suffix[i])
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/// Applies a prop rule's swap group: picks from {original} + swapGroup (index 0 keeps the original). A swap
+		/// derives the kind from the new asset (foliage stays foliage and never swaps to a world model) and drops
+		/// the material overrides and prop kits, which belong to the original asset.
+		void ApplySwap(const PropRule& rule, const uint64 h, Placement& placement)
+		{
+			const size_t choice = static_cast<size_t>(h % (rule.swapGroup.size() + 1));
+			if (choice == 0)
+			{
+				return;
+			}
+
+			const String& swapped = rule.swapGroup[choice - 1];
+			if (swapped == placement.asset)
+			{
+				return;
+			}
+
+			const bool worldModel = IsWorldModelAsset(swapped);
+			if (placement.kind == PlacementKind::Foliage)
+			{
+				if (worldModel)
+				{
+					return;
+				}
+			}
+			else
+			{
+				placement.kind = worldModel ? PlacementKind::WorldModel : PlacementKind::Entity;
+			}
+
+			placement.asset = swapped;
+			placement.materialOverrides.clear();
+			placement.kitPaths.clear();
+		}
 	}
 
-	uint64 SectionPlacementKey(const SectionCopy& copy, const uint32 variant, const size_t index)
+	uint64 SectionPlacementKey(const SectionCopy& copy, const uint32 variant, const uint64 sourceKey, const PlacementKind sourceKind)
 	{
-		return Hash(Hash(copy.spanKey, copy.copy, variant, kKeySalt), static_cast<int64>(index), 0, kKeySalt);
+		return Hash(Hash(copy.spanKey, copy.copy, variant, kKeySalt), static_cast<int64>(sourceKey), static_cast<int64>(sourceKind), kKeySalt);
 	}
 
 	bool ProjectToSectionPath(const SectionPathShape& shape, const float x, const float z, const float maxAcross, float& distance, float& across)
@@ -776,11 +833,10 @@ namespace mmo::pcg
 			const uint64 copySeed = Hash(shape.params.seed, static_cast<int64>(copy.spanKey), copy.copy, kPropSalt);
 			const float stretch = copy.stretchedLength / asset.length;
 
-			for (size_t i = 0; i < variant.placements.size(); ++i)
+			for (const SectionPlacement& source : variant.placements)
 			{
-				const SectionPlacement& source = variant.placements[i];
 				const PropRule* rule = FindRule(asset.rules, source.placement.asset);
-				const uint64 h = Hash(copySeed, static_cast<int64>(i));
+				const uint64 h = Hash(copySeed, static_cast<int64>(source.placement.key), static_cast<int64>(source.placement.kind));
 
 				const float keep = (rule != nullptr ? rule->keepChance : 1.0f) * shape.params.propDensity;
 				if (!(HashToUnit(Hash(h, 1)) < keep))
@@ -811,7 +867,7 @@ namespace mmo::pcg
 				yaw += std::atan2(frame.forwardX, frame.forwardZ);
 
 				Placement placement = source.placement;
-				placement.key = SectionPlacementKey(copy, variantIndex, i);
+				placement.key = SectionPlacementKey(copy, variantIndex, source.placement.key, source.placement.kind);
 				placement.position.x = frame.position.x + frame.rightX * localX;
 				placement.position.z = frame.position.z + frame.rightZ * localX;
 				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : CentreHeightAt(shape, s);
@@ -821,13 +877,7 @@ namespace mmo::pcg
 
 				if (rule != nullptr && !rule->swapGroup.empty())
 				{
-					const String& swapped = rule->swapGroup[Hash(h, 6) % rule->swapGroup.size()];
-					if (swapped != placement.asset)
-					{
-						placement.asset = swapped;
-						placement.materialOverrides.clear();
-						placement.kitPaths.clear();
-					}
+					ApplySwap(*rule, Hash(h, 6), placement);
 				}
 
 				out.push_back(std::move(placement));

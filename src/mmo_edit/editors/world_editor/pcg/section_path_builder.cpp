@@ -100,7 +100,7 @@ namespace mmo
 					{
 						for (size_t target = 0; target < 4; ++target)
 						{
-							if (tileTextures[target] == m_layerTextures[layer])
+							if (pcg::TextureKeysMatch(tileTextures[target], m_layerTextures[layer]))
 							{
 								map[layer] = static_cast<int8>(target);
 								break;
@@ -323,6 +323,9 @@ namespace mmo
 
 		GeneratedContent content;
 		content.influence = pcg::GetInfluenceRect(probe);
+
+		// Every write lies within a copy's rect; open ocean between far apart copies stays open ocean.
+		GetSectionCopyRects(probe, content.writeRects);
 		content.prepare = [&record, &asset, shape](const GroundFunction& ground, String& error)
 		{
 			return pcg::PrepareSectionPath(record.spline, record.pointIds, asset, record.params, ground, *shape, error);

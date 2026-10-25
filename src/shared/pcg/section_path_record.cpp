@@ -103,6 +103,15 @@ namespace mmo::pcg
 			return false;
 		}
 
+		// A damaged or hand-edited file could hand out an id that is already in use: never go below max + 1.
+		for (const uint64 id : out.pointIds)
+		{
+			if (id >= out.nextPointId)
+			{
+				out.nextPointId = id + 1;
+			}
+		}
+
 		if (!GetOwnedContent(reader, out.content, PlacementVersion))
 		{
 			return false;

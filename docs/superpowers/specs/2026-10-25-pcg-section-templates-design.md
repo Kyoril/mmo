@@ -177,9 +177,14 @@ Pure functions in `src/shared/pcg/` (testable headless), editor adapter as in th
 - **Props:** each baked placement of copy `k` → local `(x, z)` → `s = k·L' + z·L'/L`, frame at `s` →
   world position = frame.position + right·x (+ forward·0), y = **final** ground at that point + the
   placement's height above the section terrain; rotation = frame yaw · local rotation (yaw only from
-  the frame; local pitch/roll kept). Variation per placement from `Hash(seed, k, placementIndex)`:
-  keep chance × propDensity, jitter, swap group. Stable key = hash of the span's endpoint ids, `k`,
-  the variant and the placement index, so the PoC's reconcile keeps unchanged props untouched.
+  the frame; local pitch/roll kept). Variation per placement from `Hash(seed, k, placementKey)`:
+  keep chance × propDensity, jitter, swap group (one of {original} ∪ swapGroup, so the original
+  stays possible; a swap takes its kind from the new asset, `.hwmo` = world model, and foliage stays
+  foliage). Stable key = hash of the span's endpoint ids, `k`, the variant and the baked placement's
+  key (the section object's unique id, not its index), so the PoC's reconcile keeps unchanged props
+  untouched, also when another prop of the section is added or removed.
+- **Open ocean:** ocean placeholder pages are materialised only where a section copy's influence
+  rect overlaps them, not across the path's whole bounding box.
 - Everything else (ownership, reconcile, record/terrain drift guard, page readiness, recipe-free
   validation, overlap refusal) is reused from the PoC unchanged.
 

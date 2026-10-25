@@ -290,3 +290,31 @@ TEST_CASE("Section definition parsing clamps rule values", "[section_bake]")
 	CHECK(parsed.rules[1].yawJitterDeg == 15.0f);
 	CHECK(parsed.rules[1].scaleJitter == 0.1f);
 }
+
+TEST_CASE("Section definition canonical text ignores line endings", "[section_bake]")
+{
+	const String lf = WriteSectionDefinition(MakeDefinition());
+	REQUIRE(lf.find('\n') != String::npos);
+	String crlf;
+	for (const char c : lf)
+	{
+		if (c == '\n')
+		{
+			crlf.push_back('\r');
+		}
+		crlf.push_back(c);
+	}
+	REQUIRE(crlf != lf);
+
+	CHECK(CanonicalSectionDefinitionText(lf) == lf);
+	CHECK(CanonicalSectionDefinitionText(crlf) == lf);
+
+	// A changed value still changes the canonical text.
+	SectionDefinition changed = MakeDefinition();
+	changed.length += 1.0f;
+	CHECK(CanonicalSectionDefinitionText(WriteSectionDefinition(changed)) != lf);
+
+	// Text that does not parse falls back to the raw text without carriage returns.
+	CHECK(CanonicalSectionDefinitionText("not\r\njson\r\n") == "not\njson\n");
+	CHECK(CanonicalSectionDefinitionText("not\njson\n") == "not\njson\n");
+}

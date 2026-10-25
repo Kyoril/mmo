@@ -3,6 +3,7 @@
 #include "section_asset.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 namespace mmo::pcg
@@ -435,5 +436,27 @@ namespace mmo::pcg
 
 		const auto cov = [&](const size_t i) { return static_cast<float>(paint.coverage[i]); };
 		coverage = Lerp(Lerp(cov(i00), cov(i10), c.tx), Lerp(cov(i01), cov(i11), c.tx), c.tz);
+	}
+
+	String NormalizeTextureKey(const String& key)
+	{
+		String result = key;
+		for (char& c : result)
+		{
+			if (c == '\\')
+			{
+				c = '/';
+			}
+			else
+			{
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+		}
+		return result;
+	}
+
+	bool TextureKeysMatch(const String& a, const String& b)
+	{
+		return a.size() == b.size() && NormalizeTextureKey(a) == NormalizeTextureKey(b);
 	}
 }

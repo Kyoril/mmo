@@ -56,6 +56,12 @@ namespace mmo
 		///        is loaded before anything is changed.
 		pcg::WorldRect influence{};
 
+		/// @brief Optional rects (inside the influence) covering every terrain sample the build may write.
+		///        Ocean placeholder pages are turned into real terrain before writing, but only where they
+		///        overlap one of these rects (grown by 1 m for seam samples), so a long section path does
+		///        not materialise every open-ocean page of its bounding box. Empty = the whole influence.
+		std::vector<pcg::WorldRect> writeRects;
+
 		/// @brief Optional step run after the previous contribution was undone and before the new
 		///        one is written, with the height of the ground as it is now. Generators whose shape
 		///        depends on the ground (the oasis rim) prepare it here; terrain and placements may
