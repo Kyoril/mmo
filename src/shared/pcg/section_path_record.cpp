@@ -18,7 +18,10 @@ namespace mmo::pcg
 		/// 1: initial layout. Placements use the oasis record's version 4 layout.
 		/// 2: appends the per-copy rects of the last build (builtRects).
 		/// 3: appends spline.closed, params.floorInside and params.groundSmoothing; height mode SmoothedGround.
-		constexpr uint32 FormatVersion = 3;
+		/// 4: appends the mass layer (massEnabled, massHeight, massDepth, massRise, massNoiseAmplitude,
+		///    massNoiseWavelength, massDetailAmplitude, massDetailWavelength, massPaintLayer) and the facade variety
+		///    (mirrorCopies, facadeHeightJitter).
+		constexpr uint32 FormatVersion = 4;
 		/// Bytes per rect written by PutRect.
 		constexpr size_t RectBytes = 16;
 		/// Placement layout version shared with the oasis record.
@@ -64,6 +67,19 @@ namespace mmo::pcg
 		Put<uint8>(writer, record.spline.closed ? 1 : 0);
 		Put<uint8>(writer, record.params.floorInside ? 1 : 0);
 		Put(writer, record.params.groundSmoothing);
+
+		const SectionPathParams& p = record.params;
+		Put<uint8>(writer, p.massEnabled ? 1 : 0);
+		Put(writer, p.massHeight);
+		Put(writer, p.massDepth);
+		Put(writer, p.massRise);
+		Put(writer, p.massNoiseAmplitude);
+		Put(writer, p.massNoiseWavelength);
+		Put(writer, p.massDetailAmplitude);
+		Put(writer, p.massDetailWavelength);
+		Put<int8>(writer, p.massPaintLayer);
+		Put<uint8>(writer, p.mirrorCopies ? 1 : 0);
+		Put(writer, p.facadeHeightJitter);
 		return true;
 	}
 
@@ -169,6 +185,34 @@ namespace mmo::pcg
 		}
 		out.spline.closed = closed != 0;
 		out.params.floorInside = floorInside != 0;
+
+		if (version < 4)
+		{
+			// Version 3 has no mass layer and no facade variety (both off).
+			return true;
+		}
+
+		SectionPathParams& p = out.params;
+		uint8 massEnabled = 0;
+		uint8 mirrorCopies = 0;
+		if (!Get(reader, massEnabled) || massEnabled > 1 || !Get(reader, p.massHeight) || !Get(reader, p.massDepth) ||
+			!Get(reader, p.massRise) || !Get(reader, p.massNoiseAmplitude) || !Get(reader, p.massNoiseWavelength) ||
+			!Get(reader, p.massDetailAmplitude) || !Get(reader, p.massDetailWavelength) || !Get(reader, p.massPaintLayer) ||
+			p.massPaintLayer < -1 || p.massPaintLayer > 3 || !Get(reader, mirrorCopies) || mirrorCopies > 1 ||
+			!Get(reader, p.facadeHeightJitter))
+		{
+			return false;
+		}
+		for (const float value : { p.massHeight, p.massDepth, p.massRise, p.massNoiseAmplitude, p.massNoiseWavelength,
+			p.massDetailAmplitude, p.massDetailWavelength, p.facadeHeightJitter })
+		{
+			if (!std::isfinite(value))
+			{
+				return false;
+			}
+		}
+		p.massEnabled = massEnabled != 0;
+		p.mirrorCopies = mirrorCopies != 0;
 		return true;
 	}
 

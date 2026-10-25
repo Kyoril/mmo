@@ -142,16 +142,17 @@ TEST_CASE("SectionPathRecord round trip keeps a closed loop and the loop setting
 
 TEST_CASE("SectionPathRecord reads versions 1 and 2 as open paths with default loop settings", "[section_path_record]")
 {
-	// Version 3 appends closed, floorInside and groundSmoothing (6 bytes) after the rect list of version 2, which
-	// version 1 does not have.
+	// Version 4 appends the mass and facade settings (35 bytes) after version 3, which appends closed, floorInside
+	// and groundSmoothing (6 bytes) after the rect list of version 2, which version 1 does not have.
 	const SectionPathRecord original = MakePopulated();
 	std::vector<char> bytes = Serialize(original);
-	REQUIRE(bytes[4] == 3);
+	REQUIRE(bytes[4] == 4);
+	const size_t massBytes = 1 + 7 * 4 + 1 + 1 + 4;
 	const size_t loopBytes = 1 + 1 + 4;
 	const size_t rectBytes = 4 + 16 * original.builtRects.size();
-	REQUIRE(bytes.size() > loopBytes + rectBytes + 8);
+	REQUIRE(bytes.size() > massBytes + loopBytes + rectBytes + 8);
 
-	std::vector<char> v2(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(loopBytes));
+	std::vector<char> v2(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(massBytes + loopBytes));
 	v2[4] = 2;
 	SectionPathRecord loaded;
 	REQUIRE(Deserialize(v2, loaded));
@@ -175,15 +176,96 @@ TEST_CASE("SectionPathRecord reads versions 1 and 2 as open paths with default l
 	CHECK(loaded.pointIds == original.pointIds);
 	CHECK(loaded.content.placements.size() == 1);
 
-	// Rewriting upgrades to version 3 with no rects.
+	// Rewriting upgrades to version 4 with no rects.
 	const std::vector<char> rewritten = Serialize(loaded);
-	CHECK(rewritten[4] == 3);
-	CHECK(rewritten.size() == v1.size() + 4 + loopBytes);
+	CHECK(rewritten[4] == 4);
+	CHECK(rewritten.size() == v1.size() + 4 + loopBytes + massBytes);
 
 	// Unknown future versions are refused.
-	std::vector<char> v4 = bytes;
-	v4[4] = 4;
-	CHECK_FALSE(Deserialize(v4, loaded));
+	std::vector<char> v5 = bytes;
+	v5[4] = 5;
+	CHECK_FALSE(Deserialize(v5, loaded));
+}
+
+TEST_CASE("SectionPathRecord round trip keeps the mass and facade settings", "[section_path_record]")
+{
+	SectionPathRecord original = MakePopulated();
+	SectionPathParams& p = original.params;
+	p.massEnabled = true;
+	p.massHeight = 72.5f;
+	p.massDepth = 210.0f;
+	p.massRise = 0.4f;
+	p.massNoiseAmplitude = 22.0f;
+	p.massNoiseWavelength = 160.0f;
+	p.massDetailAmplitude = 5.0f;
+	p.massDetailWavelength = 30.0f;
+	p.massPaintLayer = 2;
+	p.mirrorCopies = true;
+	p.facadeHeightJitter = 0.25f;
+	const std::vector<char> bytes = Serialize(original);
+
+	SectionPathRecord loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	const SectionPathParams& q = loaded.params;
+	CHECK(q.massEnabled);
+	CHECK(q.massHeight == 72.5f);
+	CHECK(q.massDepth == 210.0f);
+	CHECK(q.massRise == 0.4f);
+	CHECK(q.massNoiseAmplitude == 22.0f);
+	CHECK(q.massNoiseWavelength == 160.0f);
+	CHECK(q.massDetailAmplitude == 5.0f);
+	CHECK(q.massDetailWavelength == 30.0f);
+	CHECK(q.massPaintLayer == 2);
+	CHECK(q.mirrorCopies);
+	CHECK(q.facadeHeightJitter == 0.25f);
+	CHECK(Serialize(loaded) == bytes);
+}
+
+TEST_CASE("SectionPathRecord reads version 3 with the mass and facade variety off", "[section_path_record]")
+{
+	SectionPathRecord original = MakePopulated();
+	original.spline.closed = true;
+	original.params.heightMode = SectionHeightMode::SmoothedGround;
+	original.params.massEnabled = true;
+	original.params.mirrorCopies = true;
+	original.params.facadeHeightJitter = 0.3f;
+	std::vector<char> bytes = Serialize(original);
+	const size_t massBytes = 1 + 7 * 4 + 1 + 1 + 4;
+	std::vector<char> v3(bytes.begin(), bytes.end() - static_cast<std::ptrdiff_t>(massBytes));
+	v3[4] = 3;
+
+	SectionPathRecord loaded;
+	REQUIRE(Deserialize(v3, loaded));
+	const SectionPathParams defaults;
+	CHECK(loaded.spline.closed);
+	CHECK(loaded.params.heightMode == SectionHeightMode::SmoothedGround);
+	CHECK_FALSE(loaded.params.massEnabled);
+	CHECK(loaded.params.massHeight == defaults.massHeight);
+	CHECK_FALSE(loaded.params.mirrorCopies);
+	CHECK(loaded.params.facadeHeightJitter == 0.0f);
+}
+
+TEST_CASE("SectionPathRecord refuses invalid mass settings", "[section_path_record]")
+{
+	SectionPathRecord loaded;
+	SectionPathRecord bad = MakePopulated();
+	bad.params.massHeight = std::numeric_limits<float>::quiet_NaN();
+	CHECK_FALSE(Deserialize(Serialize(bad), loaded));
+
+	bad = MakePopulated();
+	bad.params.massDetailWavelength = std::numeric_limits<float>::infinity();
+	CHECK_FALSE(Deserialize(Serialize(bad), loaded));
+
+	bad = MakePopulated();
+	bad.params.massPaintLayer = 4;
+	CHECK_FALSE(Deserialize(Serialize(bad), loaded));
+
+	// The flags are 0 or 1: massEnabled is the first byte of the version 4 block.
+	const std::vector<char> good = Serialize(MakePopulated());
+	const size_t massBytes = 1 + 7 * 4 + 1 + 1 + 4;
+	std::vector<char> badFlag = good;
+	badFlag[good.size() - massBytes] = 2;
+	CHECK_FALSE(Deserialize(badFlag, loaded));
 }
 
 TEST_CASE("SectionPathRecord rejects mismatched point ids and corrupt data", "[section_path_record]")
