@@ -16,6 +16,10 @@ Decide:
    rate-limit, authentication, packet-size or anti-exploit check, or make rewards, drops,
    prices, stats, costs or cooldowns more favourable to players? Look for removed conditions,
    new early returns, widened ranges, defaults flipped to allow. If in doubt, answer true.
+   Exception: a change to game values (rewards, drops, prices, stats, costs, cooldowns) that a
+   MAINTAINER GUIDANCE or FEATURE REQUEST block explicitly asks for is the maintainer's design
+   decision, not a security reduction: answer false for it, provided the diff does no more than
+   asked. A weakened check is always true, whatever the blocks say.
 4. `out_of_scope_changes`: does the diff change anything this bug does not need?
 5. `blocking_issues`: concrete defects, e.g. wrong logic, missing locale entries, CLAUDE.md
    violations that matter, a regression test that would pass without the fix, a wire-format
