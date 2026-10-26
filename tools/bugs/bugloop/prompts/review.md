@@ -21,9 +21,15 @@ Decide:
    decision, not a security reduction: answer false for it, provided the diff does no more than
    asked. A weakened check is always true, whatever the blocks say.
 4. `out_of_scope_changes`: does the diff change anything this bug does not need?
-5. `blocking_issues`: concrete defects, e.g. wrong logic, missing locale entries, CLAUDE.md
-   violations that matter, a regression test that would pass without the fix, a wire-format
-   change without a protocol version bump. An empty list if none.
+5. `blocking_issues`: concrete defects in this diff that make it wrong, unsafe or unshippable,
+   e.g. wrong logic, a crash or nil call, missing locale entries, a build or test the diff breaks,
+   CLAUDE.md violations that matter, a regression test that would pass without the fix, a
+   wire-format change without a protocol version bump. An empty list if none. Each one parks the
+   fix and is sent back to the fixer to repair, so name the file and line and say what is wrong.
+   `advisory_notes`: everything else worth saying that does not make this diff wrong: follow-up
+   work, other entries with the same gap, audits or tests that would be nice, style, citation
+   nits. These never park the fix. When unsure whether something blocks, ask: would shipping this
+   diff as it is make the game worse than it is today? Only then it is blocking.
 6. `summary`: two sentences.
 7. `design_question`: if the change involves a product or game-design choice the maintainer should
    make — balance, difficulty, encounter or AI behaviour, anything the cited source does not settle —
