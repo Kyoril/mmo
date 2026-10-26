@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000023;
+		constexpr uint32 ProtocolVersion = 0x00000024;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -493,6 +493,10 @@ namespace mmo
 
 				/// GM cooldown bypass on the sender. Payload: uint8 enabled (0/1).
 				CheatNoCooldown,
+
+				/// Sent by the client to buy an item it sold to the open vendor back. Proxied to the
+				/// world node. Payload: uint64 vendor guid, uint32 buyback slot index (zero based).
+				BuyBackItem,
 
 				/// Counter constant
 				Count_,
@@ -911,6 +915,14 @@ namespace mmo
 
 				/// Localizable whisper failure: uint8 chat_message_result, dynamic<uint8> target name.
 				ChatMessageResult,
+
+				/// The items the character sold to a vendor during this world session and can buy
+				/// back while the vendor window is open. Sent together with ListInventory and again
+				/// whenever the list changes. Buyback offers are never persisted, so the list is
+				/// empty again after a logout or a world node change. Payload: uint64 vendor guid,
+				/// uint8 count, then per entry uint32 buyback slot index, uint32 itemId, uint32
+				/// displayId, uint32 stackCount, uint32 price, uint32 durability.
+				BuyBackList,
 
 				/// Counter constant
 				Count_,

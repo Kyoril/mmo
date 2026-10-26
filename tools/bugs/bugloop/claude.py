@@ -10,6 +10,7 @@ additionally runs with git settings that make any push fail; the orchestrator's 
 
 import json
 import os
+import re
 import subprocess
 
 from .procs import run_with_tree_kill
@@ -34,6 +35,20 @@ FIXER_GIT_CONFIG = (
 
 class ClaudeError(RuntimeError):
 	pass
+
+
+class ClaudeUnavailable(ClaudeError):
+	"""Claude itself cannot run (logged out, no credit, usage limit): not the bug's fault."""
+
+
+# What `claude -p` answers when no call can succeed until someone acts; on 2026-10-26 an expired
+# login turned four bugs into needs-info and used up the maintainer's decisions on them.
+_UNAVAILABLE = re.compile(r"failed to authenticate|oauth|not logged in|/login|invalid api key|"
+	r"credit balance|usage limit|rate limit|overloaded|authentication_error", re.IGNORECASE)
+
+
+def _unavailable(text):
+	return bool(_UNAVAILABLE.search(text or ""))
 
 
 def _parse_json_text(text):
@@ -95,11 +110,18 @@ class ClaudeRunner:
 			raise ClaudeError("claude timed out after {} s".format(timeout))
 		except OSError as error:
 			raise ClaudeError("cannot start claude: {}".format(error))
-		if completed.returncode != 0:
-			raise ClaudeError("claude exited with {}: {}".format(completed.returncode, (completed.stderr or completed.stdout or "")[-2000:]))
 		try:
 			result = json.loads(completed.stdout)
 		except ValueError:
+			result = None
+		if isinstance(result, dict) and result.get("is_error") and _unavailable(str(result.get("result"))):
+			raise ClaudeUnavailable("claude is unavailable: " + str(result.get("result"))[:500])
+		if completed.returncode != 0:
+			output = completed.stderr or completed.stdout or ""
+			if _unavailable(output):
+				raise ClaudeUnavailable("claude is unavailable: " + output[-500:])
+			raise ClaudeError("claude exited with {}: {}".format(completed.returncode, output[-2000:]))
+		if result is None:
 			raise ClaudeError("claude output is not JSON: " + (completed.stdout or "")[:500])
 		if not isinstance(result, dict):
 			raise ClaudeError("claude output is not a JSON object")
@@ -117,6 +139,10 @@ class ClaudeRunner:
 		if not isinstance(value, dict):
 			raise ClaudeError("claude returned no structured object")
 		return value
+
+	def probe(self, cwd, timeout=300):
+		"""One tiny call; raises ClaudeUnavailable (or ClaudeError) while Claude cannot run."""
+		self._invoke(self._command(["--tools", ""]), "Answer with the single word ok.", cwd, timeout)
 
 	def agent(self, prompt, input_text, cwd, timeout, max_usd):
 		"""An unattended agent with all tools except git push, working in cwd (the fixer)."""

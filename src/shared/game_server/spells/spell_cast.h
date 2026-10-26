@@ -86,6 +86,12 @@ namespace mmo
 
 		void SetState(const std::shared_ptr<CastState>& castState);
 
+		/// Whether a state is still installed after callbacks which may have started another cast.
+		bool IsCurrentState(const CastState& state) const
+		{
+			return m_castState.get() == &state;
+		}
+
 		/// Drops any cast in progress silently, for use when the casting unit leaves the world.
 		/// This includes every cast still resolving on its own (see TrackDetachedCast).
 		void AbandonCast();

@@ -2,6 +2,7 @@
 #include "catch.hpp"
 #include "game_server/player_duel.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/objects/game_creature_s.h"
 #include "game/object_type_id.h"
 #include "base/timer_queue.h"
 #include "proto_data/project.h"
@@ -144,6 +145,59 @@ TEST_CASE("Periodic duel damage ends at the same floor and cannot keep ticking a
 	CHECK(f.b->IsAlive()); CHECK(f.b->GetHealth() == 10);
 	CHECK(f.b->Damage(15, spell_school::Fire, f.a.get(), damage_type::Periodic) == 0);
 	CHECK(f.b->GetHealth() == 10);
+}
+
+TEST_CASE("A duel does not protect against outside or environmental damage", "[duel][damage_source]")
+{
+	DuelFixture f;
+	f.Begin();
+	std::shared_ptr<GameUnitS> outsider = test::MakeUnit(f.project, f.timers);
+	outsider->Set<uint64>(object_fields::Guid, 3);
+	GameUnitS* attacker = outsider.get();
+	SECTION("third player") {}
+	SECTION("creature")
+	{
+		auto* entry = f.project.units.add(3);
+		entry->set_name("Outside attacker");
+		entry->set_minlevel(1);
+		entry->set_maxlevel(1);
+		outsider = std::make_shared<GameCreatureS>(f.project, f.timers, *entry);
+		outsider->Initialize();
+		outsider->Set<uint64>(object_fields::Guid, 3);
+		attacker = outsider.get();
+	}
+	SECTION("environment") { attacker = nullptr; }
+	SECTION("another player's summon") { outsider->Set<uint64>(object_fields::Owner, 4); }
+
+	bool died = false;
+	scoped_connection death{ f.b->killed.connect([&](GameUnitS*) { died = true; }) };
+	CHECK(f.b->Damage(995, spell_school::Fire, attacker, damage_type::Periodic) == 995);
+	CHECK(f.b->GetHealth() == 5);
+	CHECK_FALSE(f.duel->IsFinished());
+	CHECK(f.b->Damage(2000, spell_school::Normal, attacker, damage_type::AttackSwing) == 5);
+	CHECK_FALSE(f.b->IsAlive());
+	CHECK(died);
+	f.duel->Update(5000);
+	CHECK(f.duel->IsFinished());
+	CHECK(std::get<2>(f.events.back()) == static_cast<uint8>(DuelResult::Cancelled));
+}
+
+TEST_CASE("Owned duel damage respects invitation, defeat and post-duel protection", "[duel][damage_source]")
+{
+	DuelFixture f;
+	auto summon = test::MakeUnit(f.project, f.timers);
+	summon->Set<uint64>(object_fields::Guid, 3);
+	summon->Set<uint64>(object_fields::Owner, f.a->GetGuid());
+	CHECK(f.b->Damage(2000, spell_school::Fire, summon.get(), damage_type::Periodic) == 0);
+	f.Begin();
+	CHECK(f.b->Damage(2000, spell_school::Fire, summon.get(), damage_type::Periodic) == 990);
+	CHECK(f.b->GetHealth() == 10);
+	CHECK(f.duel->IsFinished());
+	CHECK(std::get<2>(f.events.back()) == static_cast<uint8>(DuelResult::Lost));
+	const auto eventCount = f.events.size();
+	CHECK(f.b->Damage(2000, spell_school::Fire, summon.get(), damage_type::Periodic) == 0);
+	CHECK(f.b->IsAlive());
+	CHECK(f.events.size() == eventCount);
 }
 
 TEST_CASE("Declined and expired duels clear both participants without hostility", "[duel]")

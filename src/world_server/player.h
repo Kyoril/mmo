@@ -488,6 +488,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnBuyItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// Handles the client's request to buy an item back that it sold to the currently interacted vendor npc.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnBuyBackItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// Handles the client's request to buy a spell from the currently interacted trainer npc.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -883,6 +889,10 @@ namespace mmo
 		void SendVendorInventory(const proto::VendorEntry& vendor, const GameCreatureS& vendorUnit);
 
 		void SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result);
+
+		/// Sends the items the character sold during this world session and can buy back right now.
+		/// @param vendorGuid The vendor npc the list belongs to.
+		void SendBuyBackList(uint64 vendorGuid);
 
 		/// Returns true if the player's active class may use this trainer. Class trainers with a
 		/// configured class id only serve that class; all other trainers serve everyone.

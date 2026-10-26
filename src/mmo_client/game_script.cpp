@@ -874,6 +874,29 @@ namespace mmo
 		outUsable = false;
 	}
 
+	void GameScript::GetVendorBuybackItemInfo(int32 slot, const ItemInfo *&outItem, String &outIcon, int32 &outPrice, int32 &outQuantity) const
+	{
+		const auto &buyBackItems = m_vendorClient.GetBuyBackItems();
+		if (slot < 0 || slot >= buyBackItems.size() || buyBackItems[slot].itemData == nullptr)
+		{
+			outItem = nullptr;
+			outIcon.clear();
+			outPrice = 0;
+			outQuantity = 0;
+			return;
+		}
+
+		outItem = buyBackItems[slot].itemData;
+
+		const auto *displayData = m_project.itemDisplays.getById(buyBackItems[slot].displayId);
+		if (displayData)
+		{
+			outIcon = displayData->icon().c_str();
+		}
+		outPrice = buyBackItems[slot].price;
+		outQuantity = buyBackItems[slot].stackCount;
+	}
+
 	void GameScript::GetTrainerSpellInfo(int32 slot, int32 &outSpellId, String &outName, String &outIcon, int32 &outPrice, bool &outKnown) const
 	{
 		const auto &trainerSpells = m_trainerClient.GetTrainerSpells();
@@ -1768,6 +1791,8 @@ namespace mmo
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &)>>("GetVendorBuybackItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity)
+																																{ return this->GetVendorBuybackItemInfo(slot, out_item, out_icon, out_price, out_quantity); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 					   luabind::def_lambda("BuyVendorItem", [this](uint32 slot)
 										   { this->BuyVendorItem(slot, 1); }),
 

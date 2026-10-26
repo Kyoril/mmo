@@ -144,6 +144,9 @@ namespace mmo
 
 	void ChannelingCastState::EndChanneling(bool succeeded)
 	{
+		// Aura removal and end listeners can replace or abandon this state mid-callback.
+		auto strongThis = shared_from_this();
+
 		if (m_hasFinished)
 		{
 			return;

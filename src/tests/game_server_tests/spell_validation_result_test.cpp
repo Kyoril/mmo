@@ -19,6 +19,7 @@
 #include "base/timer_queue.h"
 #include "game/spell.h"
 #include "game_server/spells/spell_cast.h"
+#include "game_server/player_duel.h"
 #include "shared/proto_data/project.h"
 #include "asio/io_service.hpp"
 
@@ -146,6 +147,108 @@ TEST_CASE_METHOD(CastResultFixture, "A cast that passes validation still reports
 	const SpellCastResult result = caster->CastSpell(targetMap, *bolt, 0, false, 0, true);
 
 	CHECK(result == spell_cast_result::CastOkay);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "A duel ending on a channel tick survives a replacement cast from its end callback", "[duel][channel]")
+{
+	victimEntry->set_factiontemplate(CasterTemplate);
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	auto victim = Spawn(*victimEntry, Vector3(5.0f, 0.0f, 0.0f));
+	victim->Set<uint32>(object_fields::FactionTemplate, CasterTemplate);
+	for (const auto& unit : { caster, victim })
+	{
+		unit->Set<uint32>(object_fields::MaxHealth, 1000);
+		unit->Set<uint32>(object_fields::Health, 1000);
+	}
+
+	auto* channel = project.spells.add(100);
+	channel->set_name("Duel channel regression");
+	channel->set_rangetype(ShortRange);
+	channel->set_duration(500);
+	channel->add_attributes(spell_attributes::Channeled);
+	channel->add_attributes(0);
+	auto* periodic = channel->add_effects();
+	periodic->set_type(spell_effects::ApplyAura);
+	periodic->set_aura(aura_type::PeriodicDamage);
+	periodic->set_targeta(spell_effect_targets::TargetEnemy);
+	periodic->set_amplitude(10);
+	periodic->set_basepoints(5000);
+
+	auto* replacement = project.spells.add(101);
+	replacement->add_attributes(0);
+	replacement->add_attributes(0);
+	replacement->set_cooldownflags(spell_cooldown_flags::NoGlobalCooldown);
+
+	unsigned outcomes = 0, ended = 0;
+	auto duel = std::make_shared<PlayerDuel>(caster, victim,
+		[&](uint64, DuelEvent event, uint8, const String&, const Vector3&)
+		{
+			if (event == DuelEvent::Finished)
+			{
+				++outcomes;
+			}
+		}, 1000);
+	duel->Start();
+	duel->Accept(victim->GetGuid(), 1000);
+	duel->Update(4000);
+	REQUIRE(caster->IsDuelActive());
+
+	SpellCastResult replacementResult = spell_cast_result::FailedError;
+	SpellTargetMap self;
+	self.SetTargetMap(spell_cast_target_flags::Self);
+	scoped_connection onEnd{ caster->finishedCasting.connect([&](bool)
+	{
+		if (++ended == 1)
+		{
+			// Deliberately replace the active state while channel cancellation is notifying
+			// listeners, rather than letting the SpellCast keep its last reference alive.
+			replacementResult = caster->CastSpell(self, *replacement, 5000, false, 0, true);
+		}
+	}) };
+	SpellTargetMap target;
+	target.SetTargetMap(spell_cast_target_flags::Unit);
+	target.SetUnitTarget(victim->GetGuid());
+	REQUIRE(caster->CastSpell(target, *channel, 500, false, 0, true) == spell_cast_result::CastOkay);
+	REQUIRE(victim->HasAuraSpell(channel->id()));
+	CHECK_FALSE(duel->IsFinished());
+	io.run_for(std::chrono::milliseconds(100));
+	CHECK(duel->IsFinished());
+	CHECK(victim->IsAlive());
+	CHECK(victim->GetHealth() == 10);
+	CHECK_FALSE(victim->HasAuraSpell(channel->id()));
+	CHECK(outcomes == 2);
+	CHECK(ended == 1);
+	CHECK(replacementResult == spell_cast_result::CastOkay);
+	CHECK(caster->CastSpell(self, *replacement, 0, false, 0, true) == spell_cast_result::FailedSpellInProgress);
+	onEnd.disconnect();
+	caster->CancelCast(spell_interrupt_flags::Any);
+}
+
+TEST_CASE_METHOD(CastResultFixture, "Cancelling a single cast preserves a replacement started by its end listener", "[spell][cast_lifetime]")
+{
+	auto caster = Spawn(*casterEntry, Vector3::Zero);
+	auto* replacement = project.spells.add(101);
+	replacement->add_attributes(0);
+	replacement->add_attributes(0);
+	replacement->set_cooldownflags(spell_cooldown_flags::NoGlobalCooldown);
+	SpellTargetMap self;
+	self.SetTargetMap(spell_cast_target_flags::Self);
+	REQUIRE(caster->CastSpell(self, *bolt, 5000, false, 0, true) == spell_cast_result::CastOkay);
+	unsigned ended = 0;
+	SpellCastResult replacementResult = spell_cast_result::FailedError;
+	scoped_connection onEnd{ caster->finishedCasting.connect([&](bool)
+	{
+		if (++ended == 1)
+		{
+			replacementResult = caster->CastSpell(self, *replacement, 5000, false, 0, true);
+		}
+	}) };
+	caster->CancelCast(spell_interrupt_flags::Any);
+	CHECK(replacementResult == spell_cast_result::CastOkay);
+	CHECK(ended == 1);
+	CHECK(caster->CastSpell(self, *replacement, 0, false, 0, true) == spell_cast_result::FailedSpellInProgress);
+	onEnd.disconnect();
+	caster->CancelCast(spell_interrupt_flags::Any);
 }
 
 TEST_CASE_METHOD(CastResultFixture, "GM cooldown bypass allows repeated casts and disabling restores cooldowns", "[spell][gm_cheats]")

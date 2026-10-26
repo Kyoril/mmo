@@ -41,6 +41,15 @@ The guard is an allow-list: only paths under these roots (each with its own file
 - `src/world_server/`, `src/realm_server/`, `src/mmo_client/` (C/C++ files)
 - `data/client/Interface/` (`.lua`, `.xml`, `.toc`), `data/client/Locales/` (`.txt`)
 - `data/editor/data/` (`.data`), `data/scripts/` (`.lua`)
+- `src/shared/{bot_core,bot_ai,bot_chat}/` (C/C++; bots can do nothing a player client cannot)
+- `docs/` and `e2e/README.md` (`.md` only; prose nothing builds or loads)
+- `data/client/ClientDB/<name>.data`, but only together with `data/editor/data/<name>.data`: the
+  client copy is exported from the editor file, and the guard decodes and judges that one
+- `src/tests/CMakeLists.txt` and `src/tests/<suite>/CMakeLists.txt`, line by line: only the shapes
+  that register a suite (`mmo_add_test`, `add_subdirectory`, `target_sources`/`..._include_directories`/
+  `..._compile_definitions(<target> PRIVATE` with source, directory and `MMO_*="${CMAKE_SOURCE_DIR}/..."`
+  lines, `if (MMO_...)`, `if (EXISTS "${CMAKE_SOURCE_DIR}/...")`, `else()`, `endif()`, comments). Any other
+  CMake line parks; every other `CMakeLists.txt` stays protected
 
 The guard also parks: edits within 20 lines of a security-sensitive identifier or a rejection
 path; changed server-code lines containing economy words (xp, reward, loot, drop, credit,
@@ -50,6 +59,22 @@ preprocessor directives other than an `#include` of a header by a plain path and
 in a header; Lua `require`, `dofile` and
 `loadstring`; an added `return true;` or `return PacketParseResult::...` in server code;
 control characters; unparseable diff headers; and submodule pointer changes.
+
+**Advisory findings (since 2026-10-26).** Some findings no longer park on their own: they go to
+the reviewer as "advisory (does not park; check it)" lines, and the review and the gate decide.
+Since 2026-10-17 they caused most parks, and the maintainer shipped those fixes as they were:
+
+- a changed tuned value or numeric condition, except in server files whose name is about the
+  economy (loot, reward, vendor, quest, xp, money, price, trade, level, talent, inventory, mail,
+  bank, ...): `if (count > 1)` in `loot_instance.cpp` still parks;
+- a path outside the allow-list above, and a file type a root does not list (except in test
+  folders, which the gate compiles and runs);
+- a changed binary file under `data/client/` (client data cannot cheat the server).
+
+Everything else above still parks: protected paths, security-sensitive edits, economy words in
+server code, economy data, preprocessor directives (an ordinary `#include` never raises one;
+what is left are shapes like `#define private public` or `#if 0` around a check), size limits.
+`guard.json` lists both, under `reasons` and `advisories`.
 
 Regression tests have their own rules. `src/tests/` may hold C/C++ files and `e2e/scenarios/`
 `.lua` files; anything else there parks. Test hunks skip the economy and condition rules but keep
@@ -76,9 +101,31 @@ anything is pushed. Emergency fixes and features always run the gate, because th
 "Feature ready" ping rely on a green result.
 
 A fix auto-ships only with: a fixable category, fixer confidence `high` (or `medium` with a
-passing regression proof), a clean review, an empty guard, a passing proof (code fixes), a green
+passing regression proof, or `medium` on a data or UI fix that needs no proof and has a clean
+review), a clean review, an empty guard, a passing proof (code fixes), a green
 fast gate, fewer than `autoship_cap_per_day` (20) ships today, no
 breaker, and a time outside 21:30–23:59 UTC (fixes ready during the window ship after it).
+
+The reviewer splits what it finds: `blocking_issues` (the diff is wrong, unsafe or breaks a build
+or test) park the fix, `advisory_notes` (follow-ups, other entries with the same gap, nice-to-have
+audits, style) are kept in `review.json` and never park it.
+
+### Self-correction
+
+A candidate that would park only for reasons the fixer can repair itself does not go to the
+maintainer yet. The loop runs another fix round on the same branch, up to `self_correct_rounds`
+(2) per bug, each needing 2 invocations of budget. Repairable are: the reviewer's blocking issues
+and its "does not fix the symptom", "not supported by the source", "out of scope" and "guidance not
+followed" answers; a failed or missing regression proof; a red fast gate; fixer confidence
+`medium`. Never repairable, so parked at once: any guard reason, a design question, a weakened
+security property, an unusable review, a diff too large to review, emergency tickets (they have
+their own attempts). A feature self-corrects the same way and still parks for approval at the end.
+
+The fixer sees the previous round's reasons in its PREVIOUS ATTEMPT block, as untrusted findings,
+never as maintainer guidance; a guided refix keeps its guidance in the rounds after it. Before a
+round starts, the bug is parked on paper (`pr_open`, the branch, the uploaded diff, the backup),
+so an interrupted or failed round leaves the last candidate reviewable. A maintainer refix starts
+the count again.
 
 ## Running it
 
@@ -194,6 +241,34 @@ does not announce it again; the first mode after an upgrade is recorded silently
 `notify_status_changes: false` post nothing. A worktree that cannot reach develop keeps its own
 "stalled"/"resumed" messages and does not change the mode.
 
+### When Claude cannot run
+
+When a `claude -p` call fails because Claude itself cannot run (the login expired, no credit,
+usage limit, overloaded: `ClaudeUnavailable`), that is not the bug's fault. The loop then
+(`claude_down` in `state.json`):
+
+- posts "Bug loop paused — Claude cannot run on the loop machine" once; for an expired login,
+  run `claude` and `/login` as the user the scheduled task runs as;
+- starts no triage, fix, refix, feature or emergency run, and leaves refix and implement decisions
+  pending (not consumed);
+- puts back what was cut off: a fix goes back to the queue, a refix or feature decision is kept in
+  `deferred_decisions` (the refix round is not counted), the emergency attempt is not counted;
+- every `claude_retry_minutes` (15) makes one tiny probe call; the first success posts "Bug loop
+  resumed" and replays the kept decisions.
+
+On 2026-10-26 an expired login turned four bugs into needs-info and used up two decisions.
+
+To carry out a refix or implement decision again that the loop could not finish (one used up
+before this pause existed, say), run from the main checkout:
+
+```powershell
+python tools/bugs/bug_loop.py replay <bug id>
+```
+
+The running loop takes the newest `decision: refix:` or `decision: implement:` entry the
+maintainer key wrote into that bug's history and carries it out at its next poll. The request
+file (`artifacts/bug-loop/replay/<bug id>`) carries nothing itself, so it cannot add guidance.
+
 ## Where to look
 
 - `python tools/bugs/bug_loop.py status`: what the loop does right now (see above).
@@ -254,6 +329,12 @@ The decision panel of a parked bug offers three actions: refix, ship and discard
 "Feature request" panel offers a fourth, "Implement as feature", on rejected reports that are
 not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
+- **Guidance sets game values.** A player report can never make rewards, drops, prices, stats,
+  costs or cooldowns more generous; maintainer guidance and feature descriptions can, and the
+  fixer makes exactly the requested change (the reviewer does not count it as a security
+  reduction). Such changes still park for a ship decision, since the guard parks every numeric
+  economy change. Weakening a permission, validation or security check stays refused, whoever
+  asks. (On 2026-10-26 the fixer refused a guided price raise for item 87.)
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
   maintainer's guidance, at most 3 guided rounds per bug. Before the fixer starts, the loop
   merges today's `origin/develop` into the branch itself; a data submodule pointer that both
@@ -270,7 +351,9 @@ not parked (see below). The loop consumes decisions before it does anything else
   same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
-- **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
+- **Ship**: ships exactly the recorded commit. The daily cap does not apply. A ship decision for a
+  bug whose branch is already merged on develop (a second click while the first ship waited in the
+  queue) only notes "already shipped in <commit>" and keeps the bug resolved. If the branch tip
   no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
   is re-parked and the maintainer must decide again. The panel sends the SHA-256 of the diff it
   shows with the decision; the loop ships only if that matches the diff it uploaded for the

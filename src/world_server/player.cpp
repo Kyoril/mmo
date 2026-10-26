@@ -1022,6 +1022,9 @@ namespace mmo
 		case game::client_realm_packet::SellItem:
 			OnSellItem(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::BuyBackItem:
+			OnBuyBackItem(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);
 			break;
@@ -3906,6 +3909,10 @@ namespace mmo
 
 			packet.Finish();
 		});
+
+		// The vendor window shows the buyback offers next to the vendor's own stock, so both lists
+		// are sent together.
+		SendBuyBackList(vendorUnit.GetGuid());
 	}
 
 	void Player::SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result)

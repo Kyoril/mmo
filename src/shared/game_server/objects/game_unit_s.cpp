@@ -24,6 +24,12 @@ namespace mmo
 {
 	namespace
 	{
+		bool isDamageFrom(const GameUnitS* instigator, const uint64 playerGuid)
+		{
+			return instigator && playerGuid != 0 &&
+				(instigator->GetGuid() == playerGuid || instigator->Get<uint64>(object_fields::Owner) == playerGuid);
+		}
+
 		float ApplyPctModifier(const float baseValue, const int32 pct)
 		{
 			return baseValue * ((100.0f + static_cast<float>(pct)) / 100.0f);
@@ -1017,8 +1023,9 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
-		if (instigator && ((m_duelPartner != 0 && m_duelPartner == instigator->GetGuid() && !m_duelActive)
-			|| (m_finishedDuelPartner != 0 && m_finishedDuelPartner == instigator->GetGuid() && GetAsyncTimeMs() < m_duelDamageBlockedUntil)))
+		const bool duelDamage = isDamageFrom(instigator, m_duelPartner);
+		if ((duelDamage && !m_duelActive)
+			|| (isDamageFrom(instigator, m_finishedDuelPartner) && GetAsyncTimeMs() < m_duelDamageBlockedUntil))
 		{
 			return 0;
 		}
@@ -1060,9 +1067,10 @@ namespace mmo
 			instigator->SetInCombat(true, true);
 		}
 
-		// Clamp before any death/proc callbacks. Large hits and periodic effects use this path too.
+		// Only the partner and their owned units can cause a duel defeat. Outside damage
+		// retains its normal health/death path, including periodic and environmental damage.
 		const uint32 duelFloor = DuelHealthFloor(GetMaxHealth());
-		const bool defeated = m_duelActive && damage > 0 && (health <= duelFloor || damage >= health - duelFloor);
+		const bool defeated = m_duelActive && duelDamage && damage > 0 && (health <= duelFloor || damage >= health - duelFloor);
 		if (defeated)
 		{
 			damage = health > duelFloor ? health - duelFloor : 0;

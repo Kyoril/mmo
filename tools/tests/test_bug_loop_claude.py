@@ -72,6 +72,20 @@ class RunnerTests(unittest.TestCase):
 			with self.assertRaises(claude.ClaudeError):
 				claude.ClaudeRunner("claude", run=run).structured("p", "i", {}, "", ".", 1)
 
+	def test_a_logged_out_cli_is_unavailable_not_a_failed_stage(self):
+		# What `claude -p` printed on 2026-10-26 after its OAuth session expired (exit code 1).
+		logged_out = result(is_error=True, result="Failed to authenticate: OAuth session expired and could not be refreshed",
+			total_cost_usd=0, usage={"input_tokens": 0, "output_tokens": 0})
+		for run in (FakeRun(logged_out, returncode=1), FakeRun(logged_out), FakeRun("", returncode=1, stderr="Please run /login")):
+			with self.assertRaises(claude.ClaudeUnavailable):
+				claude.ClaudeRunner("claude", run=run).agent("p", "i", ".", 1, 1.0)
+		with self.assertRaises(claude.ClaudeUnavailable):
+			claude.ClaudeRunner("claude", run=FakeRun(logged_out, returncode=1)).probe(".")
+		ordinary = FakeRun(result(is_error=True, result="the model refused"))
+		with self.assertRaises(claude.ClaudeError) as raised:
+			claude.ClaudeRunner("claude", run=ordinary).agent("p", "i", ".", 1, 1.0)
+		self.assertNotIsInstance(raised.exception, claude.ClaudeUnavailable)
+
 	def test_agent_skips_permissions_and_caps_budget(self):
 		run = FakeRun(result(result="done"))
 		value = claude.ClaudeRunner("claude", model="opus", run=run).agent("p", "i", "C:/wt", 99, 20.0)
