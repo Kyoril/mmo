@@ -11,15 +11,16 @@ namespace mmo
         InventorySlot slot) noexcept
         : m_context(context), m_slot(slot), m_stacks(0) // 0 means remove all stacks
           ,
-          m_removedItem(nullptr)
+          m_sold(false), m_removedItem(nullptr)
     {
     }
 
     RemoveItemCommand::RemoveItemCommand(
         IRemoveItemCommandContext &context,
         InventorySlot slot,
-        uint16 stacks) noexcept
-        : m_context(context), m_slot(slot), m_stacks(stacks), m_removedItem(nullptr)
+        uint16 stacks,
+        bool sold) noexcept
+        : m_context(context), m_slot(slot), m_stacks(stacks), m_sold(sold), m_removedItem(nullptr)
     {
     }
 
@@ -36,7 +37,7 @@ namespace mmo
         m_removedItem = m_context.GetItemAtSlot(m_slot.GetAbsolute());
 
         // Perform removal
-        m_context.RemoveItemFromSlot(m_slot.GetAbsolute(), m_stacks);
+        m_context.RemoveItemFromSlot(m_slot.GetAbsolute(), m_stacks, m_sold);
 
         return InventoryResult<void>::Success();
     }

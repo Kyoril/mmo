@@ -585,11 +585,11 @@ namespace mmo
 		const auto* map = GetAI().GetControlled().GetWorldInstance()->GetMapData();
 		ASSERT(map);
 
-		if (Vector3 position; map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position))
-		{
-			mover.MoveTo(position, 0.0f);
-		}
-		else
+		// A refused move (no path, or deep water for a creature which can not swim) has to wait
+		// and pick another point, or the creature would never wander again.
+		const MovementAbilityFlags abilities = GetAI().GetControlled().GetMovementAbilities();
+		if (Vector3 position; !map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position, abilities) ||
+			!mover.MoveTo(position, 0.0f))
 		{
 			OnTargetReached();
 		}

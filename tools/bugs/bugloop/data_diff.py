@@ -107,6 +107,21 @@ def changed_entries(changes):
 	return entries
 
 
+# Data files whose schema is not <stem>.proto: stem -> (proto stem, message), as
+# src/shared/proto_data/project.h pairs them.
+SCHEMA_ALIASES = {
+	"item_displays": ("item_display", "ItemDisplayData"),
+	"object_displays": ("object_display", "ObjectDisplayData"),
+	"lock_types": ("lock_type", "LockTypes"),
+	"ranges": ("spells", "Ranges"),
+	"combat_ratings": ("gtvalues", "CombatRatings"),
+	"melee_crit_chance": ("gtvalues", "MeleeCritChance"),
+	"spell_crit_chance": ("gtvalues", "SpellCritChance"),
+	"dodge_chance": ("gtvalues", "DodgeChance"),
+	"resistance_percentages": ("gtvalues", "ResistancePercentage"),
+}
+
+
 def message_name(proto_path):
 	"""A data file's message is the last top-level `message` of its .proto."""
 	with open(proto_path, "r", encoding="utf-8") as handle:
@@ -156,31 +171,30 @@ class DataDecoder:
 			raise DecoderUnavailable("protoc failed: " + (completed.stderr or completed.stdout or "")[-1000:])
 		sys.path.insert(0, out_dir)
 
-	def schema(self, file_name):
-		"""The message descriptor of a data file (e.g. "items.data"), or None. Several files are named
-		in the plural while their .proto is singular (item_displays.data, item_display.proto)."""
-		stem = os.path.splitext(os.path.basename(file_name))[0]
-		for candidate in (stem, stem[:-1] if stem.endswith("s") else None):
-			if not candidate:
-				continue
-			proto = os.path.join(self.project_root, "src", "shared", "proto_data", candidate + ".proto")
-			name = message_name(proto) if os.path.exists(proto) else None
-			if name is None:
-				continue
-			try:
-				return getattr(importlib.import_module(candidate + "_pb2"), name).DESCRIPTOR
-			except (ImportError, AttributeError):
-				return None
-		return None
-
-	def decode(self, stem, data):
-		proto = os.path.join(self.project_root, "src", "shared", "proto_data", stem + ".proto")
+	def _message_class(self, stem):
+		"""The generated message class of data file `stem` (SCHEMA_ALIASES first), or None."""
+		proto_stem, name = SCHEMA_ALIASES.get(stem, (stem, None))
+		proto = os.path.join(self.project_root, "src", "shared", "proto_data", proto_stem + ".proto")
 		if not os.path.exists(proto):
 			return None
-		name = message_name(proto)
+		name = name or message_name(proto)
 		if name is None:
 			return None
-		message = getattr(importlib.import_module(stem + "_pb2"), name)()
+		return getattr(importlib.import_module(proto_stem + "_pb2"), name)
+
+	def schema(self, file_name):
+		"""The message descriptor of a data file (e.g. "data/editor/data/items.data"), or None."""
+		try:
+			message_class = self._message_class(os.path.splitext(os.path.basename(file_name))[0])
+		except (ImportError, AttributeError):
+			return None
+		return message_class.DESCRIPTOR if message_class is not None else None
+
+	def decode(self, stem, data):
+		message_class = self._message_class(stem)
+		if message_class is None:
+			return None
+		message = message_class()
 		# Fields the compiled schema does not know are not refused: leaf_items() reports them as
 		# "<unknown N>" leaves, so a stale schema cannot hide a change (and unchanged ones stay invisible).
 		message.ParseFromString(data)

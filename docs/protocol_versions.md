@@ -120,6 +120,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 30 | 2026-10-23 | Vendor buyback: client `BuyBackItem` (vendor guid + buyback slot index, proxied to the world node) and server `BuyBackList` (vendor guid, then per entry the buyback slot index, item, display, stack count, price and durability), sent with `ListInventory` and whenever the buyback list changes |
 | 29 | 2026-10-20 | Second action bar: `MaxActionButtons` grows from 12 to 24, so the server `ActionButtons` payload carries 24 button records instead of 12 and the client `SetActionBarButton` slot range widens to 0..23 |
 | 28 | 2026-10-21 | Character order: `SetCharacterOrder` client opcode, `CharEnum` gains trailing uint64 realm time of day |
 | 27 | 2026-10-19 | GM observation: client `CheatInvisible` (uint8 enable), handled by the realm (persisted) and forwarded to the world node; client `CheatGhost` (uint8-length target name, empty = stop), handled by the realm |

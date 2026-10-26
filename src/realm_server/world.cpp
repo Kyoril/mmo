@@ -1088,10 +1088,18 @@ namespace mmo
 			items.push_back(item);
 		}
 
-		// Send result back to World Server
-		auto sendResult = [this, characterGuid, operationId](bool success)
+		// Send result back to World Server. Holds the World weakly: the database pool drains its
+		// queue, so this can run after the world node disconnected and the World was destroyed.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, operationId](bool success)
 		{
-			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
 				outPacket
@@ -1119,18 +1127,26 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, senderGuid = draft.senderGuid](MailCreationResult result)
+		// The World is held weakly (see OnSaveInventoryItems); the player manager outlives every World.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, &playerManager = m_playerManager, senderGuid = draft.senderGuid](MailCreationResult result)
 		{
 			// Notify the recipient about the new mail if they are online
 			if (result.result == mail_result::Ok)
 			{
-				if (Player* recipient = m_playerManager.GetPlayerByCharacterGuid(result.recipientId))
+				if (Player* recipient = playerManager.GetPlayerByCharacterGuid(result.recipientId))
 				{
 					recipient->SendMailNotify();
 				}
 			}
 
-			GetConnection().sendSinglePacket([senderGuid, &result](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([senderGuid, &result](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailDraftResult);
 				outPacket
@@ -1154,8 +1170,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, characterGuid, mailId](std::optional<uint32> money)
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, mailId](std::optional<uint32> money)
 		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
 			uint8 result = mail_result::Ok;
 			if (!money)
 			{
@@ -1166,7 +1189,7 @@ namespace mmo
 				result = mail_result::MailNotFound;
 			}
 
-			GetConnection().sendSinglePacket([characterGuid, mailId, result, amount = money.value_or(0)](auth::OutgoingPacket& outPacket)
+			strongThis->GetConnection().sendSinglePacket([characterGuid, mailId, result, amount = money.value_or(0)](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailTakeMoneyResult);
 				outPacket
@@ -1193,11 +1216,18 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, characterGuid, mailId](std::optional<MailAttachment> attachment)
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, mailId](std::optional<MailAttachment> attachment)
 		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
 			const uint8 result = attachment ? mail_result::Ok : mail_result::MailNotFound;
 
-			GetConnection().sendSinglePacket([characterGuid, mailId, result, attachment = attachment.value_or(MailAttachment{})](auth::OutgoingPacket& outPacket)
+			strongThis->GetConnection().sendSinglePacket([characterGuid, mailId, result, attachment = attachment.value_or(MailAttachment{})](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailTakeItemResult);
 				outPacket
@@ -1267,10 +1297,17 @@ namespace mmo
 			slots.push_back(slot);
 		}
 
-		// Send result back to World Server
-		auto sendResult = [this, characterGuid, operationId](bool success)
+		// Send result back to World Server. Held weakly for the same reason as in OnSaveInventoryItems.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, operationId](bool success)
 		{
-			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
 				outPacket

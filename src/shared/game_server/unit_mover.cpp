@@ -2,6 +2,7 @@
 
 #include "unit_mover.h"
 #include "game/circle.h"
+#include "game_server/water_path.h"
 #include "game_server/movement_timing.h"
 #include "game_server/objects/game_unit_s.h"
 #include "game_server/world/world_instance.h"
@@ -16,6 +17,66 @@ namespace mmo
 {
 	const GameTime UnitMover::UpdateFrequency = constants::OneSecond / 2;
 
+	namespace
+	{
+		/// @brief Wraps a map's water data into a query usable by ApplyWaterToPath.
+		/// @param map The map the moving unit is on. Only borrowed for the duration of the call
+		///	       which uses the query.
+		/// @return The query, or an empty one when the map has no water data at all.
+		WaterSurfaceQuery MakeWaterSurfaceQuery(const MapData& map)
+		{
+			if (!map.IsWaterDataAvailable())
+			{
+				return WaterSurfaceQuery();
+			}
+
+			return [&map](const float x, const float z, float& outSurfaceY)
+				{
+					return map.GetWaterSurface(Vector3(x, 0.0f, z), outSurfaceY);
+				};
+		}
+	}
+
+	bool UnitMover::IsInSwimmableWater(const Vector3& position) const
+	{
+		GameUnitS& moved = GetMoved();
+		if ((moved.GetMovementAbilities() & movement_ability::CanSwim) == 0)
+		{
+			return false;
+		}
+
+		WorldInstance* world = moved.GetWorldInstance();
+		const MapData* map = world ? world->GetMapData() : nullptr;
+		if (!map)
+		{
+			return false;
+		}
+
+		return IsSwimmableWaterAt(position, MakeWaterSurfaceQuery(*map));
+	}
+
+	void UnitMover::UpdateSwimmingFlag(const bool swimming)
+	{
+		GameUnitS& moved = GetMoved();
+
+		auto movementInfo = moved.GetMovementInfo();
+		if (movementInfo.IsSwimming() == swimming)
+		{
+			return;
+		}
+
+		if (swimming)
+		{
+			movementInfo.movementFlags |= movement_flags::Swimming;
+		}
+		else
+		{
+			movementInfo.movementFlags &= ~movement_flags::Swimming;
+		}
+
+		moved.ApplyMovementInfo(movementInfo);
+	}
+
 	UnitMover::UnitMover(GameUnitS& unit)
 		: m_unit(unit)
 		, m_moveReached(unit.GetTimers())
@@ -24,6 +85,7 @@ namespace mmo
 		, m_moveEnd(0)
 		, m_customSpeed(false)
 		, m_debugOutputEnabled(false)
+		, m_swimmingAtTarget(false)
 	{
 		m_moveUpdated.ended.connect([this]()
 			{
@@ -64,10 +126,14 @@ namespace mmo
 				const Radian o = m_customFacing.value_or(GetMoved().GetAngle(m_target.x, m_target.z));
 				auto& target = m_target;
 
+				// A unit which stopped in water deep enough to swim in keeps treading water
+				// there instead of standing on the ground below it.
+				const bool swimmingAtTarget = m_swimmingAtTarget;
+
 				// Update creatures position
 				const auto strongUnit = GetMoved().shared_from_this();
 				std::weak_ptr weakUnit(strongUnit);
-				GetMoved().GetWorldInstance()->GetUniverse().Post([weakUnit, target, o]()
+				GetMoved().GetWorldInstance()->GetUniverse().Post([weakUnit, target, o, swimmingAtTarget]()
 					{
 						if (const auto strongUnit = weakUnit.lock())
 						{
@@ -75,6 +141,10 @@ namespace mmo
 
 							auto info = strongUnit->GetMovementInfo();
 							info.movementFlags &= movement_flags::WalkMode;
+							if (swimmingAtTarget)
+							{
+								info.movementFlags |= movement_flags::Swimming;
+							}
 							strongUnit->ApplyMovementInfo(info);
 						}
 					});
@@ -220,7 +290,7 @@ namespace mmo
 
 		// Calculate path
 		std::vector<Vector3> path;
-		if (!map->CalculatePath(currentLoc, target, path))
+		if (!map->CalculatePath(currentLoc, target, path, moved.GetMovementAbilities()))
 		{
 			return false;
 		}
@@ -259,6 +329,19 @@ namespace mmo
 			}
 		}
 
+		// The nav mesh is baked on the ground, so a path through deep water would make the unit
+		// walk along its bottom. Lift it to the surface for a swimmer; for a unit which can not
+		// swim the path was already routed around deep water, and whatever still leads into it
+		// is cut off at the water's edge.
+		const WaterPathResult waterResult = ApplyWaterToPath(path, moved.GetMovementAbilities(),
+			MakeWaterSurfaceQuery(*map));
+		if (waterResult.blocked)
+		{
+			return false;
+		}
+
+		m_swimmingAtTarget = waterResult.destinationSwimming;
+
 		const std::vector<GameTime> arrivalTimes = BuildPathTimestamps(m_moveStart, currentLoc, path, customSpeed);
 		for (uint32 i = 0; i < path.size(); ++i)
 		{
@@ -274,6 +357,10 @@ namespace mmo
 
 		auto movementInfo = moved.GetMovementInfo();
 		movementInfo.movementFlags &= movement_flags::WalkMode;
+		if (waterResult.swimming)
+		{
+			movementInfo.movementFlags |= movement_flags::Swimming;
+		}
 		moved.ApplyMovementInfo(movementInfo);
 
 		// Send movement packet
@@ -393,7 +480,7 @@ namespace mmo
 		for (size_t i = 0; i < waypoints.size(); ++i)
 		{
 			std::vector<Vector3> segPath;
-			if (!map->CalculatePath(segmentStart, waypoints[i], segPath) || segPath.empty())
+			if (!map->CalculatePath(segmentStart, waypoints[i], segPath, moved.GetMovementAbilities()) || segPath.empty())
 			{
 				return false;
 			}
@@ -437,6 +524,17 @@ namespace mmo
 			return false;
 		}
 
+		// See MoveTo: deep water makes a swimmer float at the surface and stops a unit which
+		// can not swim at its edge.
+		const WaterPathResult waterResult = ApplyWaterToPath(fullPath, moved.GetMovementAbilities(),
+			MakeWaterSurfaceQuery(*map));
+		if (waterResult.blocked)
+		{
+			return false;
+		}
+
+		m_swimmingAtTarget = waterResult.destinationSwimming;
+
 		// Clear the current movement path
 		m_path.Clear();
 		m_customSpeed = false;
@@ -455,6 +553,10 @@ namespace mmo
 
 		auto movementInfo = moved.GetMovementInfo();
 		movementInfo.movementFlags &= movement_flags::WalkMode;
+		if (waterResult.swimming)
+		{
+			movementInfo.movementFlags |= movement_flags::Swimming;
+		}
 		moved.ApplyMovementInfo(movementInfo);
 
 		// Send a single movement packet covering the full waypoint chain
@@ -525,6 +627,11 @@ namespace mmo
 		// Update with grid notification
 		auto& moved = GetMoved();
 		moved.Relocate(currentLoc, o);
+
+		// A movement interrupted on land must not leave the unit flagged as swimming, and one
+		// interrupted in deep water has to keep the flag: it gates the NotAboveWater and
+		// NotUnderWater aura interrupts.
+		UpdateSwimmingFlag(IsInSwimmableWater(currentLoc));
 
 		// Send movement packet
 		TileIndex2D tile;

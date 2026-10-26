@@ -119,6 +119,8 @@ def main(argv=None):
 	p_status = sub.add_parser("status", help="what the running loop is doing right now")
 	p_status.add_argument("--json", action="store_true", help="print the raw status.json")
 	p_status.add_argument("--dry-run", action="store_true", help="the shadow loop's status")
+	p_replay = sub.add_parser("replay", help="carry out the bug's newest maintainer refix/implement decision again")
+	p_replay.add_argument("bug_id")
 	args = parser.parse_args(argv)
 
 	repo = os.path.abspath(args.repo)
@@ -130,6 +132,13 @@ def main(argv=None):
 		elif args.action == "off":
 			loop_state.reset_breaker(artifacts)
 		print("breaker: " + ("tripped" if loop_state.breaker_active(artifacts) else "clear"))
+		return 0
+	if args.command == "replay":
+		if not loop.valid_bug_id(args.bug_id):
+			print("not a bug id: " + args.bug_id, file=sys.stderr)
+			return 2
+		loop.request_replay(artifacts, args.bug_id)
+		print("replay requested for {}; the running loop carries it out at its next poll".format(args.bug_id))
 		return 0
 	if args.command == "status":
 		snapshot = loop_status.read(artifacts, loop_status.DRY_STATUS_FILE if args.dry_run else loop_status.STATUS_FILE)
