@@ -258,6 +258,17 @@ usage limit, overloaded: `ClaudeUnavailable`), that is not the bug's fault. The 
 
 On 2026-10-26 an expired login turned four bugs into needs-info and used up two decisions.
 
+To carry out a refix or implement decision again that the loop could not finish (one used up
+before this pause existed, say), run from the main checkout:
+
+```powershell
+python tools/bugs/bug_loop.py replay <bug id>
+```
+
+The running loop takes the newest `decision: refix:` or `decision: implement:` entry the
+maintainer key wrote into that bug's history and carries it out at its next poll. The request
+file (`artifacts/bug-loop/replay/<bug id>`) carries nothing itself, so it cannot add guidance.
+
 ## Where to look
 
 - `python tools/bugs/bug_loop.py status`: what the loop does right now (see above).

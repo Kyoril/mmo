@@ -86,6 +86,21 @@ EMERGENCY_QUIET = ("fix-started", "interrupted", "needs-info", "loop-error", "cl
 GATE_SKIPPED = "skipped: the candidate parks for other reasons; a ship decision runs the fast gate on the merge"
 
 
+REPLAY_DIR = "replay"
+# The maintainer decisions `bug_loop.py replay` can carry out again, as the bug history records them.
+REPLAY_PREFIXES = (("refix", "decision: refix: "), ("implement", IMPLEMENT_HISTORY_PREFIX))
+
+
+def request_replay(artifacts_dir, bug_id):
+	"""Asks the running loop to carry out the bug's newest maintainer refix or implement decision again
+	(one the loop could not finish, e.g. during a Claude outage). Only the decision's text in the bug
+	history, written with the maintainer key, is used; the request itself carries nothing."""
+	folder = os.path.join(artifacts_dir, REPLAY_DIR)
+	os.makedirs(folder, exist_ok=True)
+	with open(os.path.join(folder, bug_id), "w", encoding="utf-8") as handle:
+		handle.write("")
+
+
 class WorktreeUnavailable(RuntimeError):
 	"""The fix worktree could not be brought to origin/develop (fetch, checkout or submodule sync
 	failed: develop pushed before its submodule commit, say). It is the loop's fault, not the bug's,
@@ -372,6 +387,7 @@ class BugLoop:
 				self.log(traceback.format_exc())
 			self._backfill_review_diffs()
 			worked = self._handle_decisions() or worked
+			worked = self._replay_requests() or worked
 			self._release_stale_claims()
 			self._reconcile_parked()
 		self._ship_queued(now)
@@ -1529,6 +1545,43 @@ class BugLoop:
 		deferred = self.state.data.setdefault("deferred_decisions", [])
 		deferred[:] = [item for item in deferred if item.get("bug") != bug_id]
 		deferred.append({"bug": bug_id, "action": action, "guidance": guidance})
+
+	def _replay_requests(self):
+		"""Carries out `bug_loop.py replay` requests: the newest maintainer refix or implement decision in
+		each bug's history. Returns True when it ran one."""
+		folder = os.path.join(self.artifacts_dir, REPLAY_DIR)
+		if not os.path.isdir(folder):
+			return False
+		worked = False
+		for bug_id in sorted(os.listdir(folder)):
+			if not self._claude_ok or not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				break
+			os.remove(os.path.join(folder, bug_id))
+			if not valid_bug_id(bug_id):
+				continue
+			action = guidance = None
+			for entry in self.api.show(bug_id).get("history") or []:
+				change = entry.get("change") if isinstance(entry, dict) else None
+				if not isinstance(change, str) or entry.get("actor") != "maintainer":
+					continue
+				for name, prefix in REPLAY_PREFIXES:
+					if change.startswith(prefix):
+						action, guidance = name, change[len(prefix):].strip()[:4000]
+			if not action or not guidance:
+				self.log("bug {}: replay requested, but its history has no maintainer refix or implement decision".format(bug_id))
+				continue
+			self.log("bug {}: replaying the maintainer's {} decision on request".format(bug_id, action))
+			try:
+				if action == "refix":
+					self._refix(bug_id, guidance)
+				else:
+					self._implement(bug_id, guidance)
+			except WorktreeUnavailable:
+				request_replay(self.artifacts_dir, bug_id)  # again at the next poll
+			except Exception:
+				self.log(traceback.format_exc())
+			worked = True
+		return worked
 
 	def _replay_deferred(self):
 		"""Runs the refix and implement decisions a Claude outage interrupted, in their order."""

@@ -736,6 +736,23 @@ class LoopTests(unittest.TestCase):
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
 
+	def test_a_replay_request_carries_out_the_newest_maintainer_decision_again(self):
+		# 2026-10-26: decisions consumed during a Claude outage had to be clicked again by hand.
+		self.park_with_decision("refix", "unused")
+		self.api.bugs[BUG_ID]["decision"] = None
+		self.api.bugs[BUG_ID]["history"] = [
+			{"actor": "maintainer", "change": "decision: refix: Old guidance."},
+			{"actor": "maintainer", "change": "decision: refix: Count summoned units as player damage."},
+			{"actor": "bug-loop", "change": "decision: refix: Never taken from the loop's own entries."},
+		]
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		loop.request_replay(self.artifacts, BUG_ID)
+		self.loop.poll_once()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Count summoned units as player damage.", fix_input)
+		self.assertNotIn("Never taken", fix_input)
+		self.assertEqual(os.listdir(os.path.join(self.artifacts, loop.REPLAY_DIR)), [])
+
 	def test_guard_advisories_reach_the_reviewer_but_do_not_park(self):
 		self.make()
 		note = "src/shared/game_server/ai/x.cpp: changed a tuned value: m_range = 5;"
