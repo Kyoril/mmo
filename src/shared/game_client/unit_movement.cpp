@@ -1731,7 +1731,12 @@ namespace mmo
 
 						m_velocity.y = 0.f;
 						CalcVelocity(timeTick, m_fallingLateralFriction, false, maxDeceleration);
-						velocityNoAirControl = Vector3(m_velocity.x, oldVelocity.z, m_velocity.z);
+						// Horizontal components come from the acceleration-free CalcVelocity above,
+						// the vertical one from the velocity before this step. Taking the vertical
+						// component from oldVelocity.z instead turned the horizontal run speed into
+						// upward speed, so deflecting off a wall while falling launched the unit up
+						// its face for as long as the player kept pushing into it.
+						velocityNoAirControl = Vector3(m_velocity.x, oldVelocity.y, m_velocity.z);
 
 						velocityNoAirControl = NewFallVelocity(velocityNoAirControl, gravity, gravityTime);
 					}
