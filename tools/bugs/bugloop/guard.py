@@ -559,6 +559,35 @@ def is_production(path):
 	return not _is_test(path)
 
 
+# Findings that point the reviewer at something but do not park a fix on their own; the review and
+# the gate decide. Since 2026-10-17 they caused most parks (tuned values and numeric conditions 66,
+# the allow-list and file types 42), and the maintainer shipped those fixes as they were. Protected
+# paths, security-sensitive edits, server-side reward and economy logic and economy data, size
+# limits, file types in test folders (the gate compiles and runs them) and preprocessor directives
+# keep parking: an ordinary #include or #pragma once never raises one (_harmless_directive); what
+# is left are shapes like `#define private public` or `#if 0` around a check.
+ADVISORY_FINDINGS = re.compile(r": (changed a tuned value|changed a numeric condition|outside the auto-ship allow-list)(:|$)")
+FILE_TYPE_FINDING = ": file type not allowed to auto-ship here"
+# Client data cannot cheat the server: a changed client data file is a note for the reviewer.
+CLIENT_DATA_PREFIX = "data/client/"
+
+
+# Server files whose numbers are economy: a tuned value or numeric condition there keeps parking,
+# even without an economy word on the line (`if (count > 1)` in loot_instance.cpp).
+ECONOMY_PATH = re.compile(r"loot|reward|vendor|quest|xp|experience|money|gold|price|trade|auction|honor|reputation"
+	r"|drop|credit|level|talent|trainer|inventory|mail|bank", re.IGNORECASE)
+
+
+def is_advisory(reason):
+	path, _, finding = reason.partition(": ")
+	if ADVISORY_FINDINGS.search(reason):
+		tuned = finding.startswith(("changed a tuned value", "changed a numeric condition"))
+		return not (tuned and path.startswith(SERVER_ROOTS) and ECONOMY_PATH.search(path.rsplit("/", 1)[-1]))
+	if reason.endswith(FILE_TYPE_FINDING):
+		return not _is_test(path)
+	return path.startswith(CLIENT_DATA_PREFIX) and finding == "binary file changed"
+
+
 def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, max_entries=5, max_test_lines=MAX_TEST_LINES):
 	reasons = []
 	data = {}
@@ -602,4 +631,7 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 	if test_lines > max_test_lines:
 		reasons.append("{} changed test lines (limit {})".format(test_lines, max_test_lines))
 	reasons.extend(_hunk_reasons(hunks, {change.path for change in changes}, load_data))
-	return {"auto_ship_allowed": not reasons, "reasons": reasons, "changed_lines": changed_lines, "data": data}
+	advisories = [reason for reason in reasons if is_advisory(reason)]
+	reasons = [reason for reason in reasons if not is_advisory(reason)]
+	return {"auto_ship_allowed": not reasons, "reasons": reasons, "advisories": advisories,
+		"changed_lines": changed_lines, "data": data}

@@ -44,6 +44,9 @@ class LoopConfig:
 	# every ci_poll_seconds without consuming an attempt; the maintainer hears of it once it has
 	# lasted this long.
 	worktree_escalate_minutes: int = 60
+	# While Claude cannot run (logged out, no credit), a tiny probe call checks this often whether it
+	# works again; meanwhile no Claude work starts and no decision is consumed.
+	claude_retry_minutes: int = 15
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
 	# Self-correction: a candidate that would park only for reasons the fixer can repair itself

@@ -60,6 +60,22 @@ in a header; Lua `require`, `dofile` and
 `loadstring`; an added `return true;` or `return PacketParseResult::...` in server code;
 control characters; unparseable diff headers; and submodule pointer changes.
 
+**Advisory findings (since 2026-10-26).** Some findings no longer park on their own: they go to
+the reviewer as "advisory (does not park; check it)" lines, and the review and the gate decide.
+Since 2026-10-17 they caused most parks, and the maintainer shipped those fixes as they were:
+
+- a changed tuned value or numeric condition, except in server files whose name is about the
+  economy (loot, reward, vendor, quest, xp, money, price, trade, level, talent, inventory, mail,
+  bank, ...): `if (count > 1)` in `loot_instance.cpp` still parks;
+- a path outside the allow-list above, and a file type a root does not list (except in test
+  folders, which the gate compiles and runs);
+- a changed binary file under `data/client/` (client data cannot cheat the server).
+
+Everything else above still parks: protected paths, security-sensitive edits, economy words in
+server code, economy data, preprocessor directives (an ordinary `#include` never raises one;
+what is left are shapes like `#define private public` or `#if 0` around a check), size limits.
+`guard.json` lists both, under `reasons` and `advisories`.
+
 Regression tests have their own rules. `src/tests/` may hold C/C++ files and `e2e/scenarios/`
 `.lua` files; anything else there parks. Test hunks skip the economy and condition rules but keep
 the ones that could pull in or hide code: control characters, preprocessor directives (only an
@@ -225,6 +241,23 @@ does not announce it again; the first mode after an upgrade is recorded silently
 `notify_status_changes: false` post nothing. A worktree that cannot reach develop keeps its own
 "stalled"/"resumed" messages and does not change the mode.
 
+### When Claude cannot run
+
+When a `claude -p` call fails because Claude itself cannot run (the login expired, no credit,
+usage limit, overloaded: `ClaudeUnavailable`), that is not the bug's fault. The loop then
+(`claude_down` in `state.json`):
+
+- posts "Bug loop paused — Claude cannot run on the loop machine" once; for an expired login,
+  run `claude` and `/login` as the user the scheduled task runs as;
+- starts no triage, fix, refix, feature or emergency run, and leaves refix and implement decisions
+  pending (not consumed);
+- puts back what was cut off: a fix goes back to the queue, a refix or feature decision is kept in
+  `deferred_decisions` (the refix round is not counted), the emergency attempt is not counted;
+- every `claude_retry_minutes` (15) makes one tiny probe call; the first success posts "Bug loop
+  resumed" and replays the kept decisions.
+
+On 2026-10-26 an expired login turned four bugs into needs-info and used up two decisions.
+
 ## Where to look
 
 - `python tools/bugs/bug_loop.py status`: what the loop does right now (see above).
@@ -307,7 +340,9 @@ not parked (see below). The loop consumes decisions before it does anything else
   same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
-- **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
+- **Ship**: ships exactly the recorded commit. The daily cap does not apply. A ship decision for a
+  bug whose branch is already merged on develop (a second click while the first ship waited in the
+  queue) only notes "already shipped in <commit>" and keeps the bug resolved. If the branch tip
   no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
   is re-parked and the maintainer must decide again. The panel sends the SHA-256 of the diff it
   shows with the decision; the loop ships only if that matches the diff it uploaded for the

@@ -182,8 +182,17 @@ class FakeRunner:
 		self.calls = []
 		self.inputs = []
 		self.on_fix = None
+		# An exception every Claude call raises, like a logged-out CLI (None: calls work).
+		self.down = None
+
+	def probe(self, cwd, timeout=300):
+		self.calls.append("probe")
+		if self.down:
+			raise self.down
 
 	def structured(self, prompt, input_text, schema, tools, cwd, timeout):
+		if self.down:
+			raise self.down
 		self.calls.append(("triage" if tools == claude.TRIAGE_TOOLS else "review"))
 		self.inputs.append(("triage" if tools == claude.TRIAGE_TOOLS else "review", input_text))
 		if tools == claude.TRIAGE_TOOLS:
@@ -193,6 +202,8 @@ class FakeRunner:
 		return dict(self.review)
 
 	def agent(self, prompt, input_text, cwd, timeout, max_usd):
+		if self.down:
+			raise self.down
 		self.calls.append("fix")
 		self.inputs.append(("fix", input_text))
 		path = re.search(r"Write FIX.json to: (.+)", input_text).group(1).strip()
@@ -724,6 +735,90 @@ class LoopTests(unittest.TestCase):
 		self.assertIn("refix limit", self.api.notes(BUG_ID)[-1])
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
+
+	def test_guard_advisories_reach_the_reviewer_but_do_not_park(self):
+		self.make()
+		note = "src/shared/game_server/ai/x.cpp: changed a tuned value: m_range = 5;"
+		real = guard.evaluate
+		with mock.patch.object(guard, "evaluate", lambda *args, **kwargs: dict(real(*args, **kwargs), advisories=[note])):
+			self.loop.poll_once()
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("advisory (does not park; check it): " + note, review_input)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	LOGGED_OUT = claude.ClaudeUnavailable("claude is unavailable: Failed to authenticate: OAuth session expired")
+
+	def test_a_logged_out_claude_pauses_the_loop_instead_of_blaming_the_bug(self):
+		# 2026-10-26: an expired login turned four bugs into needs-info and used up two decisions.
+		self.make()
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertNotEqual((self.api.bugs[BUG_ID].get("triage") or {}).get("category"), loop.NEEDS_INFO_CATEGORY)
+		self.assertTrue(self.state.data["claude_down"])
+		self.assertEqual(sum("Bug loop paused" in m for m in self.notifier.messages), 1)
+		self.assertNotIn(BUG_ID, self.state.data["triage_failures"])
+		# While the pause holds, nothing calls Claude, not even the probe.
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls, [])
+		self.assertEqual(sum("Bug loop paused" in m for m in self.notifier.messages), 1)
+
+	def test_a_fix_cut_off_by_a_logout_is_queued_again(self):
+		self.make()
+		self.runner.on_fix = lambda: setattr(self.runner, "down", self.LOGGED_OUT)
+		self.runner.review = None  # never reached: the review is the first call after the logout
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertIn("waiting: Claude cannot run", self.api.notes(BUG_ID)[-1])
+		self.assertTrue(self.state.in_fix_queue(BUG_ID))
+		self.assertNotIn(BUG_ID, self.state.data["attempts"])
+
+	def test_a_refix_decision_waits_for_claude_and_runs_once_it_is_back(self):
+		self.park_with_decision("refix", "Exclude terrain from line of sight.")
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop._claude_failed("Failed to authenticate")
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertIsNone((self.api.bugs[BUG_ID].get("decision") or {}).get("consumedAt"))
+		self.assertNotIn(("refix", "Exclude terrain from line of sight."),
+			[(kind, text) for kind, text in self.runner.inputs if "Exclude terrain" in text])
+		# Back after the retry interval: the probe succeeds and the decision is carried out.
+		self.runner.down = None
+		self.now += datetime.timedelta(minutes=self.loop.config.claude_retry_minutes + 1)
+		self.loop.poll_once()
+		self.assertIsNone(self.state.data["claude_down"])
+		self.assertTrue(any("Bug loop resumed" in m for m in self.notifier.messages))
+		self.assertIn("Exclude terrain from line of sight.", dict(self.runner.inputs)["fix"])
+
+	def test_a_refix_cut_off_by_a_logout_is_replayed_without_using_a_round(self):
+		self.park_with_decision("refix", "Exclude terrain from line of sight.")
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("your refix runs once it is back", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.state.refix_count(BUG_ID), 0)
+		self.assertEqual(self.state.data["deferred_decisions"],
+			[{"bug": BUG_ID, "action": "refix", "guidance": "Exclude terrain from line of sight."}])
+		self.runner.down = None
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.now += datetime.timedelta(minutes=self.loop.config.claude_retry_minutes + 1)
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["deferred_decisions"], [])
+		self.assertIn("Exclude terrain from line of sight.", dict(self.runner.inputs)["fix"])
+
+	def test_a_second_ship_click_on_a_shipped_bug_keeps_it_resolved(self):
+		# 2026-10-26: b36cd3a9 shipped from the queue, then a second click reopened it as "branch moved".
+		self.park_with_decision("ship", head="head1")
+		self.worktree.merged_[BRANCH] = "merge9"
+
+		def head(ref="HEAD"):
+			if ref == BRANCH:
+				raise gitops.GitError("unknown revision")
+			return "head1"
+		self.worktree.head = head
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertIn("already shipped in merge9", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.shipped, [])
 
 	def test_refix_on_a_branch_that_cannot_take_develop_restarts_from_develop(self):
 		# Before 2026-10-22 this ended the refix ("decide again"), and a ship decision failed on the

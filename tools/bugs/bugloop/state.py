@@ -38,6 +38,11 @@ _DEFAULT = {
 	"ci": {"last_check": "", "colours": {}, "phase": None, "pending": None},
 	# The fix worktree could not be prepared: {"since", "retry_at", "error", "notified"}; None when it works.
 	"worktree_down": None,
+	# Claude cannot run (logged out, no credit): {"since", "retry_at", "error"}; None when it works.
+	"claude_down": None,
+	# Refix and implement decisions a Claude outage interrupted: [{"bug", "action", "guidance"}],
+	# replayed once Claude runs again.
+	"deferred_decisions": [],
 	# busy / idle / paused: {"name", "since", "reason", "counts"} (counts: outcomes finished in this
 	# mode); None before the first poll. Kept so a restart does not announce the mode again.
 	"mode": None,
