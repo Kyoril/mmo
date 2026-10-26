@@ -2,6 +2,7 @@
 
 #include "game_unit_c.h"
 #include "movement_log.h"
+#include "game/movement_ability.h"
 #include "log/default_log_levels.h"
 
 #include <sstream>
@@ -33,8 +34,9 @@ namespace mmo
 	constexpr float MIN_TICK_TIME = 1e-6f;
 
 	/// Submersion (water surface above feet) required before the player starts swimming.
-	/// Intended to scale with unit height later.
-	constexpr float SWIM_START_DEPTH = 1.5f;
+	/// Intended to scale with unit height later. Shared with the server, which lifts the
+	/// navigation paths of swimming creatures into the water surface band.
+	constexpr float SWIM_START_DEPTH = swim::StartDepth;
 
 	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
 	/// the player stops swimming and resumes walking (shallow water / wading out).
@@ -46,7 +48,7 @@ namespace mmo
 	/// torso sits in the water with only head and shoulders above it — at 0.9 the whole back
 	/// floated above the surface. Kept close to SWIM_START_DEPTH so wading in does not snap the
 	/// body down when swimming starts.
-	constexpr float SWIM_SURFACE_MARGIN = 1.5f;
+	constexpr float SWIM_SURFACE_MARGIN = swim::SurfaceMargin;
 
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
@@ -1314,7 +1316,9 @@ namespace mmo
 
 	bool UnitMovement::CanEverSwim() const
 	{
-		// Players can swim; creatures currently cannot.
+		// Only the locally controlled player simulates swimming here (see UpdateSwimState).
+		// Creature swimming is server driven: the server lifts their paths into the water
+		// surface band and UpdateRemoteSwimState keeps them there.
 		return m_movedUnit.IsPlayer();
 	}
 
@@ -3447,6 +3451,16 @@ namespace mmo
 			}
 		}
 
+		// A creature swims at the water surface instead of being snapped onto the bottom of the
+		// water body it is in: the server paths it on a nav mesh baked on the ground. Players
+		// are left alone - the local one runs its own swim simulation in UpdateSwimState /
+		// HandleSwimming, and a remote one is placed by the height its own client reports, which
+		// is also where it dives to.
+		if (!m_movedUnit.IsPlayer() && UpdateRemoteSwimState(currentPosition, closestHitY, foundGround))
+		{
+			return true;
+		}
+
 		if (!foundGround)
 		{
 			return false;
@@ -3466,6 +3480,52 @@ namespace mmo
 		// Apply the height correction
 		Vector3 newPosition = currentPosition;
 		newPosition.y = targetY;
+		GetUpdatedNode().SetPosition(newPosition);
+
+		return true;
+	}
+
+	bool UnitMovement::UpdateRemoteSwimState(const Vector3& position, const float groundY, const bool hasGround)
+	{
+		const auto stopSwimming = [this]()
+			{
+				if (m_movedUnit.GetMovementInfo().IsSwimming())
+				{
+					m_movedUnit.OnStopSwimming();
+				}
+
+				return false;
+			};
+
+		float surfaceY = 0.0f;
+		if (!m_movedUnit.QueryWaterAt(position.x, position.z, surfaceY))
+		{
+			return stopSwimming();
+		}
+
+		// Above the surface (on a bridge over the water, or falling towards it): not in the
+		// water at all, so the height stays with the ground below.
+		if (position.y > surfaceY)
+		{
+			return stopSwimming();
+		}
+
+		// Water the unit can stand in is waded through on the ground rather than swum in. With
+		// no ground within reach the water is deeper than the search band, so it is swum in.
+		if (hasGround && (surfaceY - groundY) < SWIM_START_DEPTH)
+		{
+			return stopSwimming();
+		}
+
+		if (!m_movedUnit.GetMovementInfo().IsSwimming())
+		{
+			m_movedUnit.OnStartSwimming();
+		}
+
+		// Float at the surface: the swim animation lays the body out flat, so only the surface
+		// margin of it stays submerged.
+		Vector3 newPosition = position;
+		newPosition.y = surfaceY - SWIM_SURFACE_MARGIN;
 		GetUpdatedNode().SetPosition(newPosition);
 
 		return true;

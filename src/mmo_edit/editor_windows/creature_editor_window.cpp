@@ -9,6 +9,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include "assets/asset_registry.h"
+#include "game/movement_ability.h"
 #include "game/object_type_id.h"
 #include "game_server/objects/game_unit_s.h"
 #include "log/default_log_levels.h"
@@ -667,6 +668,18 @@ namespace mmo
 		if (const auto section = ScopedEditorSection("Movement", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_FLOAT_PROP(runspeed, "Run Speed", 0.1f, 50.0f);
+
+			bool canSwim = (currentEntry.extraflags() & unit_extra_flags::CannotSwim) == 0;
+			if (ImGui::Checkbox("Can Swim", &canSwim))
+			{
+				currentEntry.set_extraflags(canSwim
+					? (currentEntry.extraflags() & ~static_cast<uint32>(unit_extra_flags::CannotSwim))
+					: (currentEntry.extraflags() | static_cast<uint32>(unit_extra_flags::CannotSwim)));
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("The unit swims at the surface of water deep enough to swim in.\nWhen off, water that deep blocks its movement like a wall.");
+			}
 		}
 
 		bool useStatSystem = currentEntry.usestatbasedsystem();
