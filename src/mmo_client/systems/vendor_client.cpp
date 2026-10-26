@@ -23,6 +23,7 @@ namespace mmo
 		ASSERT(m_packetHandlerConnections.IsEmpty());
 
 		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ListInventory, *this, &VendorClient::OnListInventory);
+		m_packetHandlerConnections += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::BuyBackList, *this, &VendorClient::OnBuyBackList);
 	}
 
 	void VendorClient::Shutdown()
@@ -34,6 +35,8 @@ namespace mmo
 	{
 		LUABIND_MODULE(lua,
 			luabind::def_lambda("GetVendorNumItems", [this]() { return GetNumVendorItems(); }),
+			luabind::def_lambda("GetVendorNumBuybackItems", [this]() { return GetNumBuyBackItems(); }),
+			luabind::def_lambda("BuybackVendorItem", [this](uint32 index) { BuyBackItem(index); }),
 			luabind::def_lambda("CloseVendor", [this]() { CloseVendor(); })
 		);
 	}
@@ -68,6 +71,25 @@ namespace mmo
 		m_realmConnector.BuyItem(m_vendorGuid, m_vendorItems[index].itemId, count);
 	}
 
+	void VendorClient::BuyBackItem(uint32 index) const
+	{
+		if (!m_vendorGuid)
+		{
+			ELOG("No vendor available right now!");
+			return;
+		}
+
+		if (index >= m_buyBackItems.size())
+		{
+			ELOG("Invalid index to buy back from!");
+			return;
+		}
+
+		// The server addresses buyback offers by their slot, which is stable while the vendor is
+		// open, unlike the index into the condensed list shown in the ui.
+		m_realmConnector.BuyBackItem(m_vendorGuid, m_buyBackItems[index].slot);
+	}
+
 	void VendorClient::CloseVendor()
 	{
 		if (m_vendorGuid == 0)
@@ -79,6 +101,7 @@ namespace mmo
 
 		m_vendorGuid = 0;
 		m_vendorItems.clear();
+		m_buyBackItems.clear();
 
 		FrameManager::Get().TriggerLuaEvent("VENDOR_CLOSED");
 	}
@@ -86,6 +109,72 @@ namespace mmo
 	uint32 VendorClient::GetNumVendorItems() const
 	{
 		return m_vendorItems.size();
+	}
+
+	uint32 VendorClient::GetNumBuyBackItems() const
+	{
+		return m_buyBackItems.size();
+	}
+
+	PacketParseResult VendorClient::OnBuyBackList(game::IncomingPacket& packet)
+	{
+		uint64 vendorGuid;
+		uint8 listCount;
+
+		if (!(packet >> io::read<uint64>(vendorGuid) >> io::read<uint8>(listCount)))
+		{
+			ELOG("Failed to read BuyBackList packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		// A list that arrived after the vendor window was closed (or for another npc) is stale.
+		if (m_vendorGuid == 0 || m_vendorGuid != vendorGuid)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		m_buyBackItems.clear();
+		m_buyBackItems.reserve(listCount);
+
+		for (uint8 i = 0; i < listCount; ++i)
+		{
+			VendorBuyBackEntry entry;
+			if (!(packet
+				>> io::read<uint32>(entry.slot)
+				>> io::read<uint32>(entry.itemId)
+				>> io::read<uint32>(entry.displayId)
+				>> io::read<uint32>(entry.stackCount)
+				>> io::read<uint32>(entry.price)
+				>> io::read<uint32>(entry.durability)))
+			{
+				ELOG("Failed to read buyback item entry!");
+				return PacketParseResult::Disconnect;
+			}
+
+			m_buyBackItems.push_back(entry);
+		}
+
+		// The item data may still have to be fetched, so the ui is refreshed again for every entry
+		// that arrives. The buyback list is short, so this stays cheap.
+		for (const auto& entry : m_buyBackItems)
+		{
+			m_itemCache.Get(entry.itemId, [this](uint64 id, const ItemInfo& itemInfo)
+				{
+					for (auto& buyBackItem : m_buyBackItems)
+					{
+						if (buyBackItem.itemId == id)
+						{
+							buyBackItem.itemData = &itemInfo;
+						}
+					}
+
+					FrameManager::Get().TriggerLuaEvent("VENDOR_BUYBACK_UPDATE");
+				});
+		}
+
+		FrameManager::Get().TriggerLuaEvent("VENDOR_BUYBACK_UPDATE");
+
+		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult VendorClient::OnListInventory(game::IncomingPacket& packet)

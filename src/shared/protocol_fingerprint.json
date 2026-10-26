@@ -137,8 +137,8 @@
 		]
 	},
 	"game": {
-		"version": 29,
-		"fingerprint": "sha256:f97849a578ecdcb444208ac78cf9822a4d0d93911255a2bf4cd86cd0f87a2ac6",
+		"version": 30,
+		"fingerprint": "sha256:ae036f7ad5374ffb3ca53e246020b95aea06165c7b951bd004a907fc86dccde0",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -155,7 +155,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:3083719d3be761b27aee87804819faa08ae73ae2826e368882bcef035808eabd"
+			"src/shared/game_protocol/game_protocol.h": "sha256:83a4a11e246f59f2dd8e973b0315829e3c1a51d7e52184aef7df510325fd9724"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -198,6 +198,7 @@
 			"game::client_realm_packet::AutoStoreLootItem = 47",
 			"game::client_realm_packet::BankerActivate = 143",
 			"game::client_realm_packet::BugReport = 167",
+			"game::client_realm_packet::BuyBackItem = 175",
 			"game::client_realm_packet::BuyBankBagSlot = 144",
 			"game::client_realm_packet::BuyItem = 64",
 			"game::client_realm_packet::CancelAura = 23",
@@ -243,7 +244,7 @@
 			"game::client_realm_packet::CheatTeleportToPlayer = 82",
 			"game::client_realm_packet::CheatTurnInQuest = 156",
 			"game::client_realm_packet::CheatWorldPort = 78",
-			"game::client_realm_packet::Count_ = 175",
+			"game::client_realm_packet::Count_ = 176",
 			"game::client_realm_packet::CreateChar = 2",
 			"game::client_realm_packet::CreatureQuery = 34",
 			"game::client_realm_packet::CyclePose = 153",
@@ -595,6 +596,7 @@
 			"game::realm_client_packet::AuthChallenge = 0",
 			"game::realm_client_packet::AuthSessionResponse = 1",
 			"game::realm_client_packet::BugReportResult = 176",
+			"game::realm_client_packet::BuyBackList = 185",
 			"game::realm_client_packet::BuyBankBagSlotResult = 160",
 			"game::realm_client_packet::CastFailed = 30",
 			"game::realm_client_packet::ChannelList = 154",
@@ -608,7 +610,7 @@
 			"game::realm_client_packet::ChatMessage = 23",
 			"game::realm_client_packet::ClassXpUpdate = 168",
 			"game::realm_client_packet::CompressedUpdateObject = 9",
-			"game::realm_client_packet::Count_ = 185",
+			"game::realm_client_packet::Count_ = 186",
 			"game::realm_client_packet::CreatureMove = 38",
 			"game::realm_client_packet::CreatureQueryResult = 42",
 			"game::realm_client_packet::DebugLineOfSightResult = 149",

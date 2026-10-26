@@ -856,9 +856,11 @@ namespace mmo
 			return;
 		}
 
-		// FindItemByGUID searches the bank too: those items are only reachable at a banker.
+		// FindItemByGUID searches the bank and the buyback slots too: bank items are only reachable
+		// at a banker, and an item that is already sold must not be sold a second time.
 		const InventorySlot slot = InventorySlot::FromAbsolute(itemSlot);
-		if ((slot.IsBankItem() || slot.IsBankBag() || slot.IsBankBagContent()) && !IsBankAccessible())
+		if (slot.IsBuyBack() ||
+			((slot.IsBankItem() || slot.IsBankBag() || slot.IsBankBagContent()) && !IsBankAccessible()))
 		{
 			SendInventoryError(inventory_change_failure::ItemNotFound);
 			return;
@@ -898,17 +900,127 @@ namespace mmo
 
 		const InventoryCommandFactory& factory = m_character->GetInventory().GetCommandFactory();
 
-		const std::unique_ptr<IInventoryCommand> command = factory.CreateRemoveItem(InventorySlot::FromAbsolute(itemSlot), stack);
+		const std::unique_ptr<IInventoryCommand> command = factory.CreateSellItem(InventorySlot::FromAbsolute(itemSlot), stack);
 		command->Execute()
-			.OnSuccess([this, money]()
+			.OnSuccess([this, money, vendorGuid]()
 				{
 					m_character->Set<uint32>(object_fields::Money, m_character->Get<uint32>(object_fields::Money) + money);
+
+					// The item is now offered for buyback, so the open vendor window has to learn about it.
+					SendBuyBackList(vendorGuid);
 				})
 			.OnFailure([this](const InventoryChangeFailure error)
 				{
 					SendInventoryError(error);
 				});
-		
+
+	}
+
+	void Player::OnBuyBackItem(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint64 vendorGuid = 0;
+		uint32 buyBackSlot = 0;
+		if (!(contentReader >> io::read<uint64>(vendorGuid) >> io::read<uint32>(buyBackSlot)))
+		{
+			ELOG("Failed to read BuyBackItem packet!");
+			return;
+		}
+
+		if (!m_character->IsAlive())
+		{
+			SendInventoryError(inventory_change_failure::YouAreDead);
+			return;
+		}
+
+		ASSERT(m_character->GetWorldInstance());
+		const GameCreatureS* vendor = m_character->GetWorldInstance()->FindByGuid<GameCreatureS>(vendorGuid);
+		if (!vendor || !vendor->IsInteractable(*m_character))
+		{
+			return;
+		}
+
+		// Buying back is part of the vendor interaction, so it needs an actual vendor npc.
+		if (vendor->GetEntry().vendorentry() == 0)
+		{
+			WLOG("Player tried to buy an item back from an npc that is not a vendor");
+			return;
+		}
+
+		if (buyBackSlot >= player_buy_back_slots::Count_)
+		{
+			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
+
+		Inventory& inventory = m_character->GetInventory();
+		const auto item = inventory.GetBuyBackItem(static_cast<uint8>(buyBackSlot));
+		if (!item)
+		{
+			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
+
+		// The player pays back exactly what the vendor paid them for the item.
+		const uint32 price = inventory.GetBuyBackPrice(static_cast<uint8>(buyBackSlot));
+		const uint32 money = m_character->Get<uint32>(object_fields::Money);
+		if (money < price)
+		{
+			SendInventoryError(inventory_change_failure::NotEnoughMoney);
+			return;
+		}
+
+		if (const auto result = inventory.BuyBackItem(static_cast<uint8>(buyBackSlot)); result != inventory_change_failure::Okay)
+		{
+			SendInventoryError(result);
+			return;
+		}
+
+		m_character->Set<uint32>(object_fields::Money, money - price);
+
+		SendBuyBackList(vendorGuid);
+	}
+
+	void Player::SendBuyBackList(const uint64 vendorGuid)
+	{
+		const Inventory& inventory = m_character->GetInventory();
+
+		SendPacket([&inventory, vendorGuid](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::BuyBackList);
+				packet << io::write<uint64>(vendorGuid);
+
+				// Count first: the packet announces how many entries follow.
+				uint8 count = 0;
+				for (uint8 slot = 0; slot < player_buy_back_slots::Count_; ++slot)
+				{
+					if (inventory.GetBuyBackItem(slot))
+					{
+						++count;
+					}
+				}
+
+				packet << io::write<uint8>(count);
+
+				for (uint8 slot = 0; slot < player_buy_back_slots::Count_; ++slot)
+				{
+					const auto item = inventory.GetBuyBackItem(slot);
+					if (!item)
+					{
+						continue;
+					}
+
+					packet
+						<< io::write<uint32>(slot)
+						<< io::write<uint32>(item->GetEntry().id())
+						<< io::write<uint32>(item->GetEntry().displayid())
+						<< io::write<uint32>(item->GetStackCount())
+						<< io::write<uint32>(inventory.GetBuyBackPrice(slot))
+						<< io::write<uint32>(item->Get<uint32>(object_fields::Durability))
+						;
+				}
+
+				packet.Finish();
+			});
 	}
 
 	void Player::OnBuyItem(uint16 opCode, uint32 size, io::Reader& contentReader)
