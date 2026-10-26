@@ -254,6 +254,12 @@ The decision panel of a parked bug offers three actions: refix, ship and discard
 "Feature request" panel offers a fourth, "Implement as feature", on rejected reports that are
 not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
+- **Guidance sets game values.** A player report can never make rewards, drops, prices, stats,
+  costs or cooldowns more generous; maintainer guidance and feature descriptions can, and the
+  fixer makes exactly the requested change (the reviewer does not count it as a security
+  reduction). Such changes still park for a ship decision, since the guard parks every numeric
+  economy change. Weakening a permission, validation or security check stays refused, whoever
+  asks. (On 2026-10-26 the fixer refused a guided price raise for item 87.)
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
   maintainer's guidance, at most 3 guided rounds per bug. Before the fixer starts, the loop
   merges today's `origin/develop` into the branch itself; a data submodule pointer that both
