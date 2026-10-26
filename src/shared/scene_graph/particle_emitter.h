@@ -424,11 +424,13 @@ namespace mmo
 		[[nodiscard]] const AABB& GetBoundingBox() const override;
 		[[nodiscard]] float GetBoundingRadius() const override;
 		/// @brief Returns the system's bounds, which are world-space already.
-		/// @remark Particles are simulated in world space and the renderable bakes world positions
-		///         into its vertex buffer (ParticleRenderable::GetWorldTransform is identity), so
-		///         UpdateBoundingBox produces a world box. Letting MovableObject transform it by the
-		///         parent node's full transform would apply the emitter placement a second time and
-		///         cull the system against a phantom box twice as far from the origin. The box also
+		/// @remark EmitterInstance::UpdateBoundingBox bakes every particle through the render
+		///         transform before growing the box, so the box is in world space for both
+		///         simulation spaces. Letting MovableObject transform it by the parent node's full
+		///         transform would apply the emitter placement a second time, putting the box twice
+		///         as far from the origin: SceneNode::UpdateBounds then stretches the owning node's
+		///         world AABB from the emitter all the way out to that phantom position, which
+		///         octree placement, region and ray queries all take at face value. The box also
 		///         changes with every simulation step, which the base class' cached box would only
 		///         pick up when something moves the node.
 		[[nodiscard]] const AABB& GetWorldBoundingBox(bool derive = false) const override;
