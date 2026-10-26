@@ -94,7 +94,9 @@ namespace mmo
 	void SpellCast::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown) const
 	{
 		ASSERT(m_castState);
-		m_castState->StopCast(reason, interruptCooldown);
+		// End callbacks can start another cast and replace the current state synchronously.
+		const auto current = m_castState;
+		current->StopCast(reason, interruptCooldown);
 	}
 
 	void SpellCast::AbandonCast()
@@ -167,6 +169,11 @@ namespace mmo
 
 	int32 SpellCast::CalculatePowerCost(const proto::SpellEntry& spell) const
 	{
+		if (m_executor.IsGodmode() && spell.powertype() == power_type::Mana)
+		{
+			return 0;
+		}
+
 		int32 cost = spell.cost();
 
 		m_executor.ApplySpellMod(spell_mod_op::Cost, spell.id(), cost);

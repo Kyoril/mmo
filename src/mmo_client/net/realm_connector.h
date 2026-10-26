@@ -327,6 +327,9 @@ namespace mmo
 		/// @param displayId The display model id to apply.
 		void Morph(uint32 displayId);
 
+		/// Requests a GM faction change on the caller's own character, regardless of the selected target.
+		void SetFaction(uint32 factionTemplateId);
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Instantly kills the selected unit (or the player if nothing is targeted).
 		void KillTarget();
 
@@ -336,6 +339,10 @@ namespace mmo
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles damage immunity on the controlled character.
 		/// @param enable True to become immune to all incoming damage, false to restore normal damage.
 		void CheatGodmode(bool enable);
+
+		/// Sets the current player's GM cooldown bypass state.
+		/// @param enable True to clear and prevent skill cooldowns.
+		void CheatNoCooldown(bool enable);
 
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Toggles game master invisibility on the controlled character.
 		/// @param enable True to hide the character from players and creatures, false to become visible again.
@@ -430,7 +437,7 @@ namespace mmo
 		void SplitItem(uint8 srcBag, uint8 srcSlot, uint8 dstBag, uint8 dstSlot, uint8 count);
 
 		/// Sends a packet to the server to destroy a specific item from the players inventory.
-		void DestroyItem(uint8 bag, uint8 slot, uint8 count);
+		void DestroyItem(uint64 itemGuid, uint8 count);
 
 		/// Sends a packet to the server to start looting a specific game object.
 		///	@param lootObjectGuid The guid of the game object we want to loot from.
@@ -622,6 +629,10 @@ namespace mmo
 
 		/// Sends a trade initiation request targeting the player with the given GUID.
 		void InitiateTrade(uint64 targetGuid);
+		/// Requests a duel with the targeted player.
+		void RequestDuel(uint64 targetGuid);
+		/// Accepts, declines or cancels the current duel invitation.
+		void RespondToDuel(bool accept);
 
 		/// Sends a trade invite acceptance.
 		void AcceptTradeInvite();

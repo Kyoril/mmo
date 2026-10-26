@@ -304,6 +304,9 @@ namespace mmo
 
 	void SingleCastState::StopCast(SpellInterruptFlags reason, const GameTime interruptCooldown)
 	{
+		// Notifications below can replace this state and release its self-hold.
+		auto strongThis = shared_from_this();
+
 		// Nothing to cancel
 		if (m_hasFinished)
 		{
@@ -365,10 +368,11 @@ namespace mmo
 			return;
 		}
 
-		// Keep *this* alive across SetState: SetState activates the new NoCastState
-		// which may drop the last external reference to this SingleCastState.
-		auto strongThis = shared_from_this();
-		m_cast.SetState(std::make_shared<NoCastState>());
+		// An end listener may already have started a replacement cast. Leave it installed.
+		if (m_cast.IsCurrentState(*this))
+		{
+			m_cast.SetState(std::make_shared<NoCastState>());
+		}
 	}
 
 	void SingleCastState::AbandonCast()
@@ -977,7 +981,7 @@ namespace mmo
 	GameTime SingleCastState::CalculateFinalCooldown() const
 	{
 		// No cooldown for procs
-		if (m_isProc)
+		if (m_isProc || m_cast.GetExecuter().IsNoCooldown())
 		{
 			return 0;
 		}

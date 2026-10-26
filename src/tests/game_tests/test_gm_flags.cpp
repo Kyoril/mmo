@@ -37,9 +37,17 @@ TEST_CASE("SanitizeGmFlags keeps both flags from SeniorGm up", "[gm_flags]")
 
 TEST_CASE("SanitizeGmFlags drops unknown bits", "[gm_flags]")
 {
-	CHECK(SanitizeGmFlags(0xFF, gm_level::SeniorGm) == (gm_flags::Invisible | gm_flags::Godmode));
+	CHECK(SanitizeGmFlags(0xFF, gm_level::SeniorGm) == gm_flags::All);
 	CHECK(SanitizeGmFlags(0xFF, gm_level::Gm) == gm_flags::Invisible);
-	CHECK(SanitizeGmFlags(0xFC, gm_level::Operator) == gm_flags::None);
+	CHECK(SanitizeGmFlags(0xF8, gm_level::Operator) == gm_flags::None);
+}
+
+TEST_CASE("Cooldown bypass requires SeniorGm", "[gm_flags]")
+{
+	CHECK(SanitizeGmFlags(gm_flags::NoCooldown, gm_level::Player) == gm_flags::None);
+	CHECK(SanitizeGmFlags(gm_flags::NoCooldown, gm_level::Gm) == gm_flags::None);
+	CHECK(SanitizeGmFlags(gm_flags::NoCooldown, gm_level::SeniorGm) == gm_flags::NoCooldown);
+	CHECK(SanitizeGmFlags(gm_flags::NoCooldown, gm_level::Operator) == gm_flags::NoCooldown);
 }
 
 TEST_CASE("CharacterData round-trips gmFlags", "[gm_flags]")
@@ -47,7 +55,7 @@ TEST_CASE("CharacterData round-trips gmFlags", "[gm_flags]")
 	CharacterData out;
 	out.name = "Observer";
 	out.isGameMaster = true;
-	out.gmFlags = gm_flags::Invisible | gm_flags::Godmode;
+	out.gmFlags = gm_flags::All;
 
 	std::vector<char> buffer;
 	io::VectorSink sink{ buffer };

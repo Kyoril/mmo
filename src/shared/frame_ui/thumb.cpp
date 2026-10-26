@@ -64,8 +64,8 @@ namespace mmo
 		}
 
 		// Inverse scale
-		const float scaleY = 1.0f / FrameManager::Get().GetUIScale().y;
-		const float scaleX = 1.0f / FrameManager::Get().GetUIScale().x;
+		const float scaleY = 1.0f / GetLayoutUIScale().y;
+		const float scaleX = 1.0f / GetLayoutUIScale().x;
 
 		// Calculate the new position of the thumb
 		if (m_verticalMovement && std::abs(delta.y) > 0.0f)

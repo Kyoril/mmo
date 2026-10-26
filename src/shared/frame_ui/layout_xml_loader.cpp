@@ -1057,6 +1057,8 @@ namespace mmo
 		auto component = std::make_unique<ImageComponent>(*m_frames.top(), texture);
 		ASSERT(component);
 		m_imageComponent = component.get();
+		component->SetRelativeInset(attributes.GetValueAsFloat("relativeInset", 0.0f));
+		component->SetCornerCut(attributes.GetValueAsFloat("cornerCut", 0.0f));
 
 		// Apply tiling mode if set
 		if (attributes.Exists(ImageComponentTilingAttribute))

@@ -648,7 +648,7 @@ namespace mmo
 			{
 				const FontImage* img = glyph->GetImage();
 				const Point drawPos = {
-					glyphPos.x,
+					glyphPos.x - (img->GetOffsetX() - img->GetOffsetX() * scale),
 					baseline - (img->GetOffsetY() - img->GetOffsetY() * scale) + 4.0f
 				};
 
@@ -717,7 +717,7 @@ namespace mmo
 			{
 				const FontImage* img = glyph->GetImage();
 				Point drawPos = {
-					glyphPos.x,
+					glyphPos.x - (img->GetOffsetX() - img->GetOffsetX() * scale),
 					baseY - (img->GetOffsetY() - img->GetOffsetY() * scale) + 4.0f
 				};
 

@@ -16,6 +16,7 @@
 #include "xml_handler/xml_attributes.h"
 
 #include <set>
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -252,8 +253,10 @@ namespace mmo
 	/// Loads a UI file, which can be one of: *.toc, *.xml or *.lua. The respective file is
 	/// then handled properly. The file is loaded using the AssetRegistry system.
 	/// @param filename Name of the file to load.
-	void LoadUIFile(const std::string& filename)
+	void LoadUIFile(const std::string& assetPath)
 	{
+		// Shared layouts may be included from another UI directory, including in packed archives.
+		const std::string filename = std::filesystem::path(assetPath).lexically_normal().generic_string();
 		if (!detail::LoadCycleCheck(filename))
 			return;
 
@@ -347,6 +350,7 @@ namespace mmo
 	void FrameManager::SetNativeResolution(const Size& nativeResolution)
 	{
 		m_nativeResolution = nativeResolution;
+		NotifyScreenSizeChanged(m_screenSize.width, m_screenSize.height);
 
 		if (m_topFrame)
 		{
@@ -443,6 +447,9 @@ namespace mmo
 					.def("ClearAnchor", &Frame::ClearAnchor)
 					.def("ClearAnchors", &Frame::ClearAnchors)
 					.def("SetSize", &Frame::SetSize)
+					.def("SetLayoutScale", &Frame::SetLayoutScale)
+					.def("GetLayoutScale", &Frame::GetLayoutScale)
+					.def("GetLayoutUIScale", &Frame::GetLayoutUIScale)
 					.def("SetWidth", &Frame::SetWidth)
 					.def("SetHeight", &Frame::SetHeight)
 					.def("GetWidth", &Frame::GetWidth)
@@ -1082,7 +1089,36 @@ namespace mmo
 
 	void FrameManager::NotifyScreenSizeChanged(float width, float height)
 	{
-		m_uiScale = Point(width / m_nativeResolution.width, height / m_nativeResolution.height);
+		// Minimized windows have no usable viewport. Keep the last layout and nonzero scale.
+		if (width <= 0.0f || height <= 0.0f || m_nativeResolution.width <= 0.0f || m_nativeResolution.height <= 0.0f)
+		{
+			return;
+		}
+		m_screenSize = Size(width, height);
+		float scale = std::min(width / m_nativeResolution.width, height / m_nativeResolution.height);
+		if (m_minimumCanvasSize.width > 0.0f && m_minimumCanvasSize.height > 0.0f)
+		{
+			const float fitScale = std::min(width / m_minimumCanvasSize.width, height / m_minimumCanvasSize.height);
+			scale = std::max(scale, std::min(m_minimumUIScale, fitScale));
+		}
+		m_uiScale = Point(scale, scale);
+		if (m_topFrame)
+		{
+			m_topFrame->Invalidate();
+			m_topFrame->InvalidateChildren();
+		}
+	}
+
+	void FrameManager::SetMinimumUIScale(const float scale, const Size& minimumCanvasSize)
+	{
+		m_minimumUIScale = std::max(0.0f, scale);
+		m_minimumCanvasSize = minimumCanvasSize;
+		NotifyScreenSizeChanged(m_screenSize.width, m_screenSize.height);
+	}
+
+	Size FrameManager::GetLogicalScreenSize() const
+	{
+		return Size(m_screenSize.width / m_uiScale.x, m_screenSize.height / m_uiScale.y);
 	}
 
 	void FrameManager::ExecuteLua(const std::string & code)

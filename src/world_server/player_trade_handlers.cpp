@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "player.h"
+#include "game/player_faction.h"
 #include "player_manager.h"
 #include "trade_session.h"
 
@@ -135,7 +136,8 @@ namespace mmo
 			return;
 		}
 
-		if (!m_character->UnitIsFriendly(*target->m_character))
+		if (!m_character->UnitIsFriendly(*target->m_character)
+			|| !CanPlayerFactionsInteract(m_character->GetFactionTemplate(), target->m_character->GetFactionTemplate()))
 		{
 			SendTradeRequestResult(*this, game::trade_result::Hostile);
 			return;
@@ -206,7 +208,8 @@ namespace mmo
 			return;
 		}
 
-		if (!m_character->UnitIsFriendly(*initiator->m_character))
+		if (!m_character->UnitIsFriendly(*initiator->m_character)
+			|| !CanPlayerFactionsInteract(m_character->GetFactionTemplate(), initiator->m_character->GetFactionTemplate()))
 		{
 			return;
 		}

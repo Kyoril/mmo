@@ -21,7 +21,10 @@ namespace mmo
 
 		Spell,
 
-		Emote
+		Emote,
+
+		/// An action-bar item reference, never an inventory slot.
+		ItemShortcut
 	};
 
 	enum class CursorType
@@ -70,6 +73,11 @@ namespace mmo
 		/// @param slot The inventory slot containing the item to display.
 		void SetItem(uint32 slot);
 
+		/// Displays an item shortcut without picking up an inventory item.
+		/// @param itemId The item template referenced by the action button.
+		/// @param displayId The display used for the shortcut's icon.
+		void SetItemShortcut(uint32 itemId, uint32 displayId);
+
 		/// Sets a spell to be displayed on the cursor by resolving the spell ID.
 		/// The cursor will display the spell's icon, or a default icon if resolution fails.
 		/// @param spell The spell ID to display.
@@ -106,6 +114,8 @@ namespace mmo
 		CursorItemType m_type = CursorItemType::None;
 
 		uint32 m_itemSlot = static_cast<uint32>(-1);
+
+		uint32 m_itemDisplayId = 0;
 
 		/// Reference to the project data for spell and item resolution.
 		const proto_client::Project* m_project = nullptr;

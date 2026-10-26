@@ -57,6 +57,11 @@ namespace mmo
 
 		void SetSize(uint16 width, uint16 height);
 
+		/// Insets each edge by this fraction of the component's width or height.
+		void SetRelativeInset(float inset);
+		/// Clips each corner by this fraction of the smaller image dimension.
+		void SetCornerCut(float cut);
+
 	public:
 		// ~Begin FrameComponent
 		Size GetSize() const override;
@@ -75,6 +80,8 @@ namespace mmo
 		ImageTilingMode m_tiling;
 		/// Color tint.
 		Color m_tint = Color::White;
+		float m_relativeInset = 0.0f;
+		float m_cornerCut = 0.0f;
 
 		std::string m_imagePropertyName;
 		scoped_connection m_imagePropertyConnection;

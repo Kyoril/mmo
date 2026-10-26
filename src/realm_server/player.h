@@ -150,6 +150,11 @@ namespace mmo
 		/// Gets the active character race id.
 		[[nodiscard]] uint32 GetCharacterRace() const { return m_characterData->raceId; }
 
+		/// Updates faction state reported by the world hosting this character.
+		void SetLiveFactionTemplate(uint32 factionTemplateId);
+		/// Whether both characters have known, matching live factions.
+		bool CanInteractWithPlayer(const Player& other) const;
+
 		/// Gets the active character class id.
 		[[nodiscard]] uint32 GetCharacterClass() const { return m_characterData->classId; }
 
@@ -271,6 +276,9 @@ namespace mmo
 
 		/// Sends the availability of every subsystem for the player's current world node.
 		void SendFullSubsystemStatus();
+
+		/// Sends a chat failure code for localization by the client.
+		void SendChatMessageResult(game::chat_message_result::Type result, const String& targetName);
 
 		/// Sends a plain system chat message to the client.
 		/// @param message The message text.
@@ -631,6 +639,9 @@ namespace mmo
 		/// Gets the name of a map as defined in the game data, or an empty string if unknown.
 		[[nodiscard]] String GetMapName(MapId mapId) const;
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
+
+		/// Session faction state is refreshed on every world join, and never persisted as race data.
+		std::optional<uint32> m_liveFactionTemplate;
 
 		// Guild packet handlers
 		PacketParseResult OnGuildInvite(game::IncomingPacket &packet);

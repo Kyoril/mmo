@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "game/duel.h"
 #include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
@@ -45,6 +46,7 @@
 #include "systems/trade_client.h"
 #include "game/aura.h"
 #include "game/item.h"
+#include "game/player_faction.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_bag_c.h"
@@ -1001,6 +1003,8 @@ namespace mmo
 							   .def_readonly("name", &ItemInfo::name)
 							   .def_readonly("description", &ItemInfo::description)
 							   .def_readonly("quality", &ItemInfo::quality)
+							   .def_readonly("bonding", &ItemInfo::bonding)
+							   .def_readonly("requiredLevel", &ItemInfo::requiredlevel)
 							   .def_readonly("armor", &ItemInfo::armor)
 							   .def_readonly("block", &ItemInfo::block)
 							   .def_readonly("minDamage", &ItemInfo::GetMinDamage)
@@ -1016,7 +1020,10 @@ namespace mmo
 							   .def_readonly("proficiency", &ItemInfo::GetProficiency)
 							   .def_readonly("inventoryType", &ItemInfo::GetItemInventoryTypeName)
 							   .def<std::function<const char *(const ItemInfo *)>>("GetIcon", [this](const ItemInfo *self) -> const char *
-																				   { return this->m_project.itemDisplays.getById(self->displayId)->icon().c_str(); })
+																				   {
+																					   const auto* display = m_project.itemDisplays.getById(self->displayId);
+																					   return display ? display->icon().c_str() : "";
+																				   })
 							   .def_readonly("sellPrice", &ItemInfo::sellPrice)
 							   .def_readonly("startQuestId", &ItemInfo::startquestid)
 							   .def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
@@ -1156,6 +1163,8 @@ namespace mmo
 
 					   luabind::def<std::function<void()>>("TargetNearestEnemy", [this]()
 														   { TargetNearestEnemy(); }),
+					   luabind::def<std::function<void()>>("TargetNearestFriendlyPlayer", [this]()
+													   { TargetNearestFriendlyPlayer(); }),
 
 					   luabind::def("RunConsoleCommand", &Script_RunConsoleCommand),
 					   luabind::def("GetCVar", &Script_GetConsoleVar),
@@ -1543,6 +1552,7 @@ namespace mmo
 					   luabind::def("print", &Script_Print),
 
 					   luabind::def("IsShiftKeyDown", Platform::IsShiftKeyDown),
+					   luabind::def("IsControlKeyDown", Platform::IsControlKeyDown),
 					   luabind::def("IsAltKeyDown", Platform::IsAltKeyDown),
 
 					   luabind::def("UnitExists", &Script_UnitExists),
@@ -1617,6 +1627,35 @@ namespace mmo
 				}
 
 				return std::make_shared<ItemHandle>(*item, m_project); }),
+
+					   luabind::def<std::function<bool(const String&)>>("CanInteractWithPlayer", [](const String& unitName)
+					   {
+						   const auto handle = ObjectMgr::GetUnitHandleByName(unitName);
+						   const auto* unit = handle ? handle->Get() : nullptr;
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   return unit && unit->IsPlayer() && player
+							   && CanPlayerFactionsInteract(player->GetFactionTemplate(), unit->GetFactionTemplate());
+					   }),
+
+					   // Public equipment entries only: never exposes another player's bags or item instances.
+					   luabind::def<std::function<const ItemInfo*(const String&, int32)>>("GetEquipmentSlotItem", [this](const String& unitName, int32 slot) -> const ItemInfo*
+					   {
+						   if (slot < 0 || slot >= player_equipment_slots::Count_)
+						   {
+							   return nullptr;
+						   }
+						   const auto handle = ObjectMgr::GetUnitHandleByName(unitName);
+						   const auto* unit = handle ? handle->Get() : nullptr;
+						   const auto player = ObjectMgr::GetActivePlayer();
+						   if (!unit || !unit->IsPlayer() || !player
+							   || !CanPlayerFactionsInteract(player->GetFactionTemplate(), unit->GetFactionTemplate()))
+						   {
+							   return nullptr;
+						   }
+						   constexpr uint32 stride = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
+						   const uint32 entry = unit->Get<uint32>(object_fields::VisibleItem1_0 + slot * stride);
+						   return entry ? m_lootClient.GetItemCache().Get(entry) : nullptr;
+					   }),
 
 					   // Inventory slot id of an equipment slot an item of the given inventory type is compared
 					   // against (rings, trinkets and one-handed weapons have two, index 0 and 1), or -1.
@@ -1709,6 +1748,7 @@ namespace mmo
 					   if (!spell) { return 0; }
 					   const auto player = ObjectMgr::GetActivePlayer();
 					   if (!player) { return spell->cost(); }
+					   if (player->IsGodmode() && spell->powertype() == power_type::Mana) { return 0; }
 					   int32 cost = spell->cost();
 					   cost = player->ApplySpellModForFlags(static_cast<uint8>(spell_mod_op::Cost), cost, spell->familyflags());
 					   return std::max(0, cost);
@@ -1844,16 +1884,31 @@ namespace mmo
 				   
 				   luabind::def<std::function<void(uint32, uint32)>>("DestroyItem", [this](uint32 slot, uint32 count)
 											 { 
-												 uint8 bag = (slot >> 8) & 0xFF;
-												 uint8 bagSlot = slot & 0xFF;
-												 this->m_realmConnector.DestroyItem(bag, bagSlot, static_cast<uint8>(count)); 
+												 if (g_cursor.GetItemType() != CursorItemType::Item || g_cursor.GetCursorItem() != slot)
+												 {
+													 return;
+												 }
+												 if (const auto item = GetItemFromSlot("player", slot))
+												 {
+													 this->m_realmConnector.DestroyItem(item->GetGuid(), static_cast<uint8>(count));
+												 }
 											 }),
+					   luabind::def<std::function<void(const ItemHandle&)>>("DestroyItemInstance", [this](const ItemHandle& handle)
+					   {
+						   if (const auto* item = handle.Get())
+						   {
+							   // The server verifies ownership and resolves the instance's current slot.
+							   this->m_realmConnector.DestroyItem(item->GetGuid(), 0);
+						   }
+					   }),
 				   
 				   // Cursor management functions
+				   luabind::def<std::function<bool()>>("CursorHasPayload", []() -> bool
+											 { return g_cursor.GetItemType() != CursorItemType::None; }),
 				   luabind::def<std::function<bool()>>("CursorHasItem", []() -> bool
-											 { return g_cursor.GetCursorItem() != static_cast<uint32>(-1); }),
+											 { return g_cursor.GetItemType() == CursorItemType::Item; }),
 				   luabind::def<std::function<uint32()>>("GetCursorItemSlot", []() -> uint32
-											 { return g_cursor.GetCursorItem(); }),
+											 { return g_cursor.GetItemType() == CursorItemType::Item ? g_cursor.GetCursorItem() : static_cast<uint32>(-1); }),
 				   luabind::def<std::function<void()>>("ClearCursorItem", []()
 											 { g_cursor.Clear(); }),
 				   luabind::def<std::function<void(uint32)>>("SetCursorItem", [](uint32 slot)
@@ -2071,6 +2126,9 @@ namespace mmo
 							   return luabind::object();
 						   }),
 
+					   luabind::def<std::function<void(uint64)>>("RequestDuel", [this](uint64 guid) { m_realmConnector.RequestDuel(guid); }),
+					   luabind::def<std::function<void()>>("AcceptDuel", [this]() { m_realmConnector.RespondToDuel(true); }),
+					   luabind::def<std::function<void()>>("DeclineDuel", [this]() { m_realmConnector.RespondToDuel(false); }),
 					   luabind::def<std::function<void()>>("AcceptGroup", [this]()
 														   { m_realmConnector.AcceptGroup(); }),
 					   luabind::def<std::function<void()>>("DeclineGroup", [this]()
@@ -2111,6 +2169,23 @@ namespace mmo
 		m_questClient.RegisterScriptFunctions(m_luaState.get());
 		m_talentClient.RegisterScriptFunctions(m_luaState.get());
 		m_tradeClient.RegisterScriptFunctions(m_luaState.get());
+
+		// Keep the Lua notification names tied to the wire enums.
+		auto duelEvents = luabind::newtable(m_luaState.get());
+		duelEvents["Pending"] = static_cast<int32>(DuelEvent::Pending);
+		duelEvents["Invited"] = static_cast<int32>(DuelEvent::Invited);
+		duelEvents["Countdown"] = static_cast<int32>(DuelEvent::Countdown);
+		duelEvents["Active"] = static_cast<int32>(DuelEvent::Active);
+		duelEvents["Finished"] = static_cast<int32>(DuelEvent::Finished);
+		duelEvents["Error"] = static_cast<int32>(DuelEvent::Error);
+		luabind::globals(m_luaState.get())["DuelEvent"] = duelEvents;
+		auto duelResults = luabind::newtable(m_luaState.get());
+		duelResults["Cancelled"] = static_cast<int32>(DuelResult::Cancelled);
+		duelResults["Won"] = static_cast<int32>(DuelResult::Won);
+		duelResults["Lost"] = static_cast<int32>(DuelResult::Lost);
+		duelResults["Declined"] = static_cast<int32>(DuelResult::Declined);
+		duelResults["Expired"] = static_cast<int32>(DuelResult::Expired);
+		luabind::globals(m_luaState.get())["DuelResult"] = duelResults;
 
 		luabind::globals(m_luaState.get())["loginConnector"] = &m_loginConnector;
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
@@ -2263,11 +2338,28 @@ namespace mmo
 
 	void GameScript::TargetNearestEnemy()
 	{
+		TargetNearestUnit(false);
+	}
+
+	void GameScript::TargetNearestFriendlyPlayer()
+	{
+		TargetNearestUnit(true);
+	}
+
+	void GameScript::TargetNearestUnit(const bool friendlyPlayers)
+	{
 		auto player = ObjectMgr::GetActivePlayer();
+		if (!player)
+		{
+			return;
+		}
+
+		constexpr float targetingRadius = 35.0f;
+		const Vector3 playerPos = player->GetPosition();
 
 		std::vector<std::shared_ptr<GameUnitC>> units;
 
-		ObjectMgr::ForEachUnit([&units, &player](GameUnitC &unit)
+		ObjectMgr::ForEachUnit([&units, &player, &playerPos, friendlyPlayers](GameUnitC &unit)
 							   {
 				if (!unit.IsAlive())
 				{
@@ -2279,7 +2371,13 @@ namespace mmo
 					return;
 				}
 
-				if (player->IsFriendlyTo(unit))
+				if (friendlyPlayers ? (!unit.IsPlayer() || !player->IsFriendlyTo(unit)) : player->IsFriendlyTo(unit))
+				{
+					return;
+				}
+
+				// Match spell range checks: measure the full distance from the player.
+				if (unit.GetPosition().GetSquaredDistanceTo(playerPos) > targetingRadius * targetingRadius)
 				{
 					return;
 				}
@@ -2291,7 +2389,6 @@ namespace mmo
 			return;
 		}
 
-		const Vector3 playerPos = player->GetPosition();
 		std::sort(units.begin(), units.end(),
 				  [&](const std::shared_ptr<GameUnitC> &a, const std::shared_ptr<GameUnitC> &b)
 				  {
@@ -2334,6 +2431,12 @@ namespace mmo
 
 	void GameScript::PickupContainerItem(uint32 slot) const
 	{
+		// Spells and action-bar shortcuts never move or swap real inventory items.
+		if (g_cursor.GetItemType() != CursorItemType::None && g_cursor.GetItemType() != CursorItemType::Item)
+		{
+			g_cursor.Clear();
+			return;
+		}
 		// Check if the cursor has an item
 		if (g_cursor.GetCursorItem() != static_cast<uint32>(-1))
 		{

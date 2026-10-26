@@ -358,6 +358,7 @@ namespace mmo
 		s_dataPathCVar = ConsoleVarMgr::RegisterConsoleVar("dataPath", "The path of the client data directory.", "Data");
 		s_lastRealmVar = ConsoleVarMgr::RegisterConsoleVar("lastRealm", "Id of the last realm connected to.", "-1");
 		ConsoleVarMgr::RegisterConsoleVar("lastCharacters", "Last played character per realm, as realmId:characterGuid;realmId:characterGuid.", "");
+		ConsoleVarMgr::RegisterConsoleVar("LockActionBars", "Require the assigned move-action-bar key when dragging skills and items off action bars. 1 locks, 0 allows dragging freely.", "1");
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 

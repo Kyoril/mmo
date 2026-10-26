@@ -1277,14 +1277,13 @@ namespace mmo
 		});
 	}
 
-	void BotRealmConnector::DestroyItem(const uint8 bag, const uint8 slot, const uint8 count)
+	void BotRealmConnector::DestroyItem(const uint64 itemGuid, const uint8 count)
 	{
-		sendSinglePacket([bag, slot, count](game::OutgoingPacket& packet)
+		sendSinglePacket([itemGuid, count](game::OutgoingPacket& packet)
 		{
 			packet.Start(game::client_realm_packet::DestroyItem);
 			packet
-				<< io::write<uint8>(bag)
-				<< io::write<uint8>(slot)
+				<< io::write<uint64>(itemGuid)
 				<< io::write<uint8>(count);
 			packet.Finish();
 		});

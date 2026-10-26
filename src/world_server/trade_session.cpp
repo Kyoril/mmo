@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "trade_session.h"
+#include "game/player_faction.h"
 #include "player.h"
 
 #include "game_server/objects/game_player_s.h"
@@ -156,6 +157,10 @@ namespace mmo
 	{
 		const GamePlayerS& char0 = m_players[0]->GetCharacter();
 		const GamePlayerS& char1 = m_players[1]->GetCharacter();
+		if (!CanPlayerFactionsInteract(char0.GetFactionTemplate(), char1.GetFactionTemplate()))
+		{
+			return false;
+		}
 
 		if (!char0.IsAlive() || !char1.IsAlive())
 		{
@@ -172,6 +177,10 @@ namespace mmo
 
 	bool TradeSession::Execute()
 	{
+		if (!IsValid())
+		{
+			return false;
+		}
 		GamePlayerS& char0 = m_players[0]->GetCharacter();
 		GamePlayerS& char1 = m_players[1]->GetCharacter();
 

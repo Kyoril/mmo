@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_unit_s.h"
+#include "game/duel.h"
 
 #include "game_server/cc_movement_controller.h"
 #include "game_server/emote_utils.h"
@@ -23,6 +24,12 @@ namespace mmo
 {
 	namespace
 	{
+		bool isDamageFrom(const GameUnitS* instigator, const uint64 playerGuid)
+		{
+			return instigator && playerGuid != 0 &&
+				(instigator->GetGuid() == playerGuid || instigator->Get<uint64>(object_fields::Owner) == playerGuid);
+		}
+
 		float ApplyPctModifier(const float baseValue, const int32 pct)
 		{
 			return baseValue * ((100.0f + static_cast<float>(pct)) / 100.0f);
@@ -784,6 +791,11 @@ namespace mmo
 
 	void GameUnitS::SetCooldown(const uint32 spellId, const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_spellCooldowns.erase(spellId);
@@ -796,6 +808,11 @@ namespace mmo
 
 	void GameUnitS::StartDeferredSpellCooldown(const proto::SpellEntry& spell)
 	{
+		if (m_noCooldown)
+		{
+			return;
+		}
+
 		// Determine the base cooldown: prefer the spell's own cooldown, fall back to its category cooldown.
 		GameTime finalCD = spell.cooldown();
 		if (finalCD == 0)
@@ -829,6 +846,11 @@ namespace mmo
 
 	void GameUnitS::SetSpellCategoryCooldown(const uint32 spellCategory, const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		// Category 0 is "no category". Storing a cooldown for it would put every uncategorised
 		// spell - almost all of them - on a shared cooldown.
 		if (spellCategory == 0)
@@ -866,6 +888,11 @@ namespace mmo
 
 	void GameUnitS::SetGlobalCooldown(const GameTime cooldownTimeMs)
 	{
+		if (m_noCooldown && cooldownTimeMs > 0)
+		{
+			return;
+		}
+
 		if (cooldownTimeMs == 0)
 		{
 			m_globalCooldownEnd = 0;
@@ -897,7 +924,29 @@ namespace mmo
 
 	GameTime GameUnitS::GetGlobalCooldownDuration() const
 	{
-		return GetCombatSettings().global_cooldown_ms();
+		return m_noCooldown ? 0 : GetCombatSettings().global_cooldown_ms();
+	}
+
+	void GameUnitS::SetGodmode(const bool enable)
+	{
+		m_godmode = enable;
+		if (enable)
+		{
+			AddFlag<uint32>(object_fields::Flags, unit_flags::Godmode);
+		}
+		else
+		{
+			RemoveFlag<uint32>(object_fields::Flags, unit_flags::Godmode);
+		}
+	}
+
+	void GameUnitS::SetNoCooldown(const bool enable)
+	{
+		m_noCooldown = enable;
+		if (enable)
+		{
+			ResetCooldowns();
+		}
 	}
 
 	SpellCastResult GameUnitS::CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, const uint32 castTimeMs, bool isProc, uint64 itemGuid, bool ignoreKnownSpellCheck)
@@ -974,6 +1023,12 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
+		const bool duelDamage = isDamageFrom(instigator, m_duelPartner);
+		if ((duelDamage && !m_duelActive)
+			|| (isDamageFrom(instigator, m_finishedDuelPartner) && GetAsyncTimeMs() < m_duelDamageBlockedUntil))
+		{
+			return 0;
+		}
 		// Developer/test cheat: absorb everything without touching health, threat or procs.
 		// Placed at the top of Damage() deliberately: this is the single choke point every
 		// damage source funnels through (auto-attacks, periodic auras, spell effects), so one
@@ -1012,6 +1067,16 @@ namespace mmo
 			instigator->SetInCombat(true, true);
 		}
 
+		// Only the partner and their owned units can cause a duel defeat. Outside damage
+		// retains its normal health/death path, including periodic and environmental damage.
+		const uint32 duelFloor = DuelHealthFloor(GetMaxHealth());
+		const bool defeated = m_duelActive && duelDamage && damage > 0 && (health <= duelFloor || damage >= health - duelFloor);
+		if (defeated)
+		{
+			damage = health > duelFloor ? health - duelFloor : 0;
+			health = std::max(health, duelFloor);
+		}
+
 		RaiseTrigger(trigger_event::OnDamaged, instigator);
 
 		if (health < damage)
@@ -1025,6 +1090,7 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health);
+		if (defeated) { duelDefeated(); }
 		takenDamage(instigator, school, damageType);
 		damageTakenAmount(instigator, damage, school);
 		if (instigator)
@@ -1188,6 +1254,12 @@ namespace mmo
 	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer> &&aura)
 	{
 		ASSERT(aura);
+		// An impact may finish the duel before that same spell applies its secondary aura.
+		if (aura->GetCasterId() == m_finishedDuelPartner && GetAsyncTimeMs() < m_duelDamageBlockedUntil
+			&& aura->IsHostileTargetAura())
+		{
+			return;
+		}
 
 		// Dead units carry no auras: OnKilled removed them, and a spell whose own damage killed
 		// the target applies its auras afterwards (e.g. a damage-over-time on the corpse).
@@ -1329,6 +1401,28 @@ namespace mmo
 				++it;
 			}
 		}
+	}
+
+	void GameUnitS::SetDuelPartner(const uint64 guid, const bool active)
+	{
+		if (guid == 0 && m_duelPartner != 0)
+		{
+			m_finishedDuelPartner = m_duelPartner;
+			m_duelDamageBlockedUntil = GetAsyncTimeMs() + 10000;
+		}
+		m_duelPartner = guid;
+		m_duelActive = active && guid != 0;
+		if (guid != 0) { m_finishedDuelPartner = 0; }
+	}
+
+	void GameUnitS::RemoveHarmfulAurasFromCaster(const uint64 casterGuid)
+	{
+		std::vector<std::shared_ptr<AuraContainer>> remove;
+		for (const auto& aura : m_auras)
+		{
+			if (aura->GetCasterId() == casterGuid && aura->IsHostileTargetAura()) { remove.push_back(aura); }
+		}
+		for (const auto& aura : remove) { aura->SetApplied(false); RemoveAura(aura); }
 	}
 
 	void GameUnitS::RemoveAllAurasFromCaster(const uint64 casterGuid, uint32 spellId)
@@ -2887,7 +2981,7 @@ namespace mmo
 	{
 		return m_canDualWield;
 	}
-	
+
 	int32 GameUnitS::GetMaxSkillValueForLevel(uint32 level) const
 	{
 		return 5 * level;
@@ -3460,6 +3554,7 @@ namespace mmo
 
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
+		if (m_duelPartner != 0 && m_duelPartner == other.GetGuid()) { return m_duelActive; }
 		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
@@ -3502,6 +3597,7 @@ namespace mmo
 
 	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
 	{
+		if (m_duelPartner != 0 && m_duelPartner == other.GetGuid()) { return !m_duelActive; }
 		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 

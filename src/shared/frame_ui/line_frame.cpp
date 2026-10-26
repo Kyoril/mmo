@@ -52,7 +52,7 @@ namespace mmo
 		// the UI scale (see Anchor::ApplyToAbsRect), and the geometry here is built in absolute (scaled)
 		// space relative to rect.left/top, so the endpoint offsets must be scaled the same way - otherwise
 		// the connector lines drift away from the nodes whenever the UI scale is not 1.0.
-		const auto uiScale = FrameManager::Get().GetUIScale();
+		const auto uiScale = GetLayoutUIScale();
 		const float startX = rect.left + ReadFloat(*this, "StartX") * uiScale.x;
 		const float startY = rect.top + ReadFloat(*this, "StartY") * uiScale.y;
 		const float endX = rect.left + ReadFloat(*this, "EndX") * uiScale.x;

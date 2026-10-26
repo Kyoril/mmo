@@ -127,6 +127,9 @@ namespace mmo
 		// the dead-reckoned truth without 10 Hz snap-back jitter.
 		Vector3  m_scenePos;
 
+		/// Predicted ground speed; a negative value means the first moving snapshot is already in flight.
+		float m_lateralSpeed = -1.0f;
+
 		// ── Fall/jump state ────────────────────────────────────────────────────
 		Vector3  m_fallVelocity;
 		float    m_fallTimeAccumSec = 0.0f;
@@ -145,5 +148,6 @@ namespace mmo
 		static constexpr float kTeleportThreshold = 8.0f;   // 8 m
 
 		static constexpr float kGravity = -9.8f * 2.0f;  // matches UnitMovement gravity scale
+		static constexpr float kMaxAcceleration = 40.48f; // matches UnitMovement's ground acceleration
 	};
 }

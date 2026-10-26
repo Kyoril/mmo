@@ -424,6 +424,9 @@ namespace mmo
 
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 
+		/// Displays a localized chat failure received from the realm.
+		PacketParseResult OnChatMessageResult(game::IncomingPacket& packet);
+
 		PacketParseResult OnNameQueryResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnCreatureQueryResult(game::IncomingPacket &packet);
@@ -446,6 +449,8 @@ namespace mmo
 		PacketParseResult OnKnownClasses(game::IncomingPacket &packet);
 
 		PacketParseResult OnTradeSkills(game::IncomingPacket &packet);
+		/// Handles private duel state and updates the participants' temporary hostility.
+		PacketParseResult OnDuelUpdate(game::IncomingPacket& packet);
 
 		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket &packet);
 
@@ -610,11 +615,17 @@ namespace mmo
 
 		void Command_Morph(const std::string &cmd, const std::string &args) const;
 
+		/// Validates a project faction-template ID before requesting a server-side change.
+		void Command_Faction(const std::string &cmd, const std::string &args) const;
+
 		void Command_Kill(const std::string &cmd, const std::string &args) const;
 
 		void Command_Revive(const std::string &cmd, const std::string &args) const;
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
+
+		/// Toggles GM cooldown bypass on the current player.
+		void Command_NoCooldown(const std::string &cmd, const std::string &args) const;
 
 		void Command_Invisible(const std::string &cmd, const std::string &args) const;
 

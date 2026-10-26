@@ -598,6 +598,9 @@ namespace mmo
 
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
+		/// Whether GM godmode bypasses this unit's spell mana costs.
+		bool IsGodmode() const { return (Get<uint32>(object_fields::Flags) & unit_flags::Godmode) != 0; }
+
 		/// @brief Returns true while the unit holds its weapon(s) drawn (combat-ready stance). This
 		///	mirrors the flag that drives the combat-ready animation, so the drawn weapon model and
 		///	the ready pose stay in sync.
@@ -801,8 +804,14 @@ namespace mmo
 
 		bool IsFriendlyTo(const GameUnitC &other) const;
 
+		/// Applies server-confirmed duel relations for the local player only.
+		void SetDuelPartner(uint64 guid, bool active) { m_duelPartner = guid; m_duelActive = active; }
+
 		bool IsHostileTo(const GameUnitC &other) const;
 
+	private:
+		uint64 m_duelPartner{0};
+		bool m_duelActive{false};
 	protected:
 		virtual void OnDisplayIdChanged();
 

@@ -779,6 +779,7 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		// before the character enters the instance so an invisible observer is never spawned to
 		// other players and never counted as an instance player.
 		characterObject->SetGodmode((characterData.gmFlags & gm_flags::Godmode) != 0);
+		characterObject->SetNoCooldown((characterData.gmFlags & gm_flags::NoCooldown) != 0);
 		characterObject->SetGmInvisible((characterData.gmFlags & gm_flags::Invisible) != 0);
 
 		characterObject->ClearFieldChanges();

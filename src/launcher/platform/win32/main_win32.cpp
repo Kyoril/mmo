@@ -130,6 +130,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 	bool selfUpdateEnabled = true;
 	bool pipeliningEnabled = true;
 	bool preview = false;
+	bool previewReady = false;
 	std::string contentUrl = "https://patch.mmo-dev.net/launcher/launcher.json";
 	bool noContent = false;
 	std::string renderPreviewDirectory;
@@ -138,6 +139,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 	options.add_options()("v,version", "Displays the version of the launcher on screen.")(
 		"remove-previous", "Tries to remove a specified file", cxxopts::value<std::string>(g_previousExecutableToBeRemoved))(
 		"preview", "Shows the launcher without checking for or downloading updates", cxxopts::value<bool>(preview))(
+		"preview-ready", "Opens the launcher for testing the installed game without downloading updates", cxxopts::value<bool>(previewReady))(
 		"content-url", "HTTPS launcher content manifest URL", cxxopts::value<std::string>(contentUrl))(
 		"no-content", "Uses embedded content without contacting the content server", cxxopts::value<bool>(noContent))(
 		"render-preview", "Renders all launcher pages to BMP files without downloading updates",
@@ -246,7 +248,12 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 			}
 		};
 
-		if (preview)
+		if (previewReady)
+		{
+			model.SetReady("Local game is ready");
+			model.SetProgress(1.0f);
+		}
+		else if (preview)
 		{
 			model.SetPhase(mmo::UpdatePhase::Updating);
 			model.SetStatus("Preview mode - no files are being downloaded");

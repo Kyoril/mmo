@@ -16,6 +16,7 @@
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
 #include "systems/trade_client.h"
+#include "game/duel.h"
 
 #include <cstring>
 #include <thread>
@@ -262,6 +263,7 @@ namespace mmo
 			Key_Enter        = 0x0D,
 			Key_Shift        = 0x10,
 			Key_Control      = 0x11,
+			Key_Alt          = 0x12,
 			Key_Pause        = 0x13,
 			Key_Accept       = 0x1E,
 			Key_Escape       = 0x1B,
@@ -320,6 +322,7 @@ namespace mmo
 			case Key_Delete:      return "DEL";
 			case Key_Insert:      return "INSERT";
 			case Key_Control:     return "CONTROL";
+			case Key_Alt:         return "ALT";
 			case Key_Shift:       return "SHIFT";
 			case Key_Left:        return "LEFT";
 			case Key_Right:       return "RIGHT";
@@ -758,7 +761,7 @@ namespace mmo
 		FrameManager::Get().ResetTopFrame();
 
 		// Make the top frame element
-		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopGameFrame");
+		const auto topFrame = FrameManager::Get().CreateOrRetrieve("Frame", "TopFrame");
 		topFrame->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr);
 		topFrame->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		topFrame->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
@@ -1081,6 +1084,10 @@ namespace mmo
 	{
 		ASSERT(ObjectMgr::GetActivePlayerGuid() == monitoredGuid);
 
+		// This handler observes all unit flags, including godmode's mana-cost bypass.
+		// Refresh action-button usability even when the mana amount itself did not change.
+		FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+
 		const uint32 flags = ObjectMgr::GetActivePlayer()->Get<uint32>(object_fields::Flags);
 		const bool combatMode = (flags & unit_flags::InCombat) != 0;
 
@@ -1171,6 +1178,15 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// A modifier released without a following key is a standalone binding.
+		// Combinations are still captured on the non-modifier key's Down event.
+		const String baseName = MapBindingKeyCode(key);
+		if (m_bindings.IsCapturing() && IsModifierKeyName(baseName))
+		{
+			m_pressedKeyBindings.erase(key);
+			m_bindings.ExecuteKey(baseName, BindingKeyState::Down);
+			return true;
+		}
 		String keyName;
 		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
@@ -2166,6 +2182,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessageResult, *this, &WorldState::OnChatMessageResult);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DuelUpdate, *this, &WorldState::OnDuelUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InitialSpells, *this, &WorldState::OnInitialSpells);
@@ -2326,12 +2344,20 @@ namespace mmo
 								 { Command_TargetInfo(cmd, args); }, ConsoleCommandCategory::Gm, "Prints GUID, entry, level, health and position of the selected target.");
 		Console::RegisterCommand("morph", [this](const std::string &cmd, const std::string &args)
 								 { Command_Morph(cmd, args); }, ConsoleCommandCategory::Gm, "Changes the display model of the selected unit (or yourself) to the given display id.");
+		Console::RegisterCommand("faction", [this](const std::string &cmd, const std::string &args)
+		{
+			Command_Faction(cmd, args);
+		}, ConsoleCommandCategory::Gm, "Changes your faction using a faction template ID and its hostility rules, regardless of your selected target.");
 		Console::RegisterCommand("kill", [this](const std::string &cmd, const std::string &args)
 								 { Command_Kill(cmd, args); }, ConsoleCommandCategory::Gm, "Instantly kills the selected target (or yourself if nothing is selected).");
 		Console::RegisterCommand("revive", [this](const std::string &cmd, const std::string &args)
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
-								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity and free mana costs on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+		Console::RegisterCommand("nocooldown", [this](const std::string &cmd, const std::string &args)
+		{
+			Command_NoCooldown(cmd, args);
+		}, ConsoleCommandCategory::Gm, "Clears and prevents your skill and global cooldowns. 'nocooldown' or 'nocooldown 1' enables it, 'nocooldown 0' disables it. Cast times still apply.");
 		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
 								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
 		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
@@ -2373,9 +2399,11 @@ namespace mmo
 		Console::UnregisterCommand("pos");
 		Console::UnregisterCommand("targetinfo");
 		Console::UnregisterCommand("morph");
+		Console::UnregisterCommand("faction");
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("nocooldown");
 		Console::UnregisterCommand("invis");
 		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");
@@ -3145,6 +3173,7 @@ namespace mmo
 				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
 				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
 				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+				const uint32 oldFaction = isUnit ? obj->Get<uint32>(object_fields::FactionTemplate) : 0;
 
 				obj->Deserialize(packet, creation);
 				if (!packet)
@@ -3156,6 +3185,10 @@ namespace mmo
 				if (isUnit)
 				{
 					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
+					if (oldFaction != obj->Get<uint32>(object_fields::FactionTemplate))
+					{
+						FrameManager::Get().TriggerLuaEvent("FACTION_CHANGED");
+					}
 				}
 
 				// Check if this was an item update for the active player
@@ -3589,6 +3622,65 @@ namespace mmo
 			}
 		}
 
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnDuelUpdate(game::IncomingPacket& packet)
+	{
+		uint8 event, detail;
+		uint64 opponent;
+		String name;
+		Vector3 position;
+		if (!(packet >> io::read<uint8>(event) >> io::read<uint8>(detail) >> io::read<uint64>(opponent)
+			>> io::read_string(name) >> io::read<float>(position.x) >> io::read<float>(position.y) >> io::read<float>(position.z)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		if (event > static_cast<uint8>(DuelEvent::Error)) { return PacketParseResult::Disconnect; }
+		const auto state = static_cast<DuelEvent>(event);
+		if (state != DuelEvent::Error)
+		{
+			if (const auto player = ObjectMgr::GetActivePlayer())
+			{
+				player->SetDuelPartner(state == DuelEvent::Finished ? 0 : opponent, state == DuelEvent::Active);
+			}
+			FrameManager::Get().TriggerLuaEvent("PLAYER_TARGET_CHANGED");
+		}
+		FrameManager::Get().TriggerLuaEvent("DUEL_UPDATE", static_cast<int32>(event), static_cast<int32>(detail), name);
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult WorldState::OnChatMessageResult(game::IncomingPacket& packet)
+	{
+		uint8 result;
+		String targetName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(targetName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		const char* key;
+		switch (result)
+		{
+		case game::chat_message_result::SelfWhisper:
+			key = "CHAT_ERROR_SELF_WHISPER";
+			break;
+		case game::chat_message_result::PlayerNotFound:
+			key = "CHAT_ERROR_PLAYER_NOT_FOUND";
+			break;
+		case game::chat_message_result::WrongFaction:
+			key = "CHAT_ERROR_WRONG_FACTION";
+			break;
+		default:
+			return PacketParseResult::Disconnect;
+		}
+
+		String message = Localize(FrameManager::Get().GetLocalization(), key);
+		if (const auto placeholder = message.find("%s"); placeholder != String::npos)
+		{
+			message.replace(placeholder, 2, targetName);
+		}
+		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
 		return PacketParseResult::Pass;
 	}
 
@@ -5131,9 +5223,6 @@ namespace mmo
 			return PacketParseResult::Pass;
 		}
 
-		// Adjust position
-		unit->GetSceneNode()->SetPosition(movementInfo.position);
-
 		MovementType type = movement_type::Run;
 		switch (packet.GetId())
 		{
@@ -5164,6 +5253,17 @@ namespace mmo
 		}
 
 		unit->SetSpeed(type, speed);
+		if (unit->IsPlayer() && !unit->IsControlledByLocalPlayer())
+		{
+			// The speed packet carries an authoritative movement snapshot too.
+			// Rebase prediction instead of moving just the scene node, which would
+			// be overwritten by the renderer's old position on the following frame.
+			unit->EnqueueRemoteMovement(movementInfo);
+		}
+		else
+		{
+			unit->GetSceneNode()->SetPosition(movementInfo.position);
+		}
 
 		return PacketParseResult::Pass;
 	}

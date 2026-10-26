@@ -919,12 +919,30 @@ namespace mmo
 		bool IsAlive() const noexcept { return GetHealth() > 0; } /// Starts the regeneration countdown.
 		void StartRegeneration() const;
 
-		/// @brief Enables or disables damage immunity (developer/test cheat).
-		/// @param enable True to make this unit immune to all incoming damage.
-		void SetGodmode(bool enable) { m_godmode = enable; }
+		/// @brief Enables or disables damage immunity and free mana costs (developer/test cheat).
+		/// @param enable True to ignore incoming damage and spell mana costs.
+		void SetGodmode(bool enable);
 
 		/// @brief Whether this unit currently ignores all incoming damage.
 		bool IsGodmode() const { return m_godmode; }
+
+		/// Enables or disables cooldown bypass, clearing existing cooldowns when enabled.
+		/// @param enable True to prevent spell, category and global cooldowns.
+		void SetNoCooldown(bool enable);
+
+		/// Whether this unit casts without spell, category and global cooldowns.
+		bool IsNoCooldown() const { return m_noCooldown; }
+
+		/// Sets this unit's private duel partner; hostility starts only after the countdown.
+		void SetDuelPartner(uint64 guid, bool active);
+		/// Current duel partner, including the invitation/countdown phase.
+		uint64 GetDuelPartner() const { return m_duelPartner; }
+		/// Whether this unit is currently fighting its duel partner.
+		bool IsDuelActive() const { return m_duelActive; }
+		/// Fired before a duel hit could reduce this unit below one percent health.
+		signal<void()> duelDefeated;
+		/// Removes only harmful effects applied by the former duel opponent.
+		void RemoveHarmfulAurasFromCaster(uint64 casterGuid);
 
 		/// @brief Enables or disables game master invisibility. While enabled the unit's visibility
 		///        is forced to unit_visibility::Off regardless of stealth or invisibility auras, so it
@@ -1939,6 +1957,7 @@ public:
 		// Developer/test cheat: when true, Damage() absorbs everything without touching
 		// health, threat or procs. Only ever set by the dev-command handler.
 		bool m_godmode = false;
+		bool m_noCooldown = false;
 
 		bool m_gmInvisible = false;
 		// Maps base spell id → the previous target that had a SingleTargetPerCaster aura from our caster.
@@ -1993,6 +2012,10 @@ public:
 		std::map<uint8, float> m_baseSpeeds;
 
 		uint32 m_regeneration = regeneration_flags::None;
+		uint64 m_duelPartner{0};
+		uint64 m_finishedDuelPartner{0};
+		GameTime m_duelDamageBlockedUntil{0};
+		bool m_duelActive{false};
 
 		UnitVisibility m_visibility = UnitVisibility::On;
 

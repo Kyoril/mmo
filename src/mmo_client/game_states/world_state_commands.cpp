@@ -474,6 +474,24 @@ namespace mmo
 		m_realmConnector.Morph(displayId);
 	}
 
+	void WorldState::Command_Faction(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		uint32 factionTemplateId = 0;
+		if (tokens.size() != 1 || !ParseUInt(tokens[0], factionTemplateId))
+		{
+			ELOG("Usage: faction <id> (faction-template ID from the project data)");
+			return;
+		}
+		if (!m_project.factionTemplates.getById(factionTemplateId))
+		{
+			ELOG("Unknown faction-template ID: " << factionTemplateId);
+			return;
+		}
+		m_realmConnector.SetFaction(factionTemplateId);
+		ILOG("Requested faction template " << factionTemplateId << " for your character.");
+	}
+
 	void WorldState::Command_Kill(const std::string &cmd, const std::string &args) const
 	{
 		m_realmConnector.KillTarget();
@@ -497,6 +515,20 @@ namespace mmo
 
 		m_realmConnector.CheatGodmode(enable);
 		ILOG("Godmode " << (enable ? "enabled" : "disabled"));
+	}
+
+	void WorldState::Command_NoCooldown(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		if (tokens.size() > 1 || (!tokens.empty() && tokens[0] != "0" && tokens[0] != "1" &&
+			tokens[0] != "off" && tokens[0] != "on" && tokens[0] != "false" && tokens[0] != "true"))
+		{
+			ELOG("Usage: nocooldown [0|1|off|on]");
+			return;
+		}
+
+		const bool enable = tokens.empty() || (tokens[0] != "0" && tokens[0] != "off" && tokens[0] != "false");
+		m_realmConnector.CheatNoCooldown(enable);
 	}
 
 	void WorldState::Command_Invisible(const std::string &cmd, const std::string &args) const

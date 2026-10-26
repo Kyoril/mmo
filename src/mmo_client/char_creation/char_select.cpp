@@ -459,11 +459,10 @@ namespace mmo
 			return false;
 		}
 
-		// The scene fills the screen, and screen px / uiScale = UI units on each axis, so a
-		// normalized position times the native resolution is already in UI units.
-		const Size& native = FrameManager::Get().GetNativeResolution();
-		x = normalizedX * native.width;
-		y = normalizedY * native.height;
+		// Uniform UI scaling can leave a logical canvas different from the design resolution.
+		const Size screen = FrameManager::Get().GetLogicalScreenSize();
+		x = normalizedX * screen.width;
+		y = normalizedY * screen.height;
 		return true;
 	}
 
@@ -474,19 +473,18 @@ namespace mmo
 			return -1;
 		}
 
-		// Screen px / (native resolution * uiScale) is the normalized screen position, the inverse
-		// of ProjectToUi.
+		// Invert ProjectToUi using the actual screen dimensions, including non-widescreen windows.
 		const FrameManager& frameManager = FrameManager::Get();
 		const Point mouse = frameManager.GetMousePosition();
 		const Point uiScale = frameManager.GetUIScale();
-		const Size& native = frameManager.GetNativeResolution();
-		if (uiScale.x <= 0.0f || uiScale.y <= 0.0f || native.width <= 0.0f || native.height <= 0.0f)
+		const Size screen = frameManager.GetLogicalScreenSize();
+		if (uiScale.x <= 0.0f || uiScale.y <= 0.0f || screen.width <= 0.0f || screen.height <= 0.0f)
 		{
 			return -1;
 		}
 
-		const float x = mouse.x / (uiScale.x * native.width);
-		const float y = mouse.y / (uiScale.y * native.height);
+		const float x = mouse.x / (uiScale.x * screen.width);
+		const float y = mouse.y / (uiScale.y * screen.height);
 		return m_glueScene->PickPlazaCharacter(x, y);
 	}
 
@@ -538,8 +536,8 @@ namespace mmo
 			boxSlots.push_back(i);
 		}
 
-		const Size& native = FrameManager::Get().GetNativeResolution();
-		const std::vector<float>& offsets = m_nameplateDeclutter.Update(boxes, deltaSeconds, nameplateGap, 0.0f, native.height);
+		const Size screen = FrameManager::Get().GetLogicalScreenSize();
+		const std::vector<float>& offsets = m_nameplateDeclutter.Update(boxes, deltaSeconds, nameplateGap, 0.0f, screen.height);
 		for (size_t i = 0; i < boxSlots.size(); ++i)
 		{
 			NameplateSlot& slot = m_nameplates[boxSlots[i]];

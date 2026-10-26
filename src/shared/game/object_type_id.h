@@ -48,6 +48,9 @@ namespace mmo
 
 			/// Unit cannot be targeted or attacked.
 			NotAttackable = 0x00000020,
+
+			/// GM godmode also bypasses mana costs and client-side mana requirements.
+			Godmode = 0x00000040,
 		};
 	}
 

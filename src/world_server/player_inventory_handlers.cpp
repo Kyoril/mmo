@@ -537,25 +537,33 @@ namespace mmo
 
 	void Player::OnDestroyItem(uint16 opCode, uint32 size, io::Reader &contentReader)
 	{
-		uint8 bag, slot, count;
-		if (!(contentReader >> io::read<uint8>(bag) >> io::read<uint8>(slot) >> io::read<uint8>(count)))
+		uint64 itemGuid;
+		uint8 count;
+		if (!(contentReader >> io::read<uint64>(itemGuid) >> io::read<uint8>(count)))
 		{
-			WLOG("Failed to read bag, slot and count");
+			WLOG("Failed to read item guid and count");
 			return;
 		}
 
-		const uint16 absoluteSlot = InventorySlot::FromRelative(bag, slot).GetAbsolute();
+		// Resolve the confirmed instance after earlier moves have been processed.
+		// A replacement in its old slot must never be destroyed instead.
+		auto &inv = m_character->GetInventory();
+		uint16 absoluteSlot;
+		if (!inv.FindItemByGUID(itemGuid, absoluteSlot))
+		{
+			SendInventoryError(inventory_change_failure::ItemNotFound);
+			return;
+		}
 		if (IsInventorySlotTradeLocked(absoluteSlot))
 		{
 			SendInventoryError(inventory_change_failure::ItemLocked);
 			return;
 		}
 
-		auto &inv = m_character->GetInventory();
 		auto &factory = inv.GetCommandFactory();
 
 		auto command = factory.CreateRemoveItem(
-			InventorySlot::FromRelative(bag, slot),
+			InventorySlot::FromAbsolute(absoluteSlot),
 			count);
 
 		auto result = command->Execute();
