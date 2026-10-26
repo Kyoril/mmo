@@ -394,8 +394,20 @@ namespace mmo
 			// Particle emitters use RenderQueueGroupId::Transparent and are therefore
 			// automatically excluded from GBuffer/ShadowMap passes by RenderVisibleObjects.
 			// No manual guard needed here.
+			//
+			// A system that hangs off a scene node or a bone was already queued above, by
+			// FindVisibleObjects or by the entity it is attached to, exactly like every other
+			// movable object. Queueing it here as well would put its renderables into the
+			// transparent collection twice and draw every particle twice - and because the
+			// first path is frustum-culled while this one is not, whether that happens depends
+			// on where the camera points. Only systems outside the scene graph still need this.
 			for (auto& [name, emitter] : m_particleEmitters)
 			{
+				if (emitter->IsInScene())
+				{
+					continue;
+				}
+
 				emitter->PopulateRenderQueue(GetRenderQueue());
 			}
 

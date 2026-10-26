@@ -1085,6 +1085,14 @@ namespace mmo
 		return m_boundingBox.GetExtents().GetLength();
 	}
 
+	const AABB& ParticleSystem::GetWorldBoundingBox(bool) const
+	{
+		// The box UpdateBoundingBox leaves behind is already a world box, and it is rebuilt from
+		// the live particle list on every simulation step - see the declaration for why neither
+		// the parent transform nor the base class' invalidation-driven cache may be applied to it.
+		return m_boundingBox;
+	}
+
 	EmitterInstance* ParticleSystem::GetEmitter(size_t index) const
 	{
 		if (index >= m_emitters.size())
