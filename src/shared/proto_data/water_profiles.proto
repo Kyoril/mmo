@@ -42,6 +42,83 @@ message WaterProfile
 
 	// Screen distortion strength while submerged. 0 disables it.
 	optional float distortion_strength = 10;
+
+	// Looping sound entry played as the calm bed of nearby water of this type. 0 disables the
+	// ambience for this profile.
+	optional uint32 ambient_calm_sound = 11;
+
+	// Looping sound entry crossfaded in as the water flows faster. 0 means no fast bed.
+	optional uint32 ambient_fast_sound = 12;
+
+	// If true, only water bordering land (shorelines) is audible instead of the whole body.
+	optional bool ambient_shore_only = 13;
+
+	// 2D sound entry layered in while the player swims in this liquid. 0 disables it.
+	optional uint32 ambient_swim_sound = 14;
+
+	// Distance in world units within which this liquid is audible.
+	optional float ambient_range = 15 [default = 40];
+
+	// Volume multiplier of the ambience of this liquid.
+	optional float ambient_volume = 16 [default = 1];
+
+	// 2D sound entry looped while the player's head is under water of this liquid. It replaces the
+	// swim sound while submerged. 0 disables it.
+	optional uint32 ambient_underwater_sound = 17;
+
+	// --- FFT ocean (only read for the Ocean liquid, id 2) -----------------------------------
+	// Every field is optional; an unset field keeps the engine's built-in default
+	// (deferred_shading/ocean_settings.h), so an empty profile already looks right.
+
+	// Wind speed in m/s. Drives wave height and wavelength.
+	optional float ocean_wind_speed = 18;
+
+	// Direction the wind (and the waves) travel toward, in degrees. 0 = +X, 90 = +Z.
+	optional float ocean_wind_direction = 19;
+
+	// Distance the wind has blown over open water, in km. Short = choppy, long = rolling swell.
+	optional float ocean_fetch = 20;
+
+	// Directional spreading. Low = confused sea, high = long parallel crests.
+	optional float ocean_spread = 21;
+
+	// Multiplier on wave height.
+	optional float ocean_wave_scale = 22;
+
+	// How sharp the crests are (horizontal displacement factor).
+	optional float ocean_choppiness = 23;
+
+	// Multiplier on wave speed.
+	optional float ocean_wave_speed = 24;
+
+	// Body colour of the water in the wave troughs, packed 0xAARRGGBB (sRGB).
+	optional uint32 ocean_trough_color = 25;
+
+	// Body colour at the crests where sunlight shines through thin water, packed 0xAARRGGBB (sRGB).
+	optional uint32 ocean_crest_color = 26;
+
+	// Light absorbed per metre of water (linear, per channel). Red dies first in clear sea water.
+	optional float ocean_absorption_r = 27;
+	optional float ocean_absorption_g = 28;
+	optional float ocean_absorption_b = 29;
+
+	// Strength of sunlight glowing through wave crests.
+	optional float ocean_subsurface_strength = 30;
+
+	// Surface roughness of calm water; higher blurs reflections and widens the sun glint.
+	optional float ocean_roughness = 31;
+
+	// Multiplier on reflections.
+	optional float ocean_reflection_strength = 32;
+
+	// How readily breaking crests turn white.
+	optional float ocean_foam_coverage = 33;
+
+	// Brightness of the foam.
+	optional float ocean_foam_brightness = 34;
+
+	// Strength of the foam band along the shore.
+	optional float ocean_shore_foam_strength = 35;
 }
 
 message WaterProfiles

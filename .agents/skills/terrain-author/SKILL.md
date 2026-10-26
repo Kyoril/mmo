@@ -72,6 +72,7 @@ The metadata JSON sidecar (written by the generator, consumed by import) is:
 minY, pixel 65535 to maxY. Optional keys:
 
 - `"waterLevel"`, `"waterMaterial"`, `"waterType"` (1 Water, 2 Ocean): see Water below.
+- `"waterLevelMap"` (+ `"waterLevelMapMinY"`, `"waterLevelMapMaxY"`, `"waterLevelMapType"`): a 16-bit PNG with one pixel per water quad, (pages x · 128) × (pages z · 128), giving pools and rivers above sea level their own surface height (0 = no own level, `waterLevel` applies; 1..65535 map linearly to minY..maxY). Full imports only.
 - `"zoneMap"`: a 16-bit PNG with one zone (area) id per terrain tile, sized (pages x · 16) × (pages z · 16). It is resolved relative to the meta file.
 - `"pages": [[x, z], ...]`: write only these pages of the rect. Use it for irregular areas such as a continent, so that open-sea pages are never created.
 - `"skipExistingPages": true`: never overwrite a page that already exists. Shape the new terrain down to the old pages' border heights so that the seams match.

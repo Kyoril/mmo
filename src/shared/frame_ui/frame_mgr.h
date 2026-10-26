@@ -130,6 +130,12 @@ namespace mmo
 		/// Gets the current mouse cursor position.
 		inline Point GetMousePosition() const { return m_mousePos; }
 
+		/// Gets the frame a mouse click at a position would go to: the deepest enabled frame there,
+		/// or its nearest clickable ancestor.
+		/// @param position The position in screen pixels.
+		/// @return The frame, or nullptr if no enabled, clickable frame would take the click.
+		FramePtr GetClickTargetAt(const Point& position) const;
+
 		/// Notifies the FrameManager that the mouse cursor has been moved.
 		void NotifyMouseMoved(const Point& position);
 

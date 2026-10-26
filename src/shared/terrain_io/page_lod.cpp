@@ -30,10 +30,17 @@ namespace mmo
 			inline const ChunkMagic LodHeightChunk = MakeChunkMagic('TGHL');
 			inline const ChunkMagic LodNormalChunk = MakeChunkMagic('MRNL');
 
-			/// Whether the page sub-quad (qx, qz), in page quad coordinates, carries water.
+			/// Whether the page sub-quad (qx, qz), in page quad coordinates, carries a liquid that lifts
+			/// the LOD. Ocean does not: it is drawn to the horizon by its own renderer, and the distant
+			/// terrain has to show the seabed under it rather than a flat sheet at sea level.
 			bool HasWaterQuad(const PageLodSource &source, const uint32 qx, const uint32 qz)
 			{
 				const uint32 tileIndex = (qx / QuadsPerTileSide) + (qz / QuadsPerTileSide) * terrain::constants::TilesPerPage;
+				if (source.waterTypes != nullptr && source.waterTypes[tileIndex] == static_cast<uint8>(terrain::WaterType::Ocean))
+				{
+					return false;
+				}
+
 				const uint32 bit = (qx % QuadsPerTileSide) + (qz % QuadsPerTileSide) * QuadsPerTileSide;
 				return (source.waterQuadMasks[tileIndex] & (1ull << bit)) != 0ull;
 			}
@@ -184,6 +191,7 @@ namespace mmo
 			source.normals = data.normals.data();
 			source.waterQuadMasks = data.waterQuadMasks.empty() ? nullptr : data.waterQuadMasks.data();
 			source.waterVertexHeights = data.waterVertexHeights.empty() ? nullptr : data.waterVertexHeights.data();
+			source.waterTypes = data.waterTypes.size() == data.waterQuadMasks.size() && !data.waterTypes.empty() ? data.waterTypes.data() : nullptr;
 			return source;
 		}
 

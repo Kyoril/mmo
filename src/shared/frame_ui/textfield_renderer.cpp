@@ -70,16 +70,8 @@ namespace mmo
 			return;
 		}
 
-		const auto& textAreaOffsets = textField->GetTextAreaOffset();
-
-		// Get the frame rectangle
-		auto frameRect = m_frame->GetAbsoluteFrameRect();
-
-		auto scale = FrameManager::Get().GetUIScaleSize();
-		frameRect.left += textAreaOffsets.left * scale.height;
-		frameRect.top += textAreaOffsets.top * scale.height;
-		frameRect.right -= textAreaOffsets.right * scale.height;
-		frameRect.bottom -= textAreaOffsets.bottom * scale.height;
+		// The text area in screen pixels; the caret below is placed relative to the same rectangle.
+		const Rect frameRect = textField->GetTextAreaRect();
 
 		// Retrieve the font
 		const FontPtr font = m_frame->GetFont();
@@ -192,15 +184,15 @@ namespace mmo
 				}
 				else
 				{
-					// Calculate cursor position accounting for scroll offset
-					float cursorX = textField->GetCursorOffset() - textField->GetScrollOffset();
+					// Caret x relative to the text area, accounting for the scroll offset. The text is drawn
+					// from frameRect.left, so the caret is placed from the same edge.
+					const float cursorX = textField->GetCursorOffset() - textField->GetScrollOffset();
 
 					// Only show cursor if it's within the visible area
 					if (cursorX >= 0 && cursorX <= frameRect.GetWidth())
 					{
 						Rect caretRect{ 0.0f, 0.0f, 2.0f, frameRect.GetHeight()};
-						caretRect.Offset(m_frame->GetAbsoluteFrameRect().GetPosition() +
-							Point(cursorX + textAreaOffsets.left * scale.height, textAreaOffsets.top * scale.height));
+						caretRect.Offset(frameRect.GetPosition() + Point(cursorX, 0.0f));
 						caretImagery->Render(caretRect, colorOverride.value_or(Color::White));
 					}
 				}

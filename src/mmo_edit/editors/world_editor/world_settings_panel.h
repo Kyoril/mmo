@@ -52,6 +52,9 @@ namespace mmo
         /// @param id The ImGui window ID for the panel.
         void Draw(const String &id);
 
+        /// @brief Sets a function that draws further sections at the end of the panel.
+        void SetExtraContent(std::function<void()> drawExtraContent) { m_drawExtraContent = std::move(drawExtraContent); }
+
     private:
         terrain::Terrain &m_terrain;
         WorldGrid &m_worldGrid;
@@ -63,5 +66,6 @@ namespace mmo
         bool &m_showWater;
         std::function<void(bool)> m_setFoliageVisibleCallback;
         std::function<void(bool)> m_setWaterVisibleCallback;
+        std::function<void()> m_drawExtraContent;
     };
 }

@@ -74,6 +74,11 @@ namespace mmo
 		return CreateSound(fileName, SoundType::SoundLooped2D);
 	}
 
+	SoundIndex NullAudio::CreateLoopedStream3D(const String& fileName)
+	{
+		return CreateSound(fileName, SoundType::StreamLooped3D);
+	}
+
 	SoundIndex NullAudio::CreateSound(const String& fileName, SoundType type)
 	{
 		// Check if that sound already exists
@@ -204,6 +209,10 @@ namespace mmo
 	}
 
 	void NullAudio::SetLowPassCutoff(float cutoffHz)
+	{
+	}
+
+	void NullAudio::SetListenerOrientation(const Vector3& forward, const Vector3& up)
 	{
 	}
 

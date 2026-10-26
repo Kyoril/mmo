@@ -1,0 +1,439 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#include "water_ambience.h"
+
+#include "sound_entry_player.h"
+
+#include "math/constants.h"
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace mmo
+{
+	namespace
+	{
+		/// Volume at or below which a voice counts as silent.
+		constexpr float SilentVolume = 0.001f;
+
+		/// Smoothed level at or below which a field counts as faded out and forgets its direction.
+		constexpr float SilentLevel = 0.001f;
+	}
+
+	float water_ambience::SpreadFromFocus(const float focus)
+	{
+		const float t = std::clamp((focus - WideFocus) / (NarrowFocus - WideFocus), 0.0f, 1.0f);
+		const float narrow = t * t * (3.0f - 2.0f * t);
+		return MinSpread + (MaxSpread - MinSpread) * (1.0f - narrow);
+	}
+
+	WaterAmbience::WaterAmbience(SoundEntryPlayer& player, IAudio& audio, const uint32 randomSeed)
+		: m_player(player)
+		, m_audio(audio)
+		, m_random(randomSeed)
+	{
+	}
+
+	WaterAmbience::~WaterAmbience()
+	{
+		Stop();
+	}
+
+	void WaterAmbience::SetProfiles(std::vector<WaterAmbienceSounds> profiles)
+	{
+		Stop();
+
+		m_profiles = std::move(profiles);
+		m_scanProfiles.clear();
+		m_scanProfiles.reserve(m_profiles.size());
+		for (WaterAmbienceSounds& sounds : m_profiles)
+		{
+			// The scan cost grows with the square of the range; data may ask for far too much.
+			sounds.profile.range = std::clamp(sounds.profile.range, 0.0f, water_ambience::MaxRange);
+
+			// A swim-only profile has no bed to place, so its water is not worth scanning.
+			WaterAmbienceProfile scanProfile = sounds.profile;
+			if (sounds.calmSound == 0)
+			{
+				scanProfile.range = 0.0f;
+			}
+
+			m_scanProfiles.push_back(scanProfile);
+		}
+
+		m_targetFields.assign(m_profiles.size(), WaterAmbienceField());
+		m_smoothedFields.assign(m_profiles.size(), WaterAmbienceField());
+		m_hasDirection.assign(m_profiles.size(), false);
+		m_failedEntries.clear();
+		for (size_t i = 0; i < m_profiles.size(); ++i)
+		{
+			m_targetFields[i].waterType = m_profiles[i].profile.waterType;
+			m_smoothedFields[i].waterType = m_profiles[i].profile.waterType;
+		}
+	}
+
+	void WaterAmbience::Update(const IWaterAmbienceSource& source, const Vector3& ear, const bool swimming, const uint32 swimWaterType, const bool submerged, const uint32 submergedWaterType, const float deltaSeconds)
+	{
+		m_lastEar = ear;
+
+		if (m_profiles.empty())
+		{
+			return;
+		}
+
+		m_scanCountdown -= deltaSeconds;
+		if (m_scanDue || m_scanCountdown <= 0.0f)
+		{
+			m_targetFields = ScanWaterAmbience(source, ear, m_scanProfiles);
+			m_scanDue = false;
+			m_scanCountdown = std::max(m_scanCountdown + water_ambience::ScanInterval, 0.0f);
+		}
+
+		Smooth(deltaSeconds);
+		UpdateBedVoices(ear, deltaSeconds);
+		UpdateSurfaceLayers(swimming, swimWaterType, submerged, submergedWaterType, deltaSeconds);
+	}
+
+	void WaterAmbience::Stop()
+	{
+		for (auto& [soundId, voice] : m_bedVoices)
+		{
+			m_audio.StopSound(&voice.channel);
+		}
+		m_bedVoices.clear();
+
+		StopLayer(m_swim);
+		StopLayer(m_underwater);
+
+		for (size_t i = 0; i < m_smoothedFields.size(); ++i)
+		{
+			const uint32 waterType = m_smoothedFields[i].waterType;
+			m_smoothedFields[i] = WaterAmbienceField();
+			m_smoothedFields[i].waterType = waterType;
+			m_hasDirection[i] = false;
+		}
+
+		m_scanDue = true;
+		m_scanCountdown = 0.0f;
+	}
+
+	const std::vector<WaterAmbienceField>& WaterAmbience::GetSmoothedFields() const
+	{
+		return m_smoothedFields;
+	}
+
+	std::vector<WaterAmbience::VoiceInfo> WaterAmbience::GetVoices() const
+	{
+		std::vector<VoiceInfo> voices;
+		voices.reserve(m_bedVoices.size() + 1);
+
+		for (const auto& [soundId, voice] : m_bedVoices)
+		{
+			voices.push_back({ soundId, voice.volume, voice.spread, voice.position });
+		}
+
+		for (const Layer* layer : { &m_swim, &m_underwater })
+		{
+			if (layer->channel != InvalidChannel)
+			{
+				voices.push_back({ layer->soundId, layer->baseVolume * layer->fade, water_ambience::MaxSpread, m_lastEar });
+			}
+		}
+
+		return voices;
+	}
+
+	void WaterAmbience::Smooth(const float deltaSeconds)
+	{
+		const float alpha = 1.0f - std::exp(-std::max(deltaSeconds, 0.0f) / water_ambience::SmoothingSeconds);
+
+		for (size_t i = 0; i < m_smoothedFields.size(); ++i)
+		{
+			const WaterAmbienceField& target = m_targetFields[i];
+			WaterAmbienceField& smoothed = m_smoothedFields[i];
+
+			smoothed.level += (target.level - smoothed.level) * alpha;
+
+			// Without water the scan has neither a direction nor a speed: keep the last ones so
+			// a fading voice neither swings onto the ear nor changes its loop mix. Once the
+			// level has faded out, forget the direction: water heard next may lie elsewhere.
+			if (target.level <= 0.0f)
+			{
+				if (smoothed.level <= SilentLevel)
+				{
+					m_hasDirection[i] = false;
+				}
+
+				continue;
+			}
+
+			// Water heard for the first time has no previous direction to blend from.
+			if (!m_hasDirection[i])
+			{
+				smoothed.direction = target.direction;
+				smoothed.speed = target.speed;
+				m_hasDirection[i] = true;
+				continue;
+			}
+
+			smoothed.direction += (target.direction - smoothed.direction) * alpha;
+			smoothed.speed += (target.speed - smoothed.speed) * alpha;
+		}
+	}
+
+	std::map<uint32, WaterAmbience::BedTarget> WaterAmbience::GatherBedTargets(const Vector3& ear) const
+	{
+		// Two profiles may share a sound entry, but a streamed entry plays on one channel only.
+		// Picking the louder profile would make the voice jump sides whenever the winner flips,
+		// so the candidates are blended: volume-weighted direction, equal-power volume.
+		struct Blend
+		{
+			float volumeSum = 0.0f;
+			float volumeSquareSum = 0.0f;
+			Vector3 weightedDirection;
+
+			// Unweighted sum, used while every candidate is silent.
+			Vector3 directionSum;
+			int count = 0;
+
+			float range = 0.0f;
+		};
+
+		std::map<uint32, Blend> blends;
+
+		const auto offer = [this, &blends](const uint32 soundId, const float volume, const Vector3& direction, const float range)
+		{
+			if (soundId == 0)
+			{
+				return;
+			}
+
+			const float entryVolume = volume * m_player.GetEntryVolume(soundId);
+
+			Blend& blend = blends[soundId];
+			blend.volumeSum += entryVolume;
+			blend.volumeSquareSum += entryVolume * entryVolume;
+			blend.weightedDirection += direction * entryVolume;
+			blend.directionSum += direction;
+			++blend.count;
+			blend.range = std::max(blend.range, range);
+		};
+
+		for (size_t i = 0; i < m_profiles.size(); ++i)
+		{
+			const WaterAmbienceSounds& sounds = m_profiles[i];
+			const WaterAmbienceField& field = m_smoothedFields[i];
+
+			// No calm loop means no bed at all; the profile may still provide a swim layer.
+			if (sounds.calmSound == 0)
+			{
+				continue;
+			}
+
+			const float speed = std::clamp(field.speed, 0.0f, 1.0f);
+			const float calmWeight = sounds.fastSound == 0 ? 1.0f : std::cos(speed * HalfPi);
+			const float fastWeight = std::sin(speed * HalfPi);
+			const float baseVolume = sounds.volume * field.level;
+
+			offer(sounds.calmSound, baseVolume * calmWeight, field.direction, sounds.profile.range);
+			offer(sounds.fastSound, baseVolume * fastWeight, field.direction, sounds.profile.range);
+		}
+
+		std::map<uint32, BedTarget> targets;
+		for (const auto& [soundId, blend] : blends)
+		{
+			BedTarget& target = targets[soundId];
+			target.range = blend.range;
+			target.volume = std::sqrt(blend.volumeSquareSum);
+
+			// Weighted mean: a single candidate keeps its own direction exactly. Opposite
+			// candidates cancel out, which pulls the voice towards the ear and widens it.
+			const Vector3 direction = blend.volumeSum > 0.0f
+				? blend.weightedDirection / blend.volumeSum
+				: blend.directionSum / static_cast<float>(blend.count);
+
+			// The direction is never normalised: its length is the focus, so the voice glides
+			// through the ear as the water spreads around the listener instead of snapping.
+			target.spread = water_ambience::SpreadFromFocus(direction.GetLength());
+			target.position = ear + direction * water_ambience::VirtualDistance;
+		}
+
+		return targets;
+	}
+
+	void WaterAmbience::UpdateBedVoices(const Vector3& ear, const float deltaSeconds)
+	{
+		const std::map<uint32, BedTarget> targets = GatherBedTargets(ear);
+
+		// Start voices which became audible.
+		for (const auto& [soundId, target] : targets)
+		{
+			if (target.volume <= SilentVolume || m_bedVoices.count(soundId) != 0 || m_failedEntries.count(soundId) != 0)
+			{
+				continue;
+			}
+
+			BedVoice voice;
+			voice.channel = m_player.PlayEntryPositionedLoop(soundId, target.position, water_ambience::VirtualDistance, target.range, water_ambience::VoicePriority);
+			if (voice.channel == InvalidChannel)
+			{
+				m_failedEntries.insert(soundId);
+				continue;
+			}
+
+			// Start somewhere within the loop so that every visit does not open identically.
+			if (const float length = m_player.GetEntryLength(soundId); length > 0.0f)
+			{
+				if (IChannelInstance* channel = m_audio.GetChannelInstance(voice.channel))
+				{
+					channel->SetPlaybackPosition(std::uniform_real_distribution<float>(0.0f, length)(m_random));
+				}
+			}
+
+			m_bedVoices.emplace(soundId, voice);
+		}
+
+		// Adjust live voices; stop the ones which stayed silent long enough.
+		for (auto it = m_bedVoices.begin(); it != m_bedVoices.end();)
+		{
+			BedVoice& voice = it->second;
+
+			const auto targetIt = targets.find(it->first);
+			if (targetIt != targets.end())
+			{
+				voice.volume = targetIt->second.volume;
+				voice.spread = targetIt->second.spread;
+				voice.position = targetIt->second.position;
+			}
+			else
+			{
+				voice.volume = 0.0f;
+			}
+
+			if (voice.volume <= SilentVolume)
+			{
+				voice.silentSeconds += deltaSeconds;
+				if (voice.silentSeconds >= water_ambience::StopHoldSeconds)
+				{
+					m_audio.StopSound(&voice.channel);
+					it = m_bedVoices.erase(it);
+					continue;
+				}
+			}
+			else
+			{
+				voice.silentSeconds = 0.0f;
+			}
+
+			ApplyBedVoice(voice);
+			++it;
+		}
+	}
+
+	void WaterAmbience::UpdateSurfaceLayers(const bool swimming, const uint32 swimWaterType, const bool submerged, const uint32 submergedWaterType, const float deltaSeconds)
+	{
+		uint32 underwaterSound = 0;
+		float underwaterVolume = 1.0f;
+		if (submerged)
+		{
+			for (const WaterAmbienceSounds& sounds : m_profiles)
+			{
+				if (sounds.profile.waterType == submergedWaterType && sounds.underwaterSound != 0)
+				{
+					underwaterSound = sounds.underwaterSound;
+					underwaterVolume = sounds.volume;
+					break;
+				}
+			}
+		}
+
+		// The swim layer gives way to the underwater layer while that is wanted.
+		uint32 swimSound = 0;
+		float swimVolume = 1.0f;
+		if (swimming && underwaterSound == 0)
+		{
+			for (const WaterAmbienceSounds& sounds : m_profiles)
+			{
+				if (sounds.profile.waterType == swimWaterType && sounds.swimSound != 0)
+				{
+					swimSound = sounds.swimSound;
+					swimVolume = sounds.volume;
+					break;
+				}
+			}
+		}
+
+		// The swim layer is updated first so that it releases a shared entry before the
+		// underwater layer asks for it.
+		UpdateLayer(m_swim, swimSound, swimVolume, water_ambience::SwimFadeSeconds, m_underwater.soundId, deltaSeconds);
+		UpdateLayer(m_underwater, underwaterSound, underwaterVolume, water_ambience::UnderwaterFadeSeconds, m_swim.soundId, deltaSeconds);
+	}
+
+	void WaterAmbience::UpdateLayer(Layer& layer, const uint32 wantedSound, const float wantedVolume, const float fadeSeconds, const uint32 otherSound, const float deltaSeconds)
+	{
+		if (layer.channel == InvalidChannel)
+		{
+			// Never two live voices of one entry: wait until the other layer let go of it.
+			if (wantedSound == 0 || wantedSound == otherSound || m_failedEntries.count(wantedSound) != 0)
+			{
+				return;
+			}
+
+			layer.channel = m_player.PlayEntry(wantedSound, water_ambience::VoicePriority);
+			if (layer.channel == InvalidChannel)
+			{
+				m_failedEntries.insert(wantedSound);
+				return;
+			}
+
+			layer.soundId = wantedSound;
+			layer.baseVolume = m_player.GetEntryVolume(wantedSound) * wantedVolume;
+			layer.fade = 0.0f;
+		}
+
+		const float step = std::max(deltaSeconds, 0.0f) / fadeSeconds;
+		if (layer.soundId == wantedSound)
+		{
+			layer.fade = std::min(1.0f, layer.fade + step);
+		}
+		else
+		{
+			// Leaving the water, or moving into another water's layer: fade out first.
+			layer.fade = std::max(0.0f, layer.fade - step);
+			if (layer.fade <= 0.0f)
+			{
+				StopLayer(layer);
+				return;
+			}
+		}
+
+		if (IChannelInstance* channel = m_audio.GetChannelInstance(layer.channel))
+		{
+			channel->SetVolume(layer.baseVolume * layer.fade);
+		}
+	}
+
+	void WaterAmbience::ApplyBedVoice(const BedVoice& voice) const
+	{
+		m_audio.Set3DPosition(voice.channel, voice.position);
+
+		if (IChannelInstance* channel = m_audio.GetChannelInstance(voice.channel))
+		{
+			channel->SetVolume(voice.volume);
+			channel->Set3DSpread(voice.spread);
+		}
+	}
+
+	void WaterAmbience::StopLayer(Layer& layer)
+	{
+		if (layer.channel != InvalidChannel)
+		{
+			m_audio.StopSound(&layer.channel);
+		}
+
+		layer.channel = InvalidChannel;
+		layer.soundId = 0;
+		layer.fade = 0.0f;
+	}
+}

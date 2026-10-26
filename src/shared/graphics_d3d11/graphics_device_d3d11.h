@@ -147,6 +147,8 @@ namespace mmo
 
 		VolumeTexturePtr CreateVolumeTexture(uint16 width, uint16 height, uint16 depth, VolumeFormat format, bool writable) override;
 
+		TextureArrayPtr CreateTextureArray(uint16 width, uint16 height, uint16 layers, TextureArrayFormat format, bool writable, bool mipmapped) override;
+
 		SamplerStatePtr CreateSamplerState(const SamplerDesc& desc) override;
 
 		void Dispatch(uint32 groupsX, uint32 groupsY, uint32 groupsZ) override;

@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 
 #include <functional>
+#include <ostream>
 #include <vector>
 
 namespace mmo
@@ -29,12 +30,27 @@ namespace mmo
 		/// @brief Writes a square RGBA8 image as a DXT1 .htex with a mip chain down to 4x4.
 		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, uint32 size);
 
+		/// @brief Writes a square RGBA8 image as a DXT1 .htex with a mip chain down to 4x4 into a seekable stream.
+		bool WriteDxt1Texture(std::ostream& out, std::vector<uint8> rgba, uint32 size);
+
+		/// @brief Like WriteDxt1Texture, but DXT5: the alpha channel is kept (smoothly, 8 bits).
+		bool WriteDxt5Texture(const String& filename, std::vector<uint8> rgba, uint32 size);
+
+		/// @brief Like WriteDxt1Texture, but DXT5: the alpha channel is kept (smoothly, 8 bits).
+		bool WriteDxt5Texture(std::ostream& out, std::vector<uint8> rgba, uint32 size);
+
+		/// @brief Writes an uncompressed RGBA8 .htex without mips (the layout of a manual R8G8B8A8
+		///        texture filled with LoadRaw) into a seekable stream.
+		/// @param pixels width * height texels, 4 bytes each, row by row.
+		bool WriteRgba8Texture(std::ostream& out, const void* pixels, uint32 width, uint32 height);
+
 		/// @brief Hides every visible movable object outside the given scene subtrees and restores it on
 		///	       destruction. Cameras are left alone.
 		class ScopedVisibleSubtrees final
 		{
 		public:
-			ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep);
+			/// @param keepLights Leave lights visible too, so a lit render keeps the scene's lighting.
+			ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep, bool keepLights = false);
 
 			~ScopedVisibleSubtrees();
 
@@ -46,6 +62,7 @@ namespace mmo
 
 		private:
 			std::vector<const SceneNode*> m_keep;
+			bool m_keepLights = false;
 			std::vector<MovableObject*> m_hidden;
 		};
 

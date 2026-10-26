@@ -7,6 +7,8 @@ import collections
 import os
 import re
 import subprocess
+import tempfile
+import time
 
 from .guard import FileChange
 
@@ -16,7 +18,14 @@ _SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
 SUBMODULES = ("data/client", "data/editor")
 # Where parked fix branches are kept on origin (and their data commits on the submodule remotes).
 BACKUP_PREFIX = "refs/bugloop/"
-ShipResult = collections.namedtuple("ShipResult", "ok commit reason")
+# Game data must never be merged line by line: a small .data file without NUL bytes looks like text
+# to git, and a "clean" text merge of protobuf bytes corrupts it. The loop's merges mark it as
+# conflicting instead, so merge_resolve merges it by entry.
+MERGE_ATTRIBUTES = "*.data -merge\n"
+# conflict: the merge with develop (or a submodule master) had a conflict nothing could resolve.
+# Rounds of merge, gate and push one ship may take when develop moves under it.
+SHIP_ATTEMPTS = 3
+ShipResult = collections.namedtuple("ShipResult", "ok commit reason conflict", defaults=(False,))
 
 
 class GitError(RuntimeError):
@@ -36,6 +45,20 @@ def run_git(cwd, *args, check=True, binary=False):
 	return completed
 
 
+def _merge_config():
+	"""The `-c` setting that applies MERGE_ATTRIBUTES to a merge."""
+	path = os.path.join(tempfile.gettempdir(), "mmo-bugloop-merge.gitattributes")
+	with open(path, "w", encoding="utf-8", newline="\n") as handle:
+		handle.write(MERGE_ATTRIBUTES)
+	return "core.attributesFile=" + path.replace("\\", "/")
+
+
+def _rejected(push):
+	"""The push failed only because the remote branch moved on (not fast-forward)."""
+	text = push.stderr or ""
+	return "non-fast-forward" in text or "fetch first" in text or "tip is behind" in text or "[rejected]" in text
+
+
 def _count(text):
 	return 0 if text == "-" else int(text)
 
@@ -51,7 +74,10 @@ def _numstat(output, prefix=""):
 
 
 class Worktree:
-	def __init__(self, main_repo, path, submodules=SUBMODULES, remote="origin", sub_remote="upstream", develop="develop", master="master"):
+	def __init__(self, main_repo, path, submodules=SUBMODULES, remote="origin", sub_remote="upstream", develop="develop", master="master",
+			resolver=None):
+		"""`resolver` (merge_resolve.ConflictResolver) resolves merge conflicts; without one any
+		conflict refuses the merge."""
 		self.main_repo = main_repo
 		self.path = path
 		self.submodules = tuple(submodules)
@@ -59,6 +85,10 @@ class Worktree:
 		self.sub_remote = sub_remote
 		self.develop = develop
 		self.master = master
+		self.resolver = resolver
+		# What the last resume_branch() or ship() resolved, one report per repository.
+		self.resolutions = []
+		self._conflicted = False
 
 	@property
 	def target(self):
@@ -96,6 +126,36 @@ class Worktree:
 			self.git("remote", "add", self.sub_remote, url, cwd=sub_dir)
 		self.git("fetch", self.sub_remote, cwd=sub_dir)
 
+	def clear_stale_locks(self, min_age_seconds=60):
+		"""Removes index.lock files a killed loop left in this worktree and its submodules; returns
+		their paths. Only the loop uses its worktree and only one loop runs, so at startup a lock
+		older than a minute belongs to nobody. On 2026-10-23 a restart killed the loop during a
+		submodule checkout, and the lock it left stalled every fix and ship for half an hour."""
+		if not os.path.exists(os.path.join(self.path, ".git")):
+			return []
+		candidates = []
+		git_dir = run_git(self.path, "rev-parse", "--absolute-git-dir", check=False).stdout.strip()
+		if git_dir:
+			candidates.append(os.path.join(git_dir, "index.lock"))
+			for sub in self.submodules:
+				candidates.append(os.path.join(git_dir, "modules", *sub.split("/"), "index.lock"))
+		for sub in self.submodules:
+			sub_dir = self.sub_path(sub)
+			if os.path.exists(os.path.join(sub_dir, ".git")):
+				sub_git = run_git(sub_dir, "rev-parse", "--absolute-git-dir", check=False).stdout.strip()
+				if sub_git:
+					candidates.append(os.path.join(sub_git, "index.lock"))
+		removed = []
+		now = time.time()
+		for path in sorted({os.path.normcase(os.path.normpath(path)) for path in candidates}):
+			try:
+				if now - os.path.getmtime(path) >= min_age_seconds:
+					os.remove(path)
+					removed.append(path)
+			except OSError:
+				continue  # missing, or still held by a process: leave it
+		return removed
+
 	def prepare(self):
 		"""A fresh checkout of origin/develop; returns its commit."""
 		run_git(self.main_repo, "fetch", self.remote, "--prune")
@@ -126,9 +186,11 @@ class Worktree:
 		origin/develop (submodule pointers included), so the refix is judged against today's
 		develop and not against whatever data landed since the branch was cut. Returns its head;
 		raises GitError when the merge needs a human."""
+		self.resolutions = []
 		self.git("checkout", "--force", branch)
 		self._sync_submodules()
-		reason = self._merge_with_submodules(self.target, "Merge {} into {} (bug-loop refix)".format(self.target, branch))
+		reason = self._merge_with_submodules(self.target, "Merge {} into {} (bug-loop refix)".format(self.target, branch),
+			{"ours": "the fix branch {}".format(branch), "theirs": "{}, the changes that landed since the fix was cut".format(self.target)})
 		if reason:
 			self.git("checkout", "--detach", "--force", self.target)
 			self._sync_submodules()
@@ -140,14 +202,60 @@ class Worktree:
 	def _is_ancestor(self, cwd, ancestor, commit):
 		return run_git(cwd, "merge-base", "--is-ancestor", ancestor, commit, check=False).returncode == 0
 
-	def _merge_with_submodules(self, other, message):
+	def _unmerged(self, repo):
+		return sorted(path for path in self.git("diff", "--name-only", "-z", "--diff-filter=U", cwd=repo).split("\0") if path)
+
+	def _resolve(self, repo, prefix, sides):
+		"""Resolves the conflicts of the merge in progress in `repo`; "" when all are resolved and
+		staged, None when there are none (the merge failed for another reason), else why not."""
+		paths = self._unmerged(repo)
+		if not paths:
+			return None
+		if self.resolver is None:
+			self._conflicted = True
+			return "merge conflict in {} (needs a manual merge)".format(", ".join(prefix + path for path in paths[:5]))
+		reason, report = self.resolver.resolve(self.path, repo, prefix, paths, sides)
+		if reason:
+			self._conflicted = True
+			return reason
+		self.resolutions.append(report)
+		return ""
+
+	def _merge_sub(self, sub, mine, other, message, sides):
+		"""Merges submodule commit `other` into `mine`, resolving conflicts; returns (commit, reason)."""
+		sub_dir = self.sub_path(sub)
+		self.git("checkout", "--detach", "--force", mine, cwd=sub_dir)
+		merge = run_git(sub_dir, "-c", _merge_config(), "merge", "--no-ff", "-m", message, other, check=False)
+		if merge.returncode != 0:
+			reason = self._resolve(sub_dir, sub + "/", sides)
+			if reason is None:
+				reason = "merge failed: " + (merge.stderr or merge.stdout).strip()[-300:]
+			if reason:
+				run_git(sub_dir, "merge", "--abort", check=False)
+				self.git("clean", "-fd", cwd=sub_dir)
+				return None, reason
+			self.git("commit", "--no-edit", cwd=sub_dir)
+		return self.git("rev-parse", "HEAD", cwd=sub_dir), ""
+
+	def _resolution_note(self, message):
+		"""`message` with the resolved files named above its trailers."""
+		resolved = [path for report in self.resolutions for path in report["data"] + [item["path"] for item in report["text"]]]
+		if not resolved:
+			return message
+		note = "Conflicts with {} resolved by the bug loop in: {}".format(self.target, ", ".join(resolved[:10]))
+		body, trailer, rest = message.partition("\n\nCo-Authored-By")
+		return body + "\n\n" + note + (trailer + rest if trailer else "")
+
+	def _merge_with_submodules(self, other, message, sides):
 		"""Merges `other` into HEAD. A submodule pointer both sides moved is resolved by merging
-		the two submodule commits inside the submodule; any other conflict aborts the merge.
-		Returns "" on success, else why it failed (HEAD and submodules are then left as before)."""
+		the two submodule commits inside the submodule; conflicts are handed to the resolver, and
+		any it cannot resolve abort the merge. Returns "" on success, else why it failed (HEAD and
+		submodules are then left as before)."""
+		self._conflicted = False
 		head = self.head()
 		base = self.git("merge-base", "HEAD", other)
 		ours, theirs, common = self.gitlinks("HEAD"), self.gitlinks(other), self.gitlinks(base)
-		merge = run_git(self.path, "merge", "--no-ff", "--no-commit", other, check=False)
+		merge = run_git(self.path, "-c", _merge_config(), "merge", "--no-ff", "--no-commit", other, check=False)
 		in_progress = run_git(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode == 0
 		if merge.returncode != 0 and not in_progress:
 			return "merge of {} failed: {}".format(other, (merge.stderr or merge.stdout).strip()[-300:])
@@ -155,6 +263,8 @@ class Worktree:
 		def abort(reason):
 			run_git(self.path, "merge", "--abort", check=False)
 			self.git("checkout", "--detach", "--force", head)
+			# A refused merge resolver may have left files behind.
+			self.git("clean", "-fd")
 			self._sync_submodules()
 			return reason
 
@@ -168,18 +278,15 @@ class Worktree:
 			elif self._is_ancestor(sub_dir, mine, other_link):
 				resolved = other_link
 			else:
-				self.git("checkout", "--detach", "--force", mine, cwd=sub_dir)
-				sub_merge = run_git(sub_dir, "merge", "--no-ff", "-m", "Merge {} into {}".format(other_link[:8], mine[:8]), other_link, check=False)
-				if sub_merge.returncode != 0:
-					run_git(sub_dir, "merge", "--abort", check=False)
-					return abort("{}: the fix's data change conflicts with {} (needs a manual merge)".format(sub, other_link[:8]))
-				resolved = self.git("rev-parse", "HEAD", cwd=sub_dir)
+				resolved, reason = self._merge_sub(sub, mine, other_link, "Merge {} into {}".format(other_link[:8], mine[:8]), sides)
+				if reason:
+					return abort("{}: the fix's data change conflicts with {}: {}".format(sub, other_link[:8], reason))
 			self.git("update-index", "--cacheinfo", "160000,{},{}".format(resolved, sub))
-		unmerged = self.git("diff", "--name-only", "--diff-filter=U")
-		if unmerged:
-			return abort("merge conflict with {} in {}".format(other, ", ".join(unmerged.splitlines()[:5])))
+		reason = self._resolve(self.path, "", sides)
+		if reason:
+			return abort("merge conflict with {}: {}".format(other[:8], reason))
 		if in_progress:
-			self.git("commit", "--no-edit", "-m", message)
+			self.git("commit", "--no-edit", "-m", self._resolution_note(message))
 		self._sync_submodules()
 		return ""
 
@@ -241,16 +348,30 @@ class Worktree:
 		completed = run_git(repo, "show", "{}:{}".format(rev, relative), check=False, binary=True)
 		return completed.stdout if completed.returncode == 0 else None
 
-	def ship(self, branch, head, message, fast_gate):
+	def ship(self, branch, head, message, fast_gate, attempts=SHIP_ATTEMPTS):
 		"""Merges `head`, the commit that was guarded, proved and gated, onto the current
 		origin/develop and pushes: changed submodules first (fast-forward of their master only),
 		then develop. Refuses when `branch` no longer points at `head`. A submodule master that moved
 		past the fix is merged into the fix's submodule commit here; a conflict refuses. fast_gate()
 		runs only when develop or a submodule master moved since the branch was cut, because then
-		the merge result was never gated."""
+		the merge result was never gated.
+
+		A push rejected because develop or a submodule master moved while the merge was gated (the
+		gate takes many minutes) starts over: fetch, merge onto the new tip, gate again, push. At
+		most `attempts` rounds; on 2026-10-24 a ship parked after one such race."""
 		current = run_git(self.path, "rev-parse", "--verify", "-q", branch + "^{commit}", check=False).stdout.strip()
 		if current != head:
 			return ShipResult(False, "", "branch moved after gating ({} is at {}, gated {})".format(branch, current[:8] or "nothing", head[:8]))
+		for _ in range(attempts):
+			result, raced = self._ship_once(branch, head, message, fast_gate)
+			if not raced:
+				return result
+		return result._replace(reason="{} (develop kept moving: {} attempts)".format(result.reason, attempts))
+
+	def _ship_once(self, branch, head, message, fast_gate):
+		"""One merge, gate and push of ship(); returns (result, raced): raced is True when a push was
+		rejected because its target moved in the meantime."""
+		self.resolutions = []
 		run_git(self.main_repo, "fetch", self.remote)
 		tip = self.head(self.target)
 		fork = self.git("merge-base", tip, head)
@@ -259,9 +380,11 @@ class Worktree:
 			self.git("fetch", self.sub_remote, cwd=self.sub_path(sub))
 		self.git("checkout", "--detach", "--force", tip)
 		self._sync_submodules()
-		reason = self._merge_with_submodules(head, message)
+		reason = self._merge_with_submodules(head, message,
+			{"ours": "{} at {}, the changes that landed after the fix was cut".format(self.target, tip[:8]),
+			"theirs": "the fix {} at {}".format(branch, head[:8])})
 		if reason:
-			return ShipResult(False, "", reason)
+			return (ShipResult(False, "", reason, self._conflicted), False)
 		# After the merge: a pointer both sides moved now names a submodule merge commit.
 		pushes = []
 		caught_up = False
@@ -272,14 +395,14 @@ class Worktree:
 				# The submodule's master moved past develop's pointer (data pushed without a develop
 				# bump). Merge it here, at ship time: a refix that merges it can lose the same race
 				# again before it ships.
-				self.git("checkout", "--detach", "--force", sha, cwd=sub_dir)
-				sub_merge = run_git(sub_dir, "merge", "--no-ff", "-m", "Merge {} into {}".format(master, sha[:8]), master, check=False)
-				if sub_merge.returncode != 0:
-					run_git(sub_dir, "merge", "--abort", check=False)
+				self._conflicted = False
+				merged, reason = self._merge_sub(sub, sha, master, "Merge {} into {}".format(master, sha[:8]),
+					{"ours": "the fix's {} commit {}".format(sub, sha[:8]), "theirs": "{} of {}, data that landed without a develop bump".format(master, sub)})
+				if reason:
 					self.git("checkout", "--detach", "--force", tip)
 					self._sync_submodules()
-					return ShipResult(False, "", "{}: the fix's data change conflicts with {} (needs a manual merge)".format(sub, master))
-				sha = self.git("rev-parse", "HEAD", cwd=sub_dir)
+					return (ShipResult(False, "", "{}: the fix's data change conflicts with {}: {}".format(sub, master, reason), self._conflicted), False)
+				sha = merged
 				self.git("update-index", "--cacheinfo", "160000,{},{}".format(sha, sub))
 				caught_up = True
 			pushes.append((sub_dir, sha))
@@ -287,17 +410,17 @@ class Worktree:
 			# HEAD is the local, unpushed merge commit of the fix; it takes the new pointers.
 			self.git("commit", "--amend", "--no-edit")
 		if (moved or caught_up) and not fast_gate():
-			return ShipResult(False, "", "the fast gate on the merge is red ({} or submodule master moved)".format(self.target))
+			return (ShipResult(False, "", "the fast gate on the merge is red ({} or submodule master moved)".format(self.target)), False)
 		for sub_dir, sha in pushes:
 			push = run_git(sub_dir, "push", self.sub_remote, "{}:refs/heads/{}".format(sha, self.master), check=False)
 			if push.returncode != 0:
-				return ShipResult(False, "", "push to {} failed: {}".format(sub_dir, push.stderr.strip()[-300:]))
+				return (ShipResult(False, "", "push to {} failed: {}".format(sub_dir, push.stderr.strip()[-300:])), _rejected(push))
 		commit = self.head()
 		push = run_git(self.path, "push", self.remote, "HEAD:refs/heads/" + self.develop, check=False)
 		if push.returncode != 0:
-			return ShipResult(False, "", "push of develop failed: " + push.stderr.strip()[-300:])
+			return (ShipResult(False, "", "push of develop failed: " + push.stderr.strip()[-300:]), _rejected(push))
 		run_git(self.main_repo, "fetch", self.remote)
-		return ShipResult(True, commit, "")
+		return (ShipResult(True, commit, ""), False)
 
 	def merged(self, branch):
 		"""The merge commit of `branch` on develop or origin/develop, found by its message

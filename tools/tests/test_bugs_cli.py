@@ -16,6 +16,7 @@ import os
 import sys
 import unittest
 import urllib.error
+import urllib.request
 
 sys.dont_write_bytecode = True
 
@@ -152,6 +153,65 @@ class BugApiTests(unittest.TestCase):
 			raise urllib.error.HTTPError(request.full_url, code, "error", {}, io.BytesIO(body))
 
 		return opener
+
+
+GET = urllib.request.Request("https://bugs.example/api/bugs")
+
+
+class TlsFallbackTests(unittest.TestCase):
+	def make(self, failures):
+		calls = []
+
+		def urlopen(request, timeout, context=None):
+			calls.append(context)
+			if failures:
+				raise failures.pop(0)
+			return FakeResponse(b"{}")
+		return bugs.TlsFallbackOpener(urlopen), calls
+
+	def test_a_reset_handshake_retries_on_tls12_and_stays_there(self):
+		opener, calls = self.make([urllib.error.URLError(ConnectionResetError(10054, "reset"))])
+		opener(GET, timeout=30)
+		opener(GET, timeout=30)
+		self.assertEqual(len(calls), 3)
+		self.assertIsNone(calls[0])
+		for context in calls[1:]:
+			self.assertEqual(context.maximum_version, bugs.ssl.TLSVersion.TLSv1_2)
+
+	def test_http_errors_and_other_failures_are_not_retried(self):
+		for error in (urllib.error.HTTPError("u", 409, "conflict", {}, None), urllib.error.URLError("name not resolved")):
+			opener, calls = self.make([error])
+			with self.assertRaises(urllib.error.URLError):
+				opener(GET, timeout=30)
+			self.assertEqual(len(calls), 1)
+			self.assertIsNone(opener.context)
+
+	def test_a_reset_after_the_switch_is_retried_once_more(self):
+		# 2026-10-23: a reset in the middle of a status update left a finished fix "interrupted".
+		reset = urllib.error.URLError(ConnectionResetError(10054, "reset"))
+		failures = [reset]
+		opener, calls = self.make(failures)
+		opener(GET, timeout=30)
+		failures.append(reset)  # already on TLS 1.2: a later reset is still retried once
+		opener(GET, timeout=30)
+		self.assertEqual(len(calls), 4)
+		opener, calls = self.make([reset, reset])
+		with self.assertRaises(urllib.error.URLError):
+			opener(GET, timeout=30)  # two resets in a row: the second retry does not happen
+		self.assertEqual(len(calls), 2)
+
+	def test_posts_are_never_repeated_but_still_switch_to_tls12(self):
+		opener, calls = self.make([urllib.error.URLError(ConnectionResetError(10054, "reset"))])
+		post = urllib.request.Request("https://bugs.example/api/bugs/x/claim", data=b"{}", method="POST")
+		with self.assertRaises(urllib.error.URLError):
+			opener(post, timeout=30)
+		self.assertEqual(len(calls), 1)
+		self.assertIsNotNone(opener.context)
+
+	def test_without_trouble_the_default_context_is_used(self):
+		opener, calls = self.make([])
+		opener(GET, timeout=30)
+		self.assertEqual(calls, [None])
 
 
 if __name__ == "__main__":

@@ -167,6 +167,13 @@ namespace mmo
 			// En quad .. hair space, zero width space/joiners, LRM/RLM, word joiner .. invisible plus
 			return (codepoint >= 0x2000 && codepoint <= 0x200F) || (codepoint >= 0x2060 && codepoint <= 0x2064);
 		}
+
+		/// Lowercases an ASCII letter and leaves every other byte untouched, including the
+		/// continuation bytes of umlauts, accents or Cyrillic letters.
+		char toLowerAscii(const char character)
+		{
+			return (character >= 'A' && character <= 'Z') ? static_cast<char>(character - 'A' + 'a') : character;
+		}
 	}
 
 	std::string SanitizeChatText(const std::string& text, const std::size_t maxLength)
@@ -215,5 +222,23 @@ namespace mmo
 		}
 
 		return result;
+	}
+
+	bool IsWhisperToSelf(const std::string& senderName, const std::string& targetName)
+	{
+		if (senderName.empty() || senderName.size() != targetName.size())
+		{
+			return false;
+		}
+
+		for (std::size_t i = 0; i < senderName.size(); ++i)
+		{
+			if (toLowerAscii(senderName[i]) != toLowerAscii(targetName[i]))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 }

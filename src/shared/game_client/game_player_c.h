@@ -189,6 +189,9 @@ namespace mmo
 
 		void OnDisplayIdChanged() override;
 
+		/// Re-applies equipment and the collider once a model whose loading was deferred is in place.
+		void OnDeferredDisplayApplied() override;
+
 		void OnEquipmentChanged(uint64);
 
 		void RefreshDisplay();
@@ -215,7 +218,7 @@ namespace mmo
 
 		/// @brief Legacy fallback footstep playback (hardcoded ground WAVs) used while
 		///        surface types / footstep sound entries are not authored yet.
-		void PlayLegacyFootstepSound();
+		void PlayLegacyFootstepSound(const Vector3& soundPosition);
 
 	private:
 		/// Item subclass of the equipped main hand weapon. 0 = unarmed.

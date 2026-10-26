@@ -17,6 +17,9 @@ namespace mmo
 		Sound2D,
 
 		SoundLooped2D,
+
+		/// Streamed, looped, positional sound. A stream can only play on one channel at a time.
+		StreamLooped3D,
 	};
 
 	/// Enumerates sound categories which can be individually adjusted in volume or muted
@@ -76,6 +79,11 @@ namespace mmo
 		/// @brief Moves playback to the given time. Looped sounds wrap it into their length, so
 		///        identical loops started together can be desynchronized with a random offset.
 		virtual void SetPlaybackPosition(float seconds) = 0;
+
+		/// @brief Sets how widely a 3D sound spreads across the speakers.
+		/// @param degrees Spread angle in degrees [0, 360]. 0 is a point source, larger values
+		///        make a sound that surrounds the listener (e.g. a long river).
+		virtual void Set3DSpread(float degrees) = 0;
 	};
 
 	class IAudio
@@ -87,10 +95,15 @@ namespace mmo
 		virtual void Create() = 0;
 		virtual void Destroy() = 0;
 		virtual void Update(const Vector3& listenerPosition, float time) = 0;
+		/// Sets the listener's world-space facing and up vectors, matching the viewing camera.
+		/// Audio backends without spatial output may leave this as a no-op.
+		virtual void SetListenerOrientation(const Vector3&, const Vector3&) {}
 		virtual SoundIndex CreateSound(const String& fileName) = 0;
 		virtual SoundIndex CreateStream(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedSound(const String& fileName) = 0;
 		virtual SoundIndex CreateLoopedStream(const String &fileName) = 0;
+		/// Creates a streamed, looped sound which can be positioned in 3D space.
+		virtual SoundIndex CreateLoopedStream3D(const String& fileName) = 0;
 		virtual SoundIndex CreateSound(const String& fileName, SoundType type) = 0;
 		virtual void PlaySound(SoundIndex sound, ChannelIndex *channelIndex, float priority = 1.0f, SoundCategory category = SoundCategory::SoundEffects) = 0;
 		/// Plays a 3D sound at the given world position, applying position and min/max distance
@@ -103,7 +116,14 @@ namespace mmo
 		virtual SoundIndex FindSound(const String& fileName, SoundType type) = 0;
 		virtual void Set3DMinMaxDistance(ChannelIndex channelIndex, float minDistance, float maxDistance) = 0;
 		virtual void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) = 0;
+		/// Places a sound at an offset from the listener and keeps it attached as the listener moves.
+		/// The offset is supplied in world directions and converted to listener space at this call.
+		virtual void Set3DListenerRelativePosition(ChannelIndex, const Vector3&) {}
 		virtual float GetSoundLength(SoundIndex sound) = 0;
+		/// Whether a sound is still being opened in the background. Streams (SoundLooped2D) open
+		/// without blocking the caller; playing one before it is ready waits for the open to finish,
+		/// so callers that must not stall poll this first.
+		virtual bool IsSoundLoading(SoundIndex /*sound*/) { return false; }
 		virtual ISoundInstance* GetSoundInstance(SoundIndex sound) = 0;
 		virtual IChannelInstance* GetChannelInstance(ChannelIndex channel) = 0;
 
@@ -123,5 +143,6 @@ namespace mmo
 		/// @remark Callers are expected to ramp this over a transition rather than switching it in
 		///         one step: an instant cutoff change is audible as a click.
 		virtual void SetLowPassCutoff(float cutoffHz) = 0;
+
 	};
 }

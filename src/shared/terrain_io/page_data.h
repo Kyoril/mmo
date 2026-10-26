@@ -60,6 +60,15 @@ namespace mmo
 			/// @brief Optional water material asset name.
 			String waterMaterialName;
 
+			/// @brief Optional river flow: per outer vertex the flow-aligned water texture coordinate
+			///	       (u runs downstream, v across the river), OuterVerticesPerPageSide² pairs. Empty when
+			///	       the page's water does not flow; it then uses world-space coordinates.
+			std::vector<float> waterFlowUVs;
+
+			/// @brief Optional river flow speed per outer vertex (0 = still, 255 = full speed). Same
+			///	       presence as waterFlowUVs.
+			std::vector<uint8> waterFlowSpeeds;
+
 			/// @brief Resizes all arrays to their expected sizes and fills them with the same
 			///	       defaults a freshly prepared, empty page would have.
 			void Reset();
@@ -114,6 +123,12 @@ namespace mmo
 
 			/// @brief Optional water material name. May be null.
 			const String *waterMaterialName = nullptr;
+
+			/// @brief Flow-aligned water texture coordinates (2 floats per outer vertex). May be null (no flow).
+			const float *waterFlowUVs = nullptr;
+
+			/// @brief Flow speed per outer vertex. Null exactly when waterFlowUVs is null.
+			const uint8 *waterFlowSpeeds = nullptr;
 		};
 
 		/// @brief Builds a full view over an owning PageData instance.

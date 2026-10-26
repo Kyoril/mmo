@@ -59,6 +59,15 @@ namespace mmo
 		/// @copydoc ImportBase::SupportsExtension
 		[[nodiscard]] bool SupportsExtension(const String& extension) const override;
 
+		/// @brief Imports image files without the import dialog, for unattended jobs.
+		/// @param filenames Source images.
+		/// @param assetPath Asset folder the textures are created in (the file names are kept).
+		/// @param usage How the pixels are interpreted (colour, normal map or grayscale).
+		/// @param compress Whether to store block-compressed formats.
+		/// @param generateHeightMap For colour textures, also write a derived "_h" height texture.
+		/// @return True if every file was imported.
+		bool ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, TextureUsage usage, bool compress, bool generateHeightMap);
+
 		/// @brief Draws the import settings UI.
 		void Draw() override;
 

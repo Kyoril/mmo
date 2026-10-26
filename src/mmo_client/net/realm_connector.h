@@ -245,6 +245,10 @@ namespace mmo
 		/// Sends the command to delete a character to the realm.
 		void DeleteCharacter(const CharacterView& character);
 
+		/// Saves the order of the account's characters on the realm and reorders the local list to match.
+		/// @param orderedGuids Every character guid of the account exactly once, in the desired order.
+		void SetCharacterOrder(const std::vector<uint64>& orderedGuids);
+
 		/// Gets the name of the currently connected realm.
 		const std::string& GetRealmName() const { return m_realmName; }
 
@@ -498,6 +502,12 @@ namespace mmo
 		///	@param count The amount of stacks to buy (some items can only be bought in stacks of lets say 5, so in this case a value of 2 would actually buy 10 items).
 		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
 
+		/// Sends a packet to the server indicating that the player wants to buy an item back that was sold to a specific vendor npc during this session. The vendor
+		///	must be the current vendor, initiated by either the ListInventory or GossipHello packet.
+		///	@param vendorGuid The guid of the vendor npc.
+		///	@param buyBackSlot The zero based buyback slot index as sent in the BuyBackList packet.
+		void BuyBackItem(uint64 vendorGuid, uint32 buyBackSlot);
+
 		/// Sends a packet to the server to spend attribute points on a specific attribute. The amount of attribute points spent is actually determined by the server
 		///	and the request will fail if the player does not have enough attribute points to spend.
 		///	@param attribute The attribute to spend the point on.
@@ -643,6 +653,9 @@ namespace mmo
 		/// Gets a constant list of character views.
 		const std::vector<CharacterView>& GetCharacterViews() const { return m_characterViews; }
 
+		/// Gets the realm wide time of day (milliseconds since midnight) as of the last character list.
+		GameTime GetRealmTimeOfDay() const { return m_realmTimeOfDay; }
+
 		/// Returns true if the given race ID is disabled on this realm.
 		bool IsRaceDisabled(uint32 raceId) const { return m_disabledRaces.count(raceId) > 0; }
 
@@ -652,6 +665,7 @@ namespace mmo
 	private:
 		/// A list of character views.
 		std::vector<CharacterView> m_characterViews;
+		GameTime m_realmTimeOfDay = 0;
 
 		/// Set of race IDs that are disabled on this realm.
 		std::unordered_set<uint32> m_disabledRaces;

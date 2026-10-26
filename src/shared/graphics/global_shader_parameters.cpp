@@ -321,6 +321,12 @@ namespace mmo
 		DefineScalar("SunScatterR", 1.0f);
 		DefineScalar("SunScatterG", 0.93f);
 		DefineScalar("SunScatterB", 0.8f);
+
+		// Published by SkyComponent every frame from the environment's cloud colour curve: the colour of the
+		// sunlit side of clouds. Scalars after the sun scatter ones for the same cbuffer packing reason.
+		DefineScalar("CloudColorR", 1.0f);
+		DefineScalar("CloudColorG", 1.0f);
+		DefineScalar("CloudColorB", 1.0f);
 	}
 
 	bool GlobalShaderParameters::LoadFromAsset(const std::string_view assetPath)

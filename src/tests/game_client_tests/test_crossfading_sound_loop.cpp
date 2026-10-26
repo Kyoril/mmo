@@ -129,3 +129,70 @@ TEST_CASE("CrossfadingSoundLoop reclaim with instant fade-in snaps to full volum
 	// Instant fade-in: the reclaimed channel returns to its base volume right away.
 	CHECK(audio.GetChannelVolume(channelA) == Approx(0.8f));
 }
+
+TEST_CASE("CrossfadingSoundLoop starts a new sound only once its stream has opened", "[crossfading_sound_loop]")
+{
+	FakeAudio audio;
+	proto_client::SoundManager sounds;
+	addLoopedEntry(sounds, 1, 1000);
+	addLoopedEntry(sounds, 2, 1000);
+
+	SoundEntryPlayer player(audio, sounds);
+	CrossfadingSoundLoop loop(player, audio);
+
+	loop.SetSound(1);
+	REQUIRE(audio.startedChannels.size() == 1);
+	const ChannelIndex channelA = audio.startedChannels[0];
+	loop.Update(2.0f);
+
+	// Sound 2 is still opening: nothing starts and sound 1 keeps playing at full volume.
+	const SoundIndex streamB = audio.GetNextSoundIndex();
+	audio.loadingSounds.insert(streamB);
+	loop.SetSound(2);
+	CHECK(loop.GetCurrentSoundId() == 2);
+	loop.Update(0.5f);
+	CHECK(audio.startedChannels.size() == 1);
+	CHECK(audio.GetChannelVolume(channelA) == Approx(1.0f));
+
+	// Asking again while it opens does not open a second copy.
+	loop.SetSound(2);
+	CHECK(audio.GetNextSoundIndex() == streamB + 1);
+
+	// Once open, the crossfade runs as usual.
+	audio.loadingSounds.erase(streamB);
+	loop.Update(0.0f);
+	REQUIRE(audio.startedChannels.size() == 2);
+	const ChannelIndex channelB = audio.startedChannels[1];
+	loop.Update(0.5f);
+	CHECK(audio.GetChannelVolume(channelA) == Approx(0.5f));
+	CHECK(audio.GetChannelVolume(channelB) == Approx(0.5f));
+}
+
+TEST_CASE("CrossfadingSoundLoop drops an opening sound that is no longer wanted", "[crossfading_sound_loop]")
+{
+	FakeAudio audio;
+	proto_client::SoundManager sounds;
+	addLoopedEntry(sounds, 1, 1000);
+	addLoopedEntry(sounds, 2, 1000);
+
+	SoundEntryPlayer player(audio, sounds);
+	CrossfadingSoundLoop loop(player, audio);
+
+	loop.SetSound(1);
+	REQUIRE(audio.startedChannels.size() == 1);
+	const ChannelIndex channelA = audio.startedChannels[0];
+	loop.Update(2.0f);
+
+	// Back in zone 1 before zone 2's stream opened: sound 1 never fades and sound 2 never plays.
+	const SoundIndex streamB = audio.GetNextSoundIndex();
+	audio.loadingSounds.insert(streamB);
+	loop.SetSound(2);
+	loop.SetSound(1);
+	CHECK(loop.GetCurrentSoundId() == 1);
+
+	audio.loadingSounds.erase(streamB);
+	loop.Update(1.0f);
+	CHECK(audio.startedChannels.size() == 1);
+	CHECK(audio.stoppedChannels.count(channelA) == 0);
+	CHECK(audio.GetChannelVolume(channelA) == Approx(1.0f));
+}

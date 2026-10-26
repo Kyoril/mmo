@@ -59,6 +59,28 @@ namespace mmo::atmosphere
 		return InverseAcesFilm(std::pow(clamped, Gamma));
 	}
 
+	/// @brief Display colour to linear HDR, inverting only the brightest channel and scaling the
+	///        others with it, so the hue survives.
+	/// @remark Per-channel InverseTonemap round-trips exactly, but it blows saturated colours apart
+	///         near 1.0: a dawn horizon of (1.0, 0.58, 0.30) came out with red 30x green. Anything
+	///         that scales the result before the tonemap (reflections weighted by Fresnel) then shows
+	///         that blown-apart colour instead of the authored one.
+	inline void InverseTonemapPreservingHue(const float r, const float g, const float b, float out[3])
+	{
+		const float peak = std::max({ r, g, b, 0.0f });
+		if (peak <= 0.0f)
+		{
+			out[0] = out[1] = out[2] = 0.0f;
+			return;
+		}
+
+		// Channel ratios are taken in linear light (display values are gamma encoded).
+		const float linearPeak = InverseTonemap(peak);
+		out[0] = std::pow(std::clamp(r, 0.0f, peak) / peak, Gamma) * linearPeak;
+		out[1] = std::pow(std::clamp(g, 0.0f, peak) / peak, Gamma) * linearPeak;
+		out[2] = std::pow(std::clamp(b, 0.0f, peak) / peak, Gamma) * linearPeak;
+	}
+
 	/// @brief Extinction coefficient of the exponential height fog at world height y.
 	inline float FogDensityAt(const float y, const float density, const float falloff, const float baseHeight)
 	{

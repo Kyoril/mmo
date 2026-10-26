@@ -59,12 +59,19 @@ namespace mmo
 			{ 1.0000f, Vector4(0.0157f, 0.0157f, 0.0157f, 0.9961f) },
 		});
 
-		// Seeded from Models/CloudColor.hccv.
+		// Lit side of the cloud layer. Symmetric warm keys around sunrise (0.2) and sunset (0.8): the
+		// CloudColor.hccv seed had a dark brown-orange dawn and no dusk key at all, so dusk clouds
+		// just faded from white to grey against a bright sunset sky.
 		profile.clouds = MakeEnvironmentCurve({
-			{ 0.1356f, Vector4(0.0550f, 0.0581f, 0.0853f, 1.0f) },
-			{ 0.2046f, Vector4(0.6351f, 0.2746f, 0.0632f, 1.0f) },
+			{ 0.1500f, Vector4(0.0550f, 0.0580f, 0.0850f, 1.0f) },
+			{ 0.2100f, Vector4(0.8500f, 0.4500f, 0.3200f, 1.0f) },
+			{ 0.2600f, Vector4(1.0000f, 0.7200f, 0.5400f, 1.0f) },
+			{ 0.3400f, Vector4(0.9700f, 0.9500f, 0.9300f, 1.0f) },
 			{ 0.5003f, Vector4(0.9479f, 0.9479f, 0.9479f, 1.0f) },
-			{ 1.0000f, Vector4(0.0549f, 0.0588f, 0.0863f, 1.0f) },
+			{ 0.6600f, Vector4(0.9700f, 0.9500f, 0.9300f, 1.0f) },
+			{ 0.7400f, Vector4(1.0000f, 0.7000f, 0.5200f, 1.0f) },
+			{ 0.7900f, Vector4(0.8500f, 0.4300f, 0.3200f, 1.0f) },
+			{ 0.8500f, Vector4(0.0550f, 0.0580f, 0.0850f, 1.0f) },
 		});
 
 		// Formerly hardcoded in SkyComponent::UpdateLighting. SkyComponent still blends sun and

@@ -32,7 +32,7 @@ webServer =
 playerManager = 
 (
 	port = 8130
-	maxCount = 20
+	maxCount = ${REALM_MAX_PLAYERS:-4000}
 )
 
 worldManager = 
@@ -59,5 +59,7 @@ crashReport =
 )
 EOF
 
-# Start the server
-./realm_server
+# Start the server. exec replaces this shell, so the server is PID 1 and gets docker's SIGTERM
+# itself: bash as PID 1 neither forwards it nor dies of it, and docker would SIGKILL the server
+# after the grace period instead of letting it save and stop.
+exec ./realm_server

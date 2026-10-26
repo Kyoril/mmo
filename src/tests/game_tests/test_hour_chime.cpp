@@ -35,6 +35,16 @@ TEST_CASE("GetHourOfDayEventValue reports midnight as 24", "[hour_chime]")
 	CHECK(GetHourOfDayEventValue(At(23, 59)) == 23);
 }
 
+TEST_CASE("GetHourOfDay reports the hour on a 24-hour clock", "[hour_chime]")
+{
+	CHECK(GetHourOfDay(At(0)) == 0);
+	CHECK(GetHourOfDay(At(0, 59, 59)) == 0);
+	CHECK(GetHourOfDay(At(6)) == 6);
+	CHECK(GetHourOfDay(At(21, 30)) == 21);
+	CHECK(GetHourOfDay(At(23, 59, 59)) == 23);
+	CHECK(GetHourOfDay(At(5) + constants::OneDay) == 5);
+}
+
 TEST_CASE("HourChime announces a full hour once when the clock runs into it", "[hour_chime]")
 {
 	HourChime chime;

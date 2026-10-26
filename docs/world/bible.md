@@ -109,20 +109,23 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - In the data, its NPCs (Farmer Haldor, Healer Mirenna, Guard Emrik, the binder Aralin the Kindling) stand at about (300, 550), just west of the Oakenshire trainers (`forest_camp`). [C]
   - **Forest Camp is part of Oakenshire.** Its atlas pin is named "Oakenshire". [E] Quest texts may still say "camp" for the NPCs' corner of town.
 
-### 3.3 Haven (zone 3; Market, zone 4, is its sub-zone) — atlas `haven` (placeholder)
+### 3.3 Haven (zone 3; Market, zone 4, is its sub-zone) — atlas `haven` (canon)
 
 - A walled town and major human hub, reached around level 10. It has guards, vendors and class trainers. [E]
-- **Haven has no terrain yet.** The zone rows exist, but no terrain tile carries its area id. [C]
-- The data strongly suggests Haven once stood around the map origin:
-  - Five vendors stood at about (0, 21). Four of them moved to the Oakenshire market on 2026-10-16 (section 3.2). Mariana Silkspun (Clothier) is still buried there; Milly Goldwyn sells the same cloth list in Oakenshire.
-  - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
-  - Haven's binder is Magister Calloran (u25), who is not spawned.
-  - All of these NPCs are buried 3–7 m below the current terrain. [C]
 - **Haven lies south-west of Oakenshire, at the end of the river valley.** [E] It is reached by the Haven Road (section 3.11), with the river passing on its east side.
-  - The atlas pin `haven` is canon at (−781, 1249), radius about 310 m: a big walled city on flat, empty ground with no zone yet.
-  - It is about 1.3 km from the Oakenshire Town Hall in a straight line.
-- The continent sketch shows Haven just **south** of Oakenshire. [E]
-- The remaining buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
+  - The town WMO `Models/Haven/Haven_Town.hwmo` stands at (−689, 1025). Its north gate (z ≈ 950) faces the harbour bridge. [C]
+  - Layout, north to south: the north gate, the **lower court** with four market stalls (z ≈ 976), stairs up to the **upper square** with the summoning stone (−689, 1020; the runestone Oakenshire uses, replaced the plaza brazier 2026-10-24) and the main street between the inn (west) and the Haven Exchange bank (east), the fountain (−689, 1035), a curved terrace, and the Keep (z ≈ 1060+). [C]
+- **People of Haven** (populated 2026-10-24): [C]
+  - The **Haven Watch** under Watch-Captain Corwin Ashby (u98, gives q73) at the north gate; Haven Guards (u97) at the gate and the Keep stairs, and two patrols.
+  - Lower-court market: Tobias Wainwright (General Goods), Hilda Brandt (Weapons), Corin Hale (Mail & Plate), Wenna Thistle (Leather Armor). By day they call out their wares, with voice lines.
+  - Upper square: Magister Calloran, the binder, at the summoning stone (u25; ends q73, gives q74); Rosalind Tull, innkeeper (food and drink); bankers Osric Penhallow (ends q74) and Ysolde Marrow at the Haven Exchange; Mariana Silkspun (Clothier), moved here from the buried old-Haven site.
+  - Class trainers on the Keep terrace: Swordmaster Gareth Lowe, Magistra Ilyana Crest, Mother Agatha Brightwell, Duskmaster Edwin Sorrel, Ranger Tamsin Reed (u111–u115).
+- **Day and night** (`Haven - Day/Night Routine`, trigger 116, on map 0's hour event): [C]
+  - 06:00–21:00: Herald Aldous Penn, the town crier, at the fountain, and citizens about the courts.
+  - 19:00–22:00: Ned Wickham, the lamplighter, walks the main street.
+  - 21:00–06:00: Old Brannoc, the night watchman, walks the main street and calls 22:00, midnight, 02:00 and 04:00; two extra night patrols; two tipsy patrons sit outside the inn.
+  - Services stay open at all hours.
+- The remaining buried Haven NPCs at the map origin (Injured Guards of q8) are leftovers. They have to move to the new Haven, or be removed. [?]
 - The Westwatch Training Yard (q21: "not far from here") stands with them. Does it move into Haven, or stay near Oakenshire as a place of its own? [?]
 
 ### 3.4 Westwatch Training Yard
@@ -143,6 +146,14 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
 - **Ruined Watchtower** (zone 11, atlas `kingsroad`): a hardened bandit gang (Kingsroad Cutthroats and Hexers) nests around the ruined watchtower on the Old King's Road (q27, q39). [C]
 - **Deepwood Fringe** (zone 12): the thicker forest where the grown Forest Wolves hunt (q29). [C]
 - **Marsh Edge** (zone 13): broken ground and rotten reeds where marsh ambushers lie in wait (q30). [C]
+
+#### The green-valley concept (2026-10-18)
+
+- The user gave concept art for where Briarwatch should go: **"Briarwatch — The Green Valley"** (`docs/world/reference/briarwatch-green-valley-concept.webp`), "woodland frontier, sheltered wetlands, connected ground-level routes". [E]
+  - It looks south from above Briarwatch: the Oakenshire gate and Briarwatch camp on the left, mixed woodland with trails in the middle, the river on the right with meadows, the Old Stone Bridge and a Crossroads Inn, farmland on the far bank, and Haven on the river in the distance. [E]
+- The valley was shaped after it the same day, and reworked on the user's review: rolling hills and open woodland on both banks, the river rerouted from its old straight course south of the Mirewater (it now crosses the King's Road under a four-arch Old Stone Bridge, meanders east past the river meadows and opens into a broad harbour bay with an island in front of Haven's north wall), the Crossroads Inn just past the bridge, farmsteads and gently rolling fields on the west bank, the Haven road to Haven's north gate, a woodland backwater pond, and a barrow ridge south of the ring. The atlas carries them as placeholders. [C]
+- The user is fine with moving roads, atlas places and their NPC spawns to follow the concept. [E]
+- The concept puts the **Mirewater backwater** in the woodland south of the road and a **barrow ridge** far to the left of the view. In the game the Mirewater (q44–q47) and the Barrowfield (q48–q53) lie north-west of the road. The pond and the ridge exist now, but the quests have not moved. [?]
 
 ### 3.6 The Old King's Road / Kingsroad — atlas `kingsroad_waypost`, `kingsroad`
 
@@ -327,14 +338,16 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder | not spawned | 25 | – / – | [C] |
+| Magister Calloran | Haven binder, at the summoning stone on the upper square | `haven` | 25 | 74 / 73 | [C] |
+| Watch-Captain Corwin Ashby | commands the Haven Watch at the north gate | `haven` | 98 | 73 / – | [C] |
+| Osric Penhallow | banker of the Haven Exchange | `haven` | 104 | – / 74 | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
 
 Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
 
 - Briarwatch camp: Battlemage Serah Wren, Drillmaster Coren Ashfield, Sister Almira Deene, Duskscholar Veslin Marr, Trailmaster Joren Slate (u70–u74). [C]
 - Barrowfront camp: War-Adept Ilsa Corvain, Veteran Hargen Dray, Field-Chaplain Rosalind Merek, Duskcaller Nerith Vael, Pathfinder Quinn Aldery (u75–u79). [C]
-- The Haven vendors are listed in section 3.3. [C]
+- The Haven vendors, trainers and townsfolk are listed in section 3.3. [C]
 
 ## 6. Creatures and threats
 

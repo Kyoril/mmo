@@ -15,6 +15,7 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
 | Gate | `verify.ps1 -Tier fast` | build, unit, tool tests, Linux check (WSL); E2E runs in the nightly before deploy |
+| Merge | `claude -p` in the loop worktree, then a read-only review | resolve conflicts with develop at ship and refix time; never stage, commit or push (see "Merge conflicts with develop") |
 
 Every Claude stage runs with `--strict-mcp-config` (no MCP servers) and a scrubbed environment:
 no stage gets `MMO_BUG_API_KEY` or `MMO_BUG_API_URL`; only the fixer gets
@@ -125,6 +126,11 @@ At startup, before the first poll, the loop compiles the game-data schemas of th
 Nothing the fixer writes can change how later diffs are decoded. If protoc or the schemas are
 missing, the loop logs a warning and runs without a decoder: every `.data` change then parks.
 
+Stale git locks: a loop killed during a git operation leaves an `index.lock` in its worktree or a
+submodule's git directory, and every later git command there fails ("File exists"). At startup
+the loop removes such locks if they are older than a minute (it is the only user of its
+worktree, and only one loop runs) and logs each one.
+
 Stale claims: if the loop is killed mid-fix, the next live poll releases the bug as `triaged`
 with an "interrupted" note and the category `needs_info` (see "Needs-info bugs"). An interrupted guided refix goes back to `pr_open`; an interrupted
 feature implement run goes back to `triaged` with the category `design_request` and "decide
@@ -194,7 +200,8 @@ does not announce it again; the first mode after an upgrade is recorded silently
 - `tools/gate/reports/bugloop-YYYY-MM-DD.json`: the day's outcomes, ships, parked branches,
   abuse flags, model invocations (`bugloop-dry-*.json` in shadow mode).
 - `artifacts/bug-loop/<bug id>/`: `report.json`, `triage.json`, `FIX.json`, `diff.patch`,
-  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`. The accepted
+  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`, `merge.json` (merge
+  conflicts with develop the loop resolved). The accepted
   description of a feature is not stored here (the fixer can write this folder) but in
   `artifacts/bug-loop/state.json` under `features`.
 - `artifacts/bug-loop/_runs/<date>.log`: the runner log. `dry-run-journal.jsonl`: the API
@@ -247,16 +254,25 @@ The decision panel of a parked bug offers three actions: refix, ship and discard
 "Feature request" panel offers a fourth, "Implement as feature", on rejected reports that are
 not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
+- **Guidance sets game values.** A player report can never make rewards, drops, prices, stats,
+  costs or cooldowns more generous; maintainer guidance and feature descriptions can, and the
+  fixer makes exactly the requested change (the reviewer does not count it as a security
+  reduction). Such changes still park for a ship decision, since the guard parks every numeric
+  economy change. Weakening a permission, validation or security check stays refused, whoever
+  asks. (On 2026-10-26 the fixer refused a guided price raise for item 87.)
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
   maintainer's guidance, at most 3 guided rounds per bug. Before the fixer starts, the loop
   merges today's `origin/develop` into the branch itself; a data submodule pointer that both
   moved is resolved by merging the two submodule commits. The refix is then guarded and
   reviewed against today's develop, so data that landed meanwhile (another fix's mesh, say) is
-  not counted as part of this fix. A conflict there ends the refix ("decide again"). Shipping
+  not counted as part of this fix. Conflicts there are resolved as described in "Merge conflicts
+  with develop"; one nothing can resolve restarts the refix on a fresh `bugfix/<id8>` from
+  develop, and the fixer re-applies the earlier change (its diff is in the fixer's input)
+  together with the guidance. Shipping
   merges submodule pointers the same way, and also merges a submodule `master` that moved past
   develop's pointer (data pushed without a develop bump) into the fix's submodule commit; that
-  merge result always runs the fast gate before anything is pushed, and a conflict parks with
-  "needs a manual merge". A refix never has to merge submodule master itself: it would lose the
+  merge result always runs the fast gate before anything is pushed. A refix never has to merge
+  submodule master itself: it would lose the
   same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
@@ -277,7 +293,10 @@ not parked (see below). The loop consumes decisions before it does anything else
   `upstream` in the loop worktree's submodule, set on every prepare from the URL in the
   committed `.gitmodules`), then `develop` is pushed to origin. Develop therefore never points at
   a data commit GitHub does not have, and a rejected submodule push stops the ship before
-  develop moves. The URL never comes from the main checkout's `.git/config`, which may point a
+  develop moves. A push rejected only because develop (or a submodule `master`) moved while the
+  merge was gated starts the ship over: fetch, merge onto the new tip, gate again, push; at most
+  3 rounds ("develop kept moving: 3 attempts"). On 2026-10-24 a ship parked after losing that race
+  once. The URL never comes from the main checkout's `.git/config`, which may point a
   submodule at the main checkout's own `data/client` (a non-bare repository with `master`
   checked out: pushes there are refused, and nothing downstream fetches from it). The main
   checkout's submodules are not updated; see Known limits. Because they can lag behind, a
@@ -346,6 +365,60 @@ webhook nothing is sent. Messages:
   itself ends abnormally (any exit code other than 0, the day-boundary restart 75 or 3 for a
   second instance, and a failed fetch, archive or extract). Never in a dry run (`-DryRun`). It
   reads the variable directly and never logs the URL.
+
+## Merge conflicts with develop
+
+A fix waits for review for hours or days while develop moves on, so its merge often conflicts.
+Before 2026-10-22 every conflict parked the fix with "needs a manual merge", and neither a ship
+decision nor a refix could get past it. Now the loop resolves them itself, at every merge it
+makes (ship, refix, and a submodule `master` that moved), in this order:
+
+1. **Game data** (`*.data` in `data/editor` and `data/client`) is merged by entry
+   (`bugloop/data_merge.py`), without a model: entries are matched by id, fields by number, and
+   lists without ids as sequences, where edits apply unless they overlap (spawns appended next to
+   re-snapped heights both apply). With the schema the loop compiles at startup, two edits to
+   different words of one string merge (one side turns "20 to 22" into "$s0", the other "40%"
+   into "$s1%"), and a spawn one side moved keeps its height over develop's height re-snap.
+   What stays a conflict: the same value changed differently on both sides, and an id both sides
+   added for different entries ("an id collision"). Those go to the re-apply (see below), where
+   the fixer redoes the change on today's develop and picks a free id. Replayed against the 62
+   historical merges in both data repositories where the two sides changed one `.data` file, 54
+   come out as the humans merged them; the other 8 are 7 id collisions and one sentence written
+   differently on both sides. git never merges these files itself during the loop's merges
+   (`*.data -merge`), because a line merge of protobuf bytes that happen to contain no NUL byte
+   would corrupt them silently.
+2. **Text files** go to a Claude merge stage (`prompts/merge.md`, all tools but push, in the loop
+   worktree, `merge_max_usd` per run). It edits the conflicted files only; the loop then checks
+   without trusting it: HEAD unchanged, no conflict markers, no other file staged, changed or
+   created. A second, read-only stage (`prompts/merge_review.md`) must confirm that the resolution
+   keeps both sides and adds nothing else. It sees only the conflicts (base, OURS, THEIRS, the
+   resolution and a few lines around each), once the loop has checked that everything git merged
+   cleanly came back unchanged; a resolution that also changed text outside the conflicts is
+   shown as full diffs against both sides. On 2026-10-23 the full diffs of a much-edited
+   `GlueTemplates.xml` were 112 000 characters and the review refused them; its one conflict is
+   9 000.
+   Protocol bumps are the one exception to "conflicted files only": when a protocol file
+   (`game_protocol.h`, `auth_protocol.h`, `protocol_fingerprint.json`, `protocol_versions.md`)
+   conflicts, the resolver may also change the others. Both sides bumping to the same value merges
+   the header cleanly, yet the merge needs a version of its own (b36cdaa3, 2026-10-23). A version
+   header may change only in its `ProtocolVersion` line, and only upwards; the review sees these
+   changes as diffs, and the gate's protocol check verifies the fingerprint. Both protocol version bumps colliding are resolved to one above both, with the
+   fingerprint regenerated.
+3. Other binary files (meshes, tiles) changed on both sides stay conflicts.
+
+A resolved merge always runs the fast gate before anything is pushed (it is a merge with a moved
+develop), and the merge commit names the resolved files ("Conflicts with origin/develop resolved
+by the bug loop in: ..."). The reports are in `artifacts/bug-loop/<bug id>/merge.json`, and the
+ship note on the bug lists the files. The resolution needs two Claude invocations; without budget
+left the conflict stands.
+
+**Re-apply.** When a ship (auto or decided) still hits a conflict nothing could resolve, the
+bug is parked as before and the loop at once re-applies the fix on today's develop: a guided
+refix whose guidance comes from the loop ("From the bug loop, not the maintainer: ... re-apply
+the same fix on today's develop"), at most `max_reapply` (2) times per bug and only with budget
+for it. It does not use up the maintainer's refix rounds. The new candidate goes through guard,
+review, proof and gate again; it auto-ships only if it qualifies on its own, otherwise it parks
+and needs a ship decision again (the approved diff no longer matches).
 
 ## CI watch and emergency fixes
 
@@ -460,13 +533,20 @@ hold set on top of the loop's own trip also ends the exemption.
 - `items.data` stores field 68 with a wire type that differs from `items.proto` (38 entries).
   The data diff surfaces such unknown fields as `<unknown N>` leaves (changed ones count as
   numeric), so item text fixes still work.
-- A fix in `data/client` or `data/editor` ships only if the submodule's `master` on GitHub has
-  not moved past the commit the fix started from; otherwise it parks.
+- A data change that develop changed differently in the same value (the same spawn moved on
+  both sides, say) cannot be merged; the loop re-applies the fix on today's develop instead
+  (see "Merge conflicts with develop").
 - After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`, and so is the
   `master` of its data submodules. Pull before pushing your own work (`git pull` then
   `git -C data/client pull` / `git -C data/editor pull`, or `git submodule update`). The loop
   never writes into the main checkout's submodules.
 - After changing `prompts/triage.md`, run `tools/bugs/adversarial_check.py` (real model calls).
+- The bug API client retries a GET, PUT or PATCH once when the connection is reset or times
+  out, and the first such failure switches it to TLS 1.2 for the rest of the process. POSTs
+  (claims, emergency tickets) are never repeated: a claim that went through before the reset
+  would come back as 409, "claimed elsewhere". On 2026-10-23 every TLS 1.3 handshake with the API
+  was reset for hours, and the loop could not see any ship decision; later the same day a reset
+  during a status update left a finished fix "interrupted".
 
 ### What the guard cannot see
 

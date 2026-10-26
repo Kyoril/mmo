@@ -17,6 +17,7 @@
 #include "scene_graph/mesh_serializer.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "scene_graph/world_model.h"
+#include "scene_graph/world_model_flatten.h"
 #include "scene_graph/world_model_serializer.h"
 
 
@@ -219,7 +220,8 @@ namespace mmo
                     continue;
                 }
 
-                if (!meshRef.visible)
+                // Particle systems (.hpar) referenced like meshes have no collision
+                if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
                 {
                     continue;
                 }

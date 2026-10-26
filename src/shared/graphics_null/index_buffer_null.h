@@ -26,7 +26,8 @@ namespace mmo
 
 	private:
 		GraphicsDeviceNull& m_device;
-		std::vector<uint32> m_indices;
+		/// Raw index bytes at the buffer's index size.
+		std::vector<uint8> m_indices;
 	};
 }
 

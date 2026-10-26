@@ -19,6 +19,7 @@
 #include "base/countdown.h"
 #include "game/chat_type.h"
 #include "game/damage_school.h"
+#include "game/movement_ability.h"
 #include "game/spell.h"
 #include "proto_data/trigger_helper.h"
 #include "shared/proto_data/triggers.pb.h"
@@ -1637,6 +1638,11 @@ public:
 		/// @brief Sets the current server-controlled movement mode.
 		/// @param movementMode Walk or run mode.
 		void SetMovementMode(UnitMovementMode movementMode);
+
+		/// @brief Gets the kinds of movement this unit is capable of. Water deep enough to swim
+		///	in blocks the movement of a unit which is not able to swim.
+		/// @return Combination of movement_ability flags.
+		[[nodiscard]] virtual MovementAbilityFlags GetMovementAbilities() const { return movement_ability::Default; }
 
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
 		/// If this unit is player controlled, a client notification is sent and the speed is

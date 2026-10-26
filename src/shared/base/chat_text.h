@@ -24,4 +24,15 @@ namespace mmo
 	/// @param maxLength Maximum number of characters of the result.
 	/// @returns Valid UTF-8 text, empty if @p text holds nothing visible.
 	std::string SanitizeChatText(const std::string& text, std::size_t maxLength = MaxChatMessageLength);
+
+	/// @brief Whether a whisper is addressed to the sending character itself.
+	///
+	/// A private message to the own character is refused, like a group invite or a mail
+	/// addressed to the own character. Names are compared ignoring ASCII letter case, so a
+	/// differently typed own name is recognized as well.
+	///
+	/// @param senderName Name of the character sending the whisper.
+	/// @param targetName Name the whisper is addressed to.
+	/// @returns true if both names denote the same character; an empty name is never self.
+	bool IsWhisperToSelf(const std::string& senderName, const std::string& targetName);
 }

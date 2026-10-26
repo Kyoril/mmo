@@ -54,4 +54,9 @@ namespace mmo
 	///        what the mesh editor's Collision > Build does for a freshly imported mesh.
 	/// @return False if the mesh could not be loaded or saved, or its stored recipe is corrupt.
 	bool BuildMeshCollisionFile(const String& assetPath);
+
+	/// @brief Unattended `mmo_edit --build-collision-from`: replaces the mesh's collision recipe with one that
+	///        takes the render triangles of the given submeshes only (e.g. a tree trunk without its leaf cards).
+	/// @return False if the mesh could not be loaded or saved, or a submesh index is out of range.
+	bool BuildMeshCollisionFromSubMeshes(const String& assetPath, const std::vector<uint16>& subMeshes);
 }

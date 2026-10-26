@@ -6,6 +6,7 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
+#include "scene_graph/light.h"
 #include "scene_graph/movable_object.h"
 #include "scene_graph/scene_node.h"
 #include "stb_dxt.h"
@@ -86,29 +87,24 @@ namespace mmo
 			return result;
 		}
 
-		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, uint32 size)
+		/// Shared DXT1/DXT5 writer: four-texel blocks per mip, down to 4x4.
+		static bool WriteDxtTexture(std::ostream& out, std::vector<uint8> rgba, uint32 size, const bool withAlpha)
 		{
-			const auto file = AssetRegistry::CreateNewFile(filename);
-			if (!file)
-			{
-				ELOG("Failed to create " << filename);
-				return false;
-			}
-
-			io::StreamSink sink(*file);
+			io::StreamSink sink(out);
 
 			tex::v1_0::Header header(tex::Version_1_0);
 			header.width = static_cast<uint16>(size);
 			header.height = static_cast<uint16>(size);
-			header.format = tex::v1_0::DXT1;
+			header.format = withAlpha ? tex::v1_0::DXT5 : tex::v1_0::DXT1;
 			header.hasMips = true;
 
 			tex::v1_0::HeaderSaver saver(sink, header);
 
 			for (uint32 mip = 0; mip < header.mipmapOffsets.size() && size >= 4; ++mip)
 			{
-				std::vector<uint8> compressed(size * size / 2);
-				rygCompress(compressed.data(), rgba.data(), static_cast<int>(size), static_cast<int>(size), 0);
+				// DXT1 packs a 4x4 block into 8 bytes, DXT5 into 16 (an extra 8 for alpha).
+				std::vector<uint8> compressed(withAlpha ? size * size : size * size / 2);
+				rygCompress(compressed.data(), rgba.data(), static_cast<int>(size), static_cast<int>(size), withAlpha ? 1 : 0);
 
 				header.mipmapOffsets[mip] = static_cast<uint32>(sink.Position());
 				header.mipmapLengths[mip] = static_cast<uint32>(compressed.size());
@@ -119,12 +115,69 @@ namespace mmo
 			}
 
 			saver.finish();
-			file->flush();
-			return true;
+			out.flush();
+			return static_cast<bool>(out);
 		}
 
-		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep)
+		bool WriteDxt1Texture(std::ostream& out, std::vector<uint8> rgba, const uint32 size)
+		{
+			return WriteDxtTexture(out, std::move(rgba), size, false);
+		}
+
+		bool WriteDxt5Texture(std::ostream& out, std::vector<uint8> rgba, const uint32 size)
+		{
+			return WriteDxtTexture(out, std::move(rgba), size, true);
+		}
+
+		bool WriteDxt1Texture(const String& filename, std::vector<uint8> rgba, const uint32 size)
+		{
+			const auto file = AssetRegistry::CreateNewFile(filename);
+			if (!file)
+			{
+				ELOG("Failed to create " << filename);
+				return false;
+			}
+
+			return WriteDxt1Texture(*file, std::move(rgba), size);
+		}
+
+		bool WriteDxt5Texture(const String& filename, std::vector<uint8> rgba, const uint32 size)
+		{
+			const auto file = AssetRegistry::CreateNewFile(filename);
+			if (!file)
+			{
+				ELOG("Failed to create " << filename);
+				return false;
+			}
+
+			return WriteDxt5Texture(*file, std::move(rgba), size);
+		}
+
+		bool WriteRgba8Texture(std::ostream& out, const void* pixels, const uint32 width, const uint32 height)
+		{
+			io::StreamSink sink(out);
+
+			tex::v1_0::Header header(tex::Version_1_0);
+			header.width = static_cast<uint16>(width);
+			header.height = static_cast<uint16>(height);
+			header.format = tex::v1_0::RGBA;
+			header.hasMips = false;
+
+			tex::v1_0::HeaderSaver saver(sink, header);
+
+			const size_t bytes = static_cast<size_t>(width) * height * 4;
+			header.mipmapOffsets[0] = static_cast<uint32>(sink.Position());
+			header.mipmapLengths[0] = static_cast<uint32>(bytes);
+			sink.Write(static_cast<const char*>(pixels), bytes);
+
+			saver.finish();
+			out.flush();
+			return static_cast<bool>(out);
+		}
+
+		ScopedVisibleSubtrees::ScopedVisibleSubtrees(SceneNode& root, std::vector<const SceneNode*> keep, const bool keepLights)
 			: m_keep(std::move(keep))
+			, m_keepLights(keepLights)
 		{
 			Hide(root);
 		}
@@ -148,7 +201,7 @@ namespace mmo
 			{
 				// Cameras are never drawn; leave the bake camera (and everyone else's) alone.
 				MovableObject* object = node.GetAttachedObject(i);
-				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object))
+				if (object && object->IsVisible() && !dynamic_cast<Camera*>(object) && !(m_keepLights && dynamic_cast<Light*>(object)))
 				{
 					m_hidden.push_back(object);
 					object->SetVisible(false);

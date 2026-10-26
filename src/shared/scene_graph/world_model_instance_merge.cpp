@@ -2,6 +2,8 @@
 
 #include "world_model_instance.h"
 #include "world_model_merge.h"
+#include "world_model_flatten.h"
+#include "mesh_merge.h"
 
 #include "entity.h"
 #include "material_manager.h"
@@ -15,7 +17,6 @@
 #include "base/profiler.h"
 
 #include <algorithm>
-#include <cstring>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -44,161 +45,6 @@ namespace mmo
 
 	namespace
 	{
-		/// @brief CPU copy of one submesh, read back from its GPU buffers.
-		struct SubMeshGeometry
-		{
-			std::vector<WorldModelMergeVertex> vertices;
-			std::vector<uint32> indices;
-		};
-
-		bool HasMergeableLayout(const VertexData& vertexData)
-		{
-			if (!vertexData.vertexDeclaration || !vertexData.vertexBufferBinding ||
-				vertexData.vertexBufferBinding->GetBufferCount() != 1 ||
-				vertexData.vertexDeclaration->GetVertexSize(0) != sizeof(WorldModelMergeVertex))
-			{
-				return false;
-			}
-
-			// The offsets the static mesh loader uses (MeshDeserializer) - anything else is another layout
-			const auto* decl = vertexData.vertexDeclaration;
-			const auto offsetOf = [decl](const VertexElementSemantic semantic) -> int32
-			{
-				const VertexElement* element = decl->FindElementBySemantic(semantic);
-				return element ? static_cast<int32>(element->GetOffset()) : -1;
-			};
-
-			return offsetOf(VertexElementSemantic::Position) == offsetof(WorldModelMergeVertex, pos) &&
-				offsetOf(VertexElementSemantic::Diffuse) == offsetof(WorldModelMergeVertex, color) &&
-				offsetOf(VertexElementSemantic::Normal) == offsetof(WorldModelMergeVertex, normal) &&
-				offsetOf(VertexElementSemantic::Binormal) == offsetof(WorldModelMergeVertex, binormal) &&
-				offsetOf(VertexElementSemantic::Tangent) == offsetof(WorldModelMergeVertex, tangent) &&
-				offsetOf(VertexElementSemantic::TextureCoordinate) == offsetof(WorldModelMergeVertex, uv) &&
-				!decl->FindElementBySemantic(VertexElementSemantic::BlendIndices);
-		}
-
-		bool ReadSubMesh(const SubMesh& subMesh, SubMeshGeometry& out)
-		{
-			PROFILE_SCOPE("WMO: ReadSubMesh (GPU readback)");
-			const VertexData& vertexData = *subMesh.vertexData;
-			const IndexData& indexData = *subMesh.indexData;
-			const VertexBufferPtr& vertexBuffer = vertexData.vertexBufferBinding->GetBuffer(0);
-			if (!vertexBuffer || !indexData.indexBuffer)
-			{
-				return false;
-			}
-
-			const auto* vertexBytes = static_cast<const uint8*>(vertexBuffer->Map(LockOptions::ReadOnly));
-			if (!vertexBytes)
-			{
-				return false;
-			}
-
-			out.vertices.resize(vertexData.vertexCount);
-			std::memcpy(out.vertices.data(), vertexBytes + vertexData.vertexStart * sizeof(WorldModelMergeVertex),
-				vertexData.vertexCount * sizeof(WorldModelMergeVertex));
-			vertexBuffer->Unmap();
-
-			const void* indexBytes = indexData.indexBuffer->Map(LockOptions::ReadOnly);
-			if (!indexBytes)
-			{
-				return false;
-			}
-
-			out.indices.resize(indexData.indexCount);
-			if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
-			{
-				const auto* indices = static_cast<const uint16*>(indexBytes) + indexData.indexStart;
-				std::copy_n(indices, indexData.indexCount, out.indices.begin());
-			}
-			else
-			{
-				const auto* indices = static_cast<const uint32*>(indexBytes) + indexData.indexStart;
-				std::copy_n(indices, indexData.indexCount, out.indices.begin());
-			}
-			indexData.indexBuffer->Unmap();
-
-			return true;
-		}
-
-		/// @brief Merged geometry being collected for one material of one chunk.
-		struct MaterialBucket
-		{
-			MaterialPtr material;
-			std::vector<WorldModelMergeVertex> vertices;
-			std::vector<uint32> indices;
-		};
-
-		MeshPtr CreateMergedMesh(const String& name, std::map<String, MaterialBucket>& buckets)
-		{
-			PROFILE_SCOPE("WMO: CreateMergedMesh");
-			if (buckets.empty())
-			{
-				return nullptr;
-			}
-
-			auto mesh = std::make_shared<Mesh>(name);
-			AABB bounds;
-			bounds.SetNull();
-
-			auto& device = GraphicsDevice::Get();
-			for (auto& [materialName, bucket] : buckets)
-			{
-				if (bucket.indices.empty())
-				{
-					continue;
-				}
-
-				SubMesh& subMesh = mesh->CreateSubMesh();
-				subMesh.useSharedVertices = false;
-				subMesh.SetMaterial(bucket.material);
-
-				subMesh.vertexData = std::make_unique<VertexData>(&device);
-				subMesh.vertexData->vertexCount = static_cast<uint32>(bucket.vertices.size());
-				subMesh.vertexData->vertexStart = 0;
-
-				uint32 offset = 0;
-				auto* decl = subMesh.vertexData->vertexDeclaration;
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
-				decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
-
-				subMesh.vertexData->vertexBufferBinding->SetBinding(0, device.CreateVertexBuffer(
-					static_cast<uint32>(bucket.vertices.size()), sizeof(WorldModelMergeVertex), BufferUsage::StaticWriteOnly, bucket.vertices.data()));
-
-				subMesh.indexData = std::make_unique<IndexData>();
-				subMesh.indexData->indexStart = 0;
-				subMesh.indexData->indexCount = static_cast<uint32>(bucket.indices.size());
-				if (bucket.vertices.size() <= 0xFFFF)
-				{
-					std::vector<uint16> narrow(bucket.indices.begin(), bucket.indices.end());
-					subMesh.indexData->indexBuffer = device.CreateIndexBuffer(
-						static_cast<uint32>(narrow.size()), IndexBufferSize::Index_16, BufferUsage::StaticWriteOnly, narrow.data());
-				}
-				else
-				{
-					subMesh.indexData->indexBuffer = device.CreateIndexBuffer(
-						static_cast<uint32>(bucket.indices.size()), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, bucket.indices.data());
-				}
-
-				for (const auto& vertex : bucket.vertices)
-				{
-					bounds.Combine(vertex.pos);
-				}
-			}
-
-			if (mesh->GetSubMeshCount() == 0)
-			{
-				return nullptr;
-			}
-
-			mesh->SetBounds(bounds);
-			return mesh;
-		}
-
 		/// @brief Merges a world model's groups, all at once or a few groups per call.
 		class MergedGeometryBuilder final
 		{
@@ -225,7 +71,7 @@ namespace mmo
 				}
 
 				// The read-back copies are only needed while merging
-				m_readBack.clear();
+				m_readBack.Clear();
 				return true;
 			}
 
@@ -244,14 +90,16 @@ namespace mmo
 				}
 
 				auto& out = m_merged->groups[groupIndex];
-				std::map<String, MaterialBucket> structure;
-				std::map<String, MaterialBucket> detail;
+				MeshMergeBuckets structure;
+				MeshMergeBuckets detail;
 
 				const auto& meshRefs = group->GetMeshRefs();
 				for (size_t refIndex = 0; refIndex < meshRefs.size(); ++refIndex)
 				{
 					const WorldModelMeshRef& meshRef = meshRefs[refIndex];
-					if (!meshRef.visible)
+
+					// Particle systems (.hpar) are created by WorldModelInstance::CreateParticleSystems
+					if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
 					{
 						continue;
 					}
@@ -275,25 +123,19 @@ namespace mmo
 					for (uint16 subIndex = 0; subIndex < mesh->GetSubMeshCount() && complete; ++subIndex)
 					{
 						SubMesh& subMesh = mesh->GetSubMesh(subIndex);
-						const auto key = std::make_pair(mesh.get(), subIndex);
-						auto it = readBack.find(key);
-						if (it == readBack.end())
+						const MeshMergeGeometry* geometry = readBack.Get(*mesh, subIndex);
+						if (!geometry)
 						{
-							SubMeshGeometry geometry;
-							if (!ReadSubMesh(subMesh, geometry))
-							{
-								complete = false;
-								break;
-							}
-							it = readBack.emplace(key, std::move(geometry)).first;
+							complete = false;
+							break;
 						}
 
 						const MaterialPtr material = overrideMaterial ? overrideMaterial : subMesh.GetMaterial();
 						const String materialName = material ? String(material->GetName()) : String();
-						MaterialBucket& bucket = chunk[materialName];
+						MeshMergeBucket& bucket = chunk[materialName];
 						bucket.material = material;
-						AppendTransformedGeometry(it->second.vertices.data(), it->second.vertices.size(),
-							it->second.indices.data(), it->second.indices.size(), transform, bucket.vertices, bucket.indices);
+						AppendTransformedGeometry(geometry->vertices.data(), geometry->vertices.size(),
+							geometry->indices.data(), geometry->indices.size(), transform, bucket.vertices, bucket.indices);
 					}
 
 					if (!complete)
@@ -315,7 +157,7 @@ namespace mmo
 			size_t m_nextGroup = 0;
 
 			/// Every distinct submesh is read back once, however often it is placed
-			std::map<std::pair<const Mesh*, uint16>, SubMeshGeometry> m_readBack;
+			MeshReadBackCache m_readBack;
 		};
 
 		size_t GetMeshBytes(const MeshPtr& mesh)
@@ -540,26 +382,7 @@ namespace mmo
 
 	bool WorldModelInstance::CanMergeMesh(const Mesh& mesh)
 	{
-		if (mesh.HasSkeleton() || mesh.GetSubMeshCount() == 0)
-		{
-			return false;
-		}
-
-		for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
-		{
-			const SubMesh& subMesh = mesh.GetSubMesh(i);
-			if (subMesh.useSharedVertices || !subMesh.vertexData || !subMesh.indexData || subMesh.indexData->indexCount == 0)
-			{
-				return false;
-			}
-
-			if (!HasMergeableLayout(*subMesh.vertexData))
-			{
-				return false;
-			}
-		}
-
-		return true;
+		return mmo::CanMergeMesh(mesh);
 	}
 
 	void WorldModelInstance::BuildMergedGeometry(Scene& scene)

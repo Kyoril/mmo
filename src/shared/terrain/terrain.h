@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <functional>
+#include <vector>
 
 #include "graphics/material.h"
 
@@ -16,6 +17,7 @@
 #include "constants.h"
 #include "flatten_plane.h"
 #include "terrain_region_snapshot.h"
+#include "terrain_io/water_flow.h"
 
 
 namespace mmo
@@ -214,6 +216,66 @@ namespace mmo
 			/// @brief Checks whether water surfaces are visible.
 			/// @return True if water is visible, false otherwise.
 			[[nodiscard]] bool IsWaterVisible() const { return m_waterVisible; }
+
+			/// @brief Gets the height of the open ocean surface.
+			/// @details Ocean placeholder pages (pages without a page file) report water of type Ocean
+			///          at this height everywhere, and the editor fills newly materialised pages with
+			///          ocean up to it.
+			/// @return The sea level in world units (constants::DefaultSeaLevel unless changed).
+			[[nodiscard]] float GetSeaLevel() const { return m_seaLevel; }
+
+			/// @brief Sets the height of the open ocean surface.
+			/// @param seaLevel The sea level in world units.
+			void SetSeaLevel(float seaLevel);
+
+			/// @brief Declares whether the ocean is drawn by a dedicated ocean renderer.
+			/// @details When true, pages leave ocean quads out of their water render objects (other
+			///          liquids are meshed as before), because the external renderer draws the ocean
+			///          to the horizon from BuildOceanMask. Already loaded pages rebuild their water.
+			///          Minimap-mode water (SetMinimapWaterMode) ignores this switch.
+			/// @param external True if an external renderer draws the ocean. Default false.
+			void SetOceanRenderedExternally(bool external);
+
+			/// @brief Whether the ocean is drawn by a dedicated ocean renderer (see SetOceanRenderedExternally).
+			[[nodiscard]] bool IsOceanRenderedExternally() const { return m_oceanRenderedExternally; }
+
+			/// @brief Fills a camera-centred ocean mask window for the ocean renderer.
+			/// @details One texel per water quad (ocean_mask::TexelSize world units), the window origin
+			///          snapped to the quad grid. Two bytes per texel, rows along +Z:
+			///          R = 255 where the ocean is drawn, else 0; G = depth below the sea level encoded
+			///          over ocean_mask::DepthEncodeRange (0 where R is 0). Ocean placeholder pages,
+			///          pages that are not prepared yet and positions off the map are open ocean
+			///          (R = G = 255); a prepared page draws ocean only on quads carrying Ocean water.
+			///          See terrain/ocean_mask.h for the exact layout.
+			/// @param centerX World X the window is centred on (typically the camera).
+			/// @param centerZ World Z the window is centred on.
+			/// @param texelsPerSide Window size in texels per side.
+			/// @param outRG Receives texelsPerSide² * 2 bytes.
+			/// @param outOriginX Receives the world X of the window's minimum corner.
+			/// @param outOriginZ Receives the world Z of the window's minimum corner.
+			/// @remark Main thread only. Cheap enough per frame, but GetOceanMaskRevision tells
+			///         whether anything changed since the last build.
+			void BuildOceanMask(float centerX, float centerZ, uint32 texelsPerSide, std::vector<uint8>& outRG, float& outOriginX, float& outOriginZ) const;
+
+			/// @brief Gets a counter that changes whenever data the ocean mask depends on changes:
+			///        a page became prepared or was destroyed, a placeholder was materialised, water or
+			///        terrain heights were edited, or the sea level changed.
+			/// @details Combined with the mask window origin it tells the ocean renderer whether it
+			///          has to rebuild and re-upload the mask.
+			[[nodiscard]] uint64 GetOceanMaskRevision() const { return m_oceanMaskRevision; }
+
+			/// @brief Bumps the ocean mask revision. Called by pages when their data changes.
+			void NotifyOceanMaskChanged() { ++m_oceanMaskRevision; }
+
+			/// @brief Turns every prepared ocean placeholder page overlapping a world-space rectangle
+			///        into a real, editable page (flat seabed constants::OceanSeabedDepth below the sea
+			///        level, ocean water up to the sea level everywhere), building its tiles if loaded.
+			/// @details Every terrain edit (brushes, holes, water, areas, region paste/capture, page
+			///          colour fill) calls this for the area it touches, so editing over open ocean
+			///          just works. Pages that are not prepared are left alone. Main thread only.
+			/// @remark Declared const like the edit methods that call it: it changes pages, which the
+			///         terrain owns by pointer, not the terrain object itself.
+			void MaterializeOceanPages(float minX, float minZ, float maxX, float maxZ) const;
 
 			/// Returns the global tile index x and y for the given world position. Global tile index means that 0,0 is the top left corner of the terrain,
 			///	and that the maximum value for x and y is m_width * constants::TilesPerPage - 1 and m_height * constants::TilesPerPage - 1 respectively.
@@ -575,6 +637,12 @@ namespace mmo
 			/// @return The bilinearly interpolated water height, or 0.0f if outside terrain bounds.
 			[[nodiscard]] float GetWaterHeightAtWorldPos(float x, float z) const;
 
+			/// @brief Gets the river flow speed at a world position.
+			/// @param x World X coordinate.
+			/// @param z World Z coordinate.
+			/// @return Normalized flow speed in [0, 1]; 0 off the map, without a page, or without flow data.
+			[[nodiscard]] float GetWaterFlowSpeedAtWorldPos(float x, float z) const;
+
 			/// @brief Returns true if there is water at the given world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
@@ -598,6 +666,35 @@ namespace mmo
 			/// @param materialName The asset path of the material to assign.
 			void SetWaterMaterial(float brushCenterX, float brushCenterZ, float radius, const String& materialName);
 
+			/// @brief Result of ApplyWaterFlow.
+			struct WaterFlowResult
+			{
+				/// @brief Pages that received new flow.
+				uint32 pagesWritten = 0;
+
+				/// @brief Pages whose flow was removed because no path reaches them any more.
+				uint32 pagesCleared = 0;
+			};
+
+			/// @brief Recomputes river flow from the given paths on every page with water within their
+			///	       reach, and removes it from pages only the previous paths reached.
+			/// @param paths The river paths (downstream order); each water vertex follows the nearest.
+			/// @param settings Flow settings for paths.
+			/// @param previousPaths The paths of the last apply. Pages they reached that paths no longer
+			///	       reach lose their flow. Pages neither set reaches are left as they are.
+			/// @param previousSettings Flow settings for previousPaths.
+			/// @param riverMaterialName Water material given to every page that receives flow (the
+			///	       flow only shows with a material that reads it). Empty leaves materials alone.
+			/// @remark Pages out of the streamed range are prepared (their data read, nothing rendered)
+			///	        so a long river is written in full; they are saved with the other changed pages.
+			WaterFlowResult ApplyWaterFlow(const std::vector<terrain_io::water_flow::FlowPath>& paths, const terrain_io::water_flow::FlowSettings& settings,
+				const std::vector<terrain_io::water_flow::FlowPath>& previousPaths, const terrain_io::water_flow::FlowSettings& previousSettings,
+				const String& riverMaterialName);
+
+			/// @brief Removes river flow from every page touched by a circular area.
+			/// @return The number of pages whose flow was removed.
+			uint32 ClearWaterFlow(float centerX, float centerZ, float radius);
+
 			/// @brief Updates tiles in a specified region.
 			/// @param fromX The starting X coordinate.
 			/// @param fromZ The starting Z coordinate.
@@ -613,6 +710,16 @@ namespace mmo
 			void NotifyCameraPosition(const Vector3& pos);
 
 		private:
+			/// @brief Materialises the ocean placeholders among the pages in an inclusive page index
+			///        range (clamped to the terrain). See MaterializeOceanPages.
+			void MaterializeOceanPagesInRange(int32 minPageX, int32 minPageZ, int32 maxPageX, int32 maxPageZ) const;
+
+			/// @brief Materialises the ocean placeholders touched by an inclusive rectangle of a global
+			///        grid whose pages are cellsPerPage cells wide (outer vertices: 128, splat pixels:
+			///        PixelsPerPage - 1), including the neighbours sharing its seam samples, which the
+			///        edit methods mirror into both pages.
+			void MaterializeOceanPagesForGrid(int32 minX, int32 minZ, int32 maxX, int32 maxZ, int32 cellsPerPage) const;
+
 			/// @brief Looks up the navigation area for a specific tile without falling back to 0.
 			/// @param globalTileX The global tile X index.
 			/// @param globalTileY The global tile Y index.
@@ -665,6 +772,10 @@ namespace mmo
 				int maxVertZ = static_cast<int>(std::ceil(globalMaxZ + (outerRadius / scale)));
 				minVertZ = std::max(0, minVertZ);
 				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::OuterVerticesPerPageSide - 1));
+
+				// Open ocean has no terrain to edit: turn the placeholder pages under the brush into
+				// real pages first (no-op everywhere else).
+				MaterializeOceanPagesForGrid(minVertX, minVertZ, maxVertX, maxVertZ, static_cast<int32>(constants::OuterVerticesPerPageSide - 1));
 
 				// Loop over each outer vertex that could be within the outer radius
 				for (int vx = minVertX; vx <= maxVertX; vx++)
@@ -776,6 +887,10 @@ namespace mmo
 				minVertZ = std::max(0, minVertZ);
 				maxVertZ = std::min<int>(maxVertZ, m_height * (constants::PixelsPerPage - 1));
 
+				// Open ocean has no splat layers to paint: turn the placeholder pages under the brush
+				// into real pages first (no-op everywhere else).
+				MaterializeOceanPagesForGrid(minVertX, minVertZ, maxVertX, maxVertZ, static_cast<int32>(constants::PixelsPerPage - 1));
+
 				// Loop over each vertex that could be within the outer radius
 				for (int vx = minVertX; vx <= maxVertX; vx++)
 				{
@@ -862,6 +977,9 @@ namespace mmo
 			MaterialPtr m_defaultMaterial;
 			bool m_showWireframe = false;
 			bool m_waterVisible = true;
+			float m_seaLevel = constants::DefaultSeaLevel;
+			bool m_oceanRenderedExternally = false;
+			uint64 m_oceanMaskRevision = 1;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
 

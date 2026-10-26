@@ -168,3 +168,48 @@ TEST_CASE("Editor-saved golden page survives load and save byte-identically", "[
 	REQUIRE(savedBytes.size() == goldenBytes.size());
 	CHECK(std::memcmp(savedBytes.data(), goldenBytes.data(), savedBytes.size()) == 0);
 }
+
+TEST_CASE("River flow round-trips and stays absent when unset", "[terrain_io]")
+{
+	terrain_io::PageData original = MakePatternedPage();
+
+	SECTION("without flow")
+	{
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		REQUIRE(terrain_io::SavePage(writer, terrain_io::MakeView(original)));
+
+		io::MemorySource source{ buffer };
+		io::Reader reader{ source };
+		terrain_io::PageData loaded;
+		REQUIRE(terrain_io::LoadPage(reader, loaded));
+		CHECK(loaded.waterFlowUVs.empty());
+		CHECK(loaded.waterFlowSpeeds.empty());
+	}
+
+	SECTION("with flow")
+	{
+		original.waterFlowUVs.resize(outerVertexCount * 2);
+		original.waterFlowSpeeds.resize(outerVertexCount);
+		for (size_t i = 0; i < outerVertexCount; ++i)
+		{
+			original.waterFlowUVs[i * 2] = static_cast<float>(i) * 0.0625f;
+			original.waterFlowUVs[i * 2 + 1] = -static_cast<float>(i % 129) * 0.125f;
+			original.waterFlowSpeeds[i] = static_cast<uint8>(i % 256);
+		}
+
+		std::vector<char> buffer;
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		REQUIRE(terrain_io::SavePage(writer, terrain_io::MakeView(original)));
+
+		io::MemorySource source{ buffer };
+		io::Reader reader{ source };
+		terrain_io::PageData loaded;
+		REQUIRE(terrain_io::LoadPage(reader, loaded));
+		CHECK(loaded.waterFlowUVs == original.waterFlowUVs);
+		CHECK(loaded.waterFlowSpeeds == original.waterFlowSpeeds);
+		CHECK(loaded.waterVertexHeights == original.waterVertexHeights);
+	}
+}

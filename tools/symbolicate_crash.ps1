@@ -35,6 +35,22 @@ if (-not $OutFile) {
     $OutFile = if ($ReportDir) { Join-Path $ReportDir 'symbolized.txt' } else { "$CrashFile.symbolized.txt" }
 }
 
+# Client crash reports carry their build as report.json's "appVersion" (there is no "Version:"
+# line in crash.txt for those - that's a server-report-only convention). Used to fetch the
+# matching mmo_client.pdb/.exe from the client's published GitHub release when not archived.
+$reportVersion = $null
+if ($ReportDir) {
+    $reportJson = Join-Path $ReportDir 'report.json'
+    if (Test-Path -LiteralPath $reportJson) {
+        try {
+            $report = Get-Content -LiteralPath $reportJson -Raw | ConvertFrom-Json
+            if ($report.appVersion) { $reportVersion = [string]$report.appVersion }
+        } catch {
+            # Malformed report.json: fall through with $reportVersion unset.
+        }
+    }
+}
+
 if (-not $Llvm) {
     $cmd = Get-Command llvm-symbolizer -ErrorAction SilentlyContinue
     if ($cmd) { $Llvm = $cmd.Source }
@@ -121,8 +137,9 @@ function ConvertFrom-SymbolizerOutput($out, [string[]]$rvas, [scriptblock]$mapPa
     return $map
 }
 
-# Linux builds record the build machine's paths (/app/src/... in the Docker images). Map a path
-# onto this checkout when the part after one of its "/src/" segments exists under src\ here.
+# Builds record the build machine's paths (/app/src/... in the Docker images; D:\a\mmo\mmo\src\...
+# on the GitHub Windows runners that build nightly client releases). Map a path onto this
+# checkout when the part after one of its "/src/" segments exists under src\ here.
 function Convert-BuildPath([string]$location) {
     $m = [regex]::Match($location, '^(.*?)(:\d+(:\d+)?)?$')
     $path = $m.Groups[1].Value.Replace('\', '/')
@@ -225,6 +242,17 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
 
     $pdb = Join-Path $SymbolStore "$mod.pdb\$pdbid\$mod.pdb"
     $exe = $null
+
+    # Not archived locally: a published client build's PDB+EXE live on its GitHub release
+    # (symbols.zip + client-bin.zip). tools\fetch_client_symbols.ps1 pulls them into the store.
+    if (-not (Test-Path -LiteralPath $pdb) -and $reportVersion) {
+        try {
+            & (Join-Path $repoRoot 'tools/fetch_client_symbols.ps1') -Version $reportVersion -Store $SymbolStore -Modules $mod | Out-Host
+        } catch {
+            Emit "[$mod] fetch_client_symbols: $($_.Exception.Message)"
+        }
+    }
+
     if (Test-Path -LiteralPath $pdb) {
         # Find the matching EXE (same pdbid) so llvm-symbolizer has an object to work with.
         $exeRoot = Join-Path $SymbolStore "$mod.exe"
@@ -273,7 +301,7 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
         $addrInput = ($rvas -join "`n")
         $out = $addrInput | & $Llvm --obj=$tmpExe --relative-address --demangle 2>&1
 
-        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas
+        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas ${function:Convert-BuildPath}
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }

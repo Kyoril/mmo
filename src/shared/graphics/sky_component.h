@@ -163,6 +163,9 @@ namespace mmo
         Entity* m_cloudsEntity;                        ///< Sky dome entity
         std::shared_ptr<MaterialInstance> m_skyMatInst;              ///< Sky material instance
 
+        SceneNode* m_cloudLayerNode = nullptr;         ///< Stylized cumulus dome scene node
+        Entity* m_cloudLayerEntity = nullptr;          ///< Stylized cumulus dome entity, drawn over the sky dome
+
         Light* m_sunLight;                             ///< Sun directional light
         SceneNode* m_sunLightNode;                     ///< Sun light scene node
 

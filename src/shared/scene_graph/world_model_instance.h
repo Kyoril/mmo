@@ -28,6 +28,7 @@ namespace mmo
     class SubMesh;
     class Mesh;
     class Light;
+    class ParticleSystem;
 
     /// @brief Represents a runtime instance of a world model placed in the scene.
     /// Handles rendering with portal culling, visibility determination, and collision.
@@ -160,6 +161,10 @@ namespace mmo
         /// @brief Gets the number of scene lights created from the applied kits.
         [[nodiscard]] size_t GetKitLightCount() const;
 
+        /// @brief Gets the number of particle systems created from particle system references
+        ///        (.hpar paths) among the mesh references, active doodads and kit props.
+        [[nodiscard]] size_t GetParticleSystemCount() const { return m_particleInstances.size(); }
+
         /// @brief Gets the room a realized kit prop was derived into.
         /// @param index Index of the prop among all visible props of all kits, in kit order.
         /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
@@ -177,6 +182,19 @@ namespace mmo
         /// @brief Deepest nesting of child world models that is instantiated. A town that places
         ///        buildings that place props is depth 2; anything this deep is a content mistake.
         static constexpr uint32 MaxChildDepth = 8;
+
+    public:
+        /// @brief Whether a mesh may be drawn through the instanced path at all.
+        /// @param mesh The mesh to test.
+        /// @return True when every submesh can be instanced.
+        static bool CanBatchMesh(const Mesh& mesh);
+
+        /// @brief Whether a material has a compiled instanced vertex shader variant.
+        /// @details Without one the device warns once and draws nothing at all, so this is checked
+        ///          up front and the affected placements fall back to entities.
+        /// @param material The material to test.
+        /// @return True when the material can be used for an instanced draw.
+        static bool MaterialSupportsInstancing(const MaterialPtr& material);
 
     public:
         // MovableObject overrides
@@ -324,18 +342,6 @@ namespace mmo
         /// @brief Whether a group is currently visible according to the last portal culling pass.
         [[nodiscard]] bool IsGroupVisible(int32 groupIndex) const;
 
-        /// @brief Whether a mesh may be drawn through the instanced path at all.
-        /// @param mesh The mesh to test.
-        /// @return True when every submesh can be instanced.
-        static bool CanBatchMesh(const Mesh& mesh);
-
-        /// @brief Whether a material has a compiled instanced vertex shader variant.
-        /// @details Without one the device warns once and draws nothing at all, so this is checked
-        ///          up front and the affected placements fall back to entities.
-        /// @param material The material to test.
-        /// @return True when the material can be used for an instanced draw.
-        static bool MaterialSupportsInstancing(const MaterialPtr& material);
-
         /// @brief Builds the mesh-facts lookup the bucketer uses, backed by the mesh manager.
         [[nodiscard]] WorldModelMeshLookup MakeMeshLookup();
 
@@ -464,6 +470,17 @@ namespace mmo
         /// @param scene The scene to destroy lights in (can be null).
         void ClearLights(Scene* scene);
 
+        /// @brief Creates one looping particle system per particle system reference (.hpar path) among
+        ///        the visible mesh references, the active doodads and the visible kit props.
+        /// @details Recreates all of them, so it is called again whenever doodads or kits change. The
+        ///          geometry paths skip these references; FlattenWorldModelExtras reports the same set.
+        /// @param scene The scene to create the particle systems in.
+        void CreateParticleSystems(Scene& scene);
+
+        /// @brief Destroys all particle systems created by CreateParticleSystems.
+        /// @param scene The scene to destroy them in (can be null).
+        void ClearParticleSystems(Scene* scene);
+
         /// @brief Clears all geometry.
         /// @param scene The scene to destroy entities in (can be null).
         void ClearGeometry(Scene* scene);
@@ -534,6 +551,19 @@ namespace mmo
         std::set<String> m_warnedInstancingMaterials;
 
         std::vector<LightInstance> m_lightInstances;
+
+        /// @brief One particle system created from a particle system reference.
+        struct ParticleInstance
+        {
+            ParticleSystem* system { nullptr };
+            SceneNode* node { nullptr };
+        };
+
+        /// @brief Particle systems of mesh references, doodads and kit props that name a .hpar file.
+        std::vector<ParticleInstance> m_particleInstances;
+
+        /// @brief Counts particle systems ever created, so recreated ones never reuse a scene name.
+        uint32 m_particleCounter { 0 };
 
         /// @brief Prop kits applied to this instance, in application order. Shared with other
         ///        instances, never modified here.

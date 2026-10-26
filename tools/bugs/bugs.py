@@ -15,6 +15,7 @@ https://error.mmo-dev.net). Output is JSON on stdout so agents can parse it.
 import argparse
 import json
 import os
+import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -23,11 +24,57 @@ import urllib.request
 DEFAULT_URL = "https://error.mmo-dev.net"
 
 
+def _tls12_context():
+	context = ssl.create_default_context()
+	context.maximum_version = ssl.TLSVersion.TLSv1_2
+	return context
+
+
+def _connection_failed(error):
+	reason = getattr(error, "reason", error)
+	return isinstance(reason, (ConnectionResetError, ssl.SSLError, TimeoutError))
+
+
+# Repeating these cannot do harm. A POST can: a claim that went through before the reset comes
+# back 409 on the retry, which the loop takes for "claimed elsewhere".
+RETRYABLE_METHODS = ("GET", "PUT", "PATCH")
+
+
+class TlsFallbackOpener:
+	"""urlopen that survives a flaky connection to the bug API: a reset or timed-out request is
+	retried once (GET, PUT and PATCH only), and the first one switches the process to TLS 1.2.
+
+	On 2026-10-23 every TLS 1.3 handshake with the bug API was reset (Windows curl, which ended up
+	on TLS 1.2, still worked), and the bug loop saw no ship decision for nine hours. Later that day
+	a connection reset in the middle of a status update left a finished fix "interrupted"."""
+
+	def __init__(self, urlopen=urllib.request.urlopen):
+		self.urlopen = urlopen
+		self.context = None
+
+	def _open(self, request, timeout):
+		if self.context is not None:
+			return self.urlopen(request, timeout=timeout, context=self.context)
+		return self.urlopen(request, timeout=timeout)
+
+	def __call__(self, request, timeout):
+		try:
+			return self._open(request, timeout)
+		except (urllib.error.URLError, OSError) as error:
+			if isinstance(error, urllib.error.HTTPError) or not _connection_failed(error):
+				raise
+			if self.context is None:
+				self.context = _tls12_context()
+			if request.get_method() not in RETRYABLE_METHODS:
+				raise
+			return self._open(request, timeout)
+
+
 class BugApi:
-	def __init__(self, base_url, api_key, opener=urllib.request.urlopen):
+	def __init__(self, base_url, api_key, opener=None):
 		self.base_url = base_url.rstrip("/")
 		self.api_key = api_key
-		self.opener = opener
+		self.opener = opener or TlsFallbackOpener()
 
 	def _call(self, method, path, query=None, body=None):
 		url = self.base_url + path

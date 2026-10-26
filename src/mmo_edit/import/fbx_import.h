@@ -67,6 +67,18 @@ namespace mmo
 		/// @copydoc ImportBase::SupportsExtension
 		[[nodiscard]] bool SupportsExtension(const String& extension) const override;
 
+		/// @brief Imports a model file without showing the settings dialog, e.g. for `mmo_edit --import-fbx`.
+		/// @param filename The model file on disk.
+		/// @param assetPath The asset folder, relative to the game content root, that receives the .hmsh file.
+		/// @param offset Translation applied to every vertex after scale and rotation.
+		/// @param scale Per-axis scale applied to every vertex.
+		/// @param rotation Rotation applied to every vertex.
+		/// @param importTangents Whether to keep the file's tangents instead of deriving them from the normal.
+		/// @return true if the mesh file was written.
+		/// @param colorFromUvChannel When >= 0, vertex colours take (u, v, 0, 1) of this UV channel instead of the file's colours,
+		///        so a material can read a second UV set (e.g. a foliage gradient) through the Vertex Color node.
+		bool ImportUnattended(const Path& filename, const Path& assetPath, const Vector3& offset, const Vector3& scale, const Quaternion& rotation, bool importTangents, int32 colorFromUvChannel = -1);
+
 	private:
 		bool CreateSubMesh(const String& name, int index, const aiNode* pNode, const aiMesh* aiMesh, const MaterialPtr& material, Mesh* mesh, AABB& boundingBox, const Matrix4& transform) const;
 		void GrabNodeNamesFromNode(const aiScene* mScene, const aiNode* pNode);
@@ -109,6 +121,7 @@ namespace mmo
 		Path m_importAssetPath;
 		bool m_showImportFileDialog = false;
 		bool m_importTangents = false;
+		int32 m_colorFromUvChannel = -1;
 
 		Vector3 m_importOffset = Vector3::Zero;
 		Vector3 m_importScale = Vector3::UnitScale;;

@@ -30,6 +30,16 @@ REVIEW_DIFF_LIMIT = 128 * 1024
 TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 # Guided refixes a maintainer may request per bug.
 MAX_REFIX = 3
+# A refix whose branch cannot take today's develop restarts from develop; the fixer is told so.
+RESTART_NOTE = ("the earlier fix branch could not be merged with today's develop ({}). This attempt starts from "
+	"today's develop: re-apply the earlier change (earlier_diff) on the current code, adapting it where develop "
+	"changed the same places, together with any guidance.")
+# The guidance of an automatic re-application after a ship conflict nothing could resolve.
+REAPPLY_GUIDANCE = ("From the bug loop, not the maintainer: this fix could not be merged with today's develop ({}). "
+	"Re-apply the same fix on today's develop: keep its intent and its regression test, adapt it to what develop "
+	"changed in the same places, and change nothing else.")
+# How much of the earlier diff a restarted refix sees.
+EARLIER_DIFF_LIMIT = 40000
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 # A bug the loop gave up on (needs-info) and that only the maintainer can move on: the web UI lists
@@ -601,14 +611,18 @@ class BugLoop:
 			try:
 				start = self.worktree.resume_branch(branch)
 				base = self.worktree.fork_point(branch)
+				self._write_resolutions(bug_id)
 			except Exception as error:
 				if emergency is None:
-					self._release(bug_id, "pr_open", "cannot refix {}: {}; decide again".format(branch, str(error)[:300]))
-					self._finish(bug_id, "needs-info", reason="branch unusable")
-					return
-				# The emergency branch is only a convenience: start again from develop.
-				self.log("emergency fix: cannot resume {} ({}); starting fresh".format(branch, str(error)[:200]))
-				previous = None
+					# The branch cannot take today's develop (a conflict nothing could resolve): the fixer
+					# re-applies the earlier change on a fresh branch from develop, with its diff in hand.
+					self.log("bug {}: cannot bring {} up to date ({}); the refix starts from develop".format(bug_id, branch, str(error)[:300]))
+					previous = dict(previous or {}, restarted_from_develop=RESTART_NOTE.format(str(error)[:500]),
+						earlier_diff=self._earlier_diff(bug_id))
+				else:
+					# The emergency branch is only a convenience: start again from develop.
+					self.log("emergency fix: cannot resume {} ({}); starting fresh".format(branch, str(error)[:200]))
+					previous = None
 				start = None
 		if start is None:
 			self.worktree.start_branch(branch, base)
@@ -1161,10 +1175,14 @@ class BugLoop:
 		self._stage("shipping", bug_id, branch, detail=label)
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
+		resolved = self._write_resolutions(bug_id)
 		if not result.ok:
-			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency)
+			reapply = getattr(result, "conflict", False) and not emergency and self._may_reapply(bug_id)
+			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency and not reapply)
 			if emergency:
 				self._park_emergency(bug_id, "ship: " + result.reason)
+			elif reapply:
+				self._reapply(bug_id, result.reason)
 			return
 		if not by_maintainer and not emergency:
 			self.state.count_autoship()
@@ -1182,8 +1200,9 @@ class BugLoop:
 						result.commit, CI_NAMES["push"], head[:8]))
 			else:
 				self._update(bug_id, status="resolved", release_claim=True,
-					note="shipped by the bug loop{} in {}; reaches players with the next nightly deploy".format(
-						" on the maintainer's decision" if by_maintainer else "", result.commit))
+					note="shipped by the bug loop{} in {}{}; reaches players with the next nightly deploy".format(
+						" on the maintainer's decision" if by_maintainer else "", result.commit,
+						" (merge conflicts with develop resolved in {})".format(", ".join(resolved[:5])) if resolved else ""))
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit)
 			if emergency:
 				self.notifier.send(notify.emergency_shipped_message(self.notifier, bug_id, result.commit))
@@ -1192,6 +1211,37 @@ class BugLoop:
 		except Exception:
 			self.log(traceback.format_exc())
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit, bookkeeping_failed=True)
+
+	def _write_resolutions(self, bug_id):
+		"""Records the merge conflicts the last ship or refix merge resolved (merge.json); returns the files."""
+		reports = list(getattr(self.worktree, "resolutions", None) or [])
+		if not reports:
+			return []
+		self._write(bug_id, "merge.json", reports)
+		return [path for report in reports for path in report.get("data", []) + [item.get("path") for item in report.get("text", [])]]
+
+	def _earlier_diff(self, bug_id):
+		text = self._review_diff_text(bug_id) or ""
+		return text[:EARLIER_DIFF_LIMIT] + ("\n... (truncated)" if len(text) > EARLIER_DIFF_LIMIT else "")
+
+	def _may_reapply(self, bug_id):
+		return (bug_id != self.state.emergency_ticket() and self.state.reapply_count(bug_id) < self.config.max_reapply
+			and self.state.budget_left(self.config.invocation_budget_per_day, needed=2))
+
+	def _reapply(self, bug_id, reason):
+		"""A ship ran into a conflict with develop nothing could resolve: the fixer re-applies the fix on
+		today's develop at once (the parked branch stays the backup until then). The new candidate goes
+		through guard, review, proof and gate again: it auto-ships only if it qualifies on its own,
+		otherwise it parks and a ship decision is needed again."""
+		self.state.count_reapply(bug_id)
+		self.state.save()
+		self.log("bug {}: re-applying the fix on today's develop after: {}".format(bug_id, reason[:300]))
+		try:
+			self._recover_feature(bug_id)
+			feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
+			self._fix(bug_id, guidance=REAPPLY_GUIDANCE.format(reason[:500]), feature=feature)
+		except Exception:  # the bug is parked already; it waits for the maintainer as before
+			self.log(traceback.format_exc())
 
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):

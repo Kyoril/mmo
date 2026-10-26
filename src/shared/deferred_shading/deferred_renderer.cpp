@@ -151,6 +151,7 @@ namespace mmo
         m_ssaoPass = std::make_unique<SsaoPass>(m_device, width, height);
         m_contactShadowPass = std::make_unique<ContactShadowPass>(m_device, width, height);
         m_volumetricFogPass = std::make_unique<VolumetricFogPass>(m_device, width, height);
+        m_oceanPass = std::make_unique<OceanPass>(m_device);
         m_bloomPass = std::make_unique<BloomPass>(m_device, width, height);
         m_postProcessPass = std::make_unique<PostProcessPass>(m_device, width, height);
         m_tonemapPass = std::make_unique<TonemapPass>(m_device, width, height);
@@ -530,10 +531,18 @@ namespace mmo
         if (m_gpuTimingActiveThisFrame) { GpuTimerMark(6); } // after volumetric fog
 #endif
 
+        // The ocean simulates on the compute queue before any forward target is bound, so none of its
+        // arrays is still attached to the output merger when it writes them.
+        m_oceanPass->Simulate();
+
         {
             RenderTexturePtr forwardColor = m_renderTexture;
             m_device.SetRenderTargetsWithDepthStencil(&forwardColor, 1, m_gBuffer.GetDepthRTPtr());
             m_device.SetViewport(0, 0, m_gBuffer.GetWidth(), m_gBuffer.GetHeight(), 0.0f, 1.0f);
+
+            // Only now: the scene colour copy may still have been a render target above, and D3D11
+            // reads an SRV of a bound render target as zeros.
+            m_oceanPass->CaptureSky(camera, *m_sceneColorCopy, m_gBuffer.GetNormalRT());
 
             // Expose the opaque scene's linear depth to forward/translucent materials so they can
             // sample SceneDepth (depth-based effects like shoreline softening, depth-tinted water).
@@ -545,6 +554,10 @@ namespace mmo
 
             // Expose the lit scene color copy for refraction (Texture2D sceneColorTex : register(t14)).
             m_sceneColorCopy->Bind(ShaderType::PixelShader, kSceneColorTextureSlot);
+
+            // The ocean draws first and writes depth, so particles and other translucent surfaces
+            // behind or under the sea are hidden by it. It reads the same scene colour and depth.
+            m_oceanPass->Render(camera, *scene.GetCameraBuffer(), m_tonemapPass->GetSettings().exposure);
         }
         scene.SetForwardTransparentOnly(true);
         // The forward pass renders into the linear HDR scene, so materials must leave tone mapping

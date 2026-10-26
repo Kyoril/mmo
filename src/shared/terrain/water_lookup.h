@@ -5,6 +5,9 @@
 #include "base/typedefs.h"
 #include "terrain/constants.h"
 
+#include <algorithm>
+#include <vector>
+
 namespace mmo
 {
 	namespace terrain
@@ -136,6 +139,36 @@ namespace mmo
 				result.qz = gz % QuadsPerTileSide;
 				result.valid = true;
 				return result;
+			}
+
+			/// @brief Bilinearly samples the per-vertex river flow speed grid.
+			/// @param speeds OuterVerticesPerPageSide^2 bytes, 0 = still, 255 = full speed. May be empty.
+			/// @param localVertX Position along X in outer-vertex units relative to the page origin.
+			/// @param localVertZ Position along Z in outer-vertex units relative to the page origin.
+			/// @return Flow speed in [0, 1]. Zero when the grid is empty or has the wrong size.
+			/// @remark The base vertex is clamped to the last cell so positions on the page edge sample cleanly.
+			inline float SampleFlowSpeed(const std::vector<uint8>& speeds, const float localVertX, const float localVertZ)
+			{
+				constexpr int32 side = static_cast<int32>(constants::OuterVerticesPerPageSide);
+				if (speeds.size() != static_cast<size_t>(side) * static_cast<size_t>(side))
+				{
+					return 0.0f;
+				}
+
+				const int32 x0 = std::max(0, std::min(static_cast<int32>(localVertX), side - 2));
+				const int32 z0 = std::max(0, std::min(static_cast<int32>(localVertZ), side - 2));
+				const float fx = std::max(0.0f, std::min(localVertX - static_cast<float>(x0), 1.0f));
+				const float fz = std::max(0.0f, std::min(localVertZ - static_cast<float>(z0), 1.0f));
+
+				const auto at = [&](const int32 x, const int32 z)
+				{
+					return static_cast<float>(speeds[static_cast<size_t>(x) + static_cast<size_t>(z) * side]) / 255.0f;
+				};
+
+				return at(x0, z0) * (1.0f - fx) * (1.0f - fz)
+					+ at(x0 + 1, z0) * fx * (1.0f - fz)
+					+ at(x0, z0 + 1) * (1.0f - fx) * fz
+					+ at(x0 + 1, z0 + 1) * fx * fz;
 			}
 		}
 	}

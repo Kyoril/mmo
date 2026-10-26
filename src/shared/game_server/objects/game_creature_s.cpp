@@ -176,6 +176,18 @@ namespace mmo
 		return genderDist(generator) == 0 ? entry.malemodel() : entry.femalemodel();
 	}
 
+	MovementAbilityFlags GameCreatureS::MovementAbilitiesOf(const proto::UnitEntry& entry)
+	{
+		MovementAbilityFlags abilities = movement_ability::Default;
+
+		if ((entry.extraflags() & unit_extra_flags::CannotSwim) != 0)
+		{
+			abilities &= ~movement_ability::CanSwim;
+		}
+
+		return abilities;
+	}
+
 	void GameCreatureS::AddLootRecipient(uint64 guid)
 	{
 		m_lootRecipients.add(guid);
