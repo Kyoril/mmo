@@ -182,10 +182,14 @@ migrations: `20260623_1_multi_class.sql`, `20260623_2_per_class_action_bars.sql`
    deliberately does **not** feed class XP (a completed quest could otherwise be banked and turned
    in as a different class); quests instead carry an explicit `rewardclassxp` field. On turn-in it
    is scaled by the active class level relative to `questlevel` (`ScaleQuestClassXp`,
-   `src/shared/game_server/quest_class_xp.h`): an under-leveled class receives the same fraction of
-   its own class-level bar that the full reward represents at the quest's level — the XP a quest
-   designed for the class level would grant — so banked high-level quests cannot power-level a
-   fresh class, while an over-leveled class steps down through the character quest XP factor table
+   `src/shared/game_server/quest_class_xp.h`): an under-leveled class keeps the **full reward**
+   while it is within five levels of the quest level and loses **a thirtieth of the reward per
+   level** below that, down to **a third** at twenty-five levels below (the quest level is clamped
+   to the class max level). The protection against banking quests therefore only bites where it was
+   meant to — power-leveling a fresh class with *far* higher level quests once high levels exist —
+   and a merely higher level quest is no longer worth less than a single creature kill, whose class
+   XP is not scaled down for a low class level at all,
+   while an over-leveled class steps down through the character quest XP factor table
    (full up to quest level + 5, then 80/60/40/20/10%). The per-class curve lives in `ClassEntry.classlevels` (repeated
    `ClassLevelEntry { xptonextlevel, talentpoints }`, editable in the class editor): the class max
    level is the entry count (clamped to 255, may exceed the character cap), and the talent-point
