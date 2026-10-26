@@ -120,8 +120,18 @@ namespace mmo
 		/// The share of the damage this creature has taken that players dealt themselves, between
 		/// 0 and 1. Damage without an instigator (environment, a caster that is already gone) counts
 		/// for nobody, and a creature that has taken no attributable damage at all counts as fully
-		/// player-killed, so a scripted or GM kill still rewards normally.
+		/// player-killed, so a scripted or GM kill still rewards normally. Units fighting on a
+		/// player's behalf - a summon, an escorted NPC following one - count as the player.
 		[[nodiscard]] float GetPlayerDamageShare() const;
+
+		/// Remembers the unit that summoned this creature, so damage the summon deals is credited
+		/// to whoever brought it into the fight.
+		/// @param owner The summoning unit, or nullptr to forget it.
+		void SetSummonOwner(const std::shared_ptr<GameUnitS>& owner);
+
+		/// @return The unit that summoned this creature, or nullptr if it was not summoned (or the
+		///	        summoner is already gone).
+		[[nodiscard]] std::shared_ptr<GameUnitS> GetSummonOwner() const { return m_summonOwner.lock(); }
 
 		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
 		/// the fight and heals it back up.
@@ -324,6 +334,8 @@ namespace mmo
 		std::set<uint64> m_combatParticipantGuids;
 		CreatureMovement m_movement = creature_movement::None;
 		std::vector<PatrolWaypoint> m_patrolWaypoints;
+		/// Unit that summoned this creature. Empty when it was not summoned by anybody.
+		std::weak_ptr<GameUnitS> m_summonOwner;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
 		/// Whether a follow target is currently assigned (distinguishes "never followed" from

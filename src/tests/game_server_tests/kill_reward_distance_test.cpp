@@ -353,3 +353,39 @@ TEST_CASE_METHOD(KillRewardFixture, "NPC support reduces the experience a kill g
 	REQUIRE(expectedXp < CreatureXp);
 	CHECK(player->Get<uint32>(object_fields::Xp) == expectedXp);
 }
+
+// Units a player brought into the fight themselves are the player: a summon and an escorted quest
+// NPC fight on the player's behalf, so what they take off costs neither experience nor kill credit.
+
+TEST_CASE_METHOD(KillRewardFixture, "Damage from a player's summon counts as the player's own", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto summon = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	summon->SetSummonOwner(player);
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	// The player pulls the creature and its summon does almost all of the work.
+	prey->Damage(prey->GetHealth() / 4, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, summon.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) == CreatureXp);
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "Damage from an NPC escorting a player counts as the player's own", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto escort = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	escort->SetFollowedUnit(player, 2.5f);
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	prey->Damage(prey->GetHealth() / 4, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, escort.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) == CreatureXp);
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+}
