@@ -46,6 +46,10 @@ class LoopConfig:
 	worktree_escalate_minutes: int = 60
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
+	# Self-correction: a candidate that would park only for reasons the fixer can repair itself
+	# (review findings, a failed proof, a red gate, medium confidence) gets this many automatic
+	# rounds on its branch before it parks for the maintainer.
+	self_correct_rounds: int = 2
 
 
 def load_config(path):

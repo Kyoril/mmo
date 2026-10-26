@@ -203,7 +203,7 @@ class CorpusBlocked(unittest.TestCase):
 
 	def test_F_paths_outside_allow_list(self):
 		for path in ("src/shared/base/signal.h", "src/shared/nav_mesh/nav_map.cpp", "src/mmo_edit/editor.cpp",
-				"tools/content/lint.py", "README.md", "data/client/Textures/a.txt", "docs/bug-loop.md", "foo.cpp",
+				"tools/content/lint.py", "README.md", "data/client/Textures/a.txt", "e2e/run.ps1", "foo.cpp",
 				"src/world_server/../login_server/x.cpp"):
 			text = raw_diff(path, (10, 1, 10, 1, ["\tDoWork();"], ["\tDoMoreWork();"]))
 			self.assertBlocked(verdict_of([FileChange(path, 1, 1, False)], text, load_data=plain_loader),
@@ -451,6 +451,55 @@ class TestPathRules(unittest.TestCase):
 
 
 class CorpusAllowed(unittest.TestCase):
+	def test_docs_and_bot_code_ship(self):
+		for path in ("docs/bug-loop.md", "e2e/README.md", "src/shared/bot_core/bot_context.cpp", "src/shared/bot_ai/grind.h"):
+			text = raw_diff(path, (10, 1, 10, 1, ["	DoWork();"], ["	DoMoreWork();"]))
+			result = verdict_of([FileChange(path, 1, 1, False)], text, load_data=plain_loader)
+			self.assertTrue(result["auto_ship_allowed"], (path, result["reasons"]))
+
+	def test_docs_of_another_type_still_park(self):
+		path = "docs/run.ps1"
+		text = raw_diff(path, (10, 1, 10, 1, ["x"], ["y"]))
+		self.assertFalse(verdict_of([FileChange(path, 1, 1, False)], text, load_data=plain_loader)["auto_ship_allowed"])
+
+	def test_test_suite_registration_ships(self):
+		path = "src/tests/CMakeLists.txt"
+		suite = "src/tests/client_ui_tests/CMakeLists.txt"
+		text = raw_diff(path, (16, 0, 16, 3, [], ['if (EXISTS "${CMAKE_SOURCE_DIR}/data/client/Interface/GameUI")',
+			"	add_subdirectory(client_ui_tests)", "endif()"]))
+		text += raw_diff(suite, (0, 0, 1, 3, [], ["mmo_add_test(client_ui_tests lua)", "target_compile_definitions(client_ui_tests PRIVATE",
+			'	MMO_UI_SCRIPT_DIR="${CMAKE_SOURCE_DIR}/data/client/Interface/GameUI")']), old=None)
+		text += raw_diff(TEST_FILE, (0, 0, 1, 1, [], ["TEST_CASE(\"x\") {}"]), old=None)
+		text += raw_diff("src/shared/game_client/a.cpp", (10, 1, 10, 1, ["	DoWork();"], ["	DoMoreWork();"]))
+		result = verdict_of([FileChange(path, 3, 0, False), FileChange(suite, 3, 0, False), FileChange(TEST_FILE, 1, 0, False),
+			FileChange("src/shared/game_client/a.cpp", 1, 1, False)], text, load_data=plain_loader)
+		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
+
+	def test_test_cmake_with_other_commands_parks(self):
+		path = "src/tests/game_client_tests/CMakeLists.txt"
+		for line in ("execute_process(COMMAND calc)", "file(WRITE x y)", "include(evil.cmake)", "set(CMAKE_CXX_FLAGS -DX)",
+				"target_compile_definitions(t PRIVATE FOO=1)", "add_custom_command(TARGET t POST_BUILD COMMAND x)"):
+			text = raw_diff(path, (10, 0, 10, 1, [], [line]))
+			result = verdict_of([FileChange(path, 1, 0, False)], text, load_data=plain_loader)
+			self.assertTrue(any("CMake line outside" in reason for reason in result["reasons"]), (line, result["reasons"]))
+
+	def test_other_cmake_files_stay_protected(self):
+		path = "src/shared/game/CMakeLists.txt"
+		text = raw_diff(path, (10, 0, 10, 1, [], ["add_subdirectory(x)"]))
+		self.assertTrue(any("protected path" in reason for reason in verdict_of([FileChange(path, 1, 0, False)], text,
+			load_data=plain_loader)["reasons"]))
+
+	def test_client_db_copy_ships_with_its_editor_file(self):
+		changes = [FileChange("data/client/ClientDB/item_displays.data", 0, 0, True),
+			FileChange("data/editor/data/item_displays.data", 0, 0, True)]
+		decoder = FakeDecoder({b"base": proto(), b"text": proto(name="mace.mesh")})
+		result = verdict_of(changes, "", load_data=lambda _path: (b"base", b"text"), decoder=decoder)
+		self.assertTrue(result["auto_ship_allowed"], result["reasons"])
+
+	def test_client_db_change_alone_parks(self):
+		result = verdict_of([FileChange("data/client/ClientDB/item_displays.data", 0, 0, True)], "")
+		self.assertTrue(any("ClientDB" in reason for reason in result["reasons"]), result["reasons"])
+
 	def test_honest_code_fix(self):
 		result = verdict_of([FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False),
 			FileChange(TEST_FILE, 4, 0, False)], BENIGN + NEW_TEST, load_data=plain_loader)

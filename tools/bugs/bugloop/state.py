@@ -28,6 +28,8 @@ _DEFAULT = {
 	# Automatic re-applications of a fix on today's develop after a ship conflict nothing could
 	# resolve: bug id -> count. Separate from refix_rounds, which are the maintainer's.
 	"reapply_rounds": {},
+	# Automatic self-correction rounds per bug since its last maintainer decision.
+	"self_correct_rounds": {},
 	"pending_summary": None,
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
@@ -142,6 +144,15 @@ class LoopState:
 
 	def refix_count(self, bug_id):
 		return self.data["refix_rounds"].get(bug_id, 0)
+
+	def self_correct_count(self, bug_id):
+		return self.data["self_correct_rounds"].get(bug_id, 0)
+
+	def count_self_correct(self, bug_id):
+		self.data["self_correct_rounds"][bug_id] = self.self_correct_count(bug_id) + 1
+
+	def reset_self_correct(self, bug_id):
+		self.data["self_correct_rounds"].pop(bug_id, None)
 
 	def count_refix(self, bug_id):
 		self.data["refix_rounds"][bug_id] = self.refix_count(bug_id) + 1
