@@ -15,6 +15,12 @@
 //   4. Facing updates (MoveSetFacing) are applied immediately as facing-only.
 //      MoveStopTurn carries an authoritative position and resets dead-reckoning.
 //
+//   5. The correction move is swept against the world
+//      by the caller. Surfaces that stop the sweep are fed back (ClipTargetToSurface)
+//      so the target cannot run on into an obstacle the real player is stopped by:
+//      otherwise the correction would drag the character into the wall or box top
+//      until the next heartbeat pulled it back out.
+//
 // With the heartbeat at 500ms the maximum dead-reckoning error is
 //   run_speed (7 m/s) × 0.5 s = 3.5 m.
 // Exponential correction (halfLife = 100ms) absorbs small arc-drift silently
@@ -32,8 +38,8 @@ namespace mmo
 	/// @brief Output state produced by the renderer each frame.
 	struct RemoteMovementState
 	{
-		Vector3 position;       ///< Visual position to apply to the scene node (includes correction)
-		Vector3 desiredDelta;   ///< Raw lateral movement this frame (before collision resolution)
+		Vector3 position;       ///< Scene node position to start this frame's move from
+		Vector3 desiredDelta;   ///< Movement to sweep from position this frame (the correction towards the target)
 		Radian  facing;
 		uint32  movementFlags = 0;
 		bool    isFalling = false;
@@ -79,6 +85,12 @@ namespace mmo
 		/// @brief Overrides the scene-node position after external ground/collision correction.
 		/// Dead reckoning target is unaffected; only the scene-node tracking position changes.
 		void SetRenderedPos(const Vector3& pos) { m_scenePos = pos; }
+
+		/// @brief Reports a surface that stopped this frame's swept move.
+		/// Removes the part of the remaining correction that points into the surface, so the
+		/// dead-reckoning target stays on the side the capsule is on. Call after SetRenderedPos.
+		/// @param normal Contact normal of the blocking surface, pointing towards the capsule.
+		void ClipTargetToSurface(const Vector3& normal);
 
 		/// @brief Overrides the Y coordinate after ground snap (e.g. terrain following).
 		/// Syncs both the scene-node tracking position and the dead-reckoning target:
@@ -131,6 +143,9 @@ namespace mmo
 		Vector3  m_fallVelocity;
 		float    m_fallTimeAccumSec = 0.0f;
 
+		/// @brief How long the scene node has been held further than kStuckDistance from the target.
+		float    m_stuckSec = 0.0f;
+
 		// ── Tuning constants ───────────────────────────────────────────────────
 
 		/// @brief Exponential decay constant for position correction (per second).
@@ -143,6 +158,12 @@ namespace mmo
 
 		/// @brief Corrections larger than this snap instantly (teleport / respawn).
 		static constexpr float kTeleportThreshold = 8.0f;   // 8 m
+
+		/// @brief A swept correction that stays this far from the target for kStuckSnapSec snaps.
+		/// Local geometry can differ from the owner's (a door open on one client only), and a
+		/// sweep cannot get through what the owner walked through.
+		static constexpr float kStuckDistance = 1.0f;
+		static constexpr float kStuckSnapSec = 1.0f;
 
 		static constexpr float kGravity = -9.8f * 2.0f;  // matches UnitMovement gravity scale
 	};

@@ -764,33 +764,25 @@ namespace mmo
 		// Apply facing
 		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
 
-		// Apply lateral movement through SafeMoveNode so the capsule respects
-		// world geometry (walls, obstacles). This prevents remote players from
-		// visually penetrating walls they are colliding against locally.
-		// Only do the sweep when there is actual movement — zero-delta sweeps
-		// are a no-op but waste cycles.
+		// Move the scene node through a capsule sweep so the remote player respects world
+		// geometry (walls, obstacles, the top of whatever it jumped onto). The renderer's move
+		// for this frame starts at the position the previous sweep resolved to.
+		GetSceneNode()->SetDerivedPosition(state.position);
 		if (!state.desiredDelta.IsZero())
 		{
-			// state.position is the pre-collision start point computed by the
-			// renderer (m_scenePos − desiredDelta).  Setting the scene node here
-			// ensures the capsule sweep begins from the smooth-correction position
-			// rather than wherever the scene node happened to be last frame.
-			GetSceneNode()->SetDerivedPosition(state.position);
+			Vector3 blockingNormals[2];
+			const int32 numBlockingNormals = m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta, blockingNormals);
 
-			// Apply lateral movement through a capsule sweep so the remote
-			// player character respects world geometry (walls, obstacles).
-			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);
+			// Feed the collision-resolved position back into the renderer's scene-tracking
+			// state so the smooth correction loop stays in sync with the physical capsule.
+			m_remoteMovementRenderer.SetRenderedPos(GetSceneNode()->GetDerivedPosition());
 
-			// Feed the collision-resolved position back into the renderer's
-			// scene-tracking state (m_scenePos) so the smooth correction loop
-			// stays in sync with the physical capsule position.
-			const Vector3 resolvedPos = GetSceneNode()->GetDerivedPosition();
-			m_remoteMovementRenderer.SetRenderedPos(resolvedPos);
-		}
-		else
-		{
-			// No movement — place the scene node at the renderer's correction pos.
-			GetSceneNode()->SetDerivedPosition(state.position);
+			// The real player is stopped by the same surfaces: keep the dead-reckoning target
+			// on this side of them, or it runs on into the obstacle until the next heartbeat.
+			for (int32 i = 0; i < numBlockingNormals; ++i)
+			{
+				m_remoteMovementRenderer.ClipTargetToSurface(blockingNormals[i]);
+			}
 		}
 
 		// Update movement info flags so animation system works correctly

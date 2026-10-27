@@ -370,11 +370,11 @@ namespace mmo
 		GetUpdatedNode().SetPosition(currentPos);
 	}
 
-	void UnitMovement::RemotePlayerMoveCollide(const Vector3& delta)
+	int32 UnitMovement::RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals)
 	{
 		if (delta.IsZero())
 		{
-			return;
+			return 0;
 		}
 
 		const Quaternion rot = GetUpdatedNode().GetOrientation();
@@ -393,14 +393,31 @@ namespace mmo
 			// reads as stuttering on staircases while the real player climbs fluidly.
 			if (CanStepUp(hit) && StepUp(GetGravityDirection(), delta * remainingFraction, hit, nullptr))
 			{
-				return;
+				return 0;
+			}
+
+			int32 numNormals = 0;
+			if (outBlockingNormals)
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
 			}
 
 			// Slide the remaining fraction of the move along the wall so the character
 			// moves parallel to the surface rather than stopping dead — same behaviour
 			// as the local player against the same geometry.
+			const Vector3 firstNormal = hit.Normal;
 			SlideAlongSurface(delta, remainingFraction, hit.Normal, hit, false);
+
+			// The slide reports the surface it ran into last (an inside corner, say).
+			if (outBlockingNormals && hit.IsValidBlockingHit() && !hit.Normal.IsNearlyEqual(firstNormal))
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
+			}
+
+			return numNormals;
 		}
+
+		return 0;
 	}
 
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const
