@@ -1853,8 +1853,13 @@ namespace mmo
 			abort_emission();
 			return true;
 		}
-		
-		return false;
+
+		// A press which landed on a ui element belongs to the ui even when that element has no
+		// handler of its own (e.g. the gap between two action bar buttons). A frame which wants the
+		// press to reach the game world instead returns false from its OnMouseDown script, like the
+		// world frame does. FrameManager decides what to do with this, as only it knows whether the
+		// press hit an actual ui element or just the top frame.
+		return true;
 	}
 
 	bool Frame::OnMouseUp(MouseButton button, int32 buttons, const Point & position)
