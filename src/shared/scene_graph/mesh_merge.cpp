@@ -146,8 +146,11 @@ namespace mmo
 		}
 
 		auto mesh = std::make_shared<Mesh>(name);
+		// A null AABB is a zero box at the origin, and combining points with it keeps the origin inside:
+		// the bounds start at the first vertex instead, or a merged group far from its world model's
+		// origin would reach back to it and never be culled.
 		AABB bounds;
-		bounds.SetNull();
+		bool hasBounds = false;
 
 		auto& device = GraphicsDevice::Get();
 		for (auto& [materialName, bucket] : buckets)
@@ -194,7 +197,15 @@ namespace mmo
 
 			for (const auto& vertex : bucket.vertices)
 			{
-				bounds.Combine(vertex.pos);
+				if (hasBounds)
+				{
+					bounds.Combine(vertex.pos);
+				}
+				else
+				{
+					bounds = AABB(vertex.pos, vertex.pos);
+					hasBounds = true;
+				}
 			}
 		}
 
