@@ -65,6 +65,70 @@ namespace mmo
 
 	static const auto s_stringColor = Color(0.0f, 0.66f, 1.0f);
 
+	namespace
+	{
+	/// @brief Normal of the triangle a collision result was produced by, oriented to the side the
+	/// capsule touched it from. Falls back to the contact normal without a usable triangle.
+	Vector3 faceNormalTowardsContact(const CollisionResult& collisionRes)
+	{
+		Vector3 faceNormal = (collisionRes.b - collisionRes.a).Cross(collisionRes.c - collisionRes.a);
+		const float length = faceNormal.GetLength();
+		if (length < 1.e-6f)
+		{
+			return collisionRes.contactNormal;
+		}
+
+		faceNormal /= length;
+		if (faceNormal.Dot(collisionRes.contactNormal) < 0.f)
+		{
+			faceNormal = -faceNormal;
+		}
+
+		return faceNormal;
+	}
+
+	/// @brief Moves the most relevant of several simultaneous blocking hits to the front.
+	/// A capsule touching an edge reports every face that meets there at the same time of impact.
+	/// Taking whichever came first makes the result depend on triangle order and flip between frames.
+	/// Prefers the contact that opposes the sweep most, then the face that does: for a downward
+	/// floor sweep over a ledge that is the flat top rather than the wall below it, and for a
+	/// sideways sweep into a step it is the wall.
+	void promoteBestSimultaneousHit(std::vector<CollisionHitResult>& hits, const Vector3& sweepDirection, const float sweepDistance)
+	{
+		const auto first = std::find_if(hits.begin(), hits.end(), [](const CollisionHitResult& hit) { return hit.bBlockingHit; });
+		if (first == hits.end())
+		{
+			return;
+		}
+
+		// Hits within a millimetre of travel count as simultaneous.
+		const float tieTime = first->Time + 0.001f / std::max(sweepDistance, 0.001f);
+		constexpr float normalEpsilon = 1.e-3f;
+
+		auto best = first;
+		for (auto it = std::next(first); it != hits.end() && it->Time <= tieTime; ++it)
+		{
+			if (!it->bBlockingHit)
+			{
+				continue;
+			}
+
+			const float contactDot = it->Normal.Dot(sweepDirection);
+			const float bestContactDot = best->Normal.Dot(sweepDirection);
+			if (contactDot < bestContactDot - normalEpsilon ||
+				(contactDot <= bestContactDot + normalEpsilon && it->ImpactNormal.Dot(sweepDirection) < best->ImpactNormal.Dot(sweepDirection) - normalEpsilon))
+			{
+				best = it;
+			}
+		}
+
+		if (best != first)
+		{
+			std::iter_swap(first, best);
+		}
+	}
+	}
+
 	void FindFloorResult::SetFromSweep(const CollisionHitResult& hit, const float sweepFloorDistance,
 	                                   const bool isWalkableFloor)
 	{
@@ -306,11 +370,11 @@ namespace mmo
 		GetUpdatedNode().SetPosition(currentPos);
 	}
 
-	void UnitMovement::RemotePlayerMoveCollide(const Vector3& delta)
+	int32 UnitMovement::RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals)
 	{
 		if (delta.IsZero())
 		{
-			return;
+			return 0;
 		}
 
 		const Quaternion rot = GetUpdatedNode().GetOrientation();
@@ -329,14 +393,31 @@ namespace mmo
 			// reads as stuttering on staircases while the real player climbs fluidly.
 			if (CanStepUp(hit) && StepUp(GetGravityDirection(), delta * remainingFraction, hit, nullptr))
 			{
-				return;
+				return 0;
+			}
+
+			int32 numNormals = 0;
+			if (outBlockingNormals)
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
 			}
 
 			// Slide the remaining fraction of the move along the wall so the character
 			// moves parallel to the surface rather than stopping dead — same behaviour
 			// as the local player against the same geometry.
+			const Vector3 firstNormal = hit.Normal;
 			SlideAlongSurface(delta, remainingFraction, hit.Normal, hit, false);
+
+			// The slide reports the surface it ran into last (an inside corner, say).
+			if (outBlockingNormals && hit.IsValidBlockingHit() && !hit.Normal.IsNearlyEqual(firstNormal))
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
+			}
+
+			return numNormals;
 		}
+
+		return 0;
 	}
 
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const
@@ -615,16 +696,11 @@ namespace mmo
 			MaintainHorizontalGroundVelocity();
 			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, -m_gravityDirection);
 
-			// If we were pressing against a wall last frame, project the input acceleration
-			// onto the wall plane before CalcVelocity. This prevents CalcVelocity from
-			// rebuilding the into-wall component each frame, which would otherwise let
-			// the wall-parallel speed exceed the geometrically correct fraction of max speed.
-			if (m_hasWallContact)
-			{
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, m_wallContactNormal);
-			}
-
-			// Clear wall contact — MoveAlongFloor will re-set it if still blocked this tick.
+			// The input acceleration is deliberately not projected onto a wall the unit pressed
+			// against: CalcVelocity accelerates to max speed in whatever direction it points, so a
+			// projected acceleration turns any push into the wall into a full-speed slide along it.
+			// Kept as it is, the move points into the wall and the slide keeps only the parallel
+			// part of the run speed (speed * sin(angle to the wall normal)).
 			m_hasWallContact = false;
 
 			// Apply acceleration
@@ -1180,11 +1256,10 @@ namespace mmo
 			const Vector3 wallNormal = hit.Normal;
 			SlideAlongSurface(delta, 1.f, wallNormal, hit, true);
 
-			// Record wall contact and project both velocity and acceleration.
+			// Record wall contact and strip the into-wall velocity.
 			m_hasWallContact = true;
 			m_wallContactNormal = wallNormal;
 			m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
-			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 			const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
 			MOVEMENT_EVENT("SLIDE_PENETRATION",
@@ -1225,10 +1300,6 @@ namespace mmo
 				// Record wall contact so next frame's CalcVelocity projects acceleration correctly.
 				m_hasWallContact = true;
 				m_wallContactNormal = wallNormal;
-
-				// Project acceleration (already done redundantly here, but kept for the penetration
-				// path and any sub-iteration that calls MoveAlongFloor multiple times per tick).
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 				// Project velocity onto the wall plane only when we have meaningful into-wall
 				// momentum: either (a) we just hit the wall this frame (hit.Time > 0) so we need
@@ -2036,6 +2107,19 @@ namespace mmo
 		SafeMoveNode(forwardDelta, rotation, true, &hit);
 		MOVEMENT_LOG("StepUp: Forward move delta=(" << forwardDelta.x << "," << forwardDelta.y << "," << forwardDelta.z << "), hit=" << hit.bBlockingHit << ", time=" << hit.Time);
 
+		// Something is still in the way at step height: the obstacle is taller than a step.
+		const bool forwardBlocked = hit.bBlockingHit;
+		if (forwardBlocked && didBoostForward)
+		{
+			// The boost exists to clear a stair edge, and there is none to clear. Sliding the
+			// boosted distance along the wall instead would move the unit a fixed distance per
+			// tick, regardless of the tick length: along a wall at high frame rates that is far
+			// above run speed (and trips the server's speed check). MoveAlongFloor slides instead.
+			MOVEMENT_LOG("StepUp: Failed - boosted forward move blocked, this is a wall");
+			scopedStepUpMovement.RevertMove();
+			return false;
+		}
+
 		// Check result of forward movement
 		if (hit.bBlockingHit)
 		{
@@ -2103,6 +2187,16 @@ namespace mmo
 			if (deltaZ > m_maxStepHeight)
 			{
 				MOVEMENT_LOG("StepUp: Failed - deltaZ > maxStepHeight (" << deltaZ << " > " << m_maxStepHeight << ")");
+				scopedStepUpMovement.RevertMove();
+				return false;
+			}
+
+			// Blocked at step height and back down on the floor we started from: nothing was
+			// stepped onto, the move only slid along a wall. Leave that to MoveAlongFloor, which
+			// slides without lifting and dropping the unit (a visible bob every other frame).
+			if (forwardBlocked && deltaZ <= MAX_FLOOR_DIST)
+			{
+				MOVEMENT_LOG("StepUp: Failed - only slid along a wall (deltaZ=" << deltaZ << ")");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -2614,11 +2708,8 @@ namespace mmo
 
 						outHits.push_back(hitResult);
 
-						// Check if we should stop collecting hits
-						if (params.bFindClosestOnly && hitResult.bBlockingHit)
-						{
-							break;
-						}
+						// bFindClosestOnly does not stop here: every face of a collidable is hit at the
+						// same time, and the closest one is chosen among all of them below.
 
 						if (params.MaxHits > 0 && outHits.size() >= params.MaxHits)
 						{
@@ -2636,10 +2727,11 @@ namespace mmo
 		}
 
 		// Sort hits by time/distance (closest first)
-		std::sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+		std::stable_sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 		{
 			return a.Time < b.Time;
 		});
+		promoteBestSimultaneousHit(outHits, sweepVector / sweepDistance, sweepDistance);
 
 		return static_cast<int32>(outHits.size());
 	}
@@ -2724,10 +2816,11 @@ namespace mmo
 		if (!hits.empty())
 		{
 			// Sort by time and get first blocking hit
-			std::sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+			std::stable_sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 			{
 				return a.Time < b.Time;
 			});
+			promoteBestSimultaneousHit(hits, sweepVector / sweepDistance, sweepDistance);
 
 			const CollisionHitResult* blockingHit = CollisionHitResult::GetFirstBlockingHit(hits);
 			outHit = blockingHit ? *blockingHit : hits[0];
@@ -2835,9 +2928,13 @@ namespace mmo
 			// This is critical for step-up logic to correctly determine impact height
 			result.ImpactPoint = collisionRes.contactPoint;
 
-			// Set normals
-			result.ImpactNormal = collisionRes.contactNormal;
-			result.Normal = collisionRes.contactNormal; // For capsule sweeps, these are typically the same
+			// Normal is the direction from the contact point to the capsule, ImpactNormal the normal
+			// of the face that was hit (as in Unreal). They differ whenever the capsule touches an
+			// edge or vertex: resting on a ledge, the contact direction tilts towards horizontal
+			// as the capsule moves outwards, while the face it stands on is still flat. Walkability
+			// is judged by the face, so the two must not be conflated.
+			result.Normal = collisionRes.contactNormal;
+			result.ImpactNormal = faceNormalTowardsContact(collisionRes);
 		}
 
 		return result;
@@ -3160,11 +3257,21 @@ namespace mmo
 			const float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
 			const float traceDist = sweepDistance + shrinkHeight;
 
+			// Unreal shrinks the capsule around its centre, which lifts its bottom by ShrinkHeight. Our
+			// sweep capsule has a fixed size and is placed by its feet, so the start is lifted instead;
+			// sweeping from the feet would make every floor read ShrinkHeight too close, and the unit
+			// would ride that far above the ground wherever the sweep (not the line trace) finds it.
+			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * shrinkHeight;
+
 			CollisionHitResult hit(1.f);
-			bBlockingHit = SweepSingleCast(capsuleLocation, capsuleLocation + GetGravityDirection() * traceDist, hit);
+			bBlockingHit = SweepSingleCast(traceStart, traceStart + GetGravityDirection() * traceDist, hit);
 
 			if (bBlockingHit)
 			{
+				// Report the location in feet space again, like a sweep from capsuleLocation would
+				// (perching measures the impact height against it).
+				hit.Location += GetGravityDirection() * shrinkHeight;
+
 				// Reduce hit distance by ShrinkHeight because we shrank the capsule for the trace.
 				// We allow negative distances here, because this allows us to pull out of penetrations.
 				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);

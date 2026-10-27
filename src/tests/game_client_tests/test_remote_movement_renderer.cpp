@@ -174,12 +174,14 @@ TEST_CASE("RemoteMovementRenderer: walking player is dead-reckoned at walk speed
 
 	const float dt = 1.0f / 60.0f;
 	RemoteMovementState state;
-	Vector3 traveled = Vector3::Zero;
 	for (int i = 0; i < 60; ++i)  // one simulated second
 	{
 		REQUIRE(renderer.Sample(dt, kRunSpeed, kBackSpeed, kWalkSpeed, 3.14f, state));
-		traveled += state.desiredDelta;
 	}
+
+	// The dead-reckoned target, not the swept correction towards it (desiredDelta), moves at
+	// the predicted speed.
+	const Vector3 traveled = renderer.GetRenderedPos() - info.position;
 
 	// After 1s of walking forward, the dead-reckoned distance must match walk
 	// speed (2.5 m), not run speed (7 m).
@@ -206,12 +208,14 @@ TEST_CASE("RemoteMovementRenderer: walking backwards still uses backwards speed"
 
 	const float dt = 1.0f / 60.0f;
 	RemoteMovementState state;
-	Vector3 traveled = Vector3::Zero;
 	for (int i = 0; i < 60; ++i)
 	{
 		REQUIRE(renderer.Sample(dt, kRunSpeed, kBackSpeed, kWalkSpeed, 3.14f, state));
-		traveled += state.desiredDelta;
 	}
+
+	// The dead-reckoned target, not the swept correction towards it (desiredDelta), moves at
+	// the predicted speed.
+	const Vector3 traveled = renderer.GetRenderedPos() - info.position;
 
 	CHECK(traveled.GetLength() == Approx(kBackSpeed).margin(0.05f));
 }
@@ -291,12 +295,14 @@ TEST_CASE("RemoteMovementRenderer: running player is dead-reckoned at run speed"
 
 	const float dt = 1.0f / 60.0f;
 	RemoteMovementState state;
-	Vector3 traveled = Vector3::Zero;
 	for (int i = 0; i < 60; ++i)
 	{
 		REQUIRE(renderer.Sample(dt, kRunSpeed, kBackSpeed, kWalkSpeed, 3.14f, state));
-		traveled += state.desiredDelta;
 	}
+
+	// The dead-reckoned target, not the swept correction towards it (desiredDelta), moves at
+	// the predicted speed.
+	const Vector3 traveled = renderer.GetRenderedPos() - info.position;
 
 	CHECK(traveled.GetLength() == Approx(kRunSpeed).margin(0.05f));
 }

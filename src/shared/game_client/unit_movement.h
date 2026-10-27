@@ -378,7 +378,10 @@ namespace mmo
 		/// If blocked, slides along the contact surface. Call after computing the desired
 		/// movement delta for a remote player to prevent them penetrating walls.
 		/// @param delta The desired movement vector for this frame.
-		void RemotePlayerMoveCollide(const Vector3& delta);
+		/// @param outBlockingNormals Optional array of at least two entries that receives the contact
+		///        normals of the surfaces that stopped or deflected the move.
+		/// @return The number of normals written to outBlockingNormals (0 when the move was not blocked).
+		int32 RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals = nullptr);
 
 		/// @brief Constrains input acceleration to valid movement parameters
 		/// @param inputAcceleration Raw input acceleration vector
