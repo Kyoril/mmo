@@ -122,6 +122,28 @@ namespace mmo
         }
         m_groupRenderables.clear();
 
+        for (auto& viz : m_clusterRenderables)
+        {
+            if (viz.entity && viz.node)
+            {
+                viz.node->DetachObject(*viz.entity);
+            }
+
+            if (scene)
+            {
+                if (viz.entity)
+                {
+                    scene->DestroyEntity(*viz.entity);
+                }
+                if (viz.node)
+                {
+                    scene->DestroySceneNode(*viz.node);
+                }
+            }
+        }
+        m_clusterRenderables.clear();
+        m_clusterGeometry.reset();
+
         ClearBatches(scene);
         m_mergedGeometry.reset();
 
@@ -484,6 +506,14 @@ namespace mmo
             }
         }
 
+        for (const auto& viz : m_clusterRenderables)
+        {
+            if (viz.entity)
+            {
+                viz.entity->VisitRenderables(visitor, debugRenderables);
+            }
+        }
+
         for (const auto& entry : m_batches)
         {
             if (entry.batch)
@@ -590,7 +620,17 @@ namespace mmo
             else
             {
                 m_currentGroup = DetermineCurrentGroup(camera);
-                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups);
+                PortalInteriorView ownView;
+                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups,
+                    m_clusterRenderables.empty() ? nullptr : &ownView);
+
+                // Standing in one of this model's own rooms hides the outdoor clusters like any other outdoors
+                UpdateClusterVisibility(ownView.eyeInInterior ? &ownView : nullptr);
+            }
+
+            if (outsideView)
+            {
+                UpdateClusterVisibility(outsideView);
             }
         }
 

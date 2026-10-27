@@ -103,6 +103,9 @@ namespace mmo
         ///
         ///          Takes precedence over batching. Meant for the client and the world editor; the world
         ///          model editor keeps every placement separate so it can be moved.
+        ///
+        ///          Outdoor groups (IsClusteredGroup) are not merged per group: the top-level instance
+        ///          merges them, together with those of every nested child, per WorldModelClusterSize cell.
         /// @param enable Whether to merge. Like batching, must be set before the instance is attached.
         void SetMergingEnabled(const bool enable) { m_mergingEnabled = enable; }
 
@@ -121,6 +124,27 @@ namespace mmo
         /// @return A handle that keeps the merged geometry alive while held, once every group is merged;
         ///         null while groups remain, or for a null model.
         static std::shared_ptr<const void> PrewarmMergedGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Builds (or finds) the outdoor cluster geometry of a top-level world model, without
+        ///        instantiating it. @see IsClusteredGroup
+        /// @details The clusters cover the clustered groups of the model and of every child world model it
+        ///          nests, so the child models are loaded as well. Like PrewarmMergedGeometry, a streaming
+        ///          caller can build them a few groups per call.
+        /// @param maxGroups How many more groups to merge in this call (at least one).
+        /// @return A handle that keeps the cluster geometry alive while held, once every group is merged;
+        ///         null while groups remain, or for a null model.
+        static std::shared_ptr<const void> PrewarmClusterGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Whether merging puts a group's geometry into the outdoor clusters of the top-level
+        ///        instance instead of a mesh of its own.
+        /// @details True for groups that are not rooms: not flagged interior and without containment
+        ///          volumes. Outside a world model those are only frustum culled, so merging them per area
+        ///          loses no culling, while merging them per group costs a draw per group and material.
+        static bool IsClusteredGroup(const WorldModelGroup& group);
+
+        /// @brief Gets the number of outdoor cluster entities this instance draws. Only top-level
+        ///        instances with merging enabled have any. Zero until attached.
+        [[nodiscard]] size_t GetClusterEntityCount() const { return m_clusterRenderables.size(); }
 
         /// @brief Appends the meshes an instance of the model loads for itself: the visible mesh
         ///        references of its groups and the doodads of its default set. Child world models and
@@ -521,6 +545,23 @@ namespace mmo
             std::vector<MeshVisualization> meshVisualizations;
         };
         std::vector<GroupRenderable> m_groupRenderables;
+
+        /// @brief Outdoor cluster entities: the clustered groups of this instance and of every nested
+        ///        child, merged per cell. Only a top-level instance with merging enabled has any; each
+        ///        node sits at its cell's origin below the placement node.
+        std::vector<MeshVisualization> m_clusterRenderables;
+
+        /// @brief Cluster geometry shared with every other instance of the same top-level model.
+        std::shared_ptr<const struct WorldModelClusterGeometry> m_clusterGeometry;
+
+        /// @brief Builds the outdoor cluster entities. Top-level instances only.
+        /// @param scene The scene to create them in.
+        void BuildClusterGeometry(Scene& scene);
+
+        /// @brief Shows or hides the cluster entities for this frame's portal culling.
+        /// @param interiorView Doors the camera looks through from inside a room, or null when the camera
+        ///        is outside every room: then every cluster is shown and the octree does the culling.
+        void UpdateClusterVisibility(const PortalInteriorView* interiorView);
 
         std::vector<DoodadInstance> m_doodadInstances;
 

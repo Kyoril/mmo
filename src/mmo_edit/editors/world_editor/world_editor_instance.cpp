@@ -64,6 +64,7 @@
 #include "tex/png_writer.h"
 #include "graphics/material_instance.h"
 #include "base/clock.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -2157,6 +2158,10 @@ namespace mmo
 		// Exposure adaptation, temporal shadows and the volumetric fog history need a few frames to
 		// settle; the last of these frames is the one that is saved.
 		constexpr float frameTime = 1.0f / 30.0f;
+
+		// The renderer only counts draws per pass while the profiler is on
+		const bool profilerWasEnabled = Profiler::GetInstance().IsEnabled();
+		Profiler::GetInstance().SetEnabled(true);
 		for (uint32 frame = 0; frame <= warmupFrames; ++frame)
 		{
 			while (m_dispatcher.poll_one() > 0)
@@ -2182,6 +2187,22 @@ namespace mmo
 			m_camera->InvalidateView();
 			m_deferredRenderer->Render(m_scene, *m_camera);
 		}
+
+		// Draw calls of the saved frame per render pass, so a capture also answers "how many batches here"
+		{
+			std::ostringstream draws;
+			double total = 0.0;
+			for (const auto& [name, value] : Profiler::GetInstance().GetCounters())
+			{
+				if (name.rfind("Draws: ", 0) == 0)
+				{
+					draws << " " << name.substr(7) << "=" << value;
+					total += value;
+				}
+			}
+			ILOG("Capture draws at " << viewpoint.ToString() << ": total=" << total << draws.str());
+		}
+		Profiler::GetInstance().SetEnabled(profilerWasEnabled);
 
 		bool written = false;
 		const auto target = std::dynamic_pointer_cast<RenderTexture>(m_deferredRenderer->GetFinalRenderTarget());
