@@ -3160,11 +3160,21 @@ namespace mmo
 			const float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
 			const float traceDist = sweepDistance + shrinkHeight;
 
+			// Unreal shrinks the capsule around its centre, which lifts its bottom by ShrinkHeight. Our
+			// sweep capsule has a fixed size and is placed by its feet, so the start is lifted instead;
+			// sweeping from the feet would make every floor read ShrinkHeight too close, and the unit
+			// would ride that far above the ground wherever the sweep (not the line trace) finds it.
+			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * shrinkHeight;
+
 			CollisionHitResult hit(1.f);
-			bBlockingHit = SweepSingleCast(capsuleLocation, capsuleLocation + GetGravityDirection() * traceDist, hit);
+			bBlockingHit = SweepSingleCast(traceStart, traceStart + GetGravityDirection() * traceDist, hit);
 
 			if (bBlockingHit)
 			{
+				// Report the location in feet space again, like a sweep from capsuleLocation would
+				// (perching measures the impact height against it).
+				hit.Location += GetGravityDirection() * shrinkHeight;
+
 				// Reduce hit distance by ShrinkHeight because we shrank the capsule for the trace.
 				// We allow negative distances here, because this allows us to pull out of penetrations.
 				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
