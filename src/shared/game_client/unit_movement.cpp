@@ -65,6 +65,70 @@ namespace mmo
 
 	static const auto s_stringColor = Color(0.0f, 0.66f, 1.0f);
 
+	namespace
+	{
+	/// @brief Normal of the triangle a collision result was produced by, oriented to the side the
+	/// capsule touched it from. Falls back to the contact normal without a usable triangle.
+	Vector3 faceNormalTowardsContact(const CollisionResult& collisionRes)
+	{
+		Vector3 faceNormal = (collisionRes.b - collisionRes.a).Cross(collisionRes.c - collisionRes.a);
+		const float length = faceNormal.GetLength();
+		if (length < 1.e-6f)
+		{
+			return collisionRes.contactNormal;
+		}
+
+		faceNormal /= length;
+		if (faceNormal.Dot(collisionRes.contactNormal) < 0.f)
+		{
+			faceNormal = -faceNormal;
+		}
+
+		return faceNormal;
+	}
+
+	/// @brief Moves the most relevant of several simultaneous blocking hits to the front.
+	/// A capsule touching an edge reports every face that meets there at the same time of impact.
+	/// Taking whichever came first makes the result depend on triangle order and flip between frames.
+	/// Prefers the contact that opposes the sweep most, then the face that does: for a downward
+	/// floor sweep over a ledge that is the flat top rather than the wall below it, and for a
+	/// sideways sweep into a step it is the wall.
+	void promoteBestSimultaneousHit(std::vector<CollisionHitResult>& hits, const Vector3& sweepDirection, const float sweepDistance)
+	{
+		const auto first = std::find_if(hits.begin(), hits.end(), [](const CollisionHitResult& hit) { return hit.bBlockingHit; });
+		if (first == hits.end())
+		{
+			return;
+		}
+
+		// Hits within a millimetre of travel count as simultaneous.
+		const float tieTime = first->Time + 0.001f / std::max(sweepDistance, 0.001f);
+		constexpr float normalEpsilon = 1.e-3f;
+
+		auto best = first;
+		for (auto it = std::next(first); it != hits.end() && it->Time <= tieTime; ++it)
+		{
+			if (!it->bBlockingHit)
+			{
+				continue;
+			}
+
+			const float contactDot = it->Normal.Dot(sweepDirection);
+			const float bestContactDot = best->Normal.Dot(sweepDirection);
+			if (contactDot < bestContactDot - normalEpsilon ||
+				(contactDot <= bestContactDot + normalEpsilon && it->ImpactNormal.Dot(sweepDirection) < best->ImpactNormal.Dot(sweepDirection) - normalEpsilon))
+			{
+				best = it;
+			}
+		}
+
+		if (best != first)
+		{
+			std::iter_swap(first, best);
+		}
+	}
+	}
+
 	void FindFloorResult::SetFromSweep(const CollisionHitResult& hit, const float sweepFloorDistance,
 	                                   const bool isWalkableFloor)
 	{
@@ -2614,11 +2678,8 @@ namespace mmo
 
 						outHits.push_back(hitResult);
 
-						// Check if we should stop collecting hits
-						if (params.bFindClosestOnly && hitResult.bBlockingHit)
-						{
-							break;
-						}
+						// bFindClosestOnly does not stop here: every face of a collidable is hit at the
+						// same time, and the closest one is chosen among all of them below.
 
 						if (params.MaxHits > 0 && outHits.size() >= params.MaxHits)
 						{
@@ -2636,10 +2697,11 @@ namespace mmo
 		}
 
 		// Sort hits by time/distance (closest first)
-		std::sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+		std::stable_sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 		{
 			return a.Time < b.Time;
 		});
+		promoteBestSimultaneousHit(outHits, sweepVector / sweepDistance, sweepDistance);
 
 		return static_cast<int32>(outHits.size());
 	}
@@ -2724,10 +2786,11 @@ namespace mmo
 		if (!hits.empty())
 		{
 			// Sort by time and get first blocking hit
-			std::sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+			std::stable_sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 			{
 				return a.Time < b.Time;
 			});
+			promoteBestSimultaneousHit(hits, sweepVector / sweepDistance, sweepDistance);
 
 			const CollisionHitResult* blockingHit = CollisionHitResult::GetFirstBlockingHit(hits);
 			outHit = blockingHit ? *blockingHit : hits[0];
@@ -2835,9 +2898,13 @@ namespace mmo
 			// This is critical for step-up logic to correctly determine impact height
 			result.ImpactPoint = collisionRes.contactPoint;
 
-			// Set normals
-			result.ImpactNormal = collisionRes.contactNormal;
-			result.Normal = collisionRes.contactNormal; // For capsule sweeps, these are typically the same
+			// Normal is the direction from the contact point to the capsule, ImpactNormal the normal
+			// of the face that was hit (as in Unreal). They differ whenever the capsule touches an
+			// edge or vertex: resting on a ledge, the contact direction tilts towards horizontal
+			// as the capsule moves outwards, while the face it stands on is still flat. Walkability
+			// is judged by the face, so the two must not be conflated.
+			result.Normal = collisionRes.contactNormal;
+			result.ImpactNormal = faceNormalTowardsContact(collisionRes);
 		}
 
 		return result;
