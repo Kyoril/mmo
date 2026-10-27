@@ -173,6 +173,15 @@ namespace mmo
 
 	void RemoteMovementRenderer::ClipTargetToSurface(const Vector3& normal)
 	{
+		// Only a target that is being dead-reckoned can run on into an obstacle. A standing
+		// player's target is its authoritative position and must stay exactly that: no further
+		// packet arrives to restore it, and the sweep (or, failing that, the stuck snap) already
+		// brings the character there around whatever is in the way.
+		if ((m_authFlags & movement_flags::PositionChanging) == 0)
+		{
+			return;
+		}
+
 		const Vector3 toTarget = m_renderedPos - m_scenePos;
 		const float intoSurface = toTarget.Dot(normal);
 		if (intoSurface >= 0.0f)

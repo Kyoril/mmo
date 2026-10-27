@@ -89,6 +89,7 @@ namespace mmo
 		/// @brief Reports a surface that stopped this frame's swept move.
 		/// Removes the part of the remaining correction that points into the surface, so the
 		/// dead-reckoning target stays on the side the capsule is on. Call after SetRenderedPos.
+		/// Ignored while the player is not moving: its target is then the authoritative position.
 		/// @param normal Contact normal of the blocking surface, pointing towards the capsule.
 		void ClipTargetToSurface(const Vector3& normal);
 

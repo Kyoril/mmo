@@ -696,16 +696,11 @@ namespace mmo
 			MaintainHorizontalGroundVelocity();
 			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, -m_gravityDirection);
 
-			// If we were pressing against a wall last frame, project the input acceleration
-			// onto the wall plane before CalcVelocity. This prevents CalcVelocity from
-			// rebuilding the into-wall component each frame, which would otherwise let
-			// the wall-parallel speed exceed the geometrically correct fraction of max speed.
-			if (m_hasWallContact)
-			{
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, m_wallContactNormal);
-			}
-
-			// Clear wall contact — MoveAlongFloor will re-set it if still blocked this tick.
+			// The input acceleration is deliberately not projected onto a wall the unit pressed
+			// against: CalcVelocity accelerates to max speed in whatever direction it points, so a
+			// projected acceleration turns any push into the wall into a full-speed slide along it.
+			// Kept as it is, the move points into the wall and the slide keeps only the parallel
+			// part of the run speed (speed * sin(angle to the wall normal)).
 			m_hasWallContact = false;
 
 			// Apply acceleration
@@ -1261,11 +1256,10 @@ namespace mmo
 			const Vector3 wallNormal = hit.Normal;
 			SlideAlongSurface(delta, 1.f, wallNormal, hit, true);
 
-			// Record wall contact and project both velocity and acceleration.
+			// Record wall contact and strip the into-wall velocity.
 			m_hasWallContact = true;
 			m_wallContactNormal = wallNormal;
 			m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
-			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 			const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
 			MOVEMENT_EVENT("SLIDE_PENETRATION",
@@ -1306,10 +1300,6 @@ namespace mmo
 				// Record wall contact so next frame's CalcVelocity projects acceleration correctly.
 				m_hasWallContact = true;
 				m_wallContactNormal = wallNormal;
-
-				// Project acceleration (already done redundantly here, but kept for the penetration
-				// path and any sub-iteration that calls MoveAlongFloor multiple times per tick).
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 				// Project velocity onto the wall plane only when we have meaningful into-wall
 				// momentum: either (a) we just hit the wall this frame (hit.Time > 0) so we need
@@ -2117,6 +2107,19 @@ namespace mmo
 		SafeMoveNode(forwardDelta, rotation, true, &hit);
 		MOVEMENT_LOG("StepUp: Forward move delta=(" << forwardDelta.x << "," << forwardDelta.y << "," << forwardDelta.z << "), hit=" << hit.bBlockingHit << ", time=" << hit.Time);
 
+		// Something is still in the way at step height: the obstacle is taller than a step.
+		const bool forwardBlocked = hit.bBlockingHit;
+		if (forwardBlocked && didBoostForward)
+		{
+			// The boost exists to clear a stair edge, and there is none to clear. Sliding the
+			// boosted distance along the wall instead would move the unit a fixed distance per
+			// tick, regardless of the tick length: along a wall at high frame rates that is far
+			// above run speed (and trips the server's speed check). MoveAlongFloor slides instead.
+			MOVEMENT_LOG("StepUp: Failed - boosted forward move blocked, this is a wall");
+			scopedStepUpMovement.RevertMove();
+			return false;
+		}
+
 		// Check result of forward movement
 		if (hit.bBlockingHit)
 		{
@@ -2184,6 +2187,16 @@ namespace mmo
 			if (deltaZ > m_maxStepHeight)
 			{
 				MOVEMENT_LOG("StepUp: Failed - deltaZ > maxStepHeight (" << deltaZ << " > " << m_maxStepHeight << ")");
+				scopedStepUpMovement.RevertMove();
+				return false;
+			}
+
+			// Blocked at step height and back down on the floor we started from: nothing was
+			// stepped onto, the move only slid along a wall. Leave that to MoveAlongFloor, which
+			// slides without lifting and dropping the unit (a visible bob every other frame).
+			if (forwardBlocked && deltaZ <= MAX_FLOOR_DIST)
+			{
+				MOVEMENT_LOG("StepUp: Failed - only slid along a wall (deltaZ=" << deltaZ << ")");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
