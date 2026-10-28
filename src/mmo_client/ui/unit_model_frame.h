@@ -25,6 +25,9 @@ namespace mmo
 		/// tracking that unit and refreshes itself whenever its equipment visuals change.
 		void SetUnit(const std::string& unitName);
 
+		/// Updates automatic head framing when the Portrait property is enabled.
+		void Update(float elapsed) override;
+
 	public:
 		void Apply(const VisibilitySetPropertyGroup& group, const AvatarConfiguration& configuration) override;
 		void Apply(const MaterialOverridePropertyGroup& group, const AvatarConfiguration& configuration) override;
@@ -50,6 +53,9 @@ namespace mmo
 		/// Detaches and destroys all item meshes attached to the displayed entity.
 		void ClearItemAttachments();
 
+		/// Caches the bounds of vertices influenced by the head and its child bones.
+		void CalculatePortraitBounds();
+
 	private:
 		/// Name of the unit to display (e.g. "player" or "target").
 		String m_unitName;
@@ -59,5 +65,8 @@ namespace mmo
 
 		/// Keeps the displayed model in sync with the equipment of the tracked unit.
 		scoped_connection m_equipmentVisualsConnection;
+
+		AABB m_portraitBounds;
+		bool m_portraitBoundsValid = false;
 	};
 }

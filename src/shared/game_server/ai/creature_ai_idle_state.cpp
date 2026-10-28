@@ -201,8 +201,12 @@ namespace mmo
 		m_waitCountdown.Cancel();
 		m_connections.disconnect();
 
-		// Save the world position so the reset state can return here instead of spawn.
-		GetAI().SavePatrolReturnPosition(GetControlled().GetMover().GetCurrentLocation());
+		// Save the world position so the reset state can return here instead of spawn. Stationary
+		// creatures have nowhere to resume: they go back to their spawn point and spawn facing.
+		if (GetControlled().GetMovementType() != creature_movement::None || GetControlled().GetFollowedUnit())
+		{
+			GetAI().SavePatrolReturnPosition(GetControlled().GetMover().GetCurrentLocation());
+		}
 
 		// Determine which waypoint the creature should resume from.
 		// m_chainProgressIndex tracks which waypoint in the chain the creature is heading
@@ -581,11 +585,11 @@ namespace mmo
 		const auto* map = GetAI().GetControlled().GetWorldInstance()->GetMapData();
 		ASSERT(map);
 
-		if (Vector3 position; map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position))
-		{
-			mover.MoveTo(position, 0.0f);
-		}
-		else
+		// A refused move (no path, or deep water for a creature which can not swim) has to wait
+		// and pick another point, or the creature would never wander again.
+		const MovementAbilityFlags abilities = GetAI().GetControlled().GetMovementAbilities();
+		if (Vector3 position; !map->FindRandomPointAroundCircle(GetAI().GetHome().position, 7.5f, position, abilities) ||
+			!mover.MoveTo(position, 0.0f))
 		{
 			OnTargetReached();
 		}

@@ -10,19 +10,50 @@
 #include "world_state.h"
 #include "console/console.h"
 #include "console/console_var.h"
+#include "login_account_memory.h"
 #include "game_client/sound_entry_player.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
+#include "char_creation/char_select.h"
+#include "glue/glue_scene.h"
+#include "glue/plaza_avatars.h"
+#include "game_client/plaza_roster.h"
+#include "ui/world_renderer.h"
 
 #include "assets/asset_registry.h"
 #include "base/clock.h"
 #include "base/timer_queue.h"
 #include "frame_ui/frame_mgr.h"
 
+#include <chrono>
+
 
 namespace mmo
 {
 	extern ConsoleVar* s_lastRealmVar;
+
+	namespace
+	{
+		/// Stores or forgets the account name of a login attempt, depending on the login screen's
+		/// "remember account name" setting, and persists the change.
+		/// @param accountName The account name the player just logged in with.
+		void RememberAccountName(const std::string& accountName)
+		{
+			const ConsoleVar* rememberVar = ConsoleVarMgr::FindConsoleVar(RememberAccountNameCVar);
+			ConsoleVar* nameVar = ConsoleVarMgr::FindConsoleVar(RememberedAccountNameCVar);
+			if (rememberVar == nullptr || nameVar == nullptr)
+			{
+				return;
+			}
+
+			// Nothing writes the config on shutdown, so a remembered name only survives the
+			// session if it is saved right here.
+			if (ApplyRememberedAccountName(*rememberVar, *nameVar, accountName))
+			{
+				Console::ExecuteCommand("saveconfig");
+			}
+		}
+	}
 
 	uint32 g_mapId = 0;
 
@@ -41,14 +72,20 @@ namespace mmo
 			return;
 		}
 
+		const std::string accountName = arguments.substr(0, spacePos);
+
+		// Keep the account name for the next launch if the login screen asked for it. Only the
+		// account name is ever written to the config, never the password.
+		RememberAccountName(accountName);
+
 		// Try to connect
-		m_loginConnector.Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
-		
+		m_loginConnector.Connect(accountName, arguments.substr(spacePos + 1));
+
 		FrameManager::Get().TriggerLuaEvent("LOGIN_CONNECT");
 	}
 
 	LoginState::LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector,
-		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord)
+		RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project, CharSelect& charSelect)
 		: GameState(gameStateManager)
 		, m_loginConnector(loginConnector)
 		, m_realmConnector(realmConnector)
@@ -56,7 +93,114 @@ namespace mmo
 		, m_audio(audio)
 		, m_soundEntryPlayer(soundEntryPlayer)
 		, m_discord(discord)
+		, m_project(project)
+		, m_charSelect(charSelect)
 	{
+	}
+
+	LoginState::~LoginState() = default;
+
+	void LoginState::CreateGlueScene()
+	{
+		constexpr const char* definitionFile = "Interface/GlueUI/GlueScene.json";
+
+		const std::unique_ptr<std::istream> stream = AssetRegistry::OpenFile(definitionFile);
+		if (!stream)
+		{
+			ELOG("Glue scene: could not open " << definitionFile);
+			return;
+		}
+
+		const String text{ std::istreambuf_iterator<char>(*stream), std::istreambuf_iterator<char>() };
+		std::optional<GlueSceneDefinition> definition = ParseGlueSceneDefinition(text);
+		if (!definition)
+		{
+			ELOG("Glue scene: " << definitionFile << " is not a valid scene definition");
+			return;
+		}
+
+		// The glue bake is used only if it was baked from this text (line endings aside: a CRLF
+		// checkout must not make the bake look stale and stream the whole world instead).
+		const String definitionHash = HashGlueSceneDefinition(text.data(), text.size());
+		m_glueScene = std::make_unique<GlueScene>(m_project, std::move(*definition), definitionHash, m_soundEntryPlayer, m_audio);
+
+		// Before a realm is chosen, the realm's default time applies: UTC time of day.
+		const auto sinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+		m_glueScene->SetTimeOfDay(static_cast<GameTime>(sinceEpoch.count()) % constants::OneDay);
+	}
+
+	DeferredRenderer* LoginState::FindGlueSceneRenderer() const
+	{
+		const FramePtr frame = FrameManager::Get().Find("GlueSceneFrame");
+		if (!frame)
+		{
+			return nullptr;
+		}
+
+		const auto* renderer = dynamic_cast<const WorldRenderer*>(frame->GetRenderer());
+		return renderer ? renderer->GetDeferredRenderer() : nullptr;
+	}
+
+	void LoginState::OnIdle(const float deltaSeconds, GameTime timestamp)
+	{
+		if (!m_glueScene)
+		{
+			return;
+		}
+
+		m_glueScene->SetRenderer(FindGlueSceneRenderer());
+		m_glueScene->Update(deltaSeconds);
+
+		// The 3D listener sits at the camera, so the placed town ambience is heard from there.
+		m_glueScene->UpdateAudioListener(m_audio, deltaSeconds);
+
+		if (!m_glueSceneReadySent && m_glueScene->IsGateReady())
+		{
+			m_glueSceneReadySent = true;
+			ILOG("Glue scene: gate view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
+			FrameManager::Get().TriggerLuaEvent("GLUE_SCENE_READY");
+		}
+
+		if (!m_plazaReadyLogged && m_glueScene->IsPlazaReady())
+		{
+			m_plazaReadyLogged = true;
+			ILOG("Glue scene: plaza view ready after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
+		}
+
+		if (m_glueScene->ConsumeDeferredFlightStarted())
+		{
+			// The character list arrived before the scene was ready: the fade held until now and
+			// lifts on the gate view while the fly-in starts. The screens keep their chrome hidden
+			// until GLUE_FLIGHT_FINISHED, as for any fly-in.
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
+
+		if (m_glueScene->ConsumeFlightFinished())
+		{
+			// Lifts a held fade (the plaza snap after SnapWhenReady counts as a flight) and tells the
+			// screens where the camera is now.
+			const bool atPlaza = m_glueScene->GetDirector().GetMode() == GlueCameraMode::Plaza;
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+			FrameManager::Get().TriggerLuaEvent("GLUE_FLIGHT_FINISHED", atPlaza ? "plaza" : "gate");
+
+			// An enterworld request that arrived during the flight acts now that the plaza shows.
+			if (atPlaza)
+			{
+				TryEnterWorld();
+			}
+		}
+
+		if (m_glueScene->GetPlazaAvatars().ConsumeArrival())
+		{
+			// A character stopped running: the cursor may rest on it without moving, so the
+			// character screen looks again at what is under it.
+			FrameManager::Get().TriggerLuaEvent("GLUE_PLAZA_ARRIVAL");
+		}
+
+		if (m_glueScene->ConsumePushInFinished())
+		{
+			FrameManager::Get().TriggerLuaEvent("GLUE_PUSHIN_FINISHED");
+		}
 	}
 
 	void LoginState::OnEnter()
@@ -71,8 +215,37 @@ namespace mmo
 		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 		frameMgr.SetTopFrame(topFrame);
 
+		// The scene behind the glue screens. Its renderer must be known before the UI loads, as
+		// GlueParent.xml creates the frame that uses it.
+		m_enterTime = GetAsyncTimeMs();
+		m_glueSceneReadySent = false;
+		m_plazaReadyLogged = false;
+
+		// The world state turns the listener with its camera; the glue screens listen straight ahead.
+		m_audio.SetListenerOrientation(Vector3(0.0f, 0.0f, -1.0f), Vector3::UnitY);
+
+		CreateGlueScene();
+		if (m_glueScene)
+		{
+			GlueScene* const glueScene = m_glueScene.get();
+			frameMgr.RegisterFrameRenderer("GlueSceneRenderer", [glueScene](const std::string& name)
+				{
+					return std::make_unique<WorldRenderer>(name, glueScene->GetScene());
+				});
+		}
+
+		// Before the UI loads, so the character screen's first selection already finds the plaza.
+		m_charSelect.SetGlueScene(m_glueScene.get());
+
 		// Load ui file
 		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
+
+		if (!m_glueScene)
+		{
+			// Without a scene there is nothing to wait for: lift the dark fill at once.
+			m_glueSceneReadySent = true;
+			frameMgr.TriggerLuaEvent("GLUE_SCENE_READY");
+		}
 
 		// Register drawing of the login ui
 		m_paintLayer = Screen::AddLayer(std::bind(&LoginState::OnPaint, this), 1.0f, ScreenLayerFlags::IdentityTransform);
@@ -101,12 +274,23 @@ namespace mmo
 			}, ConsoleCommandCategory::Debug, "Enters the world with the selected character as soon as the character list is shown.");
 
 		m_loginConnections += EventLoop::KeyDown.connect(this, &LoginState::OnKeyDown);
+		m_loginConnections += EventLoop::MouseDown.connect([this](EMouseButton, int32, int32) { return OnMouseDown(); });
+		m_loginConnections += EventLoop::Idle.connect(this, &LoginState::OnIdle);
 
+		m_returningFromWorld = false;
 		if (m_realmConnector.IsConnected())
 		{
 			// Request a fresh character list from the server; the UI shows a loading dialog
 			// while waiting. On EnterWorldFailed, an error will be shown once the list loads.
 			m_realmConnector.RequestCharacterList();
+
+			// Back from the world: the plaza appears without a flight, so the scene stays covered
+			// (and the gate view is never shown) until the plaza is ready.
+			m_returningFromWorld = true;
+			if (m_glueScene)
+			{
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+			}
 
 			switch (s_returnReason)
 			{
@@ -180,8 +364,19 @@ namespace mmo
 
 		// No longer draw current layer
 		Screen::RemoveLayer(m_paintLayer);
-		
+
+		// The frames own the renderer that draws the scene: it goes with them, the scene after them.
+		FrameManager::Get().RemoveFrameRenderer("GlueSceneRenderer");
+		if (m_glueScene)
+		{
+			m_glueScene->SetRenderer(nullptr);
+		}
+
 		FrameManager::Get().ResetTopFrame();
+
+		// The plaza characters live in the scene: the character screen must not reach them anymore.
+		m_charSelect.SetGlueScene(nullptr);
+		m_glueScene.reset();
 	}
 
 	std::string_view LoginState::GetName() const
@@ -209,6 +404,11 @@ namespace mmo
 			// Setup realm connector for connection
 			m_realmConnector.SetLoginData(m_loginConnector.GetAccountName(), m_loginConnector.GetSessionKey());
 
+			// Only the first realm list after a login may jump straight into the last realm. Later
+			// lists are periodic refreshes of a realm list the player is looking at (for example after
+			// cancelling that very connection attempt) and must not pull them out of it.
+			m_autoConnectToLastRealm = true;
+
 			// Successfully authenticated
 			FrameManager::Get().TriggerLuaEvent("AUTH_SUCCESS");
 		}
@@ -216,6 +416,46 @@ namespace mmo
 
 	void LoginState::OnCharListUpdated()
 	{
+		m_charSelect.OnCharacterListUpdated();
+
+		const bool returningFromWorld = m_returningFromWorld;
+		m_returningFromWorld = false;
+
+		if (m_glueScene)
+		{
+			m_glueScene->SetTimeOfDay(m_realmConnector.GetRealmTimeOfDay());
+
+			// Also runs for the refreshes after creating or deleting a character, where the camera
+			// already is at the plaza: FlyIn and SnapToPlaza do nothing there.
+			switch (DecideGlueArrival(m_glueScene->IsPlazaReady(), returningFromWorld))
+			{
+			case GlueArrival::FlyIn:
+				m_glueScene->GetDirector().FlyIn();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+				break;
+			case GlueArrival::Snap:
+				m_glueScene->GetDirector().SnapToPlaza();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+				break;
+			case GlueArrival::FlyInWhenReady:
+				// Covered until the scene is ready, then the fade lifts on the gate and the camera
+				// flies in (see OnIdle).
+				m_glueScene->FlyInWhenReady();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+				break;
+			case GlueArrival::SnapWhenReady:
+				// Covered until the plaza is ready, then cut to it (see OnIdle).
+				m_glueScene->SnapToPlazaWhenReady();
+				FrameManager::Get().TriggerLuaEvent("GLUE_FADE_HOLD");
+				break;
+			}
+		}
+		else
+		{
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
+
+		// After the camera decision, so the screen sees whether a flight is running.
 		FrameManager::Get().TriggerLuaEvent("CHAR_LIST");
 
 		m_charListReceived = true;
@@ -235,6 +475,16 @@ namespace mmo
 			return;
 		}
 
+		if (m_glueScene && m_glueScene->IsFlightActive())
+		{
+			// The character screen ignores the request until the plaza shows. Keep it pending: skip
+			// a running flight (it ends on the next update) and retry when GLUE_FLIGHT_FINISHED
+			// fires in OnIdle. A fly-in still waiting for the scene turns into a plaza snap, which
+			// is waited for the same way.
+			m_glueScene->SkipFlight();
+			return;
+		}
+
 		m_enterWorldRequested = false;
 
 		// The character screen decides: it knows the selection and whether that character may enter.
@@ -243,12 +493,41 @@ namespace mmo
 
 	bool LoginState::OnKeyDown(const int32 key, bool repeat)
 	{
+		if (m_glueScene && m_glueScene->IsFlightActive())
+		{
+			// Any key skips a flight, and the login state does nothing else with it: Enter must
+			// not enter the world from the middle of a flight, and no GLUE_KEY_DOWN is sent. The
+			// key is not swallowed, though: the frame UI's own KeyDown handler still receives it
+			// (a focused edit box keeps typing), since the return value does not stop the signal.
+			// During the dark wait of a deferred fly-in, SkipFlight turns it into a plaza snap, so the
+			// fade lifts straight onto the plaza (via the finished-flight path in OnIdle).
+			if (!repeat)
+			{
+				m_glueScene->SkipFlight();
+			}
+			return true;
+		}
+
 		constexpr int32 enterKey = 0x0D;
 		if (key == enterKey && !repeat && m_charListReceived && m_realmConnector.IsConnected())
 		{
 			FrameManager::Get().TriggerLuaEvent("ENTER_WORLD_REQUESTED");
 		}
 
+		// Screens without a focused text field (the realm list) drive keyboard navigation from Lua.
+		FrameManager::Get().TriggerLuaEvent("GLUE_KEY_DOWN", key, repeat);
+
+		return true;
+	}
+
+	bool LoginState::OnMouseDown()
+	{
+		if (!m_glueScene || !m_glueScene->IsFlightActive())
+		{
+			return false;
+		}
+
+		m_glueScene->SkipFlight();
 		return true;
 	}
 
@@ -272,6 +551,14 @@ namespace mmo
 	void LoginState::OnRealmDisconnected()
 	{
 		m_realmConnector.ClearPacketHandler(game::realm_client_packet::CharCreateResponse);
+
+		// Back to the login screen at the gate, without a flight.
+		m_returningFromWorld = false;
+		if (m_glueScene)
+		{
+			m_glueScene->SnapToGate();
+			FrameManager::Get().TriggerLuaEvent("GLUE_FADE_RELEASE");
+		}
 
 		// The realm tells us why before closing the connection when it terminated the session
 		// deliberately. Nothing to pass on for an ordinary drop.
@@ -311,8 +598,11 @@ namespace mmo
 
 	void LoginState::OnRealmListUpdated()
 	{
+		const bool autoConnect = m_autoConnectToLastRealm;
+		m_autoConnectToLastRealm = false;
+
 		const int32 lastRealmId = s_lastRealmVar == nullptr ? -1 : s_lastRealmVar->GetIntValue();
-		if (lastRealmId >= 0)
+		if (autoConnect && lastRealmId >= 0)
 		{
 			const auto& realms = m_loginConnector.GetRealms();
 			const auto it = std::find_if(realms.begin(), realms.end(), [lastRealmId](const RealmData& realm)
@@ -347,6 +637,10 @@ namespace mmo
 		else
 		{
 			m_realmConnector.RegisterPacketHandler(game::realm_client_packet::CharCreateResponse, *this, &LoginState::OnCharCreationResponse);
+
+			// A fresh realm connection (e.g. after cancelling the character list request that
+			// followed a logout) arrives from the realm list: its character list flies in.
+			m_returningFromWorld = false;
 
 			ASSERT(s_lastRealmVar);
 			s_lastRealmVar->Set(static_cast<int32>(m_realmConnector.GetRealmId()));

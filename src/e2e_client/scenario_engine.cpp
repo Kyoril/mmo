@@ -68,6 +68,9 @@ namespace mmo
 			std::map<uint64, uint32> channelStarts;
 			std::set<uint64> channeling;
 
+			/// Whispers received, oldest first.
+			std::vector<std::string> whispers;
+
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
@@ -143,6 +146,7 @@ namespace mmo
 			case attack_swing_event::CantAttack: return "cant_attack";
 			case attack_swing_event::WrongFacing: return "wrong_facing";
 			case attack_swing_event::TargetDead: return "target_dead";
+			case attack_swing_event::NotInLineOfSight: return "line_of_sight";
 			case attack_swing_event::Success: return "success";
 			default: return "unknown";
 			}
@@ -1006,9 +1010,40 @@ namespace mmo
 			return reached;
 		}
 
-		void luaSendChat(const std::string& message, const std::string& channel)
+		void luaSendChat(const std::string& message, const std::string& channel, const std::string& target)
 		{
 			ChatType type = ChatType::Say;
+			if (channel == "whisper")
+			{
+				if (target.empty())
+				{
+					abortScenario(bot_exit_code::ScenarioFailed, "SendChat: a whisper needs a target name");
+				}
+
+				g_runtime->session->GetContext().SendChatMessage(message, ChatType::Whisper, target);
+				if (g_runtime->transcript)
+				{
+					g_runtime->transcript->Action("SendChat", { { "message", message }, { "channel", channel }, { "target", target } });
+				}
+				return;
+			}
+
+			if (channel == "general")
+			{
+				const uint32 channelId = g_runtime->session->GetRealm().FindChatChannelId("General");
+				if (channelId == 0)
+				{
+					abortScenario(bot_exit_code::ScenarioFailed, "SendChat: not a member of the General channel");
+				}
+
+				g_runtime->session->GetContext().SendChatMessage(message, ChatType::Channel, std::to_string(channelId));
+				if (g_runtime->transcript)
+				{
+					g_runtime->transcript->Action("SendChat", { { "message", message }, { "channel", channel } });
+				}
+				return;
+			}
+
 			if (channel == "party")
 			{
 				type = ChatType::Group;
@@ -1023,7 +1058,7 @@ namespace mmo
 			}
 			else if (channel != "say")
 			{
-				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell or emote)");
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, general or whisper)");
 			}
 
 			g_runtime->session->GetContext().SendChatMessage(message, type);
@@ -1182,8 +1217,9 @@ namespace mmo
 			// into view appears at the edge of the visibility range, so a new one near the player is taken
 			// at once. The client's own position may lag the server's by a few units (right after a
 			// MoveTo, say), hence the generous radius; a farther one is only the fallback at the deadline.
-			const BotUnit* selfUnit = self();
-			const Vector3 spawnPosition = selfUnit ? selfUnit->GetPosition() : Vector3::Zero;
+			// The client's movement state, not the self unit: the server never echoes our own
+			// movement, so the unit still stands wherever the character last spawned.
+			const Vector3 spawnPosition = g_runtime->session->GetContext().GetPosition();
 			constexpr float nearSpawnDistanceSq = 10.0f * 10.0f;
 
 			g_runtime->session->GetRealm().CheatCreateMonster(entry);
@@ -1201,7 +1237,7 @@ namespace mmo
 							return;
 						}
 
-						const float distanceSq = selfUnit ? unit.GetDistanceToSquared(spawnPosition) : 0.0f;
+						const float distanceSq = unit.GetDistanceToSquared(spawnPosition);
 						if (distanceSq < nearestDistanceSq)
 						{
 							nearestDistanceSq = distanceSq;
@@ -1402,6 +1438,15 @@ namespace mmo
 			}
 		}
 
+		void luaGmInvisible(const bool enable)
+		{
+			g_runtime->session->GetRealm().CheatInvisible(enable);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action(enable ? "GM.Invisible(true)" : "GM.Invisible(false)");
+			}
+		}
+
 		void luaGmGodmode(const bool enable)
 		{
 			g_runtime->session->GetRealm().CheatGodmode(enable);
@@ -1461,16 +1506,17 @@ namespace mmo
 			BotSession& session = *g_runtime->session;
 			session.GetRealm().CheatWorldPort(mapId, Vector3(x, y, z), facing);
 
-			// Same-map teleports arrive as a MoveTeleport packet the connector acks. Wait for
-			// it and resync the context's movement cache so facing/position math stays correct.
+			// The session takes the new position and lands once the teleport is acked, or - across
+			// maps - once the new world node has spawned the character. Wait for that rather than
+			// for the packet: walking off before the landing has every movement packet refused.
 			const Vector3 target(x, y, z);
 			const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(15);
 			while (std::chrono::steady_clock::now() < until)
 			{
-				const Vector3& position = session.GetRealm().GetMovementInfo().position;
-				if ((position - target).GetSquaredLength() < 1.0f)
+				const BotContext& context = session.GetContext();
+				if (context.IsWorldReady() && context.GetCurrentMapId() == mapId
+					&& (context.GetPosition() - target).GetSquaredLength() < 1.0f)
 				{
-					session.GetContext().UpdateMovementInfo(session.GetRealm().GetMovementInfo());
 					break;
 				}
 				pumpChecked();
@@ -1704,6 +1750,8 @@ namespace mmo
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
 				luabind::def_lambda("SendAreaTrigger", &luaSendAreaTrigger),
 				luabind::def_lambda("SendChatImpl", &luaSendChat),
+				luabind::def_lambda("GetWhisperCount", []() { return static_cast<uint32>(g_runtime->whispers.size()); }),
+				luabind::def_lambda("GetLastWhisper", []() { return g_runtime->whispers.empty() ? std::string() : g_runtime->whispers.back(); }),
 				luabind::def_lambda("InviteToParty", &luaInviteToParty),
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
@@ -1728,6 +1776,7 @@ namespace mmo
 				luabind::def_lambda("GM_CheckLoS", &luaGmCheckLoS),
 				luabind::def_lambda("GM_KillTarget", &luaGmKillTarget),
 				luabind::def_lambda("GM_Godmode", &luaGmGodmode),
+				luabind::def_lambda("GM_Invisible", &luaGmInvisible),
 				luabind::def_lambda("GM_SetInstanceVariable", &luaGmSetInstanceVariable),
 				luabind::def_lambda("GM_DamageTarget", &luaGmDamageTarget),
 				luabind::def_lambda("GM_ResetCooldowns", &luaGmResetCooldowns),
@@ -1757,7 +1806,7 @@ namespace mmo
 			function Assert(cond, msg) AssertImpl(not not cond, msg or "assertion failed") end
 			function WaitUntil(fn, timeoutMs, desc) return WaitUntilImpl(fn, timeoutMs or 10000, desc or "condition") end
 			function CastSpell(spellId, target) return CastSpellImpl(spellId, target or "") end
-			function SendChat(message, channel) SendChatImpl(message, channel or "say") end
+			function SendChat(message, channel, target) SendChatImpl(message, channel or "say", target or "") end
 			function MoveTo(x, y, z, timeoutMs) return MoveToImpl(x, y, z, timeoutMs or 30000) end
 			function LoginElsewhere(timeoutMs) return LoginElsewhereImpl(timeoutMs or 15000) end
 			function Reconnect(timeoutMs) return ReconnectImpl(timeoutMs or 30000) end
@@ -1804,6 +1853,7 @@ namespace mmo
 				CheckLoS = GM_CheckLoS,
 				KillTarget = GM_KillTarget,
 				Godmode = GM_Godmode,
+				Invisible = GM_Invisible,
 				SetInstanceVariable = GM_SetInstanceVariable,
 				DamageTarget = GM_DamageTarget,
 				ResetCooldowns = GM_ResetCooldowns,
@@ -1902,6 +1952,18 @@ namespace mmo
 			{
 				++runtime.spellGos[{ caster, spellId }];
 				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
+		const scoped_connection chatRecorder { realm.ChatMessageReceived.connect(
+			[&transcript, &runtime](const BotChatMessage& message)
+			{
+				if (message.type == ChatType::Whisper)
+				{
+					runtime.whispers.push_back(message.message);
+				}
+
+				transcript.Event("chat_received",
+					{ { "sender", guidToString(message.senderGuid) }, { "chat_type", static_cast<uint32>(message.type) },
+					  { "message", message.message } });
 			}) };
 		const scoped_connection channelStartedRecorder { realm.ChannelStarted.connect(
 			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const int32 durationMs)

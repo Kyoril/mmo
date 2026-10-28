@@ -1,13 +1,18 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+
+#include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
+#include "game_client/audio_listener.h"
 #include "client_locale.h"
+#include "platform.h"
 #include "perf_capture.h"
 #include "base/localization.h"
+#include "client_data/zone_names.h"
 #include "systems/loot_client.h"
 #include "systems/spell_cast.h"
 #include "systems/trade_client.h"
@@ -38,6 +43,7 @@
 #include "systems/quest_client.h"
 #include "systems/cooldown_manager.h"
 #include "game_client/object_mgr.h"
+#include "game_client/object_update_skip.h"
 #include "game_common/projectile_target.h"
 #include "game_common/world_fog_volumes.h"
 #include "deferred_shading/fog_volume_selection.h"
@@ -46,6 +52,7 @@
 #include "systems/vendor_client.h"
 #include "systems/bank_client.h"
 #include "systems/mail_client.h"
+#include "environment_apply.h"
 #include "world_deserializer.h"
 #include "scene_graph/instanced_foliage.h"
 #include "base/erase_by_move.h"
@@ -86,6 +93,7 @@
 #include "frame_ui/font_mgr.h"
 #include "game/group.h"
 #include "game_client/game_world_object_c_base.h"
+#include "game_client/world_streaming_utils.h"
 #include "graphics/texture_mgr.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_manager.h"
@@ -121,10 +129,42 @@ namespace mmo
 		static const char *s_toggleTerrainDebug = "ToggleTerrainDebug";
 		static const char *s_freezeCulling = "ToggleCullingFreeze";
 		static const char *s_reload = "reload";
+		static const char *s_ambientSounds = "AmbientSounds";
+		static const char *s_waterSounds = "waterSounds";
 	}
 
 	namespace
 	{
+		/// Answers the water ambience scan from the streamed client terrain. Without terrain every
+		/// sample is empty.
+		class TerrainWaterAmbienceSource final : public IWaterAmbienceSource
+		{
+		public:
+			explicit TerrainWaterAmbienceSource(terrain::Terrain* terrain)
+				: m_terrain(terrain)
+			{
+			}
+
+			[[nodiscard]] WaterSample Sample(const float x, const float z) const override
+			{
+				WaterSample sample;
+				if (m_terrain == nullptr)
+				{
+					return sample;
+				}
+
+				sample.hasWater = m_terrain->HasWaterAtWorldPos(x, z);
+				sample.waterType = static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+				sample.surfaceY = m_terrain->GetWaterHeightAtWorldPos(x, z);
+				sample.hasGround = m_terrain->TryGetSmoothHeightAt(x, z, sample.groundY);
+				sample.flowSpeed = m_terrain->GetWaterFlowSpeedAtWorldPos(x, z);
+				return sample;
+			}
+
+		private:
+			terrain::Terrain* m_terrain;
+		};
+
 		/// Forgets all DB cache queries still in flight, so the next Get for such an entry queries again.
 		void ResetInFlightCacheQueries(ICacheProvider& cache)
 		{
@@ -167,6 +207,7 @@ namespace mmo
 		static ConsoleVar *s_contactShadowDebugVar = nullptr;
 		static ConsoleVar *s_atmosphereQualityVar = nullptr;
 		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
+		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
 		static ConsoleVar *s_atmosphereDebugVar = nullptr;
 		static ConsoleVar *s_bloomQualityVar = nullptr;
 		static ConsoleVar *s_exposureVar = nullptr;
@@ -302,6 +343,39 @@ namespace mmo
 			return {};
 		}
 
+		/// Whether a binding key name is one of the modifier keys themselves.
+		bool IsModifierKeyName(const String& keyName)
+		{
+			return keyName == "CONTROL" || keyName == "SHIFT" || keyName == "ALT";
+		}
+
+		/// Prefixes a binding key name with the modifier keys currently held, in a fixed
+		/// ALT-CTRL-SHIFT- order, so that bindings can tell CTRL-1 apart from 1.
+		String DecorateWithModifiers(const String& keyName)
+		{
+			// A modifier pressed on its own must keep its plain name, or it would decorate itself.
+			if (keyName.empty() || IsModifierKeyName(keyName))
+			{
+				return keyName;
+			}
+
+			String prefix;
+			if (Platform::IsAltKeyDown())
+			{
+				prefix += "ALT-";
+			}
+			if (Platform::IsControlKeyDown())
+			{
+				prefix += "CTRL-";
+			}
+			if (Platform::IsShiftKeyDown())
+			{
+				prefix += "SHIFT-";
+			}
+
+			return prefix + keyName;
+		}
+
 		/// Builds the attacker side of the combat sound context from a live unit.
 		CombatSoundAttacker makeCombatAttacker(const GameUnitC& unit, const bool offhand)
 		{
@@ -336,6 +410,8 @@ namespace mmo
 		, m_combatSoundPlayer(m_project, soundEntryPlayer)
 		, m_zoneMusic(soundEntryPlayer, audio)
 		, m_zoneAmbience(soundEntryPlayer, audio)
+		, m_ambientSounds(soundEntryPlayer, audio)
+		, m_waterAmbience(soundEntryPlayer, audio)
 		, m_gameTime(gameTime)
 		, m_cache(cache)
 		, m_project(project)
@@ -376,6 +452,9 @@ namespace mmo
 	void WorldState::OnEnter()
 	{
 		LoadingScreen::Show();
+
+		// A transfer cut short by a disconnect must not swallow the next session's transfers.
+		m_transferPending = false;
 
 		// The game clock outlives the world state; it was not updated while we were out of the world
 		m_gameTime.ResetUpdateReference();
@@ -544,6 +623,8 @@ namespace mmo
 
 		m_zoneMusic.Stop();
 		m_zoneAmbience.Stop();
+		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_unitAttachedSounds.clear();
 
 		// UpdateWaterVolume stops running once the world is left, so a low-pass applied while
@@ -556,13 +637,26 @@ namespace mmo
 		m_rayQuery.reset();
 
 		// Stop background loading thread
+		m_minimap.SetPrefetchHandler(nullptr);
+		GameUnitC::SetModelFilePrefetcher(nullptr);
 		m_work.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
 
+		// Content read ahead for the world just left
+		const AssetRegistry::PrefetchStats prefetchStats = AssetRegistry::GetPrefetchStats();
+		ILOG("Asset prefetch served " << prefetchStats.hits << " of " << prefetchStats.opens << " file opens in this world");
+		AssetRegistry::ClearPrefetched();
+
 		m_workQueue.reset();
 		m_dispatcher.reset();
+
+		// Invalidates any page-prepare continuation still sitting in m_workQueue/m_dispatcher from
+		// this world: stop()+reset() does not discard their queued handlers, only the "stopped"
+		// flag, so one of those can still run after the next OnEnter against the Page/Terrain being
+		// destroyed below. See the matching generation check in OnPageAvailabilityChanged.
+		++m_worldGeneration;
 
 		if (m_projectileManager)
 		{
@@ -1031,23 +1125,64 @@ namespace mmo
 		return true;
 	}
 
-	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	String WorldState::ResolveBindingKeyName(const int32 key) const
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), repeat ? BindingKeyState::Repeat : BindingKeyState::Down))
+		const String baseName = MapBindingKeyCode(key);
+		const String decoratedName = DecorateWithModifiers(baseName);
+		if (decoratedName == baseName)
 		{
-			return true;
+			return baseName;
 		}
 
+		// While the options frame waits for a key, the whole combination is what the player means.
+		if (m_bindings.IsCapturing())
+		{
+			return decoratedName;
+		}
+
+		// Combinations nobody bound fall back to the plain key, so that holding a modifier does not
+		// swallow an existing binding (Ctrl + W keeps moving the character forward).
+		const auto& keyBindings = m_bindings.GetAllKeyBindings();
+		return keyBindings.find(decoratedName) != keyBindings.end() ? decoratedName : baseName;
+	}
+
+	bool WorldState::OnKeyDown(const int32 key, bool repeat)
+	{
+		// A pending key capture waits for the key of a combination, not for its modifiers: holding
+		// Ctrl must not end the capture before the player pressed the key they want to bind.
+		if (m_bindings.IsCapturing())
+		{
+			const String baseName = MapBindingKeyCode(key);
+			if (baseName.empty() || IsModifierKeyName(baseName))
+			{
+				return true;
+			}
+		}
+
+		auto it = m_pressedKeyBindings.find(key);
+		if (it == m_pressedKeyBindings.end())
+		{
+			it = m_pressedKeyBindings.emplace(key, ResolveBindingKeyName(key)).first;
+		}
+
+		m_bindings.ExecuteKey(it->second, repeat ? BindingKeyState::Repeat : BindingKeyState::Down);
 		return true;
 	}
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
-		if (m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Up))
+		String keyName;
+		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
-			return true;
+			keyName = it->second;
+			m_pressedKeyBindings.erase(it);
+		}
+		else
+		{
+			keyName = ResolveBindingKeyName(key);
 		}
 
+		m_bindings.ExecuteKey(keyName, BindingKeyState::Up);
 		return true;
 	}
 
@@ -1082,45 +1217,98 @@ namespace mmo
 			}
 		}
 
-		// Day/night clock, then the zone environment for the new hour, then the lights and sky.
-		m_skyComponent->Update(deltaSeconds, timestamp);
-		m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
-		m_skyComponent->ApplyEnvironment(m_environment.GetState());
-		ApplyEnvironmentToRenderer();
-
-		m_wind.Update(deltaSeconds, m_environment.GetState());
-		if (m_scene)
 		{
-			m_scene->SetWind(m_wind.GetState());
-		}
-		PublishWindShaderParameters(m_wind.GetState());
+			PROFILE_SCOPE("OnIdle::SkyEnvironmentWind");
 
-		// Set the sky dome position to follow the player
-		if (m_playerController->GetRootNode())
+			// Day/night clock, then the zone environment for the new hour, then the lights and sky.
+			m_skyComponent->Update(deltaSeconds, timestamp);
+			m_environment.Update(deltaSeconds, m_skyComponent->GetNormalizedTimeOfDay());
+			m_skyComponent->ApplyEnvironment(m_environment.GetState());
+			ApplyEnvironmentToRenderer();
+
+			m_wind.Update(deltaSeconds, m_environment.GetState());
+			if (m_scene)
+			{
+				m_scene->SetWind(m_wind.GetState());
+			}
+			PublishWindShaderParameters(m_wind.GetState());
+
+			// Set the sky dome position to follow the player
+			if (m_playerController->GetRootNode())
+			{
+				m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+			}
+		}
+
 		{
-			m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
+			PROFILE_SCOPE("OnIdle::UnitAttachedSounds");
+			UpdateUnitAttachedSounds(deltaSeconds);
 		}
 
-		UpdateUnitAttachedSounds(deltaSeconds);
-
-		// Update audio component to simulate 3d audio correctly from the player position
+		// Keep hearing distance centered on the player, with left/right matching the camera.
 		if (m_playerController->GetControlledUnit())
 		{
-			m_audio.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+			// Head height of the listener above the unit's feet; the water beds are placed around it too.
+			const Vector3 earOffset(0.0f, 1.6f, 0.0f);
+
+			{
+				PROFILE_SCOPE("OnIdle::Audio");
+				m_audio.SetListenerOrientation(audio_listener::FlattenedForward(m_playerController->GetCamera().GetDerivedDirection()), Vector3::UnitY);
+				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition() + earOffset, deltaSeconds);
+			}
+
+			// Mesh sounds are selected around the same position the 3D listener sits at
+			PROFILE_SCOPE("OnIdle::AmbientSounds");
+			m_ambientSounds.Update(m_playerController->GetControlledUnit()->GetPosition(), deltaSeconds);
+
+			// Water beds follow the terrain water around the ear; the terrain pointer is refreshed
+			// every frame because the world instance is rebuilt on every world change.
+			{
+				PROFILE_SCOPE("OnIdle::WaterAmbience");
+				terrain::Terrain *waterTerrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain()) ? m_worldInstance->GetTerrain() : nullptr;
+				const TerrainWaterAmbienceSource waterSource(waterTerrain);
+				const GameUnitC &controlledUnit = *m_playerController->GetControlledUnit();
+				const Vector3 unitPosition = controlledUnit.GetPosition();
+				// The water type lookup is horizontal only, so the head (unit + earOffset) shares it.
+				const bool submerged = m_waterVolume != nullptr && m_waterVolume->IsPlayerSubmerged();
+				const uint32 footWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x, unitPosition.z)) : 0u;
+				const uint32 headWaterType = waterTerrain != nullptr ? static_cast<uint32>(waterTerrain->GetWaterTypeAtWorldPos(unitPosition.x + earOffset.x, unitPosition.z + earOffset.z)) : 0u;
+				m_waterAmbience.Update(waterSource, unitPosition + earOffset,
+					controlledUnit.GetMovementInfo().IsSwimming(),
+					footWaterType,
+					submerged, headWaterType,
+					deltaSeconds);
+			}
 		}
 
-		// Advance zone music / ambience crossfades
-		m_zoneMusic.Update(deltaSeconds);
-		m_zoneAmbience.Update(deltaSeconds);
+		{
+			PROFILE_SCOPE("OnIdle::ZoneMusicAmbience");
 
-		// Submersion state for the underwater post-process and the audio low-pass. Runs after the
-		// audio update so the cutoff it sets is not overwritten within the same frame.
-		UpdateWaterVolume(deltaSeconds);
+			// Advance zone music / ambience crossfades
+			m_zoneMusic.Update(deltaSeconds);
+			m_zoneAmbience.Update(deltaSeconds);
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::WaterVolume");
+
+			// Submersion state for the underwater post-process and the audio low-pass. Runs after the
+			// audio update so the cutoff it sets is not overwritten within the same frame.
+			UpdateWaterVolume(deltaSeconds);
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::Ocean");
+			UpdateOcean();
+		}
 
 		// Only update when world loading is ready
 		if (m_worldLoaded && m_timeSyncResponseSent)
 		{
-			m_playerController->Update(deltaSeconds);
+			{
+				PROFILE_SCOPE("OnIdle::PlayerController");
+				m_playerController->Update(deltaSeconds);
+			}
 			ObjectMgr::UpdateObjects(deltaSeconds);
 		}
 
@@ -1192,17 +1380,19 @@ namespace mmo
 			m_minimap.UpdatePings(m_activePings);
 		}
 
-		// Update projectiles
-		if (m_projectileManager)
 		{
-			m_projectileManager->Update(deltaSeconds);
+			PROFILE_SCOPE("OnIdle::ProjectilesSpellVisuals");
+
+			// Update projectiles
+			if (m_projectileManager)
+			{
+				m_projectileManager->Update(deltaSeconds);
+			}
+
+			// Update spell visualization service (audio fading, etc.)
+			SpellVisualizationService::Get().Update(deltaSeconds);
+
 		}
-
-		// Update spell visualization service (audio fading, etc.)
-		SpellVisualizationService::Get().Update(deltaSeconds);
-
-		// Update pending projectiles (animation notify fallback)
-		UpdatePendingProjectiles();
 
 		// Update foliage system
 		if (m_foliage && m_worldLoaded)
@@ -1215,6 +1405,7 @@ namespace mmo
 		// reloads, and the cull itself only touches chunks whose visibility actually changed.
 		if (m_worldLoaded && m_worldInstance)
 		{
+			PROFILE_SCOPE("OnIdle::TreeViewDistance");
 			if (InstancedFoliage* trees = m_worldInstance->GetInstancedFoliage())
 			{
 				trees->SetViewDistance(s_viewDistanceVar ? s_viewDistanceVar->GetFloatValue() : 0.0f);
@@ -1230,46 +1421,60 @@ namespace mmo
 				m_playerController->GetCamera().GetDerivedPosition());
 		}
 
-		const auto pos = GetPagePositionFromCamera();
-		m_memoryPointOfView->UpdateCenter(pos);
-		m_visibleSection->UpdateCenter(pos);
-
-		UpdateFarTerrain();
-
-		CheckForZoneUpdate();
-
-		// Update world text frames then remove expired ones
-		for (auto &frame : m_worldTextFrames)
 		{
-			frame->Update(deltaSeconds);
-		}
-		m_worldTextFrames.erase(
-			std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
-				[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
-			m_worldTextFrames.end());
+			PROFILE_SCOPE("Stream: PageCenterUpdate");
 
-		for (auto& frame : m_chatBubbleFrames)
-		{
-			frame->Animate(deltaSeconds);
+			const auto pos = GetPagePositionFromCamera();
+			m_memoryPointOfView->UpdateCenter(pos);
+			m_visibleSection->UpdateCenter(pos);
 		}
 
-		const size_t chatBubblesBefore = m_chatBubbleFrames.size();
-		m_chatBubbleFrames.erase(
-			std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
-				[this](const std::shared_ptr<ChatBubbleFrame>& frame)
-				{
-					return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
-				}),
-			m_chatBubbleFrames.end());
-
-		// If any bubbles were removed, rebuild the layer's children so the removed frames are
-		// released (Frame has no single-child removal). This only happens when a bubble expires.
-		if (m_chatBubbleFrames.size() != chatBubblesBefore && m_chatBubbleLayer)
 		{
-			m_chatBubbleLayer->RemoveAllChildren();
-			for (const auto& frame : m_chatBubbleFrames)
+			PROFILE_SCOPE("Stream: UpdateFarTerrain");
+			UpdateFarTerrain();
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::ZoneUpdate");
+			CheckForZoneUpdate();
+		}
+
+		{
+			PROFILE_SCOPE("OnIdle::WorldTextChatBubbles");
+
+			// Update world text frames then remove expired ones
+			for (auto &frame : m_worldTextFrames)
 			{
-				m_chatBubbleLayer->AddChild(frame);
+				frame->Update(deltaSeconds);
+			}
+			m_worldTextFrames.erase(
+				std::remove_if(m_worldTextFrames.begin(), m_worldTextFrames.end(),
+					[](const std::unique_ptr<WorldTextFrame> &frame) { return frame->IsExpired(); }),
+				m_worldTextFrames.end());
+
+			for (auto& frame : m_chatBubbleFrames)
+			{
+				frame->Animate(deltaSeconds);
+			}
+
+			const size_t chatBubblesBefore = m_chatBubbleFrames.size();
+			m_chatBubbleFrames.erase(
+				std::remove_if(m_chatBubbleFrames.begin(), m_chatBubbleFrames.end(),
+					[this](const std::shared_ptr<ChatBubbleFrame>& frame)
+					{
+						return frame->IsExpired() || !AreChatBubblesEnabled(frame->GetChatType());
+					}),
+				m_chatBubbleFrames.end());
+
+			// If any bubbles were removed, rebuild the layer's children so the removed frames are
+			// released (Frame has no single-child removal). This only happens when a bubble expires.
+			if (m_chatBubbleFrames.size() != chatBubblesBefore && m_chatBubbleLayer)
+			{
+				m_chatBubbleLayer->RemoveAllChildren();
+				for (const auto& frame : m_chatBubbleFrames)
+				{
+					m_chatBubbleLayer->AddChild(frame);
+				}
 			}
 		}
 
@@ -1284,6 +1489,7 @@ namespace mmo
 		// TaskSystem worker pool.
 		if (m_scene)
 		{
+			PROFILE_SCOPE("OnIdle::SceneSimulation");
 			m_scene->UpdateSimulation();
 		}
 	}
@@ -1309,6 +1515,29 @@ namespace mmo
 			// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
 			// (see m_chatBubbleLayer) so they render above the 3D world but beneath the rest of the UI.
 		}
+	}
+
+	uint32 WorldState::ResolveZoneSound(const proto_client::ZoneEntry *zone, const bool music) const
+	{
+		// An unset sound (0) falls back along the parent zone chain unless a zone in between
+		// explicitly opts out via inherit_parent_audio = false. Depth guard against parent zone
+		// cycles in broken data.
+		for (int depth = 0; zone && depth < 8; ++depth)
+		{
+			if (const uint32 soundId = music ? zone->music_sound() : zone->ambience_sound(); soundId != 0)
+			{
+				return soundId;
+			}
+
+			if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
+			{
+				return 0;
+			}
+
+			zone = m_project.zones.getById(zone->parentzone());
+		}
+
+		return 0;
 	}
 
 	void WorldState::CheckForZoneUpdate()
@@ -1337,7 +1566,10 @@ namespace mmo
 			return;
 		}
 
-		UpdateEnvironmentTarget(zoneId, pos);
+		{
+			PROFILE_SCOPE("Zone: EnvironmentTarget");
+			UpdateEnvironmentTarget(zoneId, pos);
+		}
 
 		if (zoneId != m_lastZoneId)
 		{
@@ -1349,45 +1581,10 @@ namespace mmo
 			const proto_client::ZoneEntry *zone = m_project.zones.getById(m_lastZoneId);
 			if (zone)
 			{
-				const proto_client::ZoneEntry *parentZone =
-					(zone->parentzone() != 0) ? m_project.zones.getById(zone->parentzone()) : nullptr;
+				ResolveZoneDisplayNames(m_project.zones, *zone, GetClientLocale(), s_zoneName, s_subZoneName);
 
-				if (parentZone)
-				{
-					s_zoneName = parentZone->name();
-					s_subZoneName = zone->name();
-				}
-				else
-				{
-					s_zoneName = zone->name();
-					s_subZoneName.clear();
-				}
-
-				// Resolve zone audio: an unset sound (0) falls back along the parent zone chain
-				// unless a zone in between explicitly opts out via inherit_parent_audio = false.
-				const auto resolveZoneSound = [this](const proto_client::ZoneEntry *zone, const auto &getSoundId) -> uint32
-				{
-					// Depth guard against parent zone cycles in broken data.
-					for (int depth = 0; zone && depth < 8; ++depth)
-					{
-						if (const uint32 soundId = getSoundId(*zone); soundId != 0)
-						{
-							return soundId;
-						}
-
-						if (!zone->inherit_parent_audio() || zone->parentzone() == 0)
-						{
-							return 0;
-						}
-
-						zone = m_project.zones.getById(zone->parentzone());
-					}
-
-					return 0;
-				};
-
-				musicSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.music_sound(); });
-				ambienceSoundId = resolveZoneSound(zone, [](const proto_client::ZoneEntry &z) { return z.ambience_sound(); });
+				musicSoundId = ResolveZoneSound(zone, true);
+				ambienceSoundId = ResolveZoneSound(zone, false);
 			}
 			else
 			{
@@ -1395,11 +1592,22 @@ namespace mmo
 			}
 
 			// Crossfade zone music / ambience if the effective sounds changed.
-			m_zoneMusic.SetSound(musicSoundId);
-			m_zoneAmbience.SetSound(ambienceSoundId);
-
-			m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
-			FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			{
+				PROFILE_SCOPE("Zone: Music");
+				m_zoneMusic.SetSound(musicSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Ambience");
+				m_zoneAmbience.SetSound(ambienceSoundId);
+			}
+			{
+				PROFILE_SCOPE("Zone: Discord");
+				m_discord.NotifyZoneChanged(s_subZoneName.empty() ? s_zoneName : s_zoneName + " - " + s_subZoneName);
+			}
+			{
+				PROFILE_SCOPE("Zone: Lua ZONE_CHANGED");
+				FrameManager::Get().TriggerLuaEvent("ZONE_CHANGED");
+			}
 		}
 	}
 
@@ -1465,7 +1673,22 @@ namespace mmo
 
 	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
 	// complete type at the point unique_ptr's deleter is instantiated.
-	WorldState::~WorldState() = default;
+	//
+	// OnLeave() normally stops and joins m_backgroundLoader. If this instance is ever destroyed
+	// without an OnLeave first - e.g. left registered in GameStateMgr but not the current state
+	// when the client shuts down - std::thread's destructor calls std::terminate() on a still
+	// joinable thread, aborting the whole process. Join it here too so destruction is safe either
+	// way; this is a no-op once OnLeave has already joined it.
+	WorldState::~WorldState()
+	{
+		if (m_backgroundLoader.joinable())
+		{
+			m_work.reset();
+			m_workQueue.stop();
+			m_dispatcher.stop();
+			m_backgroundLoader.join();
+		}
+	}
 
 	void WorldState::OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue)
 	{
@@ -1557,6 +1780,25 @@ namespace mmo
 		m_audio.SetLowPassCutoff(m_waterVolume->GetAudioLowPassHz());
 	}
 
+	void WorldState::UpdateOcean()
+	{
+		DeferredRenderer* deferred = GetWorldDeferredRenderer();
+		if (!deferred || !m_playerController)
+		{
+			return;
+		}
+
+		// The FFT ocean draws the ocean to the horizon from the terrain's ocean mask; while it runs,
+		// the terrain leaves its ocean quads out of the water mesh (lakes and rivers stay meshed).
+		terrain::Terrain* terrain = (m_worldLoaded && m_worldInstance && m_worldInstance->HasTerrain())
+			? m_worldInstance->GetTerrain()
+			: nullptr;
+
+		const auto* profile = m_project.waterProfiles.getById(static_cast<uint32>(terrain::WaterType::Ocean));
+		const OceanSettings settings = profile != nullptr ? ToOceanSettings(*profile) : OceanSettings();
+		m_oceanFeed.Update(deferred->GetOceanPass(), terrain, m_playerController->GetCamera().GetDerivedPosition(), settings);
+	}
+
 	void WorldState::SetupWorldScene()
 	{
 		m_scene = std::make_unique<OctreeScene>();
@@ -1570,6 +1812,29 @@ namespace mmo
 		m_waterQuery = std::make_unique<TerrainWaterQuery>();
 		m_waterVolume = std::make_unique<WaterVolumeSystem>(*m_waterQuery);
 		m_waterVolume->SetProfileResolver([this](const uint32 waterType) { return ResolveWaterProfile(waterType); });
+
+		// Water ambience: every profile with a calm bed, a swim layer or an underwater layer takes part. WaterAmbience
+		// only scans and plays beds for profiles with a calm sound.
+		std::vector<WaterAmbienceSounds> waterAmbienceProfiles;
+		for (const auto &profile : m_project.waterProfiles.getTemplates().entry())
+		{
+			if (profile.ambient_calm_sound() == 0 && profile.ambient_swim_sound() == 0 && profile.ambient_underwater_sound() == 0)
+			{
+				continue;
+			}
+
+			WaterAmbienceSounds sounds;
+			sounds.profile.waterType = profile.id();
+			sounds.profile.shoreOnly = profile.ambient_shore_only();
+			sounds.profile.range = profile.ambient_range();
+			sounds.calmSound = profile.ambient_calm_sound();
+			sounds.fastSound = profile.ambient_fast_sound();
+			sounds.swimSound = profile.ambient_swim_sound();
+			sounds.underwaterSound = profile.ambient_underwater_sound();
+			sounds.volume = profile.ambient_volume();
+			waterAmbienceProfiles.push_back(sounds);
+		}
+		m_waterAmbience.SetProfiles(std::move(waterAmbienceProfiles));
 
 		// Let terrain pages resolve their surface material from the profile table. A page that
 		// carries an explicit material name still overrides this, so nothing already authored
@@ -1614,6 +1879,11 @@ namespace mmo
 		m_backgroundLoader = std::thread([&workQueue]()
 										 { workQueue.run(); });
 
+		m_minimap.SetPrefetchHandler([&workQueue](const String &filename)
+		{
+			workQueue.post([filename]() { AssetRegistry::Prefetch(filename); });
+		});
+
 		const auto addWork = [&workQueue](const WorldPageLoader::Work &work)
 		{
 			workQueue.post(work);
@@ -1624,7 +1894,7 @@ namespace mmo
 		};
 
 		const PagePosition pos = GetPagePositionFromCamera();
-		m_visibleSection = std::make_unique<LoadedPageSection>(pos, 1, *this);
+		m_visibleSection = std::make_unique<LoadedPageSection>(pos, static_cast<std::size_t>(LoadedPageRadius), *this);
 		m_pageLoader = std::make_unique<WorldPageLoader>(*m_visibleSection, addWork, synchronize);
 
 		PagePosition worldSize(64, 64);
@@ -2062,6 +2332,10 @@ namespace mmo
 								 { Command_Revive(cmd, args); }, ConsoleCommandCategory::Gm, "Revives the selected dead unit at its current position (or yourself if nothing is selected).");
 		Console::RegisterCommand("godmode", [this](const std::string &cmd, const std::string &args)
 								 { Command_Godmode(cmd, args); }, ConsoleCommandCategory::Gm, "Toggles damage immunity on your character. 'godmode' or 'godmode 1' enables it, 'godmode 0' disables it.");
+		Console::RegisterCommand("invis", [this](const std::string &cmd, const std::string &args)
+								 { Command_Invisible(cmd, args); }, ConsoleCommandCategory::Gm, "Makes your character invisible to everybody except game masters. Persists across map changes and relogs. 'invis' or 'invis 1' enables it, 'invis 0' disables it.");
+		Console::RegisterCommand("ghost", [this](const std::string &cmd, const std::string &args)
+								 { Command_Ghost(cmd, args); }, ConsoleCommandCategory::Gm, "Ghosts the named online player: you join them and follow them into every instance they enter, without being in their group, until one of you logs out. 'ghost' without a name stops ghosting.");
 		Console::RegisterCommand("damage", [this](const std::string &cmd, const std::string &args)
 								 { Command_Damage(cmd, args); }, ConsoleCommandCategory::Gm, "Deals the given amount of raw damage to your current target. Used to walk a boss to its next phase threshold.");
 		Console::RegisterCommand("resetcooldowns", [this](const std::string &cmd, const std::string &args)
@@ -2102,6 +2376,8 @@ namespace mmo
 		Console::UnregisterCommand("kill");
 		Console::UnregisterCommand("revive");
 		Console::UnregisterCommand("godmode");
+		Console::UnregisterCommand("invis");
+		Console::UnregisterCommand("ghost");
 		Console::UnregisterCommand("damage");
 		Console::UnregisterCommand("resetcooldowns");
 		Console::UnregisterCommand("heal");
@@ -2259,6 +2535,9 @@ namespace mmo
 
 		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
 		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
+		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
+		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
 
 		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
 		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
@@ -2333,6 +2612,31 @@ namespace mmo
 
 		Console::RegisterCommand(command_names::s_reload, [this](const std::string &, const std::string &)
 								 { ReloadUI(); }, ConsoleCommandCategory::Debug, "Reloads the user interface.");
+
+		Console::RegisterCommand(command_names::s_ambientSounds, [this](const std::string &, const std::string &)
+								 {
+									 const GameUnitC *unit = m_playerController->GetControlledUnit().get();
+									 const Vector3 listener = unit ? unit->GetPosition() : Vector3::Zero;
+									 ILOG("Ambient sounds: " << m_ambientSounds.GetSourceCount() << " sources, " << m_ambientSounds.GetActiveVoiceCount() << " active voices");
+									 for (const auto &voice : m_ambientSounds.GetVoices())
+									 {
+										 ILOG("  sound " << voice.soundEntryId << " at " << voice.position << ", " << std::sqrt(listener.GetSquaredDistanceTo(voice.position)) << " m, fade " << voice.fade << (voice.retiring ? " (fading out)" : ""));
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the looping mesh sounds near the player.");
+
+		Console::RegisterCommand(command_names::s_waterSounds, [this](const std::string &, const std::string &)
+								 {
+									 const auto &fields = m_waterAmbience.GetSmoothedFields();
+									 ILOG("Water ambience: " << fields.size() << " fields");
+									 for (const auto &field : fields)
+									 {
+										 ILOG("  water type " << field.waterType << ": level " << field.level << ", focus " << field.GetFocus() << ", speed " << field.speed << ", direction " << field.direction);
+									 }
+									 for (const auto &voice : m_waterAmbience.GetVoices())
+									 {
+										 ILOG("  voice sound " << voice.soundEntryId << ": volume " << voice.volume << ", spread " << voice.spread << ", position " << voice.position);
+									 }
+								 }, ConsoleCommandCategory::Sound, "Lists the water ambience fields and voices.");
 
 		Console::RegisterCommand(command_names::s_toggleAxis, [this](const std::string &, const std::string &)
 								 { ToggleAxisVisibility(); }, ConsoleCommandCategory::Debug, "Toggles visibility of the axis display.");
@@ -2436,6 +2740,8 @@ namespace mmo
 		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
+		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
+		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
 		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
 		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
 		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
@@ -2469,7 +2775,9 @@ namespace mmo
 			command_names::s_toggleTerrainLOD,
 			command_names::s_toggleTerrainDebug,
 			command_names::s_freezeCulling,
-			command_names::s_reload};
+			command_names::s_reload,
+			command_names::s_ambientSounds,
+			command_names::s_waterSounds};
 
 		for (const auto &command : commandsToRemove)
 		{
@@ -2720,6 +3028,22 @@ namespace mmo
 				{
 					ObjectMgr::SetActivePlayer(object->GetGuid());
 
+					// From here on, units spawning with a model never loaded before read its files on the
+					// streaming thread first and show it a few frames later. Not before: the own player
+					// (set up before it becomes the active player) must have its model at once.
+					GameUnitC::SetModelFilePrefetcher([&workQueue = m_workQueue, &dispatcher = m_dispatcher](std::vector<String> files, std::function<void()> onReady)
+					{
+						workQueue.post([&dispatcher, files = std::move(files), onReady = std::move(onReady)]()
+						{
+							for (const String &file : files)
+							{
+								AssetRegistry::Prefetch(file);
+							}
+
+							dispatcher.post(onReady);
+						});
+					});
+
 					// Register player field change observers
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TargetUnit, 2, *this, &WorldState::OnTargetSelectionChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Money, 1, *this, &WorldState::OnMoneyChanged);
@@ -2741,11 +3065,12 @@ namespace mmo
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 
-					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 5, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::SpellDamage, 6, *this, &WorldState::OnPlayerStatsChanged);
 					static_assert(object_fields::SpellHealing == object_fields::SpellDamage + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::SpellCritChance == object_fields::SpellHealing + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MeleeCritChance == object_fields::SpellCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::ManaRegen == object_fields::MeleeCritChance + 1, "Order of fields is important for monitored unit mirror handlers");
+					static_assert(object_fields::ManaRegenCasting == object_fields::ManaRegen + 1, "Order of fields is important for monitored unit mirror handlers");
 
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Guild, 2, *this, &WorldState::OnPlayerGuildChanged);
 
@@ -2801,8 +3126,18 @@ namespace mmo
 				const auto obj = ObjectMgr::Get<GameObjectC>(guid);
 				if (!obj)
 				{
-					ELOG("Failed to find updated object with guid " << log_hex_digit(guid));
-					return PacketParseResult::Disconnect;
+					// The server's view of what this client knows went wrong somewhere; one stale
+					// update is no reason to drop the session. Read past it so the blocks after it
+					// still apply - only a block that cannot be read leaves the stream unusable.
+					if (!SkipObjectValueUpdate(packet, typeId))
+					{
+						ELOG("Failed to skip update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+						return PacketParseResult::Disconnect;
+					}
+
+					WLOG("Ignored update of unknown object with guid " << log_hex_digit(guid) << " (type " << static_cast<int32>(typeId) << ")");
+					result = PacketParseResult::Pass;
+					continue;
 				}
 
 				// Units and players share the unit field layout, which carries the combat flag
@@ -3902,7 +4237,7 @@ namespace mmo
 			{
 				int32 emptySlot = -1;
 
-				for (int32 i = 0; i < MaxActionButtons; ++i)
+				for (int32 i = 0; i < ActionButtonsPerBar; ++i)
 				{
 					// Did we find an empty slot yet?
 					if (emptySlot == -1 && m_actionBar.GetActionButton(i).type == action_button_type::None)
@@ -4052,62 +4387,10 @@ namespace mmo
 
 				if (casterUnit && targetUnit && m_projectileManager)
 				{
-					// Check if there's a CastSucceeded animation - if so, defer projectile spawn
-					bool hasCastSucceededAnimation = false;
-					if (visualization)
-					{
-						const uint32 eventKey = static_cast<uint32>(proto_client::CAST_SUCCEEDED);
-						const auto& eventMap = visualization->kits_by_event();
-						auto kitIt = eventMap.find(eventKey);
-						if (kitIt != eventMap.end())
-						{
-							for (const auto& kit : kitIt->second.kits())
-							{
-								if (kit.has_animation_name() && !kit.animation_name().empty())
-								{
-									hasCastSucceededAnimation = true;
-									break;
-								}
-							}
-						}
-					}
-
-					if (hasCastSucceededAnimation)
-					{
-						// Create pending projectile and wait for SpellGo animation notify or animation end
-						auto pending = std::make_unique<PendingProjectile>();
-						pending->spellId = spellId;
-						pending->casterGuid = casterId;
-						pending->targetGuid = unitTargetGuid;
-						pending->visualization = visualization;
-						pending->hasCastSucceededAnimation = true;
-						pending->creationTime = GetAsyncTimeMs();
-						
-						// Capture raw pointer for use in lambdas before moving
-						PendingProjectile* pendingPtr = pending.get();
-
-						// Subscribe to animation notify signals on the caster
-						pending->connections += casterUnit->animationNotifyTriggered.connect(
-							[this, pendingPtr](GameUnitC& unit, const AnimationNotify& notify, const String&, const AnimationState&)
-							{
-								if (notify.GetType() == AnimationNotifyType::SpellGo)
-								{
-									// SpellGo notify triggered - spawn the projectile now
-									SpawnPendingProjectile(pendingPtr);
-								}
-							});
-
-						// Also check if animation ends without SpellGo notify (fallback)
-						// We need to check on Update if the one-shot animation has ended
-						// For simplicity, we'll set a timeout fallback
-
-						m_pendingProjectiles.push_back(std::move(pending));
-					}
-					else
-					{
-						// No animation, spawn immediately
-						m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
-					}
+					// SpellGo starts projectile travel on the server. Launch in the same frame:
+					// waiting for a release animation adds a second cast delay and lets the next
+					// cast change when the previous projectile fires by interrupting that animation.
+					m_projectileManager->SpawnProjectile(*spell, visualization, casterUnit.get(), targetUnit.get());
 				}
 			}
 		}
@@ -4188,86 +4471,6 @@ namespace mmo
 		}
 
 		return PacketParseResult::Pass;
-	}
-
-	void WorldState::SpawnPendingProjectile(PendingProjectile* pending)
-	{
-		if (!pending || !m_projectileManager)
-		{
-			return;
-		}
-
-		// Get spell
-		const auto* spell = m_project.spells.getById(pending->spellId);
-		if (!spell)
-		{
-			return;
-		}
-
-		// Get caster and target units
-		auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
-		auto targetUnit = ObjectMgr::Get<GameUnitC>(pending->targetGuid);
-
-		if (casterUnit && targetUnit)
-		{
-			// Calculate how long the projectile was delayed by the animation
-			float animationDelay = 0.0f;
-			if (pending->creationTime > 0)
-			{
-				const GameTime now = GetAsyncTimeMs();
-				if (now > pending->creationTime)
-				{
-					animationDelay = static_cast<float>(now - pending->creationTime) / 1000.0f;
-				}
-			}
-
-			m_projectileManager->SpawnProjectile(*spell, pending->visualization, casterUnit.get(), targetUnit.get(), animationDelay);
-		}
-
-		// Remove this pending projectile from the list
-		auto it = std::find_if(m_pendingProjectiles.begin(), m_pendingProjectiles.end(),
-			[pending](const std::unique_ptr<PendingProjectile>& p)
-			{
-				return p.get() == pending;
-			});
-
-		if (it != m_pendingProjectiles.end())
-		{
-			m_pendingProjectiles.erase(it);
-		}
-	}
-
-	void WorldState::UpdatePendingProjectiles()
-	{
-		// Check pending projectiles for animation end fallback
-		for (auto it = m_pendingProjectiles.begin(); it != m_pendingProjectiles.end(); )
-		{
-			PendingProjectile* pending = it->get();
-			
-			// Get caster unit to check animation state
-			auto casterUnit = ObjectMgr::Get<GameUnitC>(pending->casterGuid);
-			if (!casterUnit)
-			{
-				// Caster no longer exists, just remove the pending projectile
-				it = m_pendingProjectiles.erase(it);
-				continue;
-			}
-
-			// Check if one-shot animation has ended
-			// If the unit has no active one-shot animation and we were waiting for SpellGo,
-			// spawn the projectile as fallback
-			if (pending->hasCastSucceededAnimation && !casterUnit->IsPlayingOneShotAnimation())
-			{
-				// Animation ended without SpellGo notify - spawn as fallback
-				SpawnPendingProjectile(pending);
-				// SpawnPendingProjectile removes from the list, so just break to avoid invalidating iterator
-				// Actually, we need to restart iteration since the list was modified
-				it = m_pendingProjectiles.begin();
-				continue;
-			}
-
-			++it;
-		}
 	}
 
 	PacketParseResult WorldState::OnSpellFailure(game::IncomingPacket &packet)
@@ -5045,12 +5248,25 @@ namespace mmo
 
 		m_playerController->StopAllMovement();
 
+		const Vector3 previousPosition = unit->GetPosition();
+
 		// Teleport player
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
 		unit->ApplyMovementInfo(movementInfo);
 
 		// Send ack to the server
 		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
+
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -5297,11 +5513,13 @@ namespace mmo
 		}
 
 		ILOG("Transfer pending to map " << mapId << "...");
-		if (g_mapId == mapId)
+		if (m_transferPending)
 		{
+			// A transfer is already in progress; the realm only ever starts one at a time.
 			return PacketParseResult::Pass;
 		}
 
+		m_transferPending = true;
 		LoadingScreen::Show();
 
 		g_mapId = mapId;
@@ -5337,6 +5555,8 @@ namespace mmo
 			ELOG("Failed to read NewWorld packet!");
 			return PacketParseResult::Disconnect;
 		}
+
+		m_transferPending = false;
 
 		ILOG("Transfer to map " << mapId << " completed! Loading map...");
 		g_mapId = mapId;
@@ -5849,6 +6069,10 @@ namespace mmo
 	{
 		// The distant terrain belongs to the old world's terrain.
 		m_farTerrain.reset();
+
+		// The old world's placements do not remove their mesh sounds when it is destroyed
+		m_ambientSounds.Clear();
+		m_waterAmbience.Stop();
 		m_worldInstance.reset();
 
 		m_worldLoaded = false;
@@ -5861,6 +6085,7 @@ namespace mmo
 		DLOG("Loading map " << assetPath << ".hwld...");
 
 		m_worldInstance = std::make_shared<ClientWorldInstance>(*m_scene, *m_worldRootNode, assetPath, m_workQueue, m_dispatcher);
+		m_worldInstance->SetAmbientSounds(&m_ambientSounds);
 
 		const std::unique_ptr<std::istream> streamPtr = AssetRegistry::OpenFile(assetPath + ".hwld");
 		if (!streamPtr)
@@ -5956,6 +6181,10 @@ namespace mmo
 			break;
 		case attack_swing_event::OutOfRange:
 			errorEvent = "ATTACK_SWING_OUT_OF_RANGE";
+			break;
+		case attack_swing_event::NotInLineOfSight:
+			// Same message as a spell blocked by line of sight
+			errorEvent = "SPELL_CAST_FAILED_LINE_OF_SIGHT";
 			break;
 		default:
 			errorEvent = "UNKNOWN";
@@ -6216,12 +6445,36 @@ namespace mmo
 					// used to run synchronously here and hitched the main thread on every
 					// page-boundary crossing. Only material resolution and tile creation (spread
 					// over frames by EnsurePageIsLoaded) remain on the main thread.
-					m_workQueue.post([this, pos, page]()
+					const String pageFileName = m_worldInstance->GetTerrain()->GetBaseFileName() + "/" + std::to_string(pos.x()) + "_" + std::to_string(pos.y()) + ".tile";
+					const uint64 generation = m_worldGeneration;
+					m_workQueue.post([this, pos, page, pageFileName, generation]()
 					{
+						// The world may have been left (and a different one entered) while this
+						// was queued: m_workQueue.stop()/reset() in OnLeave() do not drop a handler
+						// already queued here, so `page` can by now point into a destroyed Terrain.
+						if (generation != m_worldGeneration)
+						{
+							return;
+						}
+
 						const bool parsed = page->PrepareParse();
 
-						m_dispatcher.post([this, pos, page, parsed]()
+						// The page's materials and their textures, which FinalizePrepare loads on the main thread.
+						if (parsed)
 						{
+							AssetRegistry::PrefetchReferences(pageFileName);
+						}
+
+						m_dispatcher.post([this, pos, page, parsed, generation]()
+						{
+							// Same staleness check as above, re-done here: this continuation can
+							// equally have survived an OnLeave() that happened after PrepareParse()
+							// finished but before this ran.
+							if (generation != m_worldGeneration)
+							{
+								return;
+							}
+
 							if (!parsed)
 							{
 								page->AbortPrepare();
@@ -6247,7 +6500,12 @@ namespace mmo
 			}
 			else
 			{
+				PROFILE_SCOPE("Stream: UnregisterPageFoliage");
 				UnregisterPageFoliage(pos.x(), pos.y());
+			}
+
+			if (!isAvailable)
+			{
 				page->Unload();
 			}
 		}
@@ -6273,9 +6531,11 @@ namespace mmo
 			return;
 		}
 
-		// A generic lit albedo + normal material; the per-page instances only swap in the baked colour.
-		// The flat normal map leaves the (baked, filtered) vertex normals in charge of the lighting.
-		const MaterialPtr parent = MaterialManager::Get().Load("Models/AlbedoNormal_Opaque_Base.hmat");
+		// Lit albedo + normal material; the per-page instances only swap in the baked colour. The bake
+		// stores the albedo with 1 - emissive / albedo in alpha, and the material adds the emissive back
+		// unlit, so glowing terrain (the desert sand) shades the same in the distance. The flat normal map leaves
+		// the (baked, filtered) vertex normals in charge of the lighting.
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/Terrain/FarTerrain.hmat");
 		if (!parent)
 		{
 			WLOG("Distant terrain disabled: its material could not be loaded");
@@ -6830,7 +7090,12 @@ namespace mmo
 
 		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
 		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
+		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
 		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
+		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
+		{
+			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
+		}
 	}
 
 	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)
@@ -6852,20 +7117,10 @@ namespace mmo
 			return;
 		}
 
-		const EnvironmentState& state = m_environment.GetState();
 		const float brightness = s_exposureVar ? s_exposureVar->GetFloatValue() : 1.0f;
 		const float defaultBrightness = m_skyComponent ? DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()) : DefaultDayBrightness;
 
-		renderer->SetExposure(state.exposure * brightness * defaultBrightness);
-		renderer->SetBloomIntensity(state.bloomIntensity);
-		renderer->SetBloomThreshold(state.bloomThreshold);
-		renderer->SetFogLightScattering(state.lightScattering);
-
-		ColorGradingSettings grading;
-		grading.SetSaturation(state.saturation);
-		grading.SetContrast(state.contrast);
-		grading.SetColorFilter(state.colorFilter);
-		renderer->SetColorGrading(grading, state.colorLut, state.colorLutFrom, state.colorLutBlend);
+		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness * defaultBrightness);
 
 		// Selected fresh every frame (and pushed even when empty) so a map without any fog
 		// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last

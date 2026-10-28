@@ -12,6 +12,7 @@
 #include "graphics/graphics_device.h"
 #include "graphics/texture_mgr.h"
 #include "log/default_log_levels.h"
+#include "base/profiler.h"
 #include "scene_graph/camera.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/render_queue.h"
@@ -158,6 +159,7 @@ namespace mmo
 		{
 			m_visiblePageCount = 0;
 			m_readyPageCount = 0;
+			m_loadingPageCount = 0;
 			if (m_radius == 0)
 			{
 				return;
@@ -188,12 +190,17 @@ namespace mmo
 				if (it == m_entries.end())
 				{
 					RequestPage(coord.x, coord.z);
+					++m_loadingPageCount;
 					continue;
 				}
 
 				Entry& entry = it->second;
 				if (entry.state != EntryState::Ready)
 				{
+					if (entry.state == EntryState::Loading)
+					{
+						++m_loadingPageCount;
+					}
 					continue;
 				}
 
@@ -231,13 +238,17 @@ namespace mmo
 			entry.state = EntryState::Loading;
 
 			const String filename = m_terrain.GetPageLodFilename(x, z);
+			const String textureName = m_terrain.GetPageLodTextureFilename(x, z);
 			std::weak_ptr<char> lifetime = m_lifetime;
 
 			// The worker job must not touch members: this object may be gone by the time it runs.
-			m_postToWorker([lifetime, postToMain = m_postToMain, filename, x, z, owner = this]()
+			m_postToWorker([lifetime, postToMain = m_postToMain, filename, textureName, x, z, owner = this]()
 			{
 				std::vector<far_mesh::Vertex> vertices;
 				bool success = false;
+
+				// The baked colour is loaded on the main thread once the page is ready; read it here.
+				AssetRegistry::Prefetch(textureName);
 
 				if (AssetRegistry::HasFile(filename))
 				{
@@ -279,6 +290,8 @@ namespace mmo
 				// Left the area (and possibly re-entered with a newer request) while streaming.
 				return;
 			}
+
+			PROFILE_SCOPE("Stream: FarTerrain page");
 
 			Entry& entry = it->second;
 			if (!success)

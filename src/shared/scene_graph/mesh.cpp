@@ -3,6 +3,8 @@
 #include "mesh.h"
 #include "graphics/graphics_device.h"
 
+#include <algorithm>
+#include <limits>
 #include <memory>
 #include <ranges>
 
@@ -169,7 +171,8 @@ namespace mmo
 
 	void Mesh::AddBoneAssignment(const VertexBoneAssignment& vertBoneAssign)
 	{
-		m_boneAssignments.insert(VertexBoneAssignmentList::value_type(vertBoneAssign.vertexIndex, vertBoneAssign));
+		// Kept in insertion order; NormalizeBoneAssignments sorts by vertex before compiling.
+		m_boneAssignments.emplace_back(vertBoneAssign.vertexIndex, vertBoneAssign);
 		m_boneAssignmentsOutOfDate = true;
 	}
 
@@ -187,84 +190,86 @@ namespace mmo
 
 	constexpr uint16 MaxBlendWeights = 4;
 
-	typedef std::multimap<float, Mesh::VertexBoneAssignmentList::iterator> WeightIteratorMap;
-
 	uint16 Mesh::NormalizeBoneAssignments(uint64 vertexCount, VertexBoneAssignmentList& assignments) const
 	{
-		// Iterate through, finding the largest # bones per vertex
-		unsigned short maxBones = 0;
-		bool hasNonSkinnedVertices = false;
-		VertexBoneAssignmentList::iterator i;
+		// Sort by vertex; stable, so assignments of one vertex keep their insertion order as they
+		// did in the multimap this used to be. Files are already sorted, so this is usually a check.
+		const auto byVertex = [](const auto& a, const auto& b) { return a.first < b.first; };
+		if (!std::is_sorted(assignments.begin(), assignments.end(), byVertex))
+		{
+			std::stable_sort(assignments.begin(), assignments.end(), byVertex);
+		}
 
+		// One pass over the sorted assignments, a group of equal vertex indices at a time: this runs
+		// on every skinned mesh load, so no per-vertex lookups.
+		uint16 maxBones = 0;
+		bool hasNonSkinnedVertices = false;
+		bool removedAny = false;
+		std::vector<VertexBoneAssignmentList::value_type*> group;
+
+		// Trimmed entries get this key and are compacted away after the pass.
+		constexpr size_t removedKey = std::numeric_limits<size_t>::max();
+
+		size_t next = 0;
 		for (size_t v = 0; v < vertexCount; ++v)
 		{
-			// Get number of entries for this vertex
-			short currBones = static_cast<unsigned short>(assignments.count(v));
-			if (currBones <= 0)
+			group.clear();
+			for (; next < assignments.size() && assignments[next].first <= v; ++next)
+			{
+				if (assignments[next].first == v)
+				{
+					group.push_back(&assignments[next]);
+				}
+			}
+
+			if (group.empty())
 			{
 				hasNonSkinnedVertices = true;
+				continue;
 			}
-			
-			// Deal with max bones update
-			// (note this will record maxBones even if they exceed limit)
-			if (maxBones < currBones)
+
+			// Note this records maxBones even if they exceed the limit
+			maxBones = std::max(maxBones, static_cast<uint16>(std::min<size_t>(group.size(), std::numeric_limits<uint16>::max())));
+
+			if (group.size() > MaxBlendWeights)
 			{
-				maxBones = currBones;
-			}
-				
-			// does the number of bone assignments exceed limit?
-			if (currBones > MaxBlendWeights)
-			{
-				// To many bone assignments on this vertex
-				// Find the start & end (end is in iterator terms ie exclusive)
-				std::pair<VertexBoneAssignmentList::iterator, VertexBoneAssignmentList::iterator> range;
+				// Too many bone assignments on this vertex: remove the lowest weights. The stable sort
+				// keeps file order among equal weights, so the same ones go as before.
+				std::stable_sort(group.begin(), group.end(), [](const auto& a, const auto& b) { return a->second.weight < b->second.weight; });
 
-				// map to sort by weight
-				WeightIteratorMap weightToAssignmentMap;
-				range = assignments.equal_range(v);
-
-				// Add all the assignments to map
-				for (i = range.first; i != range.second; ++i)
+				const size_t numToRemove = group.size() - MaxBlendWeights;
+				for (size_t r = 0; r < numToRemove; ++r)
 				{
-					// insert value weight->iterator
-					weightToAssignmentMap.insert(
-						WeightIteratorMap::value_type(i->second.weight, i));
+					group[r]->first = removedKey;
 				}
-
-				// Reverse iterate over weight map, remove lowest n
-				unsigned short numToRemove = currBones - MaxBlendWeights;
-				auto remIt = weightToAssignmentMap.begin();
-
-				while (numToRemove--)
-				{
-					// Erase this one
-					assignments.erase(remIt->second);
-					++remIt;
-				}
+				group.erase(group.begin(), group.begin() + numToRemove);
+				removedAny = true;
 			}
 
-			std::pair<VertexBoneAssignmentList::iterator, VertexBoneAssignmentList::iterator> normalise_range = assignments.equal_range(v);
 			float totalWeight = 0;
-
-			// Find total first
-			for (i = normalise_range.first; i != normalise_range.second; ++i)
+			for (const auto& assignment : group)
 			{
-				totalWeight += i->second.weight;
+				totalWeight += assignment->second.weight;
 			}
 
 			// Now normalise if total weight is outside tolerance
 			if (fabs(1.0f - totalWeight) >= FLT_EPSILON)
 			{
-				for (i = normalise_range.first; i != normalise_range.second; ++i)
+				for (const auto& assignment : group)
 				{
-					i->second.weight = i->second.weight / totalWeight;
+					assignment->second.weight = assignment->second.weight / totalWeight;
 				}
 			}
 		}
 
+		if (removedAny)
+		{
+			std::erase_if(assignments, [](const auto& assignment) { return assignment.first == removedKey; });
+		}
+
 		if (maxBones > MaxBlendWeights)
 		{
-			WLOG("Mesh " << m_name << " includes vertices with more than " << MaxBlendWeights << " bone assignments. The lowest bone assignments beyong this limit have been removed!");
+			WLOG("Mesh " << m_name << " includes vertices with more than " << MaxBlendWeights << " bone assignments. The lowest bone assignments beyond this limit have been removed on load; re-save it with mmo_edit --resave-mesh to stop paying for that.");
 			maxBones = MaxBlendWeights;
 		}
 
@@ -447,5 +452,17 @@ namespace mmo
 		}
 
 		vertexBuffer->Unmap();
+	}
+}
+
+namespace mmo
+{
+	void AppendPlacedSoundEmitters(const Mesh& mesh, const Vector3& position, const Quaternion& orientation, const Vector3& scale, std::vector<PlacedSoundEmitter>& out)
+	{
+		for (const MeshSoundEmitter& emitter : mesh.GetSoundEmitters())
+		{
+			const Vector3 scaled(emitter.offset.x * scale.x, emitter.offset.y * scale.y, emitter.offset.z * scale.z);
+			out.push_back(PlacedSoundEmitter{ emitter.soundEntryId, position + orientation * scaled, emitter.volume, emitter.maxDistance });
+		}
 	}
 }

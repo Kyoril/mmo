@@ -92,6 +92,12 @@ namespace mmo
 		/// model unless random_gender is set and a female model exists; then it is a 50/50 roll.
 		static uint32 RollDisplayId(const proto::UnitEntry& entry, RandomnessGenerator& generator);
 
+		/// Derives the movement abilities of a creature from its unit entry. Every creature can
+		/// walk and swim unless its extraflags take an ability away.
+		static MovementAbilityFlags MovementAbilitiesOf(const proto::UnitEntry& entry);
+
+		MovementAbilityFlags GetMovementAbilities() const override { return MovementAbilitiesOf(*m_entry); }
+
 		/// Updates the creatures loot recipient. Values of 0 mean no recipient.
 		void AddLootRecipient(uint64 guid);
 

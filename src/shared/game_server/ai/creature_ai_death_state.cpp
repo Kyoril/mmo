@@ -17,6 +17,15 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Horizontal distance from the dying creature within which a player still shares in the
+		/// kill: experience, quest kill credit and loot rights alike. The group scan below uses the
+		/// same radius to decide which party members of a tagger are in, so this is what "being at
+		/// the kill" means here.
+		constexpr float KillRewardDistance = 100.0f;
+	}
+
 	CreatureAIDeathState::CreatureAIDeathState(CreatureAI& ai)
 		: CreatureAIState(ai)
 		, m_rollTimeout(ai.GetControlled().GetTimers())
@@ -50,24 +59,11 @@ namespace mmo
 			GamePlayerS* maxLevelCharacter = nullptr;
 			std::shared_ptr<GamePlayerS> primaryLootRecipient;
 			std::map<uint64, std::shared_ptr<GamePlayerS>> lootRecipients;
-			controlled.ForEachLootRecipient([&controlled, &lootRecipients, &sumLevel, &maxLevelCharacter, &primaryLootRecipient](const std::shared_ptr<GamePlayerS>& character)
+			controlled.ForEachLootRecipient([&lootRecipients, &primaryLootRecipient](const std::shared_ptr<GamePlayerS>& character)
 				{
 					if (!primaryLootRecipient)
 					{
 						primaryLootRecipient = character;
-					}
-
-					// First add this to the sum of levels
-					const uint32 characterLevel = character->GetLevel();
-					sumLevel += characterLevel;
-
-					const uint32 xpCutoffLevel = xp::GetExpCutoffLevel(characterLevel);
-					if (controlled.GetLevel() > xpCutoffLevel)
-					{
-						if (!maxLevelCharacter || maxLevelCharacter->GetLevel() < characterLevel)
-						{
-							maxLevelCharacter = character.get();
-						}
 					}
 
 					lootRecipients[character->GetGuid()] = character;
@@ -81,7 +77,7 @@ namespace mmo
 					const Vector3 location(controlled.GetPosition());
 
 					// Find nearby group members and make them loot recipients, too
-					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, 100.0f), [&lootRecipients, &controlled, groupId, &maxLevelCharacter, &sumLevel](GameUnitS& unit) -> bool
+					controlled.GetWorldInstance()->GetUnitFinder().FindUnits(Circle(location.x, location.z, KillRewardDistance), [&lootRecipients, groupId](GameUnitS& unit) -> bool
 						{
 							// Not even a player? Only players get rewards
 							if (!unit.IsPlayer())
@@ -103,29 +99,67 @@ namespace mmo
 								return true;
 							}
 
-							// Alright, this player needs to be considered for rewards as well, increase the sumLevel
-							const uint32 characterLevel = unit.GetLevel();
-							sumLevel += characterLevel;
-
 							// Remember we rewarded the player
 							lootRecipients[player->GetGuid()] = player;
-
-							// Check if this is the max level character if it
-							const uint32 xpCutoffLevel = xp::GetExpCutoffLevel(characterLevel);
-							if (controlled.GetLevel() > xpCutoffLevel)
-							{
-								if (!maxLevelCharacter || maxLevelCharacter->GetLevel() < characterLevel)
-								{
-									maxLevelCharacter = player.get();
-								}
-							}
 
 							return true;
 						});
 				}
 			}
 
-			// Reward all recipients
+			// A kill rewards the players who were at it. The group scan above only ever reaches
+			// members inside the reward radius, but the tagger never passed through it, so a player
+			// who had died and released to its bind point, or was teleported away, still collected
+			// everything. Dropping the far away recipients here instead of at each payout keeps
+			// experience, quest kill credit and loot rights agreeing on who was there.
+			const Vector3 corpseLocation(controlled.GetPosition());
+			for (auto it = lootRecipients.begin(); it != lootRecipients.end();)
+			{
+				if (it->second->GetSquaredDistanceTo(corpseLocation, false) > KillRewardDistance * KillRewardDistance)
+				{
+					it = lootRecipients.erase(it);
+				}
+				else
+				{
+					++it;
+				}
+			}
+
+			// The corpse itself belongs to the same players: IsLootRecipient answers from the tag
+			// list until the loot instance below exists, and the tag list still holds a tagger who
+			// is no longer here.
+			controlled.RemoveLootRecipients();
+			for (const auto& recipient : lootRecipients)
+			{
+				controlled.AddLootRecipient(recipient.first);
+			}
+
+			// Whoever tagged the creature decides the loot rules - unless it was not at the kill,
+			// in which case whichever of its party members remain do.
+			if (primaryLootRecipient && !lootRecipients.contains(primaryLootRecipient->GetGuid()))
+			{
+				primaryLootRecipient = lootRecipients.empty() ? nullptr : lootRecipients.begin()->second;
+			}
+
+			// The experience split is shared out by level, so only the remaining recipients may
+			// count towards it.
+			for (const auto& recipient : lootRecipients)
+			{
+				const uint32 characterLevel = recipient.second->GetLevel();
+				sumLevel += characterLevel;
+
+				const uint32 xpCutoffLevel = xp::GetExpCutoffLevel(characterLevel);
+				if (controlled.GetLevel() > xpCutoffLevel)
+				{
+					if (!maxLevelCharacter || maxLevelCharacter->GetLevel() < characterLevel)
+					{
+						maxLevelCharacter = recipient.second.get();
+					}
+				}
+			}
+
+			// Reward all recipients. Quest kill credit is not gated on being alive: a player who
+			// died to the creature it was killing still worked for the objective.
 			for (const auto& recipient : lootRecipients)
 			{
 				recipient.second->OnQuestKillCredit(controlled.GetGuid(), controlled.GetEntry());
@@ -195,6 +229,9 @@ namespace mmo
 			const float groupModifier = xp::GetGroupXpRate(lootRecipients.size(), false);
 			for (const auto& character : lootRecipients)
 			{
+				// Experience is earned by being at the kill and living through it. The distance is
+				// already settled above; a corpse earns nothing, even though it keeps its quest
+				// kill credit and may still loot once it is back on its feet.
 				if (!character.second->IsAlive())
 				{
 					continue;

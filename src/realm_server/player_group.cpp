@@ -237,6 +237,10 @@ namespace mmo
 	{
 		ASSERT(m_leaderGUID != 0);
 
+		// SetGroup(nullptr) below may drop the last strong reference: a group already erased from
+		// ms_groupsById is held only by its members. Keep ourselves alive until we return.
+		const auto self = shared_from_this();
+
 		const auto it = m_members.find(guid);
 		if (it != m_members.end())
 		{
@@ -377,6 +381,10 @@ namespace mmo
 	void PlayerGroup::Disband(const bool silent)
 	{
 		ASSERT(m_leaderGUID != 0);
+
+		// SetGroup(nullptr) below may drop the last strong reference (see RemoveMember), and the
+		// erase from ms_groupsById at the end may too. Keep ourselves alive until we return.
+		const auto self = shared_from_this();
 
 		if (!silent)
 		{

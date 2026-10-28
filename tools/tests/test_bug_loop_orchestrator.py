@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 
 sys.dont_write_bytecode = True
 
@@ -181,8 +182,17 @@ class FakeRunner:
 		self.calls = []
 		self.inputs = []
 		self.on_fix = None
+		# An exception every Claude call raises, like a logged-out CLI (None: calls work).
+		self.down = None
+
+	def probe(self, cwd, timeout=300):
+		self.calls.append("probe")
+		if self.down:
+			raise self.down
 
 	def structured(self, prompt, input_text, schema, tools, cwd, timeout):
+		if self.down:
+			raise self.down
 		self.calls.append(("triage" if tools == claude.TRIAGE_TOOLS else "review"))
 		self.inputs.append(("triage" if tools == claude.TRIAGE_TOOLS else "review", input_text))
 		if tools == claude.TRIAGE_TOOLS:
@@ -192,6 +202,8 @@ class FakeRunner:
 		return dict(self.review)
 
 	def agent(self, prompt, input_text, cwd, timeout, max_usd):
+		if self.down:
+			raise self.down
 		self.calls.append("fix")
 		self.inputs.append(("fix", input_text))
 		path = re.search(r"Write FIX.json to: (.+)", input_text).group(1).strip()
@@ -371,6 +383,8 @@ class FakeVerifier:
 class LoopTests(unittest.TestCase):
 	def make(self, verdict=GOOD_VERDICT, fix=GOOD_FIX, review=GOOD_REVIEW, changes=BENIGN_CHANGES, diff=BENIGN_DIFF,
 			bugs=None, now="2026-10-07 10:00", dry_run=False, proof_ok=True, gate_ok=True, github=None, **config):
+		# Self-correction rounds have tests of their own; elsewhere a park is the first park.
+		config.setdefault("self_correct_rounds", 0)
 		folder = tempfile.TemporaryDirectory()
 		self.addCleanup(folder.cleanup)
 		self.artifacts = os.path.join(folder.name, "artifacts")
@@ -722,12 +736,165 @@ class LoopTests(unittest.TestCase):
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertTrue(any("Refix limit" in m for m in self.notifier.messages))
 
-	def test_refix_on_an_unusable_branch_is_released(self):
-		self.park_with_decision("refix", "Again.")
-		self.worktree.resume_error = gitops.GitError("merge conflict")
+	def test_a_replay_request_carries_out_the_newest_maintainer_decision_again(self):
+		# 2026-10-26: decisions consumed during a Claude outage had to be clicked again by hand.
+		self.park_with_decision("refix", "unused")
+		self.api.bugs[BUG_ID]["decision"] = None
+		self.api.bugs[BUG_ID]["history"] = [
+			{"actor": "maintainer", "change": "decision: refix: Old guidance."},
+			{"actor": "maintainer", "change": "decision: refix: Count summoned units as player damage."},
+			{"actor": "bug-loop", "change": "decision: refix: Never taken from the loop's own entries."},
+		]
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		loop.request_replay(self.artifacts, BUG_ID)
 		self.loop.poll_once()
-		self.assertIn("cannot refix", self.api.notes(BUG_ID)[-1])
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Count summoned units as player damage.", fix_input)
+		self.assertNotIn("Never taken", fix_input)
+		self.assertEqual(os.listdir(os.path.join(self.artifacts, loop.REPLAY_DIR)), [])
+
+	def test_guard_advisories_reach_the_reviewer_but_do_not_park(self):
+		self.make()
+		note = "src/shared/game_server/ai/x.cpp: changed a tuned value: m_range = 5;"
+		real = guard.evaluate
+		with mock.patch.object(guard, "evaluate", lambda *args, **kwargs: dict(real(*args, **kwargs), advisories=[note])):
+			self.loop.poll_once()
+		review_input = [text for kind, text in self.runner.inputs if kind == "review"][0]
+		self.assertIn("advisory (does not park; check it): " + note, review_input)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	LOGGED_OUT = claude.ClaudeUnavailable("claude is unavailable: Failed to authenticate: OAuth session expired")
+
+	def test_a_logged_out_claude_pauses_the_loop_instead_of_blaming_the_bug(self):
+		# 2026-10-26: an expired login turned four bugs into needs-info and used up two decisions.
+		self.make()
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertNotEqual((self.api.bugs[BUG_ID].get("triage") or {}).get("category"), loop.NEEDS_INFO_CATEGORY)
+		self.assertTrue(self.state.data["claude_down"])
+		self.assertEqual(sum("Bug loop paused" in m for m in self.notifier.messages), 1)
+		self.assertNotIn(BUG_ID, self.state.data["triage_failures"])
+		# While the pause holds, nothing calls Claude, not even the probe.
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls, [])
+		self.assertEqual(sum("Bug loop paused" in m for m in self.notifier.messages), 1)
+
+	def test_a_fix_cut_off_by_a_logout_is_queued_again(self):
+		self.make()
+		self.runner.on_fix = lambda: setattr(self.runner, "down", self.LOGGED_OUT)
+		self.runner.review = None  # never reached: the review is the first call after the logout
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "triaged")
+		self.assertIn("waiting: Claude cannot run", self.api.notes(BUG_ID)[-1])
+		self.assertTrue(self.state.in_fix_queue(BUG_ID))
+		self.assertNotIn(BUG_ID, self.state.data["attempts"])
+
+	def test_a_refix_decision_waits_for_claude_and_runs_once_it_is_back(self):
+		self.park_with_decision("refix", "Exclude terrain from line of sight.")
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop._claude_failed("Failed to authenticate")
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertIsNone((self.api.bugs[BUG_ID].get("decision") or {}).get("consumedAt"))
+		self.assertNotIn(("refix", "Exclude terrain from line of sight."),
+			[(kind, text) for kind, text in self.runner.inputs if "Exclude terrain" in text])
+		# Back after the retry interval: the probe succeeds and the decision is carried out.
+		self.runner.down = None
+		self.now += datetime.timedelta(minutes=self.loop.config.claude_retry_minutes + 1)
+		self.loop.poll_once()
+		self.assertIsNone(self.state.data["claude_down"])
+		self.assertTrue(any("Bug loop resumed" in m for m in self.notifier.messages))
+		self.assertIn("Exclude terrain from line of sight.", dict(self.runner.inputs)["fix"])
+
+	def test_a_refix_cut_off_by_a_logout_is_replayed_without_using_a_round(self):
+		self.park_with_decision("refix", "Exclude terrain from line of sight.")
+		self.runner.down = self.LOGGED_OUT
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("your refix runs once it is back", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.state.refix_count(BUG_ID), 0)
+		self.assertEqual(self.state.data["deferred_decisions"],
+			[{"bug": BUG_ID, "action": "refix", "guidance": "Exclude terrain from line of sight."}])
+		self.runner.down = None
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.now += datetime.timedelta(minutes=self.loop.config.claude_retry_minutes + 1)
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["deferred_decisions"], [])
+		self.assertIn("Exclude terrain from line of sight.", dict(self.runner.inputs)["fix"])
+
+	def test_a_second_ship_click_on_a_shipped_bug_keeps_it_resolved(self):
+		# 2026-10-26: b36cd3a9 shipped from the queue, then a second click reopened it as "branch moved".
+		self.park_with_decision("ship", head="head1")
+		self.worktree.merged_[BRANCH] = "merge9"
+
+		def head(ref="HEAD"):
+			if ref == BRANCH:
+				raise gitops.GitError("unknown revision")
+			return "head1"
+		self.worktree.head = head
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertIn("already shipped in merge9", self.api.notes(BUG_ID)[-1])
 		self.assertEqual(self.worktree.shipped, [])
+
+	def test_refix_on_a_branch_that_cannot_take_develop_restarts_from_develop(self):
+		# Before 2026-10-22 this ended the refix ("decide again"), and a ship decision failed on the
+		# same conflict: the bug could never move again.
+		self.park_with_decision("refix", "Again.")
+		self.worktree.resume_error = gitops.GitError("merge conflict in src/a.cpp (needs a manual merge)")
+		self.runner.on_fix = lambda: (setattr(self.worktree, "head_", "head1"), self.worktree.branch_heads.update({BRANCH: "head1"}))
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.started, [(BRANCH, "base1")])
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("Again.", fix_input)
+		self.assertIn("restarted_from_develop", fix_input)
+		self.assertIn("src/a.cpp", fix_input)
+		self.assertIn("earlier_diff", fix_input)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_ship_conflict_reapplies_the_fix_on_develop(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: data/maps.data changed differently", True)
+
+		def refixed():
+			self.worktree.head_ = "head2"
+			self.worktree.branch_heads[BRANCH] = "head2"
+			self.worktree.ship_result = gitops.ShipResult(True, "merge2", "")
+		patcher = mock.patch.dict(FILES, {"head2": FILES["head1"]})
+		patcher.start()
+		self.addCleanup(patcher.stop)
+		self.runner.on_fix = refixed
+		self.loop.poll_once()
+		fix_input = dict(self.runner.inputs)["fix"]
+		self.assertIn("From the bug loop, not the maintainer", fix_input)
+		self.assertIn("data/maps.data", fix_input)
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head2"])
+		self.assertEqual(self.state.reapply_count(BUG_ID), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_ship_conflict_reapply_is_limited(self):
+		self.park_with_decision("ship", head="head1", max_reapply=0)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("ship: merge conflict", self.api.notes(BUG_ID)[-1])
+
+	def test_other_ship_failures_do_not_reapply(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "the fast gate on the merge is red")
+		self.loop.poll_once()
+		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	def test_ship_records_the_conflicts_it_resolved(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.resolutions = [{"repo": ".", "data": ["data/editor/data/items.data"], "text": [{"path": "src/a.cpp"}]}]
+		self.loop.poll_once()
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertIn("resolved in data/editor/data/items.data, src/a.cpp", self.api.notes(BUG_ID)[-1])
+		with open(os.path.join(self.artifacts, BUG_ID, "merge.json"), encoding="utf-8") as handle:
+			self.assertEqual(json.load(handle)[0]["text"], [{"path": "src/a.cpp"}])
 
 	def test_refix_on_a_missing_branch_starts_fresh_with_the_guidance(self):
 		self.park_with_decision("refix", "Exclude terrain from line of sight.")
@@ -896,12 +1063,35 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn("does not match", self.api.notes(BUG_ID)[-1])
 
-	def test_ship_decision_respects_breaker_and_freeze(self):
+	def test_ship_decision_waits_for_the_breaker_instead_of_being_used_up(self):
 		self.park_with_decision("ship", head="head1")
 		loop_state.trip_breaker(self.artifacts, "test", self.now)
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
-		self.assertIn("circuit breaker", self.api.notes(BUG_ID)[-1])
+		self.assertIn("ships once the breaker is cleared", self.api.notes(BUG_ID)[-1])
+		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual(self.state.data["ship_queue"], [])
+
+	def test_ship_decision_queued_for_the_freeze_waits_for_a_breaker_tripped_meanwhile(self):
+		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "test", self.now)
+		self.now = utc("2026-10-08 01:00")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertEqual(len(self.state.data["ship_queue"]), 1)
+		self.assertNotIn("parked", self.outcomes())
+		loop_state.reset_breaker(self.artifacts)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
+	def test_ship_decision_respects_freeze(self):
 		self.park_with_decision("ship", head="head1", now="2026-10-07 22:00")
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped, [])
@@ -954,13 +1144,16 @@ class LoopTests(unittest.TestCase):
 	def test_status_changes_are_announced(self):
 		self.make(gate_ok=False)
 		self.loop.poll_once()
-		self.assertEqual(len(self.notifier.messages), 3)
+		self.assertEqual(len(self.notifier.messages), 4)
 		self.assertIn("Triaged, queued", self.notifier.messages[0])
 		self.assertIn("severity high", self.notifier.messages[0])
 		self.assertIn("Fix started", self.notifier.messages[1])
 		self.assertIn("Parked for review", self.notifier.messages[2])
-		self.assertIn("the full gate is red", self.notifier.messages[2])
-		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages))
+		self.assertIn("the fast gate is red", self.notifier.messages[2])
+		self.assertTrue(all(BUG_ID in m for m in self.notifier.messages[:3]))
+		# The queue ran empty: busy (recorded silently, the first mode) -> idle, with the stretch's work.
+		self.assertIn("Bug loop idle", self.notifier.messages[3])
+		self.assertIn("parked 1", self.notifier.messages[3])
 
 	def test_design_question_replaces_the_park_status_message(self):
 		self.make(review=dict(GOOD_REVIEW, design_question="Q?"))
@@ -1132,7 +1325,7 @@ class LoopTests(unittest.TestCase):
 		self.assertTrue(self.api.updates[-1][1]["release_claim"])
 		self.assertEqual(self.state.data["autoships"], 1)
 		self.assertEqual(self.worktree.deleted, [BRANCH])
-		self.assertEqual(self.verifier.gates, ["full"])
+		self.assertEqual(self.verifier.gates, ["fast"])
 		with open(os.path.join(self.reports, "bugloop-2026-10-07.json"), encoding="utf-8") as handle:
 			self.assertEqual(json.load(handle)["counts"]["shipped"], 1)
 
@@ -1155,13 +1348,20 @@ class LoopTests(unittest.TestCase):
 
 	def test_low_confidence_red_gate_failed_proof_and_bad_review_park(self):
 		for kwargs, fragment in (
-				({"fix": dict(GOOD_FIX, confidence="medium")}, "confidence is medium"),
-				({"gate_ok": False}, "full gate is red"),
+				({"fix": dict(GOOD_FIX, confidence="low")}, "confidence is low"),
+				({"fix": dict(GOOD_FIX, confidence="medium"), "proof_ok": False}, "confidence is medium"),
+				({"gate_ok": False}, "fast gate is red"),
 				({"proof_ok": False}, "proof:"),
 				({"review": dict(GOOD_REVIEW, reduces_security=True)}, "reduces a security")):
 			self.make(**kwargs)
 			self.loop.poll_once()
 			self.assertParked(fragment)
+
+	def test_medium_confidence_with_a_passing_proof_ships(self):
+		self.make(fix=dict(GOOD_FIX, confidence="medium"))
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_no_project_basis_is_wontfix(self):
 		self.make(fix=dict(GOOD_FIX, outcome="no_project_basis", expected_source=""))
@@ -1272,6 +1472,48 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 		self.assertIn("abc123", self.api.notes(BUG_ID)[-1])
 
+	BLAMING_RED = {"passed": False, "merges_since_last_green": ["abc Merge bugfix/0a1b2c3d (bug-loop, gate green at 1)"]}
+
+	def test_newer_green_nightly_clears_the_breaker_the_loop_tripped(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+		self.assertIsNone(self.state.data["breaker_source"])
+		self.assertTrue(any("breaker cleared" in m and "nightly run 8" in m for m in self.notifier.messages))
+		# The red run stays seen: it cannot trip the breaker a second time.
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertFalse(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_breaker_set_by_hand(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		loop_state.trip_breaker(self.artifacts, "rollback of nightly-x", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_green_nightly_keeps_a_hold_set_on_top_of_the_loops_trip(self):
+		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		loop_state.trip_breaker(self.artifacts, "hold everything", self.now, by_hand=True)
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertTrue(loop_state.breaker_active(self.artifacts))
+
+	def test_cleared_breaker_ships_the_waiting_ship_decision(self):
+		self.park_with_decision("ship", head="head1")
+		self.loop.nightly = lambda: ("nightly run 7", self.BLAMING_RED)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.loop.nightly = lambda: ("nightly run 8", {"passed": True, "merges_since_last_green": []})
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+
 	def test_red_nightly_with_loop_merge_trips_breaker_once(self):
 		self.make(verdict=dict(GOOD_VERDICT, category="not_a_bug"))
 		self.loop.nightly = lambda: ("nightly run 7", {"passed": False,
@@ -1371,6 +1613,116 @@ class LoopTests(unittest.TestCase):
 		self.assertIsNone(self.state.data["worktree_down"])
 
 	# ---- fix round 1
+
+	# ---- self-correction
+
+	BLOCKING_REVIEW = dict(GOOD_REVIEW, blocking_issues=["GameTooltip.lua:224 calls FormatDurationAmount before it is defined"])
+
+	def self_correcting(self, review=None, fixed_after=1, **make_kwargs):
+		"""The fixer commits head1, head2, ... one per round; the review is `review` until round
+		`fixed_after` has run, then clean."""
+		self.make(review=review or self.BLOCKING_REVIEW, self_correct_rounds=2, **make_kwargs)
+		rounds = []
+
+		def on_fix():
+			rounds.append(1)
+			head = "head{}".format(len(rounds))
+			FILES.setdefault(head, FILES["head1"])
+			self.worktree.head_ = head
+			self.worktree.branch_heads[BRANCH] = head
+			if len(rounds) > fixed_after:
+				self.runner.review = GOOD_REVIEW
+		self.runner.on_fix = on_fix
+		self.loop.poll_once()
+		return rounds
+
+	def test_review_finding_is_repaired_by_a_further_round_and_ships(self):
+		rounds = self.self_correcting()
+		self.assertEqual(len(rounds), 2)
+		self.assertEqual(self.worktree.shipped_heads, ["head2"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		second = [text for kind, text in self.runner.inputs if kind == "fix"][1]
+		self.assertIn("PREVIOUS ATTEMPT", second)
+		self.assertIn("FormatDurationAmount", second)
+		self.assertNotIn("MAINTAINER GUIDANCE", second)
+		self.assertIn(BRANCH, self.worktree.resumed)
+		self.assertIn("self-correcting", self.outcomes())
+
+	def test_self_correction_parks_after_its_rounds(self):
+		rounds = self.self_correcting(fixed_after=99)
+		self.assertEqual(len(rounds), 3)
+		self.assertParked("FormatDurationAmount")
+		self.assertEqual(self.state.self_correct_count(BUG_ID), 2)
+
+	def test_design_question_goes_to_the_maintainer_at_once(self):
+		rounds = self.self_correcting(review=dict(GOOD_REVIEW, design_question="Should rats flee?"))
+		self.assertEqual(len(rounds), 1)
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "needs_decision")
+
+	def test_reduced_security_goes_to_the_maintainer_at_once(self):
+		rounds = self.self_correcting(review=dict(GOOD_REVIEW, reduces_security=True))
+		self.assertEqual(len(rounds), 1)
+		self.assertParked("reduces a security")
+
+	def test_self_correction_needs_budget(self):
+		self.make(review=self.BLOCKING_REVIEW, self_correct_rounds=2, invocation_budget_per_day=10)
+		# The real runner counts every model call; the fake one does not, so the fix uses the budget up.
+		self.runner.on_fix = lambda: self.state.data.__setitem__("invocations", 9)
+		self.loop.poll_once()
+		self.assertEqual(self.runner.calls.count("fix"), 1)
+		self.assertParked("FormatDurationAmount")
+
+	def test_a_maintainer_refix_gets_rounds_of_its_own(self):
+		self.park_with_decision("refix", "Define it first.", head="head1", self_correct_rounds=2, review=self.BLOCKING_REVIEW)
+		self.state.count_self_correct(BUG_ID)
+		self.state.count_self_correct(BUG_ID)
+		rounds = []
+
+		def on_fix():
+			rounds.append(1)
+			head = "head{}".format(len(rounds) + 1)
+			FILES.setdefault(head, FILES["head1"])
+			self.worktree.head_ = head
+			self.worktree.branch_heads[BRANCH] = head
+			if len(rounds) > 1:
+				self.runner.review = GOOD_REVIEW
+		self.runner.on_fix = on_fix
+		self.loop.poll_once()
+		self.assertEqual(len(rounds), 2)
+		self.assertEqual(self.worktree.shipped_heads, ["head3"])
+		# The guided round's guidance stays in force in the automatic round after it.
+		self.assertIn("Define it first.", [text for kind, text in self.runner.inputs if kind == "fix"][1])
+
+	def test_self_correctable_reasons(self):
+		self.assertTrue(loop.self_correctable(["review: GameTooltip.lua:224 nil call", "the fast gate is red"]))
+		self.assertTrue(loop.self_correctable(["proof: regression test before=failed after=failed", loop.FEATURE_REASON]))
+		self.assertTrue(loop.self_correctable(["fixer confidence is medium"]))
+		self.assertFalse(loop.self_correctable(["fixer confidence is low"]))
+		self.assertFalse(loop.self_correctable([loop.FEATURE_REASON]))
+		self.assertFalse(loop.self_correctable(["review: x", "guard: src/a.cpp: protected path"]))
+		self.assertFalse(loop.self_correctable(["review: design question: why?"]))
+		self.assertFalse(loop.self_correctable(["review: the diff reduces a security, permission or integrity property"]))
+		self.assertFalse(loop.self_correctable(["review unavailable: timeout"]))
+		self.assertFalse(loop.self_correctable(["diff too large for review (1 characters, limit 0)"]))
+
+	def test_medium_confidence_ui_fix_ships_on_a_clean_review(self):
+		fix = dict(GOOD_FIX, confidence="medium", data_only=True, regression_test={"kind": "none"})
+		self.make(fix=fix, changes=LOC_CHANGES, diff=LOC_DIFF)
+		self.loop.poll_once()
+		self.assertEqual(len(self.worktree.shipped), 1)
+
+	def test_medium_confidence_ui_fix_with_a_finding_parks(self):
+		fix = dict(GOOD_FIX, confidence="medium", data_only=True, regression_test={"kind": "none"})
+		self.make(fix=fix, changes=LOC_CHANGES, diff=LOC_DIFF, review=self.BLOCKING_REVIEW)
+		self.loop.poll_once()
+		self.assertParked("confidence is medium")
+
+	def test_docs_beside_a_data_fix_do_not_require_a_regression_test(self):
+		changes = LOC_CHANGES + [guard.FileChange("docs/ui.md", 1, 0, False)]
+		self.assertTrue(loop.proof_exempt(changes))
+		self.assertFalse(loop.proof_exempt([guard.FileChange("docs/ui.md", 1, 0, False)]))
+		self.assertTrue(loop.proof_exempt([guard.FileChange("data/client/ClientDB/items.data", 0, 0, True),
+			guard.FileChange("data/editor/data/items.data", 0, 0, True)]))
 
 	def test_data_only_claim_does_not_waive_the_regression_proof(self):
 		fix = dict(GOOD_FIX, data_only=True, regression_test={"kind": "none"})
@@ -2321,6 +2673,136 @@ class LoopTests(unittest.TestCase):
 		ticket = self.run_emergency(fix=dict(GOOD_FIX, outcome="cannot_reproduce"))
 		self.assertIn("needs-info", self.outcomes())
 		self.assertEqual(len(self.ticket_messages(ticket)), 1)  # develop is red
+
+
+class StatusAndModeTests(LoopTests):
+	"""status.json at every stage, the busy/idle/paused mode and its Discord messages, and the
+	gate a doomed candidate skips."""
+
+	def record_stages(self):
+		stages = []
+		original = loop.loop_status.write
+
+		def write(artifacts_dir, snapshot, name=loop.loop_status.STATUS_FILE):
+			stages.append(snapshot["stage"])
+			original(artifacts_dir, snapshot, name)
+
+		loop.loop_status.write = write
+		self.addCleanup(setattr, loop.loop_status, "write", original)
+		return stages
+
+	def status(self):
+		return loop.loop_status.read(self.artifacts)
+
+	def test_every_stage_of_a_fix_is_reported(self):
+		self.make()
+		stages = self.record_stages()
+		self.loop.poll_once()
+		for stage in ("polling", "triaging", "preparing", "fixing", "reviewing", "waiting-for-gate-lock", "proving",
+				"gating", "shipping"):
+			self.assertIn(stage, stages)
+		self.assertLess(stages.index("fixing"), stages.index("gating"))
+		snapshot = self.status()
+		self.assertEqual(snapshot["stage"], "shipping")
+		self.assertEqual(snapshot["bug"], BUG_ID)
+		self.assertEqual(snapshot["branch"], BRANCH)
+		self.assertEqual(snapshot["pid"], os.getpid())
+		self.assertEqual(snapshot["budget"], self.loop.config.invocation_budget_per_day)
+
+	def test_status_lists_the_next_fix_first(self):
+		self.make()
+		self.state.enqueue_fix("a" * 24, "low", "2026-10-07T07:00:00Z")
+		self.state.enqueue_fix("b" * 24, "critical", "2026-10-07T09:00:00Z")
+		self.loop._stage("polling")
+		self.assertEqual(self.status()["fix_queue"], ["b" * 24, "a" * 24])
+
+	def test_a_dry_run_writes_its_own_status_file(self):
+		self.make(dry_run=True)
+		self.loop.poll_once()
+		self.assertIsNone(self.status())
+		self.assertIsNotNone(loop.loop_status.read(self.artifacts, loop.loop_status.DRY_STATUS_FILE))
+
+	def test_watch_reports_the_sleep_and_the_next_poll(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+
+		class Stop(Exception):
+			pass
+
+		def sleep(seconds):
+			raise Stop()
+
+		with self.assertRaises(Stop):
+			self.loop.watch(sleep)
+		snapshot = self.status()
+		self.assertEqual(snapshot["stage"], "sleeping")
+		self.assertEqual(snapshot["until"], (self.now + datetime.timedelta(seconds=self.loop.config.poll_seconds)).isoformat())
+
+	def test_a_new_backlog_is_announced_busy_then_idle_with_the_work_done(self):
+		self.make(gate_ok=False)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		modes = [m for m in self.notifier.messages if m.startswith("**Bug loop")]
+		self.assertEqual(len(modes), 2)
+		self.assertIn("Bug loop busy", modes[0])
+		self.assertIn("1 bug(s) queued", modes[0])
+		self.assertIn("Bug loop idle", modes[1])
+		self.assertIn("parked 1", modes[1])
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+
+	def test_an_unchanged_mode_is_not_announced_again(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		self.loop.poll_once()
+		self.assertFalse(any(m.startswith("**Bug loop") for m in self.notifier.messages))
+
+	def test_the_first_mode_is_recorded_silently(self):
+		self.make(bugs=[dict(BUG, status="resolved")])
+		self.loop.poll_once()
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+		self.assertEqual(self.notifier.messages, [])
+
+	def test_a_used_up_budget_with_bugs_queued_is_announced_as_paused(self):
+		other = dict(BUG, _id="65f0aa00bb11cc22dd33ee55", createdAt="2026-10-07T08:30:00Z",
+			subject={"type": "quest", "id": 13, "guid": "0", "name": "Wolf Trouble"})
+		self.make(bugs=[BUG, other], invocation_budget_per_day=4)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		# The fake runner counts no invocations: room for a triage (1), not for a fix (2).
+		self.state.data["invocations"] = 3
+		self.loop.poll_once()
+		self.assertNotIn("fix", self.runner.calls)
+		self.assertEqual(self.state.data["mode"]["name"], "paused")
+		paused = [m for m in self.notifier.messages if "Bug loop paused" in m]
+		self.assertEqual(len(paused), 1)
+		self.assertIn("daily Claude budget used up (3 of 4)", paused[0])
+		self.assertIn("2 bug(s) wait", paused[0])
+
+	def test_mode_messages_follow_the_status_message_switch(self):
+		self.make(gate_ok=False, notify_status_changes=False)
+		self.state.data["mode"] = {"name": "idle", "since": "2026-10-07T09:00:00+00:00", "reason": "", "counts": {}}
+		self.loop.poll_once()
+		self.assertEqual(self.notifier.messages, [])
+		self.assertEqual(self.state.data["mode"]["name"], "idle")
+
+	def test_a_candidate_that_parks_anyway_skips_the_gate(self):
+		self.make(review=dict(GOOD_REVIEW, blocking_issues=["off by one"]), notify_status_changes=False)
+		self.loop.poll_once()
+		self.assertEqual(self.verifier.gates, [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		with open(os.path.join(self.artifacts, BUG_ID, "gate.json"), encoding="utf-8") as handle:
+			gate = json.load(handle)
+		self.assertIsNone(gate["ok"])
+		self.assertEqual(gate["skipped"], loop.GATE_SKIPPED)
+		with open(os.path.join(self.artifacts, BUG_ID, "decision.json"), encoding="utf-8") as handle:
+			reasons = json.load(handle)["reasons"]
+		self.assertFalse(any("gate" in reason for reason in reasons))
+		self.assertTrue(reasons)
+
+	def test_a_parking_feature_still_runs_the_gate(self):
+		self.make(review=dict(GOOD_REVIEW, blocking_issues=["off by one"]), notify_status_changes=False)
+		self.state.add_feature(BUG_ID, "A feature")
+		self.loop.poll_once()
+		self.assertEqual(self.verifier.gates, ["fast"])
 
 
 class DecideTests(unittest.TestCase):

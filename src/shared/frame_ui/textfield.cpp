@@ -291,21 +291,19 @@ namespace mmo
 			return static_cast<int32>(GetCaretIndexAt(lines, lineIndex, column));
 		}
 
-		// Adjust position for scroll offset
+		// The position is in pixels relative to the frame with the scroll offset already added, so
+		// the text starts at the scaled left offset. The offset is authored in UI units and must be
+		// scaled before it can be compared with pixels; a click past the end of the text falls out
+		// of the loop below with the full length.
 		const float adjustedX = position.x;
-
-		// Check for out of bounds
-		if (adjustedX <= m_textAreaOffset.left)
+		const float textLeft = GetScaledTextAreaOffset().left;
+		if (adjustedX <= textLeft)
 		{
 			return 0;
 		}
-		if (adjustedX >= GetAbsoluteFrameRect().GetWidth() - m_textAreaOffset.right)
-		{
-			return utf8::length(textForCalculation);
-		}
 
 		// Now iterate the string value
-		float x = m_textAreaOffset.left;
+		float x = textLeft;
 		
 		// Character index (not byte index)
 		int32 charIndex = 0;
@@ -399,68 +397,39 @@ namespace mmo
 		Invalidate();
 	}
 
+	Rect TextField::GetScaledTextAreaOffset() const
+	{
+		// The renderer has always scaled the offsets with the UI scale height; keep that so text,
+		// caret and clicks agree on one value.
+		const float scale = FrameManager::Get().GetUIScaleSize().height;
+		return Rect(
+			m_textAreaOffset.left * scale,
+			m_textAreaOffset.top * scale,
+			m_textAreaOffset.right * scale,
+			m_textAreaOffset.bottom * scale);
+	}
+
+	Rect TextField::GetTextAreaRect() const
+	{
+		Rect area = const_cast<TextField*>(this)->GetAbsoluteFrameRect();
+		const Rect offset = GetScaledTextAreaOffset();
+		area.left += offset.left;
+		area.top += offset.top;
+		area.right -= offset.right;
+		area.bottom -= offset.bottom;
+		return area;
+	}
+
 	float TextField::GetCursorOffset() const
 	{
-		const float textScale = FrameManager::Get().GetTextScale();
-
+		// Relative to the text area: the renderer adds the text area's left edge itself. This used to
+		// add the left offset here as well, so the caret sat one (scaled) offset right of the text.
 		if (m_cursor <= 0)
 		{
-			return m_textAreaOffset.left * textScale;
-		}
-		
-		// Check for font
-		const auto font = GetFont();
-		if (!font)
-		{
-			return m_textAreaOffset.left * textScale;
+			return 0.0f;
 		}
 
-		// Make sure we have up-to-date parsed text
-		const_cast<TextField*>(this)->UpdateParsedText();
-
-		float x = m_textAreaOffset.left * textScale;
-		
-		// Use the plain text for cursor calculations when not masked
-		const std::string& textForCalculation = m_masked ? GetVisualText() : m_parsedText.plainText;
-		
-		// Process each character up to the caret position
-		std::size_t charIndex = 0;
-		
-		for (std::size_t byteIndex = 0; byteIndex < textForCalculation.length() && charIndex < static_cast<std::size_t>(m_cursor);)
-		{
-			std::size_t iterations = 1;
-			uint32_t codepoint;
-			
-			// Handle special ASCII control characters
-			if (byteIndex < textForCalculation.length() && textForCalculation[byteIndex] == '\t')
-			{
-				codepoint = ' ';
-				iterations = 4;
-				byteIndex++;
-			}
-			else
-			{
-				// Process UTF-8 character
-				size_t startPos = byteIndex;
-				codepoint = utf8::next_codepoint(textForCalculation, byteIndex);
-				
-				// If we couldn't decode a valid codepoint, skip this byte
-				if (codepoint == 0 && startPos < byteIndex)
-				{
-					continue;
-				}
-			}
-
-			if (const FontGlyph* glyph = font->GetGlyphData(m_masked ? m_maskCodePoint : codepoint))
-			{
-				x += glyph->GetAdvance(textScale) * iterations;
-			}
-			
-			// Increment character index (one Unicode codepoint = one character)
-			charIndex++;
-		}
-
-		return x;
+		return GetCaretPixelOffset(FrameManager::Get().GetTextScale());
 	}
 
 	bool TextField::OnMouseDown(MouseButton button, int32 buttons, const Point & position)
@@ -748,12 +717,38 @@ namespace mmo
 	{
 		abort_emission();
 
-		if (!AcceptsTab() && codepoint == 0x09)     // VK_TAB
+		// WM_CHAR delivers UTF-16 code units: a character beyond U+FFFF (most emoji) arrives as a
+		// high surrogate followed by a low one. Keep the first half until the second arrives, as
+		// encoding either half on its own produces invalid UTF-8.
+		uint32 character = codepoint;
+		if (codepoint >= 0xD800 && codepoint <= 0xDBFF)
+		{
+			m_pendingHighSurrogate = codepoint;
+			return;
+		}
+
+		if (codepoint >= 0xDC00 && codepoint <= 0xDFFF)
+		{
+			const uint16 highSurrogate = m_pendingHighSurrogate;
+			m_pendingHighSurrogate = 0;
+			if (highSurrogate == 0)
+			{
+				return;
+			}
+
+			character = 0x10000 + ((static_cast<uint32>(highSurrogate) - 0xD800) << 10) + (codepoint - 0xDC00);
+		}
+		else
+		{
+			m_pendingHighSurrogate = 0;
+		}
+
+		if (!AcceptsTab() && character == 0x09)     // VK_TAB
 		{
 			return;
 		}
 
-		if (codepoint == 0x0D || codepoint == 0x0A)  // VK_RETURN / line feed
+		if (character == 0x0D || character == 0x0A)  // VK_RETURN / line feed
 		{
 			if (!IsMultiLine())
 			{
@@ -761,17 +756,17 @@ namespace mmo
 			}
 
 			// Insert a hard line break
-			codepoint = '\n';
+			character = '\n';
 		}
 
-		if (codepoint == 0x8)   // VK_BACKSPACE
+		if (character == 0x8)   // VK_BACKSPACE
 			return;
 
 		// Windows turns a Ctrl shortcut into a WM_CHAR carrying a C0 control character right
 		// after the key down which already handled it, so Ctrl+V would append a 0x16 to the very
 		// text it just pasted. Control characters are not text and must never reach the field.
 		// Tab and line break got their meaning assigned above and are let through here.
-		if ((codepoint < 0x20 && codepoint != '\t' && codepoint != '\n') || codepoint == 0x7F)
+		if ((character < 0x20 && character != '\t' && character != '\n') || character == 0x7F)
 		{
 			return;
 		}
@@ -785,9 +780,9 @@ namespace mmo
 			m_cursor = static_cast<int32>(m_parsedText.hyperlinks[hyperlinkIndex].plainTextEnd);
 		}
 
-		// Convert the 16-bit codepoint to UTF-8 and insert it at the cursor position
+		// Convert the character to UTF-8 and insert it at the cursor position
 		std::string utf8Char;
-		utf8::append_codepoint(utf8Char, codepoint);
+		utf8::append_codepoint(utf8Char, character);
 		
 		// For simplicity and reliability, always append to the end when there's no markup
 		// This avoids complex text rebuilding issues
@@ -1011,7 +1006,7 @@ namespace mmo
 
 	float TextField::GetVisibleTextWidth() const
 	{
-		return const_cast<TextField*>(this)->GetAbsoluteFrameRect().GetWidth() - m_textAreaOffset.left - m_textAreaOffset.right;
+		return std::max(GetTextAreaRect().GetWidth(), 0.0f);
 	}
 
 	const std::string& TextField::GetParsedPlainText() const
@@ -1024,10 +1019,7 @@ namespace mmo
 	{
 		// Match the renderer, which insets the frame rect by the text area offsets
 		// scaled with the ui scale height.
-		const float scale = FrameManager::Get().GetUIScaleSize().height;
-		const float width = const_cast<TextField*>(this)->GetAbsoluteFrameRect().GetWidth() -
-			(m_textAreaOffset.left + m_textAreaOffset.right) * scale;
-		return std::max(width, 1.0f);
+		return std::max(GetTextAreaRect().GetWidth(), 1.0f);
 	}
 
 	const std::vector<TextWrapLine>& TextField::GetLineLayout() const

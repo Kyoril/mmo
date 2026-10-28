@@ -4,6 +4,7 @@
 
 #include "world_model.h"
 #include "instanced_mesh_collision.h"
+#include "mesh.h"
 #include "movable_object.h"
 #include "prop_kit.h"
 #include "world_model_batch.h"
@@ -27,6 +28,7 @@ namespace mmo
     class SubMesh;
     class Mesh;
     class Light;
+    class ParticleSystem;
 
     /// @brief Represents a runtime instance of a world model placed in the scene.
     /// Handles rendering with portal culling, visibility determination, and collision.
@@ -101,6 +103,9 @@ namespace mmo
         ///
         ///          Takes precedence over batching. Meant for the client and the world editor; the world
         ///          model editor keeps every placement separate so it can be moved.
+        ///
+        ///          Outdoor groups (IsClusteredGroup) are not merged per group: the top-level instance
+        ///          merges them, together with those of every nested child, per WorldModelClusterSize cell.
         /// @param enable Whether to merge. Like batching, must be set before the instance is attached.
         void SetMergingEnabled(const bool enable) { m_mergingEnabled = enable; }
 
@@ -119,6 +124,27 @@ namespace mmo
         /// @return A handle that keeps the merged geometry alive while held, once every group is merged;
         ///         null while groups remain, or for a null model.
         static std::shared_ptr<const void> PrewarmMergedGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Builds (or finds) the outdoor cluster geometry of a top-level world model, without
+        ///        instantiating it. @see IsClusteredGroup
+        /// @details The clusters cover the clustered groups of the model and of every child world model it
+        ///          nests, so the child models are loaded as well. Like PrewarmMergedGeometry, a streaming
+        ///          caller can build them a few groups per call.
+        /// @param maxGroups How many more groups to merge in this call (at least one).
+        /// @return A handle that keeps the cluster geometry alive while held, once every group is merged;
+        ///         null while groups remain, or for a null model.
+        static std::shared_ptr<const void> PrewarmClusterGeometry(const WorldModelPtr& model, size_t maxGroups = std::numeric_limits<size_t>::max());
+
+        /// @brief Whether merging puts a group's geometry into the outdoor clusters of the top-level
+        ///        instance instead of a mesh of its own.
+        /// @details True for groups that are not rooms: not flagged interior and without containment
+        ///          volumes. Outside a world model those are only frustum culled, so merging them per area
+        ///          loses no culling, while merging them per group costs a draw per group and material.
+        static bool IsClusteredGroup(const WorldModelGroup& group);
+
+        /// @brief Gets the number of outdoor cluster entities this instance draws. Only top-level
+        ///        instances with merging enabled have any. Zero until attached.
+        [[nodiscard]] size_t GetClusterEntityCount() const { return m_clusterRenderables.size(); }
 
         /// @brief Appends the meshes an instance of the model loads for itself: the visible mesh
         ///        references of its groups and the doodads of its default set. Child world models and
@@ -159,15 +185,40 @@ namespace mmo
         /// @brief Gets the number of scene lights created from the applied kits.
         [[nodiscard]] size_t GetKitLightCount() const;
 
+        /// @brief Gets the number of particle systems created from particle system references
+        ///        (.hpar paths) among the mesh references, active doodads and kit props.
+        [[nodiscard]] size_t GetParticleSystemCount() const { return m_particleInstances.size(); }
+
         /// @brief Gets the room a realized kit prop was derived into.
         /// @param index Index of the prop among all visible props of all kits, in kit order.
         /// @return The group index, or -1 when the prop lies in no room (so it is never culled) or
         ///         the index is out of range.
         [[nodiscard]] int32 GetKitPropGroup(size_t index) const;
 
+        /// @brief Appends the sound emitters of every mesh this instance places, in world space:
+        ///        the group mesh references, the doodads of the active sets, the kit props and,
+        ///        recursively, the child world models.
+        /// @details Walks the model data rather than the scene, so it gives the same result whether
+        ///          the geometry is batched, merged or one entity per mesh. Meaningful once the
+        ///          instance is attached, because the placement transform comes from its node.
+        void CollectSoundEmitters(std::vector<PlacedSoundEmitter>& out) const;
+
         /// @brief Deepest nesting of child world models that is instantiated. A town that places
         ///        buildings that place props is depth 2; anything this deep is a content mistake.
         static constexpr uint32 MaxChildDepth = 8;
+
+    public:
+        /// @brief Whether a mesh may be drawn through the instanced path at all.
+        /// @param mesh The mesh to test.
+        /// @return True when every submesh can be instanced.
+        static bool CanBatchMesh(const Mesh& mesh);
+
+        /// @brief Whether a material has a compiled instanced vertex shader variant.
+        /// @details Without one the device warns once and draws nothing at all, so this is checked
+        ///          up front and the affected placements fall back to entities.
+        /// @param material The material to test.
+        /// @return True when the material can be used for an instanced draw.
+        static bool MaterialSupportsInstancing(const MaterialPtr& material);
 
     public:
         // MovableObject overrides
@@ -315,18 +366,6 @@ namespace mmo
         /// @brief Whether a group is currently visible according to the last portal culling pass.
         [[nodiscard]] bool IsGroupVisible(int32 groupIndex) const;
 
-        /// @brief Whether a mesh may be drawn through the instanced path at all.
-        /// @param mesh The mesh to test.
-        /// @return True when every submesh can be instanced.
-        static bool CanBatchMesh(const Mesh& mesh);
-
-        /// @brief Whether a material has a compiled instanced vertex shader variant.
-        /// @details Without one the device warns once and draws nothing at all, so this is checked
-        ///          up front and the affected placements fall back to entities.
-        /// @param material The material to test.
-        /// @return True when the material can be used for an instanced draw.
-        static bool MaterialSupportsInstancing(const MaterialPtr& material);
-
         /// @brief Builds the mesh-facts lookup the bucketer uses, backed by the mesh manager.
         [[nodiscard]] WorldModelMeshLookup MakeMeshLookup();
 
@@ -439,6 +478,10 @@ namespace mmo
         /// @param scene The scene to create entities in.
         void CreateDoodads(Scene& scene);
 
+        /// @brief Gets the indices of the doodads that are placed: the global set 0 plus the
+        ///        active set, skipping indices out of range or without a valid name.
+        [[nodiscard]] std::vector<uint32> GetActiveDoodadIndices() const;
+
         /// @brief Creates lights from the world model.
         /// @param scene The scene to create lights in.
         void CreateLights(Scene& scene);
@@ -450,6 +493,17 @@ namespace mmo
         /// @brief Clears all lights.
         /// @param scene The scene to destroy lights in (can be null).
         void ClearLights(Scene* scene);
+
+        /// @brief Creates one looping particle system per particle system reference (.hpar path) among
+        ///        the visible mesh references, the active doodads and the visible kit props.
+        /// @details Recreates all of them, so it is called again whenever doodads or kits change. The
+        ///          geometry paths skip these references; FlattenWorldModelExtras reports the same set.
+        /// @param scene The scene to create the particle systems in.
+        void CreateParticleSystems(Scene& scene);
+
+        /// @brief Destroys all particle systems created by CreateParticleSystems.
+        /// @param scene The scene to destroy them in (can be null).
+        void ClearParticleSystems(Scene* scene);
 
         /// @brief Clears all geometry.
         /// @param scene The scene to destroy entities in (can be null).
@@ -492,6 +546,23 @@ namespace mmo
         };
         std::vector<GroupRenderable> m_groupRenderables;
 
+        /// @brief Outdoor cluster entities: the clustered groups of this instance and of every nested
+        ///        child, merged per cell. Only a top-level instance with merging enabled has any; each
+        ///        node sits at its cell's origin below the placement node.
+        std::vector<MeshVisualization> m_clusterRenderables;
+
+        /// @brief Cluster geometry shared with every other instance of the same top-level model.
+        std::shared_ptr<const struct WorldModelClusterGeometry> m_clusterGeometry;
+
+        /// @brief Builds the outdoor cluster entities. Top-level instances only.
+        /// @param scene The scene to create them in.
+        void BuildClusterGeometry(Scene& scene);
+
+        /// @brief Shows or hides the cluster entities for this frame's portal culling.
+        /// @param interiorView Doors the camera looks through from inside a room, or null when the camera
+        ///        is outside every room: then every cluster is shown and the octree does the culling.
+        void UpdateClusterVisibility(const PortalInteriorView* interiorView);
+
         std::vector<DoodadInstance> m_doodadInstances;
 
         std::vector<BatchEntry> m_batches;
@@ -521,6 +592,19 @@ namespace mmo
         std::set<String> m_warnedInstancingMaterials;
 
         std::vector<LightInstance> m_lightInstances;
+
+        /// @brief One particle system created from a particle system reference.
+        struct ParticleInstance
+        {
+            ParticleSystem* system { nullptr };
+            SceneNode* node { nullptr };
+        };
+
+        /// @brief Particle systems of mesh references, doodads and kit props that name a .hpar file.
+        std::vector<ParticleInstance> m_particleInstances;
+
+        /// @brief Counts particle systems ever created, so recreated ones never reuse a scene name.
+        uint32 m_particleCounter { 0 };
 
         /// @brief Prop kits applied to this instance, in application order. Shared with other
         ///        instances, never modified here.

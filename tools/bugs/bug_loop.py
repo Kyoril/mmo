@@ -5,6 +5,7 @@
 
     python tools/bugs/bug_loop.py [--repo <main checkout>] watch [--dry-run] [--once]
     python tools/bugs/bug_loop.py [--repo <main checkout>] breaker on|off|status [--reason "..."]
+    python tools/bugs/bug_loop.py [--repo <main checkout>] status [--json] [--dry-run]
 
 Environment: MMO_BUG_API_KEY (reader key, required), MMO_BUG_API_URL (optional),
 MMO_E2E_MYSQL_PASSWORD (the gate's E2E step), MMO_BUGLOOP_GITHUB_TOKEN (optional: the CI watch;
@@ -25,7 +26,7 @@ RUNTIME_ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import bugs  # noqa: E402
-from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, notify, state as loop_state, verification, winlock  # noqa: E402
+from bugloop import ci, claude, config as loop_config, data_diff, github, gitops, loop, merge_resolve, notify, state as loop_state, status as loop_status, verification, winlock  # noqa: E402
 
 
 def _logger(path):
@@ -115,6 +116,11 @@ def main(argv=None):
 	p_breaker = sub.add_parser("breaker", help="the auto-ship circuit breaker")
 	p_breaker.add_argument("action", choices=("on", "off", "status"))
 	p_breaker.add_argument("--reason", default="tripped by hand")
+	p_status = sub.add_parser("status", help="what the running loop is doing right now")
+	p_status.add_argument("--json", action="store_true", help="print the raw status.json")
+	p_status.add_argument("--dry-run", action="store_true", help="the shadow loop's status")
+	p_replay = sub.add_parser("replay", help="carry out the bug's newest maintainer refix/implement decision again")
+	p_replay.add_argument("bug_id")
 	args = parser.parse_args(argv)
 
 	repo = os.path.abspath(args.repo)
@@ -127,6 +133,21 @@ def main(argv=None):
 			loop_state.reset_breaker(artifacts)
 		print("breaker: " + ("tripped" if loop_state.breaker_active(artifacts) else "clear"))
 		return 0
+	if args.command == "replay":
+		if not loop.valid_bug_id(args.bug_id):
+			print("not a bug id: " + args.bug_id, file=sys.stderr)
+			return 2
+		loop.request_replay(artifacts, args.bug_id)
+		print("replay requested for {}; the running loop carries it out at its next poll".format(args.bug_id))
+		return 0
+	if args.command == "status":
+		snapshot = loop_status.read(artifacts, loop_status.DRY_STATUS_FILE if args.dry_run else loop_status.STATUS_FILE)
+		if args.json:
+			print(json.dumps(snapshot, indent=1, sort_keys=True))
+			return 0
+		alive = snapshot is not None and loop_status.pid_alive(snapshot.get("pid"))
+		print(loop_status.render(snapshot, now, alive))
+		return 0 if alive else 1
 
 	api_key = os.environ.get("MMO_BUG_API_KEY")
 	if not api_key:
@@ -148,8 +169,11 @@ def main(argv=None):
 	worktree = gitops.Worktree(repo, resolve_worktree(config, repo, os.environ))
 	verifier = verification.Verifier(worktree, os.path.join(repo, "build"), timeout=config.step_timeout_seconds)
 	decoder = make_decoder(RUNTIME_ROOT, repo, log)
-	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review")}
-	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review")}
+	prompts = {name: _read(os.path.join("prompts", name + ".md")) for name in ("triage", "fix", "review", "merge", "merge_review")}
+	schemas = {name: json.loads(_read(os.path.join("schemas", name + ".json"))) for name in ("triage", "review", "merge_review")}
+	worktree.resolver = merge_resolve.ConflictResolver(gitops.run_git, runner, prompts, schemas,
+		budget_ok=lambda: state.budget_left(config.invocation_budget_per_day, needed=2),
+		timeout=config.step_timeout_seconds, max_usd=config.merge_max_usd, log=log, decoder=decoder)
 	if args.dry_run:
 		gh = None
 		log("ci watch: off (dry run)")
@@ -160,6 +184,10 @@ def main(argv=None):
 		artifacts, os.path.join(repo, "tools", "gate", "reports"), lock=winlock.named_mutex, dry_run=args.dry_run, log=log,
 		notifier=make_notifier(os.environ, log), github=gh, nightly=ci.github_nightly(repo))
 	log("bug loop started ({}, {})".format("dry run" if args.dry_run else "live", HERE))
+	if not args.dry_run:
+		for path in worktree.clear_stale_locks():
+			log("removed a stale git lock left by an earlier run: " + path)
+	bug_loop._stage("starting")
 	log(notifications_status(bug_loop.notifier, args.dry_run))
 	warning = stored_phase_warning(state, gh)
 	if warning:

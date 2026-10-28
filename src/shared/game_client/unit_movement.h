@@ -378,7 +378,10 @@ namespace mmo
 		/// If blocked, slides along the contact surface. Call after computing the desired
 		/// movement delta for a remote player to prevent them penetrating walls.
 		/// @param delta The desired movement vector for this frame.
-		void RemotePlayerMoveCollide(const Vector3& delta);
+		/// @param outBlockingNormals Optional array of at least two entries that receives the contact
+		///        normals of the surfaces that stopped or deflected the move.
+		/// @return The number of normals written to outBlockingNormals (0 when the move was not blocked).
+		int32 RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals = nullptr);
 
 		/// @brief Constrains input acceleration to valid movement parameters
 		/// @param inputAcceleration Raw input acceleration vector
@@ -485,6 +488,36 @@ namespace mmo
 		///        searched range so the highest-hit selection can recover the unit onto it.
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
+
+		/// @brief Floats a creature at the water surface while it is in water deep enough to swim
+		/// in, and keeps its swimming movement flag in sync.
+		/// @details The navigation mesh the server paths creatures on is baked on the ground, so
+		///          the server lifts the paths of creatures which can swim into the water surface
+		///          band. Without this the per-frame ground correction would pull them straight
+		///          back down and they would walk along the bottom of the water, fully submerged.
+		/// @param position The unit's current node position, which the ground search started at.
+		/// @param groundY Height of the ground found below the unit, if any.
+		/// @param hasGround Whether any ground was found below the unit at all.
+		/// @return True when the unit is swimming and its height was set to the surface band, so
+		///         no ground correction applies.
+		bool UpdateRemoteSwimState(const Vector3& position, float groundY, bool hasGround);
+
+		/// @brief Corrects the height of a remotely simulated player so it comes to rest where the
+		/// player's own client puts it.
+		/// @details The owning client stands its character on the floor with the collision capsule
+		///          (@ref FindFloor plus @ref AdjustFloorHeight), which leaves the feet a floor
+		///          distance above the surface and reacts to the shape of the ground under the
+		///          whole capsule, not just under its centre. Resolving the height with a single
+		///          downward ray at the unit's centre instead always ends up lower than that — by
+		///          a few centimetres on flat ground and by more on slopes, stairs and ledges —
+		///          so the observing client draws the character sunk into the floor. Settling with
+		///          the capsule removes that mismatch; the ray search stays as the fallback for
+		///          units that are too far from any floor for the capsule to reach one (large
+		///          dead-reckoning drift, or a unit that slipped through the geometry).
+		/// @param maxCorrectionDistance Maximum distance the fallback ray search looks for ground.
+		/// @param referenceHeight Optional authoritative height the fallback search band must cover.
+		/// @return True if a floor was found and the height corrected, false otherwise.
+		bool CorrectRemoteGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
 
 		/// @brief CorrectGroundHeight for a unit standing still (idle NPCs).
 		/// While the node sits exactly where the previous successful correction put it, the scene
@@ -903,6 +936,11 @@ namespace mmo
 		/// @param bCheckRadius Whether to check radius constraints
 		/// @return True if perch result should be computed, false otherwise
 		[[nodiscard]] bool ShouldComputePerchResult(const CollisionHitResult& inHit, bool bCheckRadius = true) const;
+
+		/// @brief Settles the unit onto the floor beneath its capsule, the way the per-frame
+		///        movement simulation does for a locally controlled unit.
+		/// @return True if a walkable floor was within the capsule's reach, false otherwise.
+		bool SettleOnFloor();
 
 		/// @brief Find the floor beneath the unit
 		/// @param capsuleLocation Location of the unit's capsule center

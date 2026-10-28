@@ -109,6 +109,16 @@ namespace mmo
 		/// @return The position in world coordinates.
 		const Vector3& GetPosition() const { return m_position; }
 
+		/// @brief Where the unit is at a given time: along the path of a move the server announced
+		///        (a creature walking up to the group), else where it last was. GetPosition() is the
+		///        end of such a path, already while the unit is still on its way there.
+		/// @param nowMs The time, on the same clock SetMovePath was given.
+		Vector3 GetPositionAt(GameTime nowMs) const;
+
+		/// @brief Records a move the server announced: the points from where the unit starts to
+		///        its destination, walked from startMs for durationMs.
+		void SetMovePath(std::vector<Vector3> points, GameTime startMs, GameTime durationMs);
+
 		/// @brief Gets the facing direction of the unit.
 		/// @return The facing direction in radians.
 		Radian GetFacing() const { return m_facing; }
@@ -334,6 +344,25 @@ namespace mmo
 		/// @brief Sets the current experience points (players only).
 		void SetXp(uint32 xp) { m_xp = xp; }
 
+		/// @brief Sets the active class id (players only; 0 mage, 1 warrior, 2 cleric, ...).
+		void SetClassId(uint32 classId) { m_classId = classId; }
+
+		/// @brief Gets the active class id (players only).
+		uint32 GetClassId() const { return m_classId; }
+
+		/// @brief Records that the unit started casting a spell, and when the cast will finish.
+		void SetCurrentCast(uint32 spellId, GameTime endMs) { m_currentCastSpell = spellId; m_currentCastEndMs = endMs; }
+
+		/// @brief The spell the unit is casting at the given time, or 0. A cast the server
+		///        interrupted early still reads as running until its planned end.
+		uint32 GetCurrentCast(GameTime nowMs) const { return nowMs < m_currentCastEndMs ? m_currentCastSpell : 0; }
+
+		/// @brief Sets the unspent talent points (the bot's own player only).
+		void SetTalentPoints(uint32 points) { m_talentPoints = points; }
+
+		/// @brief Gets the unspent talent points (the bot's own player only).
+		uint32 GetTalentPoints() const { return m_talentPoints; }
+
 		/// @brief Gets the current experience points (players only).
 		uint32 GetXp() const { return m_xp; }
 
@@ -432,6 +461,9 @@ namespace mmo
 		Vector3 m_position = Vector3::Zero;
 		Radian m_facing = Radian(0.0f);
 		MovementInfo m_movementInfo;
+		std::vector<Vector3> m_movePath;
+		GameTime m_moveStartMs { 0 };
+		GameTime m_moveDurationMs { 0 };
 		std::array<float, static_cast<size_t>(MovementType::Count)> m_speeds = {};
 
 		// Stats & State
@@ -439,6 +471,10 @@ namespace mmo
 		uint32 m_health = 0;
 		uint32 m_money = 0;
 		uint32 m_xp = 0;
+		uint32 m_classId = 0;
+		uint32 m_talentPoints = 0;
+		uint32 m_currentCastSpell = 0;
+		GameTime m_currentCastEndMs = 0;
 		uint32 m_nextLevelXp = 0;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;

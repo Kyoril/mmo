@@ -3,6 +3,7 @@
 #include "vertex_buffer_null.h"
 #include "base/macros.h"
 
+#include <cstring>
 
 namespace mmo
 {
@@ -10,12 +11,17 @@ namespace mmo
 		: VertexBuffer(InVertexCount, InVertexSize, usage)
 		, Device(InDevice)
 	{
+		// Keeps the initial contents, so mapping reads back what was written.
 		m_data.resize(InVertexCount * InVertexSize, 0);
+		if (InitialData && !m_data.empty())
+		{
+			std::memcpy(m_data.data(), InitialData, m_data.size());
+		}
 	}
 
 	void * VertexBufferNull::Map(LockOptions lock)
 	{
-		return &m_data[0];
+		return m_data.data();
 	}
 
 	void VertexBufferNull::Unmap()

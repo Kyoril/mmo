@@ -16,14 +16,18 @@
 #include "game/auto_attack.h"
 #include "game/spell_target_map.h"
 #include "game/bug_report.h"
+#include "game/mail.h"
 #include "game/subsystem.h"
 
 #include "binary_io/reader.h"
 
 #include "asio/io_service.hpp"
 
+#include <array>
+#include <deque>
 #include <map>
 #include <optional>
+#include <set>
 
 namespace mmo
 {
@@ -48,6 +52,96 @@ namespace mmo
 		bool hasPosition { false };
 	};
 
+	/// A chat line the realm delivered to this bot. NPC speech is not reported.
+	struct BotChatMessage
+	{
+		/// Character guid of the speaker; 0 for system messages.
+		uint64 senderGuid { 0 };
+		ChatType type { ChatType::Unknown };
+		std::string message;
+		/// Global channel id for ChatType::Channel, otherwise 0.
+		uint32 channelId { 0 };
+	};
+
+	/// One item in an open loot window.
+	struct BotLootItem
+	{
+		uint8 slot { 0 };
+		uint32 itemId { 0 };
+		uint32 count { 0 };
+
+		/// loot_slot_type: only AllowLoot (0) may be taken directly.
+		uint8 slotType { 0 };
+	};
+
+	/// The loot window the server opened for the bot.
+	struct BotLootWindow
+	{
+		uint64 lootGuid { 0 };
+		uint32 money { 0 };
+		std::vector<BotLootItem> items;
+	};
+
+	/// One line of a quest giver's quest list.
+	struct BotQuestMenuEntry
+	{
+		uint32 questId { 0 };
+
+		/// questgiver_status: Available for a quest on offer, Reward for one ready to turn in,
+		/// Incomplete for one in the log that is not done yet.
+		uint32 menuIcon { 0 };
+		int32 level { 0 };
+		std::string title;
+	};
+
+	/// A ground zone a spell left: a circle the bot does well to stay out of.
+	struct BotSpellZone
+	{
+		uint32 zoneId { 0 };
+		uint64 casterGuid { 0 };
+		uint32 spellId { 0 };
+		Vector3 position { Vector3::Zero };
+		float radius { 0.0f };
+		GameTime endMs { 0 };
+	};
+
+	/// A group loot roll the server opened.
+	struct BotLootRoll
+	{
+		uint64 lootGuid { 0 };
+		uint8 slot { 0 };
+		uint32 itemId { 0 };
+		GameTime endMs { 0 };
+	};
+
+	/// Requests whose answer the connector times: the server's response latency, as a bot feels it.
+	namespace bot_request
+	{
+		enum Type
+		{
+			/// CastSpell, answered by SpellStart, SpellGo (instant casts send nothing else) or
+			/// SpellFailure for the bot itself, whichever comes first. Paired by spell id.
+			Cast,
+
+			/// Loot, answered by LootResponse.
+			Loot,
+
+			/// NameQuery, answered by NameQueryResult.
+			NameQuery,
+
+			/// QuestGiverHello, answered by QuestGiverQuestList.
+			QuestHello,
+
+			/// QuestGiverStatusQuery, answered by QuestGiverStatus.
+			QuestStatus,
+
+			Count_
+		};
+	}
+
+	/// A short name for a timed request kind.
+	const char* GetBotRequestName(bot_request::Type type);
+
 	/// Minimal realm connector variant that tolerates unknown packets and exposes the hooks needed for the bot.
 	class BotRealmConnector final
 		: public game::Connector
@@ -57,8 +151,21 @@ namespace mmo
 		signal<void(uint8)> AuthenticationResult;
 		signal<void()> CharListUpdated;
 		signal<void()> Disconnected;
+
+		/// @brief Emitted when the connection to the realm server could not be established.
+		signal<void()> ConnectFailed;
 		signal<void(game::player_login_response::Type)> EnterWorldFailed;
 		signal<void(uint32, Vector3, float)> VerifyNewWorld;
+		/// @brief Emitted after the server teleported the bot within its map and the teleport was
+		///        acknowledged. The bot now falls at the new position (GetMovementInfo).
+		signal<void()> Teleported;
+		/// @brief Emitted when the server roots, stuns, puts to sleep, fears or disorients the bot,
+		///        or lifts it: the ack opcode to answer with, the ack id, and whether it applies.
+		///        Every one of them must be acked with the Rooted flag set or cleared, or the
+		///        server kicks the bot at its next movement packet.
+		signal<void(uint16, uint32, bool)> MovementControlChanged;
+		/// @brief Emitted when another player offers to revive the dead bot: the caster's guid.
+		signal<void(uint64)> ReviveOffered;
 		signal<void(game::CharCreateResult)> CharacterCreated;
 		signal<void(const std::string&)> PartyInvitationReceived;
 		/// @brief Emitted when the bot joins a party or receives an updated party list.
@@ -67,6 +174,98 @@ namespace mmo
 		signal<void(uint64, uint32)> PartyJoined;
 		/// @brief Emitted when the bot leaves or is removed from a party.
 		signal<void()> PartyLeft;
+
+		/// @brief Emitted when the server opens a loot window for the bot.
+		signal<void(const BotLootWindow&)> LootOpened;
+
+		/// @brief Emitted when a loot request is refused.
+		/// @param lootGuid The corpse or object the bot tried to loot.
+		/// @param error The loot_error code.
+		signal<void(uint64, uint8)> LootFailed;
+
+		/// @brief Emitted when the server opens a group loot roll the bot may vote on.
+		signal<void(const BotLootRoll&)> LootRollStarted;
+
+		/// @brief Emitted for every inventory error the server reports (bag full, cannot sell...).
+		signal<void(uint8)> InventoryErrorReceived;
+
+		// ============================================================
+		// Quest Signals
+		// ============================================================
+
+		/// @brief Emitted with the answer to QuestGiverStatusQuery.
+		/// @param questGiverGuid The unit asked about.
+		/// @param status The questgiver_status it has for this character.
+		signal<void(uint64, uint8)> QuestGiverStatusReceived;
+
+		/// @brief Emitted when a quest giver opens its quest list, after QuestGiverHello or a turn-in.
+		signal<void(uint64, const std::vector<BotQuestMenuEntry>&)> QuestListReceived;
+
+		/// @brief Emitted when a quest giver shows the details of a quest it offers.
+		/// @param questGiverGuid The quest giver.
+		/// @param questId The quest shown.
+		signal<void(uint64, uint32)> QuestDetailsReceived;
+
+		/// @brief Emitted when a quest ender offers the rewards of a completed quest.
+		/// @param questGiverGuid The quest ender.
+		/// @param questId The quest being turned in.
+		/// @param choiceItems The item ids to choose one from; empty when there is no choice.
+		signal<void(uint64, uint32, const std::vector<uint32>&)> QuestRewardOffered;
+
+		/// @brief Emitted when the server confirms a quest was accepted into the quest log.
+		signal<void(uint32)> QuestAccepted;
+
+		/// @brief Emitted when a quest was turned in and rewarded.
+		/// @param questGiverGuid The quest ender.
+		/// @param questId The quest.
+		/// @param xp Experience rewarded.
+		/// @param money Money rewarded.
+		signal<void(uint64, uint32, uint32, uint32)> QuestRewarded;
+
+		/// @brief Emitted when a quest could not be accepted because the quest log is full.
+		signal<void()> QuestLogFull;
+
+		// ============================================================
+		// Trade, mail and logout
+		// ============================================================
+
+		/// @brief Someone asked to trade with the bot. Answer with AcceptTradeInvite or DeclineTradeInvite.
+		signal<void(const std::string&, uint64)> TradeInviteReceived;
+
+		/// @brief The answer to InitiateTrade (trade_request_result).
+		signal<void(uint8)> TradeRequestAnswered;
+
+		/// @brief A trade window opened with the given character.
+		signal<void(const std::string&, uint64)> TradeOpened;
+
+		/// @brief The trade window closed (trade_close_reason; completed or cancelled).
+		signal<void(uint8)> TradeClosed;
+
+		/// @brief The server opened the bot's mailbox (after UseObject on a mailbox).
+		signal<void(uint64)> MailboxOpened;
+
+		/// @brief The answer to RequestMailList.
+		signal<void(const std::vector<MailInfo>&)> MailListReceived;
+
+		/// @brief The answers to SendMail and to MailTakeMoney / MailTakeItem (mail_result).
+		signal<void(uint8)> MailSendAnswered;
+		signal<void(uint8)> MailTakeAnswered;
+
+		/// @brief The realm took the character out of the world after LogoutRequest.
+		signal<void()> LoggedOut;
+
+		/// @brief Emitted when the server answered a timed request.
+		/// @param type What was asked.
+		/// @param latencyMs Time from sending it to the answer.
+		signal<void(bot_request::Type, GameTime)> RequestAnswered;
+
+		/// @brief Emitted for every player or system chat line the realm delivers.
+		signal<void(const BotChatMessage&)> ChatMessageReceived;
+
+		/// @brief Emitted when the answer to a QueryName call arrives.
+		/// @param guid The character guid that was queried.
+		/// @param name The character name.
+		signal<void(uint64, const std::string&)> NameResolved;
 
 		/// @brief Emitted when a new unit is spawned in the world.
 		signal<void(const BotUnit&)> UnitSpawned;
@@ -95,6 +294,12 @@ namespace mmo
 		/// @param spellId The channeled spell.
 		/// @param durationMs The channel's duration in milliseconds.
 		signal<void(uint64, uint32, int32)> ChannelStarted;
+
+		/// Another unit started casting a spell: caster, spell, cast time in milliseconds.
+		signal<void(uint64, uint32, GameTime)> UnitCastStarted;
+
+		/// Another unit's cast failed or was interrupted: caster, spell, result.
+		signal<void(uint64, uint32, uint8)> UnitCastFailed;
 
 		/// @brief Emitted when a unit in sight finishes a cast (SpellGo), ours or anyone else's.
 		/// @param casterGuid The GUID of the casting unit.
@@ -142,6 +347,16 @@ namespace mmo
 		uint32 m_realmId { 0 };
 
 		uint64 m_selectedCharacterGuid { 0 };
+
+		/// A transfer to another map was acknowledged and the new world node is not ready for the
+		/// bot's movement yet; VerifyNewWorld waits for that, with where the transfer goes.
+		bool m_awaitingWorldSpawn { false };
+
+		std::unordered_set<uint32> m_proficiencies;
+		std::function<MovementInfo()> m_liveMovement;
+		uint32 m_transferMapId { 0 };
+		Vector3 m_transferPosition { Vector3::Zero };
+		float m_transferFacing { 0.0f };
 		MovementInfo m_movementInfo;
 		std::string m_lastSpellStateIssue;
 
@@ -167,6 +382,24 @@ namespace mmo
 		std::map<uint32, uint64> m_heardSounds;
 		std::map<uint32, uint32> m_heardSoundCounts;
 
+		// Ground zones by id
+		std::map<uint32, BotSpellZone> m_spellZones;
+
+		// Chat state
+		std::map<uint64, std::string> m_nameCache;
+		std::set<uint64> m_pendingNameQueries;
+
+		/// Send times of the timed requests still waiting for an answer, oldest first, per kind.
+		std::array<std::deque<GameTime>, bot_request::Count_> m_pendingRequests;
+
+		/// Spell id -> when a cast of it was sent and not answered yet.
+		std::map<uint32, GameTime> m_pendingCasts;
+		uint64 m_packetsReceived { 0 };
+		uint64 m_bytesSent { 0 };
+
+		std::vector<std::pair<uint32, std::string>> m_chatChannels;
+		bool m_hasChatChannelList { false };
+
 		// Party state
 		std::vector<BotPartyMember> m_partyMembers;
 		uint64 m_partyLeaderGuid { 0 };
@@ -183,6 +416,9 @@ namespace mmo
 		// Line of sight debug check state (dev command responses)
 		uint32 m_losResultCounter { 0 };
 		bool m_lastLosResult { false };
+		Vector3 m_lastLosFrom { Vector3::Zero };
+		Vector3 m_lastLosTo { Vector3::Zero };
+		Vector3 m_lastLosHit { Vector3::Zero };
 
 		// Most recent GameTimeInfo from the server
 		uint32 m_gameTimeInfoCounter { 0 };
@@ -283,7 +519,27 @@ namespace mmo
 
 		void RequestCharEnum();
 
+		/// Deletes one of the account's characters at character select. The realm answers with a
+		/// fresh character list.
+		void DeleteCharacter(uint64 guid);
+
 		void SendChatMessage(const String& message, ChatType chatType, const String& target);
+
+		/// Asks the realm for a character name. The answer is cached and announced through
+		/// NameResolved; a guid already cached or already asked for is not asked for again.
+		void QueryName(uint64 guid);
+
+		/// The cached name of a character, or null if it was never resolved.
+		[[nodiscard]] const std::string* GetCachedName(uint64 guid) const;
+
+		/// Asks the realm to add this character to a chat channel by name.
+		void JoinChatChannel(const std::string& name);
+
+		/// Global id of a joined chat channel by case-insensitive name, or 0 if not a member.
+		[[nodiscard]] uint32 FindChatChannelId(const std::string& name) const;
+
+		/// Whether the realm has sent the channel membership list for this session yet.
+		[[nodiscard]] bool HasChatChannelList() const { return m_hasChatChannelList; }
 
 		void SendMovementUpdate(uint64 characterId, uint16 opCode, const MovementInfo& info);
 
@@ -344,6 +600,10 @@ namespace mmo
 		/// Leaves the current party.
 		void LeaveParty();
 
+		/// Resets the dungeon instances the character is bound to (/resetinstance). Alone, it
+		/// resets its own; in a group, only the leader may. Fails while anyone is inside.
+		void ResetInstances();
+
 		/// Kicks a player from the party by name.
 		void KickFromParty(const std::string& playerName);
 
@@ -354,6 +614,22 @@ namespace mmo
 		/// @param bag The bag index (255 for the backpack).
 		/// @param slot The slot inside that bag.
 		void AutoEquipItem(uint8 bag, uint8 slot);
+
+		/// Where acks read the bot's movement state from. The session's is the live one; without a
+		/// source the connector's own copy is used, which is wherever the bot last teleported to.
+		void SetLiveMovementSource(std::function<MovementInfo()> source) { m_liveMovement = std::move(source); }
+
+		/// Answers a MovementControlChanged with the bot's movement state after the change.
+		void SendMovementControlAck(uint16 ackOpCode, uint32 ackId, const MovementInfo& movementInfo);
+
+		/// The weapon and armor proficiencies the server has granted the character.
+		[[nodiscard]] const std::unordered_set<uint32>& GetProficiencies() const { return m_proficiencies; }
+
+		/// Uses an item - drinks, eats, reads - on the given targets.
+		void UseItem(uint8 bag, uint8 slot, uint64 itemGuid, const SpellTargetMap& targetMap);
+
+		/// Destroys the given number of items of the stack in a bag slot.
+		void DestroyItem(uint8 bag, uint8 slot, uint8 count);
 
 		/// Swaps the contents of two slots of the character's own inventory (equipment, backpack and
 		/// bag slots, all relative to Bag_0), e.g. to equip a backpack item into a specific equipment
@@ -391,6 +667,9 @@ namespace mmo
 		/// player walks, and the release path is where the interesting server work happens.
 		void SendReviveRequest();
 
+		/// Accepts or declines a revive another player offered (ReviveOffered).
+		void SendReviveResponse(bool accept);
+
 		/// Sends a spell cast request using the standard spell target map contract.
 		/// @return True if the request was queued locally, false if it was rejected before send.
 		bool SendCastSpell(uint32 spellId, const SpellTargetMap& targetMap, bool autoFlush = true);
@@ -427,11 +706,20 @@ namespace mmo
 		/// for a change and then read GetLastLosResult.
 		void CheatCheckLineOfSight(uint64 targetGuid);
 
+		/// Cancels the cast the bot is casting, as a player does to free itself for another.
+		void CancelCast();
+
 		/// Returns how many DebugLineOfSightResult packets have been received so far.
 		uint32 GetLosResultCounter() const { return m_losResultCounter; }
 
 		/// Returns the result of the most recent line of sight check (true = clear).
 		bool GetLastLosResult() const { return m_lastLosResult; }
+
+		/// The ray the most recent line of sight check tested (eye to eye) and where it was
+		/// blocked; the hit point is the ray's end when it was clear.
+		const Vector3& GetLastLosFrom() const { return m_lastLosFrom; }
+		const Vector3& GetLastLosTo() const { return m_lastLosTo; }
+		const Vector3& GetLastLosHit() const { return m_lastLosHit; }
 
 		/// GAME MASTER only. Changes the realm-wide time of day. Every player on the realm, this
 		/// one included, then receives a GameTimeInfo with a non-zero transition.
@@ -502,8 +790,39 @@ namespace mmo
 		/// @param lootObjectGuid Guid of the unit or object being looted.
 		void LootRelease(uint64 lootObjectGuid);
 
+		/// @brief Takes one item from the open loot window into the bags.
+		void AutoStoreLootItem(uint8 lootSlot);
+
+		/// @brief Takes the money from the open loot window.
+		void LootMoney();
+
+		/// @brief Sells a whole item stack to a vendor the bot stands next to.
+		void SellItem(uint64 vendorGuid, uint64 itemGuid);
+
+		/// @brief Buys items from a vendor the bot stands next to.
+		void BuyItem(uint64 vendorGuid, uint32 itemId, uint8 count);
+
+		/// @brief Buys a spell from a trainer the bot stands next to.
+		void TrainerBuySpell(uint64 trainerGuid, uint32 spellId);
+
+		/// @brief Tells the server the bot walked into an area trigger (a portal, say).
+		void SendAreaTriggerTriggered(uint32 triggerId);
+
+		/// @brief Votes on a group loot roll (roll_vote: 0 pass, 1 need, 2 greed).
+		void SendLootRoll(uint64 lootGuid, uint8 slot, uint8 vote);
+
+		/// @brief The ground zones currently active around the bot, by zone id.
+		[[nodiscard]] const std::map<uint32, BotSpellZone>& GetSpellZones() const { return m_spellZones; }
+
+		/// @brief Spends talent points on a talent.
+		/// @param rank Zero-based rank to learn.
+		void LearnTalent(uint32 talentId, uint8 rank);
+
 		/// GAME MASTER only. Toggles damage immunity on the sender's character.
 		void CheatGodmode(bool enable);
+
+		/// GAME MASTER only. Toggles game master invisibility on the sender's character.
+		void CheatInvisible(bool enable);
 
 		/// GAME MASTER only. Sets an instance-scoped variable in the world instance the character is
 		///	in, so a scenario can put an encounter into a given state without having to reach it
@@ -530,6 +849,60 @@ namespace mmo
 		/// GAME MASTER only. Fills mana, rage and energy of the current target (or the character).
 		void CheatRestorePower();
 
+		/// @brief Packets received and bytes sent over the realm connection since the connector was
+		///        made. Never reset, so a host can sample them for rates across reconnects.
+		[[nodiscard]] uint64 GetPacketsReceived() const { return m_packetsReceived; }
+		[[nodiscard]] uint64 GetBytesSent() const { return m_bytesSent; }
+
+		/// @brief Uses a world object that is used without a spell, such as a mailbox.
+		void UseObject(uint64 objectGuid);
+
+		/// @brief Asks to trade with a character the bot stands next to.
+		void InitiateTrade(uint64 targetGuid);
+		void AcceptTradeInvite();
+		void DeclineTradeInvite();
+
+		/// @brief Puts money on the trade window, in copper.
+		void TradeSetMoney(uint32 amount);
+
+		/// @brief Accepts the trade as it stands; it completes once both sides accepted.
+		void AcceptTrade();
+		void CancelTrade();
+
+		/// @brief Mail at an open mailbox.
+		void RequestMailList();
+		void SendMail(const std::string& recipient, const std::string& subject, const std::string& body, uint32 money);
+		void MailTakeMoney(uint64 mailId);
+
+		/// @brief Asks the realm to take the character out of the world, back to the character list.
+		void Logout();
+
+		/// @brief Sets the party's loot rules; the leader only.
+		/// @param method loot_method value.
+		void SetLootMethod(uint8 method, uint64 masterGuid, uint8 threshold);
+
+		/// @brief Asks for the quest giver status of a unit the bot can see.
+		void QuestGiverStatusQuery(uint64 questGiverGuid);
+
+		/// @brief Opens a quest giver's quest list. The bot must stand next to it.
+		void QuestGiverHello(uint64 questGiverGuid);
+
+		/// @brief Asks a quest giver for the details of a quest it offers.
+		void QuestGiverQueryQuest(uint64 questGiverGuid, uint32 questId);
+
+		/// @brief Accepts a quest a quest giver offers.
+		void AcceptQuest(uint64 questGiverGuid, uint32 questId);
+
+		/// @brief Starts turning in a quest at its quest ender; the server answers with the rewards.
+		void QuestGiverCompleteQuest(uint64 questGiverGuid, uint32 questId);
+
+		/// @brief Takes the rewards of a completed quest.
+		/// @param rewardChoice Index into the quest's reward choices; ignored without any.
+		void QuestGiverChooseQuestReward(uint64 questGiverGuid, uint32 questId, uint32 rewardChoice);
+
+		/// @brief Removes a quest from the quest log.
+		void AbandonQuest(uint32 questId);
+
 		/// GAME MASTER only. Accepts the given quest without a questgiver interaction.
 		void CheatAcceptQuest(uint32 questId);
 
@@ -540,6 +913,18 @@ namespace mmo
 		void CheatClearInventory();
 
 	private:
+		/// Notes that a timed request was sent, and that its answer arrived. Answers pair with the
+		/// oldest outstanding request of the kind; one older than a few seconds is given up on.
+		void BeginRequest(bot_request::Type type);
+		void EndRequest(bot_request::Type type);
+
+		/// Cast requests pair by spell: a cast is answered by the first SpellStart, SpellGo or
+		/// SpellFailure of that spell, and a newer cast of the same spell replaces an unanswered one.
+		void BeginCastRequest(uint32 spellId);
+		void EndCastRequest(uint32 spellId);
+
+		void connectionDataSent(size_t size) override;
+
 		void RegisterWorldPacketHandlers();
 		BotUnit* GetSelfMutable();
 		const BotUnit* GetSelf() const;
@@ -609,6 +994,33 @@ namespace mmo
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
+		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
+		PacketParseResult OnLootResponse(game::IncomingPacket& packet);
+		PacketParseResult OnSpellZoneStart(game::IncomingPacket& packet);
+		PacketParseResult OnSpellZoneEnd(game::IncomingPacket& packet);
+		PacketParseResult OnStartLootRoll(game::IncomingPacket& packet);
+		PacketParseResult OnSetProficiency(game::IncomingPacket& packet);
+		PacketParseResult OnMovementControl(game::IncomingPacket& packet);
+		PacketParseResult OnReviveOffer(game::IncomingPacket& packet);
+		PacketParseResult OnInventoryError(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverStatus(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverQuestList(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverQuestDetails(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverOfferReward(game::IncomingPacket& packet);
+		PacketParseResult OnQuestGiverQuestComplete(game::IncomingPacket& packet);
+		PacketParseResult OnQuestAccepted(game::IncomingPacket& packet);
+		PacketParseResult OnQuestLogFull(game::IncomingPacket& packet);
+		PacketParseResult OnTradeInvite(game::IncomingPacket& packet);
+		PacketParseResult OnTradeRequestResult(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSessionOpened(game::IncomingPacket& packet);
+		PacketParseResult OnTradeSessionClosed(game::IncomingPacket& packet);
+		PacketParseResult OnShowMailbox(game::IncomingPacket& packet);
+		PacketParseResult OnMailList(game::IncomingPacket& packet);
+		PacketParseResult OnMailSendResult(game::IncomingPacket& packet);
+		PacketParseResult OnMailTakeResult(game::IncomingPacket& packet);
+		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
+		PacketParseResult OnChannelList(game::IncomingPacket& packet);
+		PacketParseResult OnChannelNotify(game::IncomingPacket& packet);
 
 		/// @brief Handles movement packets from other units.
 		PacketParseResult OnMovementPacket(game::IncomingPacket& packet);

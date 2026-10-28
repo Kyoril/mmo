@@ -1,5 +1,6 @@
 ﻿
 #include "world_text_component.h"
+#include "world_text_layout.h"
 
 #include <algorithm>
 
@@ -161,9 +162,7 @@ void WorldTextComponent::SetFontColor(const Color& color)
 		std::vector<VertexStruct> vertices;
 		vertices.reserve(m_text.size() * 6);  // 6 verts per glyph
 
-		// Decide how big or small you want the text to be.
-		// E.g. 0.01f if you are in "world" space units.
-		constexpr float scale = 0.005f;
+		constexpr float scale = WorldUnitsPerFontPixel;
 
 		// Start drawing at some "anchor" point
 		// (You can make this your baseline or top-left; adjust as needed.)
@@ -174,10 +173,12 @@ void WorldTextComponent::SetFontColor(const Color& color)
 
 		const uint32 color = m_fontColor.GetABGR();
 
-		for (size_t i = 0; i < m_text.length(); ++i)
+		// Lay the text out codepoint by codepoint. Walking the raw bytes instead would hand
+		// the font each byte of a multi-byte character on its own - as a signed char those
+		// sign-extend far beyond the font's codepoint range, so every byte of a localized
+		// name or subtitle was dropped as a missing glyph.
+		for (const uint32 c : BuildWorldTextCodepoints(m_text))
 		{
-			char c = m_text[i];
-
 			if (c == '\n')
 			{
 				lineStarts.push_back(vertices.size());

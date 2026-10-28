@@ -97,7 +97,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000019;
+		constexpr uint32 ProtocolVersion = 0x0000001E;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -466,6 +466,26 @@ namespace mmo
 				/// Sent by the loot master to hand a master loot item of the open loot to a party member.
 				/// Proxied to the world node. Payload: uint8 loot slot, uint64 target character guid.
 				MasterLootItem,
+
+				/// GAME MASTER. Toggles game master invisibility on the sender's character: hidden from
+				/// players and creatures, visible to other game masters. Persisted by the realm.
+				/// Payload: uint8 (0/1).
+				CheatInvisible, // GAME MASTER
+
+				/// GAME MASTER. Ghosts an online player: every transfer of the sender onto the target's
+				/// map joins the target's instance, and the target's instance changes take the sender
+				/// along, without a group. Lasts until either character logs out. Handled by the realm.
+				/// Payload: uint8-length string target name (empty = stop ghosting).
+				CheatGhost, // GAME MASTER
+
+				/// Saves the order in which the account's characters are listed. Must contain every
+				/// character of the account exactly once. Handled by the realm.
+				/// Payload: uint8 count, then count uint64 character guids in the desired order.
+				SetCharacterOrder,
+
+				/// Sent by the client to buy an item it sold to the open vendor back. Proxied to the
+				/// world node. Payload: uint64 vendor guid, uint32 buyback slot index (zero based).
+				BuyBackItem,
 
 				/// Counter constant
 				Count_,
@@ -878,6 +898,14 @@ namespace mmo
 
 				/// Tells the loot master why a MasterLootItem request was refused. Payload: uint8 loot_error.
 				MasterLootResult,
+
+				/// The items the character sold to a vendor during this world session and can buy
+				/// back while the vendor window is open. Sent together with ListInventory and again
+				/// whenever the list changes. Buyback offers are never persisted, so the list is
+				/// empty again after a logout or a world node change. Payload: uint64 vendor guid,
+				/// uint8 count, then per entry uint32 buyback slot index, uint32 itemId, uint32
+				/// displayId, uint32 stackCount, uint32 price, uint32 durability.
+				BuyBackList,
 
 				/// Counter constant
 				Count_,

@@ -28,19 +28,49 @@ namespace mmo
 	public:
 		/// @brief Plays a sound entry as a global (2D) sound. 3D entries are played
 		/// unpositioned as well, so prefer the positional overload for those.
+		/// @param soundId Sound entry to play.
+		/// @param priority Channel priority (see IAudio::PlaySound). Sounds of lower priority
+		///	never steal the channel when all channels are busy.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayEntry(uint32 soundId);
+		ChannelIndex PlayEntry(uint32 soundId, float priority = 1.0f);
+
+		/// @brief Creates the sound of an entry without playing it, picking the file the following
+		/// PlayLoadedEntry plays. Streams keep opening in the background (see IAudio::IsSoundLoading).
+		/// @return The sound to pass to PlayLoadedEntry, or InvalidSound.
+		SoundIndex LoadEntry(uint32 soundId);
+
+		/// @brief Plays a sound returned by LoadEntry as a global (2D) sound with the entry's settings.
+		/// @param priority Channel priority; higher-priority channels are not stolen by lower ones.
+		/// @return The channel the sound plays on, or InvalidChannel.
+		ChannelIndex PlayLoadedEntry(uint32 soundId, SoundIndex sound, float priority = 1.0f);
 
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntry(uint32 soundId, const Vector3& position);
 
+		/// @brief Plays a sound entry as a streamed, positioned loop (e.g. a river or waterfall).
+		/// The file is picked like for PlayEntry (shuffle bag) but loaded through
+		/// IAudio::CreateLoopedStream3D, regardless of the entry's 2D/3D flag, and played in
+		/// the entry's category with the entry's volume and pitch.
+		/// @remark A stream plays on one channel only, so at most one voice per entry may be
+		///         live at any time. Callers must stop the previous channel first.
+		/// @param priority Channel priority (see IAudio::PlaySound3D). Long-lived loops should use
+		///	a priority above 1.0, or one-shots steal their channel once all channels are busy.
+		/// @return The channel the sound plays on, or InvalidChannel.
+		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f);
+
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;
 
 		/// Whether the entry plays as a positional (3D) sound. False for unknown ids.
 		bool IsEntry3D(uint32 soundId) const;
+
+		/// Whether the entry plays as a loop. False for unknown ids.
+		bool IsEntryLooped(uint32 soundId) const;
+
+		/// @brief Gets the distance in metres beyond which a 3D entry is inaudible (0 if unknown).
+		float GetEntryMaxDistance(uint32 soundId) const;
 
 		/// @brief Gets the configured base volume [0, 1] of an entry (1.0 if unknown).
 		float GetEntryVolume(uint32 soundId) const;
@@ -96,6 +126,9 @@ namespace mmo
 	/// the two overlap for a true crossfade rather than a hard cut. Multiple outgoing sounds
 	/// can be fading out at once (e.g. rapid zone changes).
 	///
+	/// A new sound starts only once its stream has opened in the background, so SetSound never
+	/// blocks the frame; until then the previous sound keeps playing untouched.
+	///
 	/// Call SetSound whenever the desired entry changes (comparison is by entry id, never by
 	/// channel, as audio channels are recycled), and Update once per frame to advance the fades.
 	class CrossfadingSoundLoop final : public NonCopyable
@@ -116,8 +149,9 @@ namespace mmo
 		/// @brief Immediately stops all playback (active and outgoing) without fading.
 		void Stop();
 
-		/// @brief Gets the id of the sound entry currently fading in / playing (0 = none).
-		[[nodiscard]] uint32 GetCurrentSoundId() const { return m_activeSoundId; }
+		/// @brief Gets the id of the sound entry last requested: the one fading in / playing, or the
+		/// one waiting for its stream to open (0 = none).
+		[[nodiscard]] uint32 GetCurrentSoundId() const { return m_pendingSoundId != 0 ? m_pendingSoundId : m_activeSoundId; }
 
 	private:
 		/// @brief A sound that is currently fading out towards silence.
@@ -135,6 +169,9 @@ namespace mmo
 		/// @brief Moves the current active sound (if any) into the fade-out list.
 		void RetireActiveSound();
 
+		/// @brief Crossfades to the pending sound once its stream has opened.
+		void StartPendingSoundIfReady();
+
 	private:
 		SoundEntryPlayer& m_player;
 		IAudio& m_audio;
@@ -149,5 +186,9 @@ namespace mmo
 		float m_activeFadeInPerSec = 0.0f;
 
 		std::vector<FadingChannel> m_fadingOut;
+
+		// Requested sound whose stream is still opening (0 = none).
+		uint32 m_pendingSoundId = 0;
+		SoundIndex m_pendingSound = InvalidSound;
 	};
 }

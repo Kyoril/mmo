@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "terrain_io/water_flow.h"
 
 #include <cmath>
 #include <filesystem>
@@ -49,6 +50,24 @@ namespace mmo
 		/// @brief Water type written for flagged water quads (see terrain::WaterType, 1 = Water, 2 = Ocean).
 		uint8 waterType = 1;
 
+		/// @brief Optional 16-bit grey map with one pixel per water quad of the rect ((pages x * 128) by
+		///	       (pages z * 128)) giving each quad its own water level, for lakes above the sea. Pixel 0
+		///	       means "no level here" (waterLevel applies, if set); other pixels map linearly from
+		///	       waterLevelMapMinY (1) to waterLevelMapMaxY (65535). Full imports only.
+		std::filesystem::path waterLevelMap;
+
+		/// @brief Water level of waterLevelMap pixel value 1.
+		float waterLevelMapMinY = 0.0f;
+
+		/// @brief Water level of waterLevelMap pixel value 65535.
+		float waterLevelMapMaxY = 0.0f;
+
+		/// @brief Water type of the tiles whose water comes from waterLevelMap.
+		uint8 waterLevelMapType = 1;
+
+		/// @brief Whether any water source (waterLevel or waterLevelMap) is configured.
+		[[nodiscard]] bool HasAnyWater() const { return HasWaterLevel() || !waterLevelMap.empty(); }
+
 		/// @brief Optional 16-bit PNG holding one zone (area) id per terrain tile, sized
 		///	       (pages x · 16) × (pages z · 16). Resolved relative to the metadata file. Empty = no zones.
 		std::filesystem::path zoneMap;
@@ -59,6 +78,67 @@ namespace mmo
 		/// @brief With skipExistingPages: also give the unzoned tiles (id 0) of existing pages the zone
 		///	       from the zone map. Everything else in those pages stays untouched. Only v2 pages can be updated.
 		bool fillExistingZones = false;
+
+		/// @brief When set, the heightmap holds height offsets (minY..maxY) that are added to the
+		///	       existing pages instead of replacing them. Everything else in those pages (painted
+		///	       layers, holes, zones, colours, materials, water) is kept; normals are recomputed
+		///	       only where the terrain changed, and water quads are only ever added (with
+		///	       waterLevel). Every page of the rect must already exist.
+		bool applyAsDelta = false;
+
+		/// @brief With applyAsDelta: give every written page that holds water the waterMaterial,
+		///	       replacing its current surface material (e.g. to unify a river across pages).
+		bool setWaterMaterial = false;
+
+		/// @brief With applyAsDelta: optional 16-bit grey mask with one pixel per water quad of the rect
+		///	       ((pages x · 128) × (pages z · 128)); quads under white pixels lose their water.
+		std::filesystem::path clearWaterMask;
+
+		/// @brief One splat layer painted by a delta import.
+		struct PaintLayer
+		{
+			/// @brief 16-bit grey mask at splat resolution of the rect ((pages x · 1008 + 1) square); white paints fully.
+			std::filesystem::path mask;
+
+			/// @brief Splat layer (0..3) the mask paints.
+			uint8 layer = 0;
+
+			/// @brief Scales the mask (0..1).
+			float strength = 1.0f;
+
+			/// @brief When set, the mask removes this layer instead (its weight moves to layer 0).
+			bool remove = false;
+		};
+
+		/// @brief With applyAsDelta: splat layers to paint over the existing weights, in order.
+		std::vector<PaintLayer> paint;
+
+		/// @brief With applyAsDelta: optional 16-bit grey mask with one pixel per terrain tile of the rect
+		///	       ((pages x · 16) × (pages z · 16)). A value k > 0 gives the tile tileMaterials[k - 1].
+		std::filesystem::path tileMaterialMask;
+
+		/// @brief Material asset names referenced by tileMaterialMask.
+		std::vector<String> tileMaterials;
+
+		/// @brief One point of a river's flow path: position and half width of the channel there.
+		typedef terrain_io::water_flow::FlowPoint FlowPoint;
+
+		/// @brief With applyAsDelta: optional river flow path, downstream order. Every written page
+		///	       with water gets flow-aligned water UVs and a flow speed from it.
+		std::vector<FlowPoint> flowPath;
+
+		/// @brief Further flow paths (branches). Each point takes its flow from the nearest path;
+		///	       a branch's distance downstream starts at 0.
+		std::vector<std::vector<FlowPoint>> flowBranches;
+
+		/// @brief Water UV units per world unit along and across the flow (the world mapping uses 1/16).
+		float flowUVScale = 1.0f / 16.0f;
+
+		/// @brief Distance beyond the channel's half width over which the flow slows to flowMinSpeed.
+		float flowFalloff = 60.0f;
+
+		/// @brief Slowest flow (0..1), used for still water off the channel such as bays and ponds.
+		float flowMinSpeed = 0.08f;
 
 		/// @brief Optional list of pages (x, z) to write. Empty = every page of the rect. Pages
 		///	       outside this list are neither written nor touched.

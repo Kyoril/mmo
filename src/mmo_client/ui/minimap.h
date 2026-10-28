@@ -10,6 +10,7 @@
 #include "base/signal.h"
 #include "base/typedefs.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -80,6 +81,11 @@ namespace mmo
 		float GetMarkerScale() const;
 
 		void NotifyWorldChanged(const String& worldName);
+
+		/// @brief Sets the handler that reads a texture ahead of use on a streaming thread.
+		/// @details Called for the tiles just beyond the load distance whenever the player enters a new tile, so
+		///	that the next tile change finds them in memory. Pass nullptr to stop prefetching.
+		void SetPrefetchHandler(std::function<void(const String&)> prefetch);
 
 		struct PartyMemberDot
 		{
@@ -186,6 +192,9 @@ namespace mmo
 		static constexpr float s_minWorldCoverage = 120.0f;
 
 		String m_worldName;
+
+		/// @brief Reads a tile texture ahead of use, or empty.
+		std::function<void(const String&)> m_prefetch;
 
 		/// @brief Whether the minimap has been initialized.
 		bool m_initialized;

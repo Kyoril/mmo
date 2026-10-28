@@ -66,3 +66,34 @@ TEST_CASE("Decorative overlays pass mouse hit tests to the window underneath", "
 	overlay->GetProperty("MousePassThrough")->Set("false");
 	CHECK(root->GetChildFrameAt(cursor, true) != tab);
 }
+
+TEST_CASE("Raising a window preserves higher tooltip and overlay layers", "[frame_input][frame_order]")
+{
+	if (!GraphicsDevice::HasInstance())
+	{
+		GraphicsDevice::CreateNull(GraphicsDeviceDesc());
+	}
+
+	auto root = std::make_shared<Frame>("Frame", "Root");
+	auto inventory = std::make_shared<Frame>("Frame", "Inventory");
+	auto window = std::make_shared<Frame>("Frame", "OtherWindow");
+	auto tooltip = std::make_shared<Frame>("Frame", "Tooltip");
+	auto overlay = std::make_shared<Frame>("Frame", "Overlay");
+	tooltip->SetFrameLevel(100);
+	overlay->SetFrameLevel(1000);
+	root->AddChild(inventory);
+	root->AddChild(window);
+	root->AddChild(tooltip);
+	root->AddChild(overlay);
+
+	inventory->BringToFront();
+	CHECK(root->GetChild(0) == window.get());
+	CHECK(root->GetChild(1) == inventory.get());
+	CHECK(root->GetChild(2) == tooltip.get());
+	CHECK(root->GetChild(3) == overlay.get());
+
+	window->BringToFront();
+	CHECK(root->GetChild(1) == window.get());
+	CHECK(root->GetChild(2) == tooltip.get());
+	CHECK(root->GetChild(3) == overlay.get());
+}

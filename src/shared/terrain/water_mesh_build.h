@@ -71,10 +71,12 @@ namespace mmo
 			/// @param faceAlpha TopFaceVertexAlpha or BottomFaceVertexAlpha.
 			/// @param waterHeight World Y of the water surface at the vertex.
 			/// @param terrainHeight World Y of the terrain at the same vertex.
-			/// @return The ARGB colour. Green and blue stay white; nothing reads them.
+			/// @return The packed colour. Vertex colours upload as R8G8B8A8_UNORM, so the shader's red
+			///			is the LOW byte (as in terrain vertex colours and ribbon trails). Green carries the
+			///			river flow speed on flowing pages and is white otherwise; blue stays white.
 			[[nodiscard]] inline uint32 MakeWaterVertexColor(const uint32 faceAlpha, const float waterHeight, const float terrainHeight)
 			{
-				return (faceAlpha << 24) | (EncodeShoreDepth(waterHeight, terrainHeight) << 16) | 0x0000FFFFu;
+				return (faceAlpha << 24) | 0x00FFFF00u | EncodeShoreDepth(waterHeight, terrainHeight);
 			}
 
 			/// @brief Decides whether explicit reversed-winding (underside) triangles are emitted.

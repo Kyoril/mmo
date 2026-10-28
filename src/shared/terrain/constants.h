@@ -42,6 +42,16 @@ namespace mmo
 			constexpr uint32 MaxPagesSquared = MaxPages * MaxPages;
 			constexpr double TileSize = 33.33333f;
 			constexpr double PageSize = TileSize * TilesPerPage;
+
+			/// @brief Default ocean surface height in world units (see Terrain::GetSeaLevel).
+			constexpr float DefaultSeaLevel = 0.0f;
+
+			/// @brief How far below the sea level the editor places the flat seabed of an ocean
+			///        placeholder page when a brush stroke first turns it into real terrain.
+			/// @remark Deep enough that the shore foam (water_mesh::ShoreDepthEncodeRange, 8 units) and
+			///         the ocean renderer's depth tint both read it as open water, shallow enough that
+			///         raising an island out of it stays a short sculpt.
+			constexpr float OceanSeabedDepth = 30.0f;
 		}
 	}
 }

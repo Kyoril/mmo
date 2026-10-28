@@ -13,6 +13,7 @@
 #include "base/signal.h"
 #include "frame_ui/frame_mgr.h"
 
+#include <memory>
 #include <optional>
 
 namespace mmo
@@ -23,6 +24,14 @@ namespace mmo
 	class RealmConnector;
 	class Discord;
 	class SoundEntryPlayer;
+	class GlueScene;
+	class CharSelect;
+	class DeferredRenderer;
+
+	namespace proto_client
+	{
+		class Project;
+	}
 
 	/// Reason for returning to the login/character-select screen.
 	enum class LoginReturnReason
@@ -41,7 +50,9 @@ namespace mmo
 		: public GameState
 	{
 	public:
-		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord);
+		explicit LoginState(GameStateMgr& gameStateManager, LoginConnector& loginConnector, RealmConnector& realmConnector, TimerQueue& timers, IAudio& audio, SoundEntryPlayer& soundEntryPlayer, Discord& discord, const proto_client::Project& project, CharSelect& charSelect);
+
+		~LoginState() override;
 
 	public:
 		/// The default name of the login state
@@ -103,8 +114,22 @@ namespace mmo
 		/// Hands a pending enter world request to the character screen once the list has arrived.
 		void TryEnterWorld();
 
-		/// Enter on the character screen enters the world, like clicking the button.
+		/// Enter on the character screen enters the world, like clicking the button. While the glue
+		/// camera flies, any key skips the flight and the login state ignores it otherwise (the
+		/// frame UI still receives it through its own KeyDown handler).
 		bool OnKeyDown(int32 key, bool repeat);
+
+		/// A click that no frame took skips a glue camera flight.
+		bool OnMouseDown();
+
+		/// Advances the glue scene and reports when its gate view is ready.
+		void OnIdle(float deltaSeconds, GameTime timestamp);
+
+		/// Creates the glue scene from its definition file. Leaves m_glueScene empty on failure.
+		void CreateGlueScene();
+
+		/// Gets the deferred renderer of the frame showing the glue scene, if it exists.
+		DeferredRenderer* FindGlueSceneRenderer() const;
 
 	private:
 
@@ -125,5 +150,29 @@ namespace mmo
 
 		/// Whether the character list has arrived since this state was entered.
 		bool m_charListReceived = false;
+
+		/// Set when this state was entered from the world with the realm still connected, until the
+		/// first character list arrives: that one lands on the plaza without a flight.
+		bool m_returningFromWorld = false;
+
+		/// Set on a successful login: the next realm list may auto-connect to the last used realm.
+		bool m_autoConnectToLastRealm = false;
+
+		const proto_client::Project& m_project;
+
+		/// Shows the characters on the glue scene's plaza; told about the scene on enter and leave.
+		CharSelect& m_charSelect;
+
+		/// The 3D scene behind the glue screens. Lives while this state is active.
+		std::unique_ptr<GlueScene> m_glueScene;
+
+		/// When OnEnter ran, for the readiness log lines.
+		GameTime m_enterTime = 0;
+
+		/// Whether GLUE_SCENE_READY was fired since this state was entered.
+		bool m_glueSceneReadySent = false;
+
+		/// Whether the plaza readiness was logged since this state was entered.
+		bool m_plazaReadyLogged = false;
 	};
 }

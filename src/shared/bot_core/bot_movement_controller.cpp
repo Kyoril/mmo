@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2026, Kyoril. All rights reserved.
 
 #include "bot_movement_controller.h"
+#include "bot_object_manager.h"
 
 #include <cmath>
 
@@ -66,6 +67,12 @@ namespace mmo
 
 	bool BotMovementController::MoveTo(BotContext& context, const Vector3& target, const float acceptanceRadius)
 	{
+		// Rooted, stunned and the like: no walk can start until the server lets go.
+		if ((context.GetMovementInfo().movementFlags & movement_flags::Rooted) != 0)
+		{
+			return false;
+		}
+
 		StopLowLevel(context, "replaced", false);
 		Reset();
 
@@ -89,7 +96,24 @@ namespace mmo
 			return m_status;
 		}
 
+		// Died on the way: the server takes no movement from a corpse, not even the stop, and the
+		// revive teleports the bot and resets its movement anyway. Drop the path without a word.
+		if (const BotUnit* self = context.GetSelf(); self && !self->IsAlive())
+		{
+			Reset();
+			return m_status;
+		}
+
 		MovementInfo movement = context.GetMovementInfo();
+
+		// Held in place by a root, stun or the like: the server refuses any change of position
+		// until it lets go, and whatever the bot wanted to do it decides again then.
+		if ((movement.movementFlags & movement_flags::Rooted) != 0)
+		{
+			Reset();
+			return m_status;
+		}
+
 		if ((movement.movementFlags & movement_flags::Falling) != 0)
 		{
 			context.SendLandedPacket();
@@ -257,8 +281,10 @@ namespace mmo
 			return false;
 		}
 
+		// Guessed only while the server has not said which map the character is on. Once it has,
+		// its word stands - including map 0, which is a real map.
 		uint32 mapId = context.GetCurrentMapId();
-		if (mapId == 0)
+		if (!context.HasCurrentMapId())
 		{
 			if (const auto inferredMapId = navService->InferMapId(start, target); inferredMapId.has_value())
 			{
@@ -267,7 +293,7 @@ namespace mmo
 			}
 		}
 
-		const BotPathResult result = navService->FindPath(mapId, start, target);
+		const BotPathResult result = navService->FindPath(mapId, start, target, context.GetObjectManager().GetClosedDoorPositions());
 		if (!result.success)
 		{
 			if (PlanarDistance(start, target) <= ShortMoveFallbackPlanarDistance

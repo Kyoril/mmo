@@ -301,3 +301,43 @@ TEST_CASE("path following: reports exhaustion once the last waypoint is reached"
 	CHECK(follow.exhausted);
 	CHECK(follow.waypointIndex == path.size());
 }
+
+TEST_CASE("low level movement: a climb counts against the run speed", "[bot][path]")
+{
+	// The server checks speed in three dimensions. A bot that covered its full run speed over the
+	// ground and climbed on top of it failed that check on every heartbeat up a steep hill, and
+	// was kicked for a speed hack.
+	constexpr float runSpeed = 7.0f;
+
+	BotLowLevelMovementInput input;
+	input.movement.position = Vector3(0.0f, 0.0f, 0.0f);
+	input.steeringTarget = Vector3(20.0f, 20.0f, 0.0f);  // a 45 degree slope
+	input.maxSpeed = runSpeed;
+	input.maxAcceleration = 10000.0f;
+	input.runtime.velocity = Vector3(runSpeed, 0.0f, 0.0f);
+	input.runtime.lastSimulationTime = 1000;
+	input.now = 1500;
+
+	const BotLowLevelMovementOutput output = AdvanceBotLowLevelMovement(input);
+	const float travelled = (output.movement.position - input.movement.position).GetLength();
+	CHECK(output.moved);
+	CHECK(travelled <= runSpeed * 0.5f + 0.01f);
+	CHECK(output.movement.position.y > 0.0f);
+}
+
+TEST_CASE("low level movement: a waypoint far above is not reached in one step", "[bot][path]")
+{
+	// In plan the waypoint is within a step; nine yards up it is not.
+	BotLowLevelMovementInput input;
+	input.movement.position = Vector3(0.0f, 0.0f, 0.0f);
+	input.steeringTarget = Vector3(1.0f, 9.0f, 0.0f);
+	input.maxSpeed = 7.0f;
+	input.maxAcceleration = 10000.0f;
+	input.runtime.velocity = Vector3(7.0f, 0.0f, 0.0f);
+	input.runtime.lastSimulationTime = 1000;
+	input.now = 1500;
+
+	const BotLowLevelMovementOutput output = AdvanceBotLowLevelMovement(input);
+	CHECK((output.movement.position - input.movement.position).GetLength() <= 3.5f + 0.01f);
+	CHECK(output.movement.position.y < 9.0f);
+}

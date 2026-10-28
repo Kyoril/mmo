@@ -53,8 +53,6 @@ namespace mmo
 		}
 
 		const float corrLen = (info.position - m_renderedPos).GetLength();
-		DLOG("[RemoteMovement] auth update corr=" << corrLen
-		    << "m flags=" << log_hex_digit(info.movementFlags));
 
 		// Reset dead-reckoning to the authoritative position.
 		// m_scenePos (scene node) is NOT snapped here — the proportional correction
@@ -130,39 +128,41 @@ namespace mmo
 		}
 
 		// ── 3. Smooth correction: exponentially decay m_scenePos toward m_renderedPos ─
-		// Use a critically-damped exponential blend rather than constant-speed chase.
-		// This means small drift errors (normal heartbeat arc mismatch) are absorbed
-		// gradually and invisibly, while large errors still converge within ~200 ms.
-		// Formula: scenePos = lerp(scenePos, renderedPos, 1 - exp(-k * dt))
-		// k = ln(2) / halfLife  →  k ≈ 6.93 for halfLife = 100ms.
+		// A critically-damped exponential blend rather than a constant-speed chase: small
+		// drift errors (normal heartbeat arc mismatch) are absorbed gradually and invisibly,
+		// while large errors still converge within ~200 ms.
+		// Formula: step = (renderedPos - scenePos) * (1 - exp(-k * dt)), k = ln(2) / halfLife.
 		// At k=6.93: a 3.5 m gap (500ms heartbeat worst-case) halves every 100ms.
-		//   t=100ms → 1.75 m remaining, t=200ms → 0.875 m, t=300ms → 0.44 m.
-		// Teleports (>= kTeleportThreshold) still snap instantly.
+		// The target already includes this frame's dead-reckoned step, so the correction is the
+		// whole move of the frame. While running it settles ~1 m behind the target, which lets a
+		// stop packet (sent from slightly behind the prediction) end the run without a pull-back.
+		// The step is not applied here: the caller sweeps it, so it can never pull the character
+		// into geometry.
+		Vector3 correction = Vector3::Zero;
 		const Vector3 corrVec = m_renderedPos - m_scenePos;
 		const float corrLen = corrVec.GetLength();
-		if (corrLen > 0.001f)
+
+		m_stuckSec = (corrLen > kStuckDistance) ? m_stuckSec + deltaTime : 0.0f;
+
+		if (corrLen >= kTeleportThreshold || m_stuckSec >= kStuckSnapSec)
 		{
-			if (corrLen >= kTeleportThreshold)
-			{
-				m_scenePos = m_renderedPos;
-			}
-			else
-			{
-				// alpha = 1 - exp(-k * dt), clamped to [0,1].
-				const float alpha = 1.0f - std::exp(-kCorrectionDecay * deltaTime);
-				m_scenePos += corrVec * alpha;
-			}
+			// Teleports, and corrections the sweep could not complete, snap.
+			m_scenePos = m_renderedPos;
+			m_stuckSec = 0.0f;
+		}
+		else if (corrLen > 0.001f)
+		{
+			const float alpha = 1.0f - std::exp(-kCorrectionDecay * deltaTime);
+			correction = corrVec * alpha;
 		}
 
 		// ── 4. Fill output ────────────────────────────────────────────────────
-		// position: where game_unit_c should place the scene node before the
-		//   collision sweep.  This is m_scenePos (which has been nudged toward
-		//   m_renderedPos by the correction above) minus the delta that will be
-		//   applied this frame via RemotePlayerMoveCollide — so after the sweep
-		//   the scene node ends up at approximately m_scenePos.
-		// desiredDelta: the movement delta to pass to RemotePlayerMoveCollide.
-		outState.position      = m_scenePos - desiredDelta;
-		outState.desiredDelta  = desiredDelta;
+		// position: where the scene node currently is (the collision-resolved result of the
+		//   previous frame, fed back via SetRenderedPos).
+		// desiredDelta: this frame's move towards the target, which game_unit_c sweeps through
+		//   RemotePlayerMoveCollide before feeding the resolved position back.
+		outState.position      = m_scenePos;
+		outState.desiredDelta  = correction;
 		outState.facing        = m_renderedFacing;
 		outState.movementFlags = m_authFlags;
 		outState.isFalling     = isFalling;
@@ -171,11 +171,40 @@ namespace mmo
 		return true;
 	}
 
+	void RemoteMovementRenderer::ClipTargetToSurface(const Vector3& normal)
+	{
+		// Only a target that is being dead-reckoned can run on into an obstacle. A standing
+		// player's target is its authoritative position and must stay exactly that: no further
+		// packet arrives to restore it, and the sweep (or, failing that, the stuck snap) already
+		// brings the character there around whatever is in the way.
+		if ((m_authFlags & movement_flags::PositionChanging) == 0)
+		{
+			return;
+		}
+
+		const Vector3 toTarget = m_renderedPos - m_scenePos;
+		const float intoSurface = toTarget.Dot(normal);
+		if (intoSurface >= 0.0f)
+		{
+			return;
+		}
+
+		m_renderedPos -= normal * intoSurface;
+
+		// Landed on something (a box top, a slope) before the prediction did: stop the predicted
+		// fall there instead of accelerating downwards until the land packet arrives.
+		if (normal.y > 0.7f && m_fallVelocity.y < 0.0f)
+		{
+			m_fallVelocity.y = 0.0f;
+		}
+	}
+
 	void RemoteMovementRenderer::Reset()
 	{
 		m_initialized        = false;
 		m_fallVelocity       = Vector3::Zero;
 		m_fallTimeAccumSec   = 0.0f;
+		m_stuckSec           = 0.0f;
 		m_authFlags          = 0;
 	}
 

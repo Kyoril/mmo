@@ -20,6 +20,8 @@ from .stage import Stager
 from .state import load_state
 from .web import Http
 
+PORTAINER_TIMEOUT_S = 2700
+
 
 def build_deployer(cfg, clock=None, backup=None, compiler_command=None, github_api="https://api.github.com"):
 	clock = clock or Clock(cfg.timezone)
@@ -30,8 +32,10 @@ def build_deployer(cfg, clock=None, backup=None, compiler_command=None, github_a
 	stager = Stager(cfg, github, patchdir, compiler_command)
 	realms = [RestApi(realm.name, realm.url, realm.password, http) for realm in cfg.realms]
 	login = RestApi("login", cfg.login_url, cfg.login_password, http)
-	# Portainer answers the stack update only after pulling and starting every image.
-	portainer = PortainerClient(cfg.portainer_url, cfg.portainer_token, cfg.portainer_stack_id, cfg.portainer_endpoint_id, Http(timeout=900))
+	# Portainer answers the stack update only after stopping the old containers (each may use its
+	# stop_grace_period), pulling every image, running data-service and starting the rest. 900 s
+	# was too short for that on 2026-10-25; a timeout is survivable anyway (Maintenance._redeploy).
+	portainer = PortainerClient(cfg.portainer_url, cfg.portainer_token, cfg.portainer_stack_id, cfg.portainer_endpoint_id, Http(timeout=PORTAINER_TIMEOUT_S))
 	if backup is None:
 		backups_dir = Path(cfg.state_dir) / "backups"
 

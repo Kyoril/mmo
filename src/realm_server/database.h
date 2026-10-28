@@ -181,6 +181,11 @@ namespace mmo
 		/// Deletes a character by GUID.
 		virtual void DeleteCharacter(uint64 characterGuid) = 0;
 
+		/// Persists the order in which the characters of an account are listed.
+		/// @param accountId The owning account. Characters of other accounts are never touched.
+		/// @param orderedGuids The account's character guids in the desired order.
+		virtual void SetCharacterOrder(uint64 accountId, std::vector<uint64> orderedGuids) = 0;
+
 		/// Creates a new character.
 		virtual std::optional<CharCreateResult> CreateCharacter(std::string characterName, uint64 accountId, uint32 map, uint32 level, uint32 hp, uint32 gender, uint32 race, uint32 characterClass, const Vector3& position, const Degree& orientation, std::vector<uint32> spellIds, uint32 mana, uint32 rage, uint32 energy, std::map<uint8, ActionButton> actionButtons, const AvatarConfiguration& configuration,
 			const std::vector<ItemData>& items) = 0;
@@ -318,6 +323,9 @@ namespace mmo
 		/// Persists a single character's membership decision for one channel (upsert).
 		/// @param status 1 if the character joined the channel, 0 if the character left it.
 		virtual void SetCharacterChannelState(uint64 characterId, uint32 channelId, uint8 status) = 0;
+
+		/// Stores the persistent game master flags (gm_flags::Type bits) of a character.
+		virtual void SetCharacterGmFlags(uint64 characterId, uint8 flags) = 0;
 	};
 
 	/// Mail storage operations. Money and item attachments stay stored with the mail

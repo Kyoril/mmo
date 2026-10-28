@@ -14,7 +14,8 @@ test, and auto-ships low-risk fixes to `origin/develop`. Everything else is park
 | Review | `claude -p --tools Read,Grep,Glob` | read the branch; never sees the report |
 | Guard | `bugloop/guard.py` | protected paths, suspicious patterns, data field rules |
 | Proof | orchestrator | test fails on base, passes on the fix (E2E scenarios run here, under the gate lock) |
-| Gate | `verify.ps1 -Tier full` | build, unit, tool tests, Linux check (WSL), E2E |
+| Gate | `verify.ps1 -Tier fast` | build, unit, tool tests, Linux check (WSL); E2E runs in the nightly before deploy |
+| Merge | `claude -p` in the loop worktree, then a read-only review | resolve conflicts with develop at ship and refix time; never stage, commit or push (see "Merge conflicts with develop") |
 
 Every Claude stage runs with `--strict-mcp-config` (no MCP servers) and a scrubbed environment:
 no stage gets `MMO_BUG_API_KEY` or `MMO_BUG_API_URL`; only the fixer gets
@@ -40,13 +41,40 @@ The guard is an allow-list: only paths under these roots (each with its own file
 - `src/world_server/`, `src/realm_server/`, `src/mmo_client/` (C/C++ files)
 - `data/client/Interface/` (`.lua`, `.xml`, `.toc`), `data/client/Locales/` (`.txt`)
 - `data/editor/data/` (`.data`), `data/scripts/` (`.lua`)
+- `src/shared/{bot_core,bot_ai,bot_chat}/` (C/C++; bots can do nothing a player client cannot)
+- `docs/` and `e2e/README.md` (`.md` only; prose nothing builds or loads)
+- `data/client/ClientDB/<name>.data`, but only together with `data/editor/data/<name>.data`: the
+  client copy is exported from the editor file, and the guard decodes and judges that one
+- `src/tests/CMakeLists.txt` and `src/tests/<suite>/CMakeLists.txt`, line by line: only the shapes
+  that register a suite (`mmo_add_test`, `add_subdirectory`, `target_sources`/`..._include_directories`/
+  `..._compile_definitions(<target> PRIVATE` with source, directory and `MMO_*="${CMAKE_SOURCE_DIR}/..."`
+  lines, `if (MMO_...)`, `if (EXISTS "${CMAKE_SOURCE_DIR}/...")`, `else()`, `endif()`, comments). Any other
+  CMake line parks; every other `CMakeLists.txt` stays protected
 
 The guard also parks: edits within 20 lines of a security-sensitive identifier or a rejection
 path; changed server-code lines containing economy words (xp, reward, loot, drop, credit,
-price, cost, ...) even without numbers; numeric literals in conditions or tuned values;
-added or removed preprocessor directives (including `#include`); Lua `require`, `dofile` and
+price, cost, ...) even without numbers; numeric literals in conditions or tuned values in server
+code (client code cannot cheat the server, and comment lines never count); added or removed
+preprocessor directives other than an `#include` of a header by a plain path and `#pragma once`
+in a header; Lua `require`, `dofile` and
 `loadstring`; an added `return true;` or `return PacketParseResult::...` in server code;
 control characters; unparseable diff headers; and submodule pointer changes.
+
+**Advisory findings (since 2026-10-26).** Some findings no longer park on their own: they go to
+the reviewer as "advisory (does not park; check it)" lines, and the review and the gate decide.
+Since 2026-10-17 they caused most parks, and the maintainer shipped those fixes as they were:
+
+- a changed tuned value or numeric condition, except in server files whose name is about the
+  economy (loot, reward, vendor, quest, xp, money, price, trade, level, talent, inventory, mail,
+  bank, ...): `if (count > 1)` in `loot_instance.cpp` still parks;
+- a path outside the allow-list above, and a file type a root does not list (except in test
+  folders, which the gate compiles and runs);
+- a changed binary file under `data/client/` (client data cannot cheat the server).
+
+Everything else above still parks: protected paths, security-sensitive edits, economy words in
+server code, economy data, preprocessor directives (an ordinary `#include` never raises one;
+what is left are shapes like `#define private public` or `#if 0` around a check), size limits.
+`guard.json` lists both, under `reasons` and `advisories`.
 
 Regression tests have their own rules. `src/tests/` may hold C/C++ files and `e2e/scenarios/`
 `.lua` files; anything else there parks. Test hunks skip the economy and condition rules but keep
@@ -63,11 +91,41 @@ The regression-proof waiver is decided by the diff, not the fixer's claim: a fix
 regression test only if it has at least one non-test change and all of its non-test changes are
 under `data/editor/data/`, `data/client/Locales/` or `data/client/Interface/`. Client UI Lua
 under `data/client/Interface/` needs no regression proof because it cannot cheat the server;
-the guard and the full gate still apply.
+the guard and the gate still apply.
 
-A fix auto-ships only with: a fixable category, fixer confidence `high`, a clean review, an
-empty guard, a passing proof (code fixes), a green full gate, fewer than 5 ships today, no
+The fast gate runs last and only when it can change the outcome: a candidate that already parks
+for another reason (guard, review, confidence, proof) skips it, and its `gate.json` says
+"skipped". That saves the 15–25 minutes a gate takes, and nothing is lost: a maintainer's ship
+decision merges the branch into today's develop and runs the fast gate on that merge before
+anything is pushed. Emergency fixes and features always run the gate, because the CI push and the
+"Feature ready" ping rely on a green result.
+
+A fix auto-ships only with: a fixable category, fixer confidence `high` (or `medium` with a
+passing regression proof, or `medium` on a data or UI fix that needs no proof and has a clean
+review), a clean review, an empty guard, a passing proof (code fixes), a green
+fast gate, fewer than `autoship_cap_per_day` (20) ships today, no
 breaker, and a time outside 21:30–23:59 UTC (fixes ready during the window ship after it).
+
+The reviewer splits what it finds: `blocking_issues` (the diff is wrong, unsafe or breaks a build
+or test) park the fix, `advisory_notes` (follow-ups, other entries with the same gap, nice-to-have
+audits, style) are kept in `review.json` and never park it.
+
+### Self-correction
+
+A candidate that would park only for reasons the fixer can repair itself does not go to the
+maintainer yet. The loop runs another fix round on the same branch, up to `self_correct_rounds`
+(2) per bug, each needing 2 invocations of budget. Repairable are: the reviewer's blocking issues
+and its "does not fix the symptom", "not supported by the source", "out of scope" and "guidance not
+followed" answers; a failed or missing regression proof; a red fast gate; fixer confidence
+`medium`. Never repairable, so parked at once: any guard reason, a design question, a weakened
+security property, an unusable review, a diff too large to review, emergency tickets (they have
+their own attempts). A feature self-corrects the same way and still parks for approval at the end.
+
+The fixer sees the previous round's reasons in its PREVIOUS ATTEMPT block, as untrusted findings,
+never as maintainer guidance; a guided refix keeps its guidance in the rounds after it. Before a
+round starts, the bug is parked on paper (`pr_open`, the branch, the uploaded diff, the backup),
+so an interrupted or failed round leaves the last candidate reviewable. A maintainer refix starts
+the count again.
 
 ## Running it
 
@@ -115,6 +173,11 @@ At startup, before the first poll, the loop compiles the game-data schemas of th
 Nothing the fixer writes can change how later diffs are decoded. If protoc or the schemas are
 missing, the loop logs a warning and runs without a decoder: every `.data` change then parks.
 
+Stale git locks: a loop killed during a git operation leaves an `index.lock` in its worktree or a
+submodule's git directory, and every later git command there fails ("File exists"). At startup
+the loop removes such locks if they are older than a minute (it is the only user of its
+worktree, and only one loop runs) and logs each one.
+
 Stale claims: if the loop is killed mid-fix, the next live poll releases the bug as `triaged`
 with an "interrupted" note and the category `needs_info` (see "Needs-info bugs"). An interrupted guided refix goes back to `pr_open`; an interrupted
 feature implement run goes back to `triaged` with the category `design_request` and "decide
@@ -145,12 +208,75 @@ old task (`Disable-ScheduledTask -TaskName "MMO Bug Loop"`) before starting the 
 loops at once double the daily ship cap and both work the same red develop. To review a branch
 parked on another machine by hand: `git fetch origin refs/bugloop/bugfix/<id8>:bugfix/<id8>`.
 
+## What is it doing right now?
+
+```powershell
+python tools/bugs/bug_loop.py status          # from the main checkout; --json for the raw file
+```
+
+The loop rewrites `artifacts/bug-loop/status.json` at every stage change (`status-dry.json` in a
+dry run): its pid, the stage and since when (polling, triaging, preparing the worktree, fixing,
+reviewing, waiting for the gate lock, proving, gating, shipping, sleeping until the next poll),
+the bug and branch it works on, the fix queue (next bug first), today's invocations and
+auto-ships against their limits, breaker and red develop. The command prints it and exits 1 when
+the recorded process no longer runs ("NOT RUNNING"), so a loop that died is not mistaken for
+one that waits. Run it from a worktree with `--repo <main checkout>`.
+
+### Busy, idle and paused
+
+The loop never sleeps between bugs: a poll that did work starts the next one at once. It sleeps
+(`ci_poll_seconds`, 5 min, with the CI watch on, else `poll_seconds`) only after a poll that
+found nothing to do. The mode in `state.json` (`mode`) names which of three it is in:
+
+| Mode | When |
+|---|---|
+| busy | bugs are queued for a fix and the daily budget allows one |
+| paused | bugs are queued but the daily invocation budget is used up (it resumes at 00:00 UTC) |
+| idle | the fix queue is empty; the loop polls for new reports |
+
+Each change is logged (`mode: idle -> busy`) and posted to Discord once ("Bug loop busy — N
+bug(s) queued", "Bug loop paused — <reason>", "Bug loop idle", the last with what the busy
+stretch shipped, parked and gave up on). The mode survives a restart, so the day-boundary restart
+does not announce it again; the first mode after an upgrade is recorded silently. A dry run and
+`notify_status_changes: false` post nothing. A worktree that cannot reach develop keeps its own
+"stalled"/"resumed" messages and does not change the mode.
+
+### When Claude cannot run
+
+When a `claude -p` call fails because Claude itself cannot run (the login expired, no credit,
+usage limit, overloaded: `ClaudeUnavailable`), that is not the bug's fault. The loop then
+(`claude_down` in `state.json`):
+
+- posts "Bug loop paused — Claude cannot run on the loop machine" once; for an expired login,
+  run `claude` and `/login` as the user the scheduled task runs as;
+- starts no triage, fix, refix, feature or emergency run, and leaves refix and implement decisions
+  pending (not consumed);
+- puts back what was cut off: a fix goes back to the queue, a refix or feature decision is kept in
+  `deferred_decisions` (the refix round is not counted), the emergency attempt is not counted;
+- every `claude_retry_minutes` (15) makes one tiny probe call; the first success posts "Bug loop
+  resumed" and replays the kept decisions.
+
+On 2026-10-26 an expired login turned four bugs into needs-info and used up two decisions.
+
+To carry out a refix or implement decision again that the loop could not finish (one used up
+before this pause existed, say), run from the main checkout:
+
+```powershell
+python tools/bugs/bug_loop.py replay <bug id>
+```
+
+The running loop takes the newest `decision: refix:` or `decision: implement:` entry the
+maintainer key wrote into that bug's history and carries it out at its next poll. The request
+file (`artifacts/bug-loop/replay/<bug id>`) carries nothing itself, so it cannot add guidance.
+
 ## Where to look
 
+- `python tools/bugs/bug_loop.py status`: what the loop does right now (see above).
 - `tools/gate/reports/bugloop-YYYY-MM-DD.json`: the day's outcomes, ships, parked branches,
   abuse flags, model invocations (`bugloop-dry-*.json` in shadow mode).
 - `artifacts/bug-loop/<bug id>/`: `report.json`, `triage.json`, `FIX.json`, `diff.patch`,
-  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`. The accepted
+  `guard.json`, `review.json`, `proof.json`, `gate.json`, `decision.json`, `merge.json` (merge
+  conflicts with develop the loop resolved). The accepted
   description of a feature is not stored here (the fixer can write this folder) but in
   `artifacts/bug-loop/state.json` under `features`.
 - `artifacts/bug-loop/_runs/<date>.log`: the runner log. `dry-run-journal.jsonl`: the API
@@ -203,37 +329,51 @@ The decision panel of a parked bug offers three actions: refix, ship and discard
 "Feature request" panel offers a fourth, "Implement as feature", on rejected reports that are
 not parked (see below). The loop consumes decisions before it does anything else in a poll:
 
+- **Guidance sets game values.** A player report can never make rewards, drops, prices, stats,
+  costs or cooldowns more generous; maintainer guidance and feature descriptions can, and the
+  fixer makes exactly the requested change (the reviewer does not count it as a security
+  reduction). Such changes still park for a ship decision, since the guard parks every numeric
+  economy change. Weakening a permission, validation or security check stays refused, whoever
+  asks. (On 2026-10-26 the fixer refused a guided price raise for item 87.)
 - **Refix with guidance**: the fixer continues on the existing `bugfix/<id8>` branch with the
   maintainer's guidance, at most 3 guided rounds per bug. Before the fixer starts, the loop
   merges today's `origin/develop` into the branch itself; a data submodule pointer that both
   moved is resolved by merging the two submodule commits. The refix is then guarded and
   reviewed against today's develop, so data that landed meanwhile (another fix's mesh, say) is
-  not counted as part of this fix. A conflict there ends the refix ("decide again"). Shipping
+  not counted as part of this fix. Conflicts there are resolved as described in "Merge conflicts
+  with develop"; one nothing can resolve restarts the refix on a fresh `bugfix/<id8>` from
+  develop, and the fixer re-applies the earlier change (its diff is in the fixer's input)
+  together with the guidance. Shipping
   merges submodule pointers the same way, and also merges a submodule `master` that moved past
   develop's pointer (data pushed without a develop bump) into the fix's submodule commit; that
-  merge result always runs the fast gate before anything is pushed, and a conflict parks with
-  "needs a manual merge". A refix never has to merge submodule master itself: it would lose the
+  merge result always runs the fast gate before anything is pushed. A refix never has to merge
+  submodule master itself: it would lose the
   same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
-- **Ship**: ships exactly the recorded commit. The daily cap does not apply. If the branch tip
+- **Ship**: ships exactly the recorded commit. The daily cap does not apply. A ship decision for a
+  bug whose branch is already merged on develop (a second click while the first ship waited in the
+  queue) only notes "already shipped in <commit>" and keeps the bug resolved. If the branch tip
   no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
   is re-parked and the maintainer must decide again. The panel sends the SHA-256 of the diff it
   shows with the decision; the loop ships only if that matches the diff it uploaded for the
   recorded commit, otherwise it re-parks ("the diff you approved does not match the candidate
   commit; decide again") and uploads the real diff. The API refuses a new review diff while a
   decision is pending, the UI proxy refuses review-diff uploads altogether, and "Ship as is" is
-  disabled until a diff is uploaded. An active circuit breaker also re-parks
-  the bug ("the circuit breaker is tripped"); decide again once it is cleared. Only the
-  nightly freeze window queues the ship until the window ends; a second ship decision for a
-  queued bug only adds a note.
+  disabled until a diff is uploaded. An active circuit breaker queues the ship
+  ("the circuit breaker is tripped; ships once the breaker is cleared"), and so do the nightly
+  freeze window and a red develop: the decision is never used up by a hold, and the ship goes
+  out on its own once the hold ends. A second ship decision for a queued bug only adds a note.
 
   Every ship (auto or decided) lands in the same order: each changed data submodule commit is
   pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
   `upstream` in the loop worktree's submodule, set on every prepare from the URL in the
   committed `.gitmodules`), then `develop` is pushed to origin. Develop therefore never points at
   a data commit GitHub does not have, and a rejected submodule push stops the ship before
-  develop moves. The URL never comes from the main checkout's `.git/config`, which may point a
+  develop moves. A push rejected only because develop (or a submodule `master`) moved while the
+  merge was gated starts the ship over: fetch, merge onto the new tip, gate again, push; at most
+  3 rounds ("develop kept moving: 3 attempts"). On 2026-10-24 a ship parked after losing that race
+  once. The URL never comes from the main checkout's `.git/config`, which may point a
   submodule at the main checkout's own `data/client` (a non-bare repository with `master`
   checked out: pushes there are refused, and nothing downstream fetches from it). The main
   checkout's submodules are not updated; see Known limits. Because they can lag behind, a
@@ -292,6 +432,8 @@ webhook nothing is sent. Messages:
   discarded, merged by hand, interrupted, loop error. Outcomes with a message of their own
   (shipped, refix limit, design decision needed, feature ready) are not repeated. Each message
   links the bug and quotes the triage summary;
+- the loop's mode changes: busy, paused (budget used up with bugs queued), idle (see "Busy, idle
+  and paused"), sent with the status messages and switched off with them;
 - a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
   decision: parked ones without a decision and `needs_info` ones, plus the day's parked and
   needs-info outcomes with their first reason), sent once per UTC day when the day rolls over; it is persisted, so the restart at
@@ -300,6 +442,60 @@ webhook nothing is sent. Messages:
   itself ends abnormally (any exit code other than 0, the day-boundary restart 75 or 3 for a
   second instance, and a failed fetch, archive or extract). Never in a dry run (`-DryRun`). It
   reads the variable directly and never logs the URL.
+
+## Merge conflicts with develop
+
+A fix waits for review for hours or days while develop moves on, so its merge often conflicts.
+Before 2026-10-22 every conflict parked the fix with "needs a manual merge", and neither a ship
+decision nor a refix could get past it. Now the loop resolves them itself, at every merge it
+makes (ship, refix, and a submodule `master` that moved), in this order:
+
+1. **Game data** (`*.data` in `data/editor` and `data/client`) is merged by entry
+   (`bugloop/data_merge.py`), without a model: entries are matched by id, fields by number, and
+   lists without ids as sequences, where edits apply unless they overlap (spawns appended next to
+   re-snapped heights both apply). With the schema the loop compiles at startup, two edits to
+   different words of one string merge (one side turns "20 to 22" into "$s0", the other "40%"
+   into "$s1%"), and a spawn one side moved keeps its height over develop's height re-snap.
+   What stays a conflict: the same value changed differently on both sides, and an id both sides
+   added for different entries ("an id collision"). Those go to the re-apply (see below), where
+   the fixer redoes the change on today's develop and picks a free id. Replayed against the 62
+   historical merges in both data repositories where the two sides changed one `.data` file, 54
+   come out as the humans merged them; the other 8 are 7 id collisions and one sentence written
+   differently on both sides. git never merges these files itself during the loop's merges
+   (`*.data -merge`), because a line merge of protobuf bytes that happen to contain no NUL byte
+   would corrupt them silently.
+2. **Text files** go to a Claude merge stage (`prompts/merge.md`, all tools but push, in the loop
+   worktree, `merge_max_usd` per run). It edits the conflicted files only; the loop then checks
+   without trusting it: HEAD unchanged, no conflict markers, no other file staged, changed or
+   created. A second, read-only stage (`prompts/merge_review.md`) must confirm that the resolution
+   keeps both sides and adds nothing else. It sees only the conflicts (base, OURS, THEIRS, the
+   resolution and a few lines around each), once the loop has checked that everything git merged
+   cleanly came back unchanged; a resolution that also changed text outside the conflicts is
+   shown as full diffs against both sides. On 2026-10-23 the full diffs of a much-edited
+   `GlueTemplates.xml` were 112 000 characters and the review refused them; its one conflict is
+   9 000.
+   Protocol bumps are the one exception to "conflicted files only": when a protocol file
+   (`game_protocol.h`, `auth_protocol.h`, `protocol_fingerprint.json`, `protocol_versions.md`)
+   conflicts, the resolver may also change the others. Both sides bumping to the same value merges
+   the header cleanly, yet the merge needs a version of its own (b36cdaa3, 2026-10-23). A version
+   header may change only in its `ProtocolVersion` line, and only upwards; the review sees these
+   changes as diffs, and the gate's protocol check verifies the fingerprint. Both protocol version bumps colliding are resolved to one above both, with the
+   fingerprint regenerated.
+3. Other binary files (meshes, tiles) changed on both sides stay conflicts.
+
+A resolved merge always runs the fast gate before anything is pushed (it is a merge with a moved
+develop), and the merge commit names the resolved files ("Conflicts with origin/develop resolved
+by the bug loop in: ..."). The reports are in `artifacts/bug-loop/<bug id>/merge.json`, and the
+ship note on the bug lists the files. The resolution needs two Claude invocations; without budget
+left the conflict stands.
+
+**Re-apply.** When a ship (auto or decided) still hits a conflict nothing could resolve, the
+bug is parked as before and the loop at once re-applies the fix on today's develop: a guided
+refix whose guidance comes from the loop ("From the bug loop, not the maintainer: ... re-apply
+the same fix on today's develop"), at most `max_reapply` (2) times per bug and only with budget
+for it. It does not use up the maintainer's refix rounds. The new candidate goes through guard,
+review, proof and gate again; it auto-ships only if it qualifies on its own, otherwise it parks
+and needs a ship decision again (the approved diff no longer matches).
 
 ## CI watch and emergency fixes
 
@@ -384,6 +580,14 @@ landed on develop since the last successful run (read through `gh` in the user's
 `bugloop/ci.py`). If `gh` cannot be reached, the loop logs it and keeps going without the check.
 After a deploy rollback, trip it by hand. Only clear it once the cause is understood.
 
+A breaker the loop tripped itself clears itself once a newer Nightly Release on develop is
+green (Discord: "circuit breaker cleared"): the trip is a correlation (a red nightly with a
+bug-loop merge in it), and a green nightly after it shows develop no longer has the fault.
+On 2026-10-20 a red nightly caused by a bot change held seven ship decisions after the next
+nightly was already green. A breaker set by hand, or `breaker on` on top of the loop's trip,
+never clears itself. Ship decisions wait in the ship queue while the breaker is tripped and
+ship when it clears; auto-ship candidates still park.
+
 The one exemption: when the loop tripped the breaker for a red nightly run, it records that run
 id (`breaker_source` in `state.json`, together with the breaker file's text). A green emergency
 fix of a red phase that saw that same nightly run red ships despite the breaker. Everything
@@ -406,13 +610,20 @@ hold set on top of the loop's own trip also ends the exemption.
 - `items.data` stores field 68 with a wire type that differs from `items.proto` (38 entries).
   The data diff surfaces such unknown fields as `<unknown N>` leaves (changed ones count as
   numeric), so item text fixes still work.
-- A fix in `data/client` or `data/editor` ships only if the submodule's `master` on GitHub has
-  not moved past the commit the fix started from; otherwise it parks.
+- A data change that develop changed differently in the same value (the same spawn moved on
+  both sides, say) cannot be merged; the loop re-applies the fix on today's develop instead
+  (see "Merge conflicts with develop").
 - After an auto-ship, the local `develop` in `H:/mmo` is behind `origin/develop`, and so is the
   `master` of its data submodules. Pull before pushing your own work (`git pull` then
   `git -C data/client pull` / `git -C data/editor pull`, or `git submodule update`). The loop
   never writes into the main checkout's submodules.
 - After changing `prompts/triage.md`, run `tools/bugs/adversarial_check.py` (real model calls).
+- The bug API client retries a GET, PUT or PATCH once when the connection is reset or times
+  out, and the first such failure switches it to TLS 1.2 for the rest of the process. POSTs
+  (claims, emergency tickets) are never repeated: a claim that went through before the reset
+  would come back as 409, "claimed elsewhere". On 2026-10-23 every TLS 1.3 handshake with the API
+  was reset for hours, and the loop could not see any ship decision; later the same day a reset
+  during a status update left a finished fix "interrupted".
 
 ### What the guard cannot see
 

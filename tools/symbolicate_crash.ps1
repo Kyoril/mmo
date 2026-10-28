@@ -21,7 +21,7 @@ param(
     [string]$OutFile,
     [string]$Llvm,
     # Only symbolicate frames from these modules (our own code is what we can fix).
-    [string[]]$Modules = @('mmo_client')
+    [string[]]$Modules = @('mmo_client', 'login_server', 'realm_server', 'world_server')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,6 +33,22 @@ if (-not $CrashFile) { throw "Provide -ReportDir or -CrashFile." }
 if (-not (Test-Path -LiteralPath $CrashFile)) { throw "Crash file not found: $CrashFile" }
 if (-not $OutFile) {
     $OutFile = if ($ReportDir) { Join-Path $ReportDir 'symbolized.txt' } else { "$CrashFile.symbolized.txt" }
+}
+
+# Client crash reports carry their build as report.json's "appVersion" (there is no "Version:"
+# line in crash.txt for those - that's a server-report-only convention). Used to fetch the
+# matching mmo_client.pdb/.exe from the client's published GitHub release when not archived.
+$reportVersion = $null
+if ($ReportDir) {
+    $reportJson = Join-Path $ReportDir 'report.json'
+    if (Test-Path -LiteralPath $reportJson) {
+        try {
+            $report = Get-Content -LiteralPath $reportJson -Raw | ConvertFrom-Json
+            if ($report.appVersion) { $reportVersion = [string]$report.appVersion }
+        } catch {
+            # Malformed report.json: fall through with $reportVersion unset.
+        }
+    }
 }
 
 if (-not $Llvm) {
@@ -89,9 +105,64 @@ function Get-PdbIdFromBinary([string]$path) {
     return $null
 }
 
+# llvm-symbolizer emits, per address, "function" / "file:line:col" line pairs, then a blank line.
+# An address inside inlined code gets one pair per inlining level, innermost first.
+# Returns a map of "RVA -> 'func | file:line'", plus "(inlined into func | file:line ...)" for the
+# outer levels. $mapPath, when given, rewrites each file path (build machine -> this checkout).
+function ConvertFrom-SymbolizerOutput($out, [string[]]$rvas, [scriptblock]$mapPath) {
+    $map = @{}
+    $i = 0
+    $pairs = @()
+    $func = $null
+    foreach ($o in (@($out) + @(''))) {
+        $o = ([string]$o).Trim()
+        if ($o -eq '') {
+            if ($pairs.Count -gt 0 -and $i -lt $rvas.Count) {
+                $text = $pairs[0]
+                if ($pairs.Count -gt 1) { $text += "  (inlined into " + (($pairs | Select-Object -Skip 1) -join ', ') + ")" }
+                $map[$rvas[$i]] = $text
+            }
+            if ($pairs.Count -gt 0 -or $null -ne $func) { $i++ }
+            $pairs = @()
+            $func = $null
+            continue
+        }
+        if ($null -eq $func) { $func = $o }
+        else {
+            if ($mapPath) { $o = & $mapPath $o }
+            $pairs += "$func | $o"
+            $func = $null
+        }
+    }
+    return $map
+}
+
+# Builds record the build machine's paths (/app/src/... in the Docker images; D:\a\mmo\mmo\src\...
+# on the GitHub Windows runners that build nightly client releases). Map a path onto this
+# checkout when the part after one of its "/src/" segments exists under src\ here.
+function Convert-BuildPath([string]$location) {
+    $m = [regex]::Match($location, '^(.*?)(:\d+(:\d+)?)?$')
+    $path = $m.Groups[1].Value.Replace('\', '/')
+    $suffix = $m.Groups[2].Value
+    $at = 0
+    while (($at = $path.IndexOf('/src/', $at)) -ge 0) {
+        $rest = $path.Substring($at + 5)
+        $local = Join-Path (Join-Path $repoRoot 'src') $rest
+        if (Test-Path -LiteralPath $local -PathType Leaf) { return ((Resolve-Path -LiteralPath $local).Path + $suffix) }
+        # By one, not five: in ".../src/src/shared" the second "/src/" starts on the first one's "/".
+        $at += 1
+    }
+    return $location
+}
+
 # --- Parse the crash report: module pdbids + frames ---------------------------------------------
 $text = Get-Content -LiteralPath $CrashFile -Raw
 $lines = $text -split "`r?`n"
+
+# Server reports name their build ("Version: 0.1.0.42 (Commit: <sha>)"); Linux frames resolve by it.
+$reportCommit = $null
+$commitMatch = [regex]::Match($text, '(?m)^Version:.*\(Commit: ([0-9a-fA-F]+)\)')
+if ($commitMatch.Success) { $reportCommit = $commitMatch.Groups[1].Value }
 
 $modulePdbId = @{}   # module name -> pdbid
 foreach ($line in $lines) {
@@ -129,22 +200,92 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
     $pdbid = $modulePdbId[$mod]
     if (-not $pdbid) { Emit "[$mod] no pdbid in MODULES section - cannot symbolicate."; continue }
 
-    $pdb = Join-Path $SymbolStore "$mod.pdb\$pdbid\$mod.pdb"
-    if (-not (Test-Path -LiteralPath $pdb)) {
-        Emit "[$mod] no PDB for pdbid $pdbid in store. Run tools\archive_symbols on that exact build."
+    # Linux server builds carry no PDB id. The ELF binary of the exact commit is the only object
+    # that resolves their offsets: <store>\<mod>.elf\<commit>\<mod>. Each nightly release carries
+    # the unstripped binaries (server-symbols.zip); tools\fetch_server_symbols.ps1 puts them there.
+    if ($pdbid -eq 'elf') {
+        $elf = $null
+        if ($reportCommit) {
+            $candidate = Join-Path $SymbolStore "$mod.elf\$reportCommit\$mod"
+            if (-not (Test-Path -LiteralPath $candidate) -and $reportCommit -match '^[0-9a-fA-F]{40}$') {
+                try {
+                    & (Join-Path $repoRoot 'tools/fetch_server_symbols.ps1') -Commit $reportCommit -Store $SymbolStore -Modules $mod | Out-Host
+                } catch {
+                    Emit "[$mod] fetch_server_symbols: $($_.Exception.Message)"
+                }
+            }
+            if (Test-Path -LiteralPath $candidate) { $elf = $candidate }
+        }
+        if (-not $elf) {
+            Emit "[$mod] Linux build (commit '$reportCommit'): no ELF binary at $SymbolStore\$mod.elf\<commit>\$mod - cannot symbolicate. Run tools\fetch_server_symbols.ps1 -Commit <sha> (or -FromImage for function names only)."
+            continue
+        }
+
+        # backtrace() gives return addresses, which point past the call and often resolve to the
+        # next line (or the destructor run after it). Look up address - 1, except for frame 2: the
+        # signal handler is frame 0 and the kernel's signal trampoline frame 1, so frame 2 is the
+        # faulting instruction itself.
+        $mine = @($frames | Where-Object Module -eq $mod)
+        $lookups = @($mine | ForEach-Object {
+            $value = [Convert]::ToUInt64($_.Rva.Substring(2), 16)
+            if ($_.Index -ne 2 -and $value -gt 0) { $value = [uint64]($value - 1) }
+            '0x' + $value.ToString('x')
+        })
+        $byLookup = ConvertFrom-SymbolizerOutput (($lookups -join "`n") | & $Llvm --obj=$elf --demangle 2>&1) $lookups ${function:Convert-BuildPath}
+        $map = @{}
+        for ($k = 0; $k -lt $mine.Count; $k++) {
+            if ($byLookup.ContainsKey($lookups[$k])) { $map[$mine[$k].Rva] = $byLookup[$lookups[$k]] }
+        }
+        $resolvedByModule[$mod] = $map
         continue
     }
 
-    # Find the matching EXE (same pdbid) so llvm-symbolizer has an object to work with.
+    $pdb = Join-Path $SymbolStore "$mod.pdb\$pdbid\$mod.pdb"
     $exe = $null
-    $exeRoot = Join-Path $SymbolStore "$mod.exe"
-    if (Test-Path -LiteralPath $exeRoot) {
-        foreach ($cand in (Get-ChildItem -LiteralPath $exeRoot -Recurse -Filter "$mod.exe" -ErrorAction SilentlyContinue)) {
-            if ((Get-PdbIdFromBinary $cand.FullName) -eq $pdbid) { $exe = $cand.FullName; break }
+
+    # Not archived locally: a published client build's PDB+EXE live on its GitHub release
+    # (symbols.zip + client-bin.zip). tools\fetch_client_symbols.ps1 pulls them into the store.
+    if (-not (Test-Path -LiteralPath $pdb) -and $reportVersion) {
+        try {
+            & (Join-Path $repoRoot 'tools/fetch_client_symbols.ps1') -Version $reportVersion -Store $SymbolStore -Modules $mod | Out-Host
+        } catch {
+            Emit "[$mod] fetch_client_symbols: $($_.Exception.Message)"
         }
     }
+
+    if (Test-Path -LiteralPath $pdb) {
+        # Find the matching EXE (same pdbid) so llvm-symbolizer has an object to work with.
+        $exeRoot = Join-Path $SymbolStore "$mod.exe"
+        if (Test-Path -LiteralPath $exeRoot) {
+            foreach ($cand in (Get-ChildItem -LiteralPath $exeRoot -Recurse -Filter "$mod.exe" -ErrorAction SilentlyContinue)) {
+                if ((Get-PdbIdFromBinary $cand.FullName) -eq $pdbid) { $exe = $cand.FullName; break }
+            }
+        }
+    }
+
+    # Not archived: a crash of a local dev build still has its exact EXE + PDB pair in bin\<config>.
     if (-not $exe) {
-        Emit "[$mod] found the PDB but no matching EXE (pdbid $pdbid) in the store. Re-run archive_symbols WITHOUT -NoBinary on that build."
+        $binRoot = Join-Path $repoRoot 'bin'
+        if (Test-Path -LiteralPath $binRoot) {
+            foreach ($cand in (Get-ChildItem -LiteralPath $binRoot -Directory -ErrorAction SilentlyContinue)) {
+                $candExe = Join-Path $cand.FullName "$mod.exe"
+                $candPdb = Join-Path $cand.FullName "$mod.pdb"
+                if ((Test-Path -LiteralPath $candExe) -and (Test-Path -LiteralPath $candPdb) -and ((Get-PdbIdFromBinary $candExe) -eq $pdbid)) {
+                    $exe = $candExe
+                    $pdb = $candPdb
+                    Emit "[$mod] not archived; using the matching local build in $($cand.FullName)"
+                    break
+                }
+            }
+        }
+    }
+
+    if (-not $exe) {
+        if (Test-Path -LiteralPath $pdb) {
+            Emit "[$mod] found the PDB but no matching EXE (pdbid $pdbid) in the store. Re-run archive_symbols WITHOUT -NoBinary on that build."
+        } else {
+            Emit "[$mod] no PDB for pdbid $pdbid in store or bin\. Run tools\archive_symbols -Binary bin\<config>\$mod.exe on that exact build."
+        }
         continue
     }
 
@@ -160,23 +301,7 @@ foreach ($mod in ($frames.Module | Select-Object -Unique)) {
         $addrInput = ($rvas -join "`n")
         $out = $addrInput | & $Llvm --obj=$tmpExe --relative-address --demangle 2>&1
 
-        # llvm-symbolizer emits, per address: function line, then "file:line:col", then a blank line.
-        $map = @{}
-        $i = 0
-        $func = $null
-        foreach ($o in @($out)) {
-            $o = [string]$o
-            if ($o.Trim() -eq '') {
-                if ($i -lt $rvas.Count) { $i++ }
-                $func = $null
-                continue
-            }
-            if ($null -eq $func) { $func = $o.Trim() }
-            else {
-                if ($i -lt $rvas.Count) { $map[$rvas[$i]] = "$func | $($o.Trim())" }
-            }
-        }
-        $resolvedByModule[$mod] = $map
+        $resolvedByModule[$mod] = ConvertFrom-SymbolizerOutput $out $rvas ${function:Convert-BuildPath}
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }

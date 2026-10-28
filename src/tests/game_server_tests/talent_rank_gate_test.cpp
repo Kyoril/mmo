@@ -284,3 +284,18 @@ TEST_CASE("Saved talents over the point budget leave follow-up ranks inactive", 
 	CHECK_FALSE(player->HasSpell(FollowUpRank));
 	CHECK(player->GetKnownSpellIds().contains(FollowUpRank));
 }
+
+TEST_CASE("A talent reset gives the spent points back", "[talent_gate]")
+{
+	GateCtx ctx;
+	ctx.Init();
+	auto player = ctx.MakePlayer();
+	player->ResetTalents();
+	const uint32 before = player->Get<uint32>(object_fields::TalentPoints);
+
+	REQUIRE(player->LearnTalent(GatedTalent, 0));
+	REQUIRE(player->Get<uint32>(object_fields::TalentPoints) == before - 1);
+
+	player->ResetTalents();
+	CHECK(player->Get<uint32>(object_fields::TalentPoints) == before);
+}

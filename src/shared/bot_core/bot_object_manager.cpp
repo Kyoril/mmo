@@ -2,6 +2,8 @@
 
 #include "bot_object_manager.h"
 
+#include "game/object_type_id.h"
+
 #include <limits>
 
 namespace mmo
@@ -470,6 +472,50 @@ namespace mmo
 		return result;
 	}
 
+	void BotObjectManager::SetItem(const BotItemState& item)
+	{
+		m_items[item.guid] = item;
+	}
+
+	void BotObjectManager::SetSelfInventorySlot(const uint8 slot, const uint64 itemGuid)
+	{
+		if (slot < m_selfInventorySlots.size())
+		{
+			m_selfInventorySlots[slot] = itemGuid;
+		}
+	}
+
+	uint64 BotObjectManager::GetSelfInventorySlot(const uint8 slot) const
+	{
+		return slot < m_selfInventorySlots.size() ? m_selfInventorySlots[slot] : 0;
+	}
+
+	void BotObjectManager::SetSelfQuestLogSlot(const uint8 slot, const QuestField& field)
+	{
+		if (slot < m_selfQuestLog.size())
+		{
+			m_selfQuestLog[slot] = field;
+		}
+	}
+
+	const QuestField* BotObjectManager::FindSelfQuest(const uint32 questId) const
+	{
+		if (questId == 0)
+		{
+			return nullptr;
+		}
+
+		for (const QuestField& field : m_selfQuestLog)
+		{
+			if (field.questId == questId)
+			{
+				return &field;
+			}
+		}
+
+		return nullptr;
+	}
+
 	void BotObjectManager::AddOrUpdateItem(const BotItemState& item)
 	{
 		auto it = m_items.find(item.guid);
@@ -574,4 +620,30 @@ namespace mmo
 		return nullptr;
 	}
 
+
+	std::vector<BotWorldObjectState> BotObjectManager::GetClosedDoors() const
+	{
+		std::vector<BotWorldObjectState> doors;
+		for (const auto& [guid, object] : m_worldObjects)
+		{
+			if (object.type == game_world_object_type::Door && object.state == 0)
+			{
+				doors.push_back(object);
+			}
+		}
+		return doors;
+	}
+
+	std::vector<Vector3> BotObjectManager::GetClosedDoorPositions() const
+	{
+		std::vector<Vector3> doors;
+		for (const auto& [guid, object] : m_worldObjects)
+		{
+			if (object.type == game_world_object_type::Door && object.state == 0)
+			{
+				doors.push_back(object.position);
+			}
+		}
+		return doors;
+	}
 }

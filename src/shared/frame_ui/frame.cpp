@@ -722,6 +722,12 @@ namespace mmo
 		return this == FrameManager::Get().GetHoveredFrame().get();
 	}
 
+	bool Frame::IsMouseClickTarget() const
+	{
+		const FrameManager& frameManager = FrameManager::Get();
+		return this == frameManager.GetClickTargetAt(frameManager.GetMousePosition()).get();
+	}
+
 	void Frame::Invalidate(bool includeLayout)
 	{
 		m_needsRedraw = true;
@@ -1124,7 +1130,10 @@ namespace mmo
 		auto& siblings = m_parent->m_children;
 		const auto self = shared_from_this();
 		siblings.erase(std::remove(siblings.begin(), siblings.end(), self), siblings.end());
-		siblings.push_back(self);
+		// Raise within this layer without covering tooltips or other higher-level overlays.
+		const auto position = std::find_if(siblings.begin(), siblings.end(),
+			[this](const Pointer& sibling) { return sibling->m_frameLevel > m_frameLevel; });
+		siblings.insert(position, self);
 	}
 
 	void Frame::SendToBack()

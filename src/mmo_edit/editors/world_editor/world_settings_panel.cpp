@@ -141,8 +141,8 @@ namespace mmo
                     ImGui::SetTooltip("Fog, light shafts, exposure and bloom come from the environment profile of the zone under the camera.");
                 }
 
-                // Foliage rendering (authored trees) — mirrors the in-game client appearance.
-                // Hidden by default since dense foliage makes terrain editing harder.
+                // Procedural grass from the terrain materials, as in the client. Authored trees are
+                // always shown. Hidden by default since dense grass makes terrain editing harder.
                 bool showFoliage = m_showFoliage;
                 if (ImGui::Checkbox("Show Foliage", &showFoliage))
                 {
@@ -154,7 +154,18 @@ namespace mmo
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("Render authored foliage (trees) just as in the game client.");
+                    ImGui::SetTooltip("Render the procedural grass and ground cover of the terrain materials, as in the game client. Placed trees are always shown.");
+                }
+
+                float seaLevel = m_terrain.GetSeaLevel();
+                if (ImGui::DragFloat("Sea Level", &seaLevel, 0.05f, -500.0f, 500.0f, "%.2f"))
+                {
+                    m_terrain.SetSeaLevel(seaLevel);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("Height of the open ocean. Pages without terrain are ocean at this height, and the\n"
+                        "ocean renderer draws the sea here out to the horizon. Saved with the world.");
                 }
 
                 // Water rendering — visible by default. Note that water is always shown while
@@ -174,6 +185,11 @@ namespace mmo
                 }
 
                 ImGui::EndDisabled();
+            }
+
+            if (m_drawExtraContent)
+            {
+                m_drawExtraContent();
             }
         }
         ImGui::End();

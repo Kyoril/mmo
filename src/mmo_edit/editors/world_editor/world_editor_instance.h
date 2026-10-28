@@ -30,6 +30,11 @@
 #include "selection_raycaster.h"
 #include "nav_mesh/map.h"
 #include "terrain/terrain.h"
+#include "terrain_lod_baker.h"
+#include "terrain/far_terrain.h"
+#include "editor_viewpoint.h"
+#include <algorithm>
+#include <filesystem>
 #include "edit_modes/terrain_edit_mode.h"
 #include "edit_modes/spawn_edit_mode.h"
 #include "edit_modes/entity_edit_mode.h"
@@ -41,6 +46,9 @@
 
 #include "deferred_shading/deferred_renderer.h"
 #include "deferred_shading/water_volume_system.h"
+#include "deferred_shading/ocean_feed.h"
+#include "deferred_shading/ocean_profile.h"
+#include "terrain/ocean_mask.h"
 #include "edit_modes/navigation_edit_mode.h"
 #include "edit_modes/sky_edit_mode.h"
 #include "edit_modes/area_trigger_edit_mode.h"
@@ -64,6 +72,7 @@
 #include "entity_factory.h"
 #include "minimap_baker.h"
 #include "minimap_grid_view.h"
+#include "glue_bake/glue_bake_placement.h"
 
 namespace mmo
 {
@@ -333,6 +342,9 @@ namespace mmo
 		void OnMouseMoved(uint16 x, uint16 y) override;
 
 		bool Save() override;
+
+		/// Asset path of the world's river flow paths (.hflow next to the world file).
+		[[nodiscard]] String GetFlowPathsFileName() const;
 
 	private:
 		// UI related methods
@@ -651,6 +663,21 @@ namespace mmo
 		/// @return False when any page failed.
 		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
+		/// @brief Starts an interactive minimap bake that runs a few pages per frame (see TickMinimapBake),
+		///        so the editor stays responsive and the bake can be cancelled.
+		/// @param onlyStale Skip pages whose tile is newer than their .tile file.
+		void StartMinimapBake(bool onlyStale);
+
+		/// @brief Bakes pages of the running interactive minimap bake for up to a frame budget and
+		///        finishes it when the queue is empty.
+		void TickMinimapBake();
+
+		/// @brief Stops the running interactive minimap bake, keeping the tiles baked so far.
+		void FinishMinimapBake();
+
+		/// @brief Draws the "Generate Minimaps" dialog: choice of pages, then progress and Cancel.
+		void DrawMinimapBakeDialog();
+
 		/// @brief Bakes the distant-terrain data (.tlod + colour texture) the client draws beyond its
 		///        streamed pages. See TerrainLodBaker.
 		/// @param onlyStale Skip pages whose baked files are newer than their .tile and that have no unsaved changes.
@@ -661,6 +688,54 @@ namespace mmo
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
+		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
+		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and
+		///        released by ReleaseForcedPages; streaming takes a page over when it arrives.
+		void ForceLoadPages(const std::vector<PagePosition>& pages);
+
+		/// @brief Unloads every page's entities and foliage that ForceLoadPages (or the minimap bake) loaded.
+		void ReleaseForcedPages();
+
+		/// @brief Calls the visitor for every loaded placement (mesh or world model), in world space.
+		void ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const;
+
+		/// @brief Calls the visitor for every authored foliage instance of the given pages that is loaded.
+		void ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const;
+
+		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
+		///        heights, layers and water. Null when the world has no terrain, the page is out of
+		///        range or it has no .tile file.
+		/// @remark Meant for one-shot jobs such as the glue bake: preparing a page resets its pending
+		///         unload request (Page::BeginPrepare), and the page stays prepared afterwards, holding
+		///         its CPU data until streaming unloads it.
+		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
+
+		/// @brief Renders terrain pages' top-down, unlit colour like the distant-terrain bake does
+		///        (see TerrainLodBaker::RenderPageColor) with one renderer, for one-shot jobs such as the glue bake.
+		/// @param pages The pages.
+		/// @param textureSize Edge length of each image in texels.
+		/// @param options Encoding and water.
+		/// @param out Receives one image per page (textureSize² RGBA8 texels; texel (u, v) maps to page-local
+		///        (x, z)); empty for a page that could not be rendered.
+		/// @return False when there is no terrain or any page could not be rendered.
+		bool RenderTerrainPageColors(const std::vector<PagePosition>& pages, uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out);
+
+		/// @brief The scene the world is shown in, for one-shot editor jobs that render it offscreen.
+		[[nodiscard]] Scene& GetScene() { return m_scene; }
+
+		/// @brief Shows or hides the authored instanced foliage, which keeps its own visibility flag on top
+		///        of its scene objects.
+		/// @return Whether it was visible before.
+		bool SetFoliageVisible(bool visible);
+
+		/// @brief Runs one queued main-thread step of the page streaming.
+		/// @return Whether there was one.
+		bool PumpStreaming() { return m_dispatcher.poll_one() > 0; }
+
+		/// @brief The asset files that define a page's content: its .tile, .hfol and .wobj files,
+		///        whichever exist.
+		std::vector<String> GetPageInputFiles(const PagePosition& page) const;
+
 		/// @brief Moves the editor camera so it focuses the given world location (X/Z plane). The
 		///        height is sampled from the terrain when available. Used by the minimap location
 		///        picker and the in-editor minimap teleport panel.
@@ -668,10 +743,55 @@ namespace mmo
 		/// @param worldZ Target world Z coordinate.
 		void MoveCameraToWorldPosition(float worldX, float worldZ);
 
+		/// @brief Describes where the editor camera is and where it looks, in the form SetViewpoint reads.
+		[[nodiscard]] EditorViewpoint GetViewpoint() const;
+
+		/// @brief Places the editor camera exactly at a viewpoint and applies its field of view and,
+		///        if the viewpoint carries one, its time of day.
+		void SetViewpoint(const EditorViewpoint& viewpoint);
+
+		/// @brief Renders the world from a viewpoint at a given resolution and saves the frame as PNG.
+		///
+		/// Before rendering, it waits until the pages around the viewpoint, their trees and the
+		/// distant terrain have streamed in, then renders a few warm-up frames so exposure and
+		/// temporal effects settle. The viewport size and camera are restored afterwards.
+		/// @param viewpoint Where to place the camera.
+		/// @param width Image width in pixels.
+		/// @param height Image height in pixels.
+		/// @param path Destination PNG file.
+		/// @param showGrass Whether procedural grass is shown in the shot.
+		/// @param warmupFrames Frames rendered before the one that is saved.
+		/// @return True if the image was written.
+		bool CaptureViewpoint(const EditorViewpoint& viewpoint, uint32 width, uint32 height, const std::filesystem::path& path, bool showGrass, uint32 warmupFrames = 24);
+
+		/// @brief Sets how many pages around the camera the distant terrain covers (0 turns it off).
+		void SetFarTerrainRadius(uint32 radius) { m_farTerrainRadius = std::min<uint32>(radius, 16); }
+
+		/// @brief Turns the scene's fog and atmosphere on or off, like the World Settings "Show Fog" box.
+		void SetFogEnabled(const bool enabled) { m_scene.SetFogEnabled(enabled); }
+
+		/// @brief Gets how many pages around the camera the distant terrain covers.
+		[[nodiscard]] uint32 GetFarTerrainRadius() const { return m_farTerrainRadius; }
+
 	private:
 		/// @brief Draws the dockable "World Map" panel which shows the world's minimap grid and lets
 		///        the user quickly teleport the camera by clicking a tile.
 		void DrawMinimapPanel(const String& id);
+
+		/// @brief Creates the distant terrain stand-ins for this world, mirroring the game client.
+		void CreateFarTerrain();
+
+		/// @brief Streams distant terrain around the camera and adapts the camera's far clip to it.
+		void UpdateFarTerrain();
+
+		/// @brief Waits until the pages around the camera and the distant terrain are loaded, pumping
+		///        the main-thread dispatcher. Gives up after the timeout.
+		/// @return True if everything finished loading in time.
+		bool WaitForStreaming(float timeoutSeconds);
+
+		/// @brief Draws the "View" section of the World Settings panel: distant terrain, viewpoint
+		///        and screenshot controls.
+		void DrawViewSettings();
 
 	private:
 		WorldEditor &m_editor;
@@ -700,6 +820,18 @@ namespace mmo
 
 		/// @brief Procedural grass/vegetation system (the dense foliage seen in the client). Hidden by default.
 		std::unique_ptr<Foliage> m_grass;
+
+		/// @brief Baked low-detail stand-ins for terrain pages beyond the streamed ones, as in the client.
+		std::unique_ptr<terrain::FarTerrain> m_farTerrain;
+
+		/// @brief Distant terrain radius in pages. The client's TerrainFarRadius default.
+		uint32 m_farTerrainRadius{4};
+
+		/// @brief Text field of the View settings, holding a viewpoint to jump to.
+		String m_viewpointText;
+
+		/// @brief Size of images captured from the View settings.
+		int m_captureSize[2]{1920, 1080};
 
 		/// Key identifying a distinct procedural foliage layer derived from terrain material data
 		/// (the painted .hmat or .hmi, the bound layer index and the mesh asset).
@@ -831,12 +963,18 @@ namespace mmo
 		///		   surface previews what a diving player sees, from the same water profiles.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
 
+		/// Feeds the FFT ocean (sea level, ocean mask, Ocean water profile) every frame.
+		OceanFeed<terrain::Terrain> m_oceanFeed { static_cast<float>(terrain::ocean_mask::TexelSize) };
+
 		/// @brief Asset name of the caustics texture last handed to the underwater pass.
 		String m_underwaterCausticsTexture;
 
 		/// @brief Recomputes camera submersion and pushes the underwater state and caustics texture
 		///		   to the renderer.
 		void UpdateUnderwaterPreview(float deltaSeconds);
+
+		/// Hands the terrain's sea to the FFT ocean renderer and applies the Ocean water profile.
+		void UpdateOcean();
 
 		std::unique_ptr<DetailsPanel> m_detailsPanel;
 		std::unique_ptr<WorldSettingsPanel> m_worldSettingsPanel;
@@ -849,8 +987,18 @@ namespace mmo
 		MinimapGridView m_minimapPanel;
 		/// @brief Page indices whose entities are currently loaded (by streaming or the minimap bake).
 		std::set<uint16> m_entityPages;
-		/// @brief Page indices whose entities only the minimap bake loaded.
+		/// @brief Page indices whose entities only the minimap bake or ForceLoadPages loaded.
 		std::set<uint16> m_bakeEntityPages;
+
+		/// @brief Interactive minimap bake state (see StartMinimapBake).
+		std::unique_ptr<MinimapBaker> m_minimapBake;
+		std::vector<MinimapBaker::PageCoord> m_minimapBakeQueue;
+		size_t m_minimapBakeNext = 0;
+		MinimapBaker::Stats m_minimapBakeStats;
+		uint32 m_minimapBakeFarTerrainRadius = 0;
+		bool m_openMinimapBakeDialog = false;
+		/// @brief Page indices whose authored foliage only ForceLoadPages loaded.
+		std::set<uint16> m_bakeFoliagePages;
 		/// @brief Whether the minimap panel's world name has been set yet (deferred until first draw
 		///        because the asset path is known at construction but minimaps may not exist yet).
 		bool m_minimapWorldSet{ false };

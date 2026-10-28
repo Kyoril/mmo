@@ -495,10 +495,22 @@ namespace mmo
             // Calculate smooth tangent
             Vector4 m0 = (key.color - prevKey->color) / dt_prev;
             Vector4 m1 = (nextKey->color - key.color) / dt_next;
-            
-            // Average the two tangents for continuity
-            Vector4 tangent = (m0 + m1) * 0.5f;
-            
+
+            // Average the two tangents for continuity, limited per channel so that no segment
+            // overshoots its keys (Fritsch-Carlson). A plain average undershoots after a steep drop:
+            // the Korash dusk horizon went to negative red at 21:30, which the sky drew purple.
+            const auto monotone = [](const float before, const float after)
+            {
+                if (before * after <= 0.0f)
+                {
+                    return 0.0f;
+                }
+
+                const float limit = 3.0f * std::min(std::abs(before), std::abs(after));
+                return std::clamp((before + after) * 0.5f, -limit, limit);
+            };
+            const Vector4 tangent(monotone(m0.x, m1.x), monotone(m0.y, m1.y), monotone(m0.z, m1.z), monotone(m0.w, m1.w));
+
             outInTangent = tangent;
             outOutTangent = tangent;
         }

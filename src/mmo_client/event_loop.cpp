@@ -8,6 +8,8 @@
 #include "graphics/graphics_device.h"
 #include "log/default_log.h"
 
+#include <chrono>
+
 
 namespace mmo
 {
@@ -34,6 +36,10 @@ namespace mmo
 	{
 		auto lastIdle = GetAsyncTimeMs();
 
+		// The frame delta comes from a microsecond clock: GetAsyncTimeMs counts whole milliseconds, which at
+		// 90 fps rounds every frame's movement step by up to +-9 % and makes walking judder slightly.
+		auto lastIdlePrecise = std::chrono::steady_clock::now();
+
 		auto& gx = GraphicsDevice::Get();
 		const auto gxWindow = gx.GetAutoCreatedWindow();
 
@@ -45,8 +51,10 @@ namespace mmo
 			}
 
 			auto currentTime = GetAsyncTimeMs();
-			auto timePassed = static_cast<float>((currentTime - lastIdle) / 1000.0);
+			const auto currentPrecise = std::chrono::steady_clock::now();
+			auto timePassed = std::chrono::duration<float>(currentPrecise - lastIdlePrecise).count();
 			lastIdle = currentTime;
+			lastIdlePrecise = currentPrecise;
 
 			// Emit log entries buffered by worker/streaming threads (the log signal itself
 			// is main-thread-only, see Log::Emit).

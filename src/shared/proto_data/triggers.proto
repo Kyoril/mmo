@@ -49,6 +49,9 @@ enum TriggerFunction {
 	// moment a summon dies, despawns or is missed. Asking the world how many are actually alive
 	// cannot desync, which is what makes it usable for capping adds.
 	LivingCreatureCount = 12;
+	// Hour of the world instance's authoritative time of day on a 24-hour clock, 0 to 23.
+	// FunctionData: NONE. Lets a trigger tell day from night, e.g. a town's day/night routine.
+	HourOfDay = 13;
 }
 
 enum TriggerConditionType {

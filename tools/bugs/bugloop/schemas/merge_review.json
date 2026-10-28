@@ -1,0 +1,12 @@
+{
+	"type": "object",
+	"properties": {
+		"keeps_ours": {"type": "boolean"},
+		"keeps_theirs": {"type": "boolean"},
+		"adds_unrelated": {"type": "boolean"},
+		"problems": {"type": "array", "items": {"type": "string"}},
+		"summary": {"type": "string"}
+	},
+	"required": ["keeps_ours", "keeps_theirs", "adds_unrelated", "problems", "summary"],
+	"additionalProperties": false
+}

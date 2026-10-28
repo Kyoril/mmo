@@ -43,6 +43,17 @@ namespace mmo
         m_skyMatInst = std::make_shared<MaterialInstance>("__Sky__", m_cloudsEntity->GetSubEntity(0)->GetMaterial());
         m_cloudsEntity->GetSubEntity(0)->SetMaterial(m_skyMatInst);
 
+        // Stylized cumulus band: a cut-out dome just inside the sky sphere. Its material reads the sky
+        // colours and the cloud colour from the global shader parameters published in UpdateLighting.
+        m_cloudLayerEntity = m_scene.CreateEntity("CloudLayer", "Models/Sky/SM_StylizedSkyDome_Clouds.hmsh");
+        m_cloudLayerEntity->SetRenderQueueGroup(SkiesClouds);
+        m_cloudLayerEntity->SetQueryFlags(0);
+        m_cloudLayerEntity->SetCastShadows(false);
+        m_cloudLayerNode = &m_scene.CreateSceneNode("CloudLayer");
+        m_cloudLayerNode->AttachObject(*m_cloudLayerEntity);
+        m_cloudLayerNode->SetScale(Vector3::UnitScale * 40.0f);
+        m_scene.GetRootSceneNode().AddChild(*m_cloudLayerNode);
+
         // Setup sun light
         m_sunLightNode = m_scene.GetRootSceneNode().CreateChildSceneNode("SunLightNode");
         m_sunLight = &m_scene.CreateLight("SunLight", LightType::Directional);
@@ -79,6 +90,11 @@ namespace mmo
         if (m_cloudsNode)
         {
             m_cloudsNode->SetPosition(position);
+        }
+
+        if (m_cloudLayerNode)
+        {
+            m_cloudLayerNode->SetPosition(position);
         }
     }
 
@@ -291,5 +307,14 @@ namespace mmo
         // the full contribution from a single parameter.
         GlobalShaderParameters::Get().SetVector("SunColor",
             Vector4(blendedColor.x, blendedColor.y, blendedColor.z, blendedIntensity));
+
+        // The sun's visible hue for reflections of its disc (see GlobalShaderParameters::EnsureEngineDefaults).
+        GlobalShaderParameters::Get().SetScalar("SunScatterR", m_environment.timeOfDay.sunScatterColor[0]);
+        GlobalShaderParameters::Get().SetScalar("SunScatterG", m_environment.timeOfDay.sunScatterColor[1]);
+        GlobalShaderParameters::Get().SetScalar("SunScatterB", m_environment.timeOfDay.sunScatterColor[2]);
+
+        GlobalShaderParameters::Get().SetScalar("CloudColorR", m_environment.clouds.x);
+        GlobalShaderParameters::Get().SetScalar("CloudColorG", m_environment.clouds.y);
+        GlobalShaderParameters::Get().SetScalar("CloudColorB", m_environment.clouds.z);
     }
 }

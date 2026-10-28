@@ -73,7 +73,7 @@ namespace mmo
 			}
 
 			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(GetExecutor().GetPosition(), tileIndex[0], tileIndex[1]);
+			worldInstance->GetGrid().GetTilePosition(GetExecutor().GetMovementInfo().position, tileIndex[0], tileIndex[1]);
 
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);
@@ -99,7 +99,7 @@ namespace mmo
 			}
 
 			TileIndex2D tileIndex;
-			worldInstance->GetGrid().GetTilePosition(GetExecutor().GetPosition(), tileIndex[0], tileIndex[1]);
+			worldInstance->GetGrid().GetTilePosition(GetExecutor().GetMovementInfo().position, tileIndex[0], tileIndex[1]);
 
 			std::vector<char> buffer;
 			io::VectorSink sink(buffer);

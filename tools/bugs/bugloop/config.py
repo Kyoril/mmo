@@ -25,6 +25,11 @@ class LoopConfig:
 	fix_timeout_seconds: int = 5400
 	fix_max_usd: float = 20.0
 	step_timeout_seconds: int = 3600
+	# The Claude stage that resolves merge conflicts with develop at ship or refix time.
+	merge_max_usd: float = 5.0
+	# Automatic re-applications of a fix on today's develop per bug, after a ship conflict the
+	# resolver could not resolve.
+	max_reapply: int = 2
 	ci_poll_seconds: int = 300
 	ci_push_workflow: str = "ccpp.yml"
 	ci_nightly_workflow: str = "nightly-release.yml"
@@ -39,8 +44,15 @@ class LoopConfig:
 	# every ci_poll_seconds without consuming an attempt; the maintainer hears of it once it has
 	# lasted this long.
 	worktree_escalate_minutes: int = 60
+	# While Claude cannot run (logged out, no credit), a tiny probe call checks this often whether it
+	# works again; meanwhile no Claude work starts and no decision is consumed.
+	claude_retry_minutes: int = 15
 	# Post a Discord message on every bug status change, not only ships, pings and the summary.
 	notify_status_changes: bool = True
+	# Self-correction: a candidate that would park only for reasons the fixer can repair itself
+	# (review findings, a failed proof, a red gate, medium confidence) gets this many automatic
+	# rounds on its branch before it parks for the maintainer.
+	self_correct_rounds: int = 2
 
 
 def load_config(path):

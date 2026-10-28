@@ -4,6 +4,7 @@
 #include "math/math_utils.h"
 
 #include "player_manager.h"
+#include "base/crash_context.h"
 #include "base/utilities.h"
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/world/each_tile_in_sight.h"
@@ -554,23 +555,33 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
 	{
-		// Assert that none of these GUIDs are already known to the client — receiving a
-		// second creation packet for the same GUID crashes the client (duplicate entity name
-		// in Scene::CreateEntity).  If this fires, the server sent a spawn without a prior despawn.
-		for (const auto* object : objects)
+		// None of these GUIDs may already be known to the client — receiving a second creation
+		// packet for the same GUID crashes the client (duplicate entity name in
+		// Scene::CreateEntity). A known one means the server's view bookkeeping went wrong
+		// somewhere (a spawn without a prior despawn): log it, and leave that object out rather
+		// than crash the client, or - through an assert - the whole world node.
+		std::vector<GameObjectS*> objects;
+		objects.reserve(requested.size());
+		for (auto* object : requested)
 		{
 			const uint64 guid = object->GetGuid();
-			if (m_spawnedGuids.contains(guid))
+			if (!m_spawnedGuids.insert(guid).second)
 			{
 				ELOG("Double-spawn detected: GUID " << log_hex_digit(guid)
-					<< " (type=" << static_cast<int>(object->GetTypeId()) << ")"
+					<< " (type=" << static_cast<int>(object->GetTypeId()) << ", at " << object->GetPosition() << ")"
 					<< " is already known to client " << log_hex_digit(m_character->GetGuid())
-					<< " — server sent creation without prior destroy");
-				ASSERT(false && "Double-spawn: object already spawned at client without prior despawn");
+					<< " (at " << m_character->GetPosition() << ") — creation skipped");
+				continue;
 			}
-			m_spawnedGuids.insert(guid);
+
+			objects.push_back(object);
+		}
+
+		if (objects.empty())
+		{
+			return;
 		}
 
 		// Prepare dynamic fields for world objects and creatures
@@ -827,6 +838,12 @@ namespace mmo
 
 	void Player::HandleProxyPacket(game::client_realm_packet::Type opCode, std::vector<uint8>& buffer)
 	{
+		// Names the player and packet in a crash report, which the stack alone cannot.
+		const CrashContextScope crashContext("client packet 0x%04x (%zu bytes) from character 0x%016llx '%s' on map %u, instance %s",
+			static_cast<uint32>(opCode), buffer.size(), static_cast<unsigned long long>(m_character->GetGuid()),
+			m_character->GetName().c_str(), m_character->GetMapId(),
+			m_worldInstance ? m_worldInstance->GetId().to_string().c_str() : "none");
+
 		io::MemorySource source(reinterpret_cast<char*>(buffer.data()), reinterpret_cast<char*>(buffer.data() + buffer.size()));
 		io::Reader reader(source);
 
@@ -896,6 +913,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatGodmode:
 			OnCheatGodmode(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatInvisible:
+			OnCheatInvisible(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatSetInstanceVariable:
 			OnCheatSetInstanceVariable(opCode, buffer.size(), reader);
@@ -992,6 +1012,9 @@ namespace mmo
 
 		case game::client_realm_packet::SellItem:
 			OnSellItem(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::BuyBackItem:
+			OnBuyBackItem(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);
@@ -1369,9 +1392,12 @@ namespace mmo
 	{
 		ASSERT(m_worldInstance);
 
+		// The movement snapshot, as the grid files the character and moves this watcher between
+		// tiles - not GetPosition, which is the mover's interpolated location during a
+		// server-controlled move (charge, fear) and can lie in the next tile already.
 		TileIndex2D position;
 		m_worldInstance->GetGrid().GetTilePosition(
-			m_character->GetPosition(), position[0], position[1]);
+			m_character->GetMovementInfo().position, position[0], position[1]);
 
 		return position;
 	}
@@ -1448,6 +1474,14 @@ namespace mmo
 			return;
 		}
 
+		// An invisible GM is an observer and must never start scripted events or take portals;
+		// they move with port / worldport instead.
+		if (m_character && m_character->IsGmInvisible())
+		{
+			DLOG("Ignoring area trigger " << triggerId << " for invisible game master " << log_hex_digit(m_character->GetGuid()));
+			return;
+		}
+
 		DLOG("Player triggered area trigger " << triggerId);
 
 		// Get the area trigger from the project
@@ -1498,6 +1532,12 @@ namespace mmo
 		if (!(contentReader >> io::read<uint32>(triggerId)))
 		{
 			ELOG("Failed to read AreaTriggerLeft packet!");
+			return;
+		}
+
+		// Invisible GMs never fire area triggers (see OnAreaTriggerTriggered), so leaving one is ignored too.
+		if (m_character && m_character->IsGmInvisible())
+		{
 			return;
 		}
 
@@ -2750,6 +2790,15 @@ namespace mmo
 					continue;
 				}
 
+				// The tiles in sight are those of the position before this move. A move that changed
+				// tiles has just despawned the unit for watchers it left behind, and an invisible unit
+				// was never spawned to anyone: their clients do not know it and only warn about the
+				// packet. Watchers that newly see it got its current position in the spawn instead.
+				if (!watcher->IsObjectKnown(characterGuid))
+				{
+					continue;
+				}
+
 				// Info is a copy here so we can modify it per watcher without any issues
 				copy.timestamp = watcher->ServerToClientTime(info.timestamp);
 
@@ -3847,6 +3896,10 @@ namespace mmo
 
 			packet.Finish();
 		});
+
+		// The vendor window shows the buyback offers next to the vendor's own stock, so both lists
+		// are sent together.
+		SendBuyBackList(vendorUnit.GetGuid());
 	}
 
 	void Player::SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result)
@@ -4103,43 +4156,48 @@ namespace mmo
 		}
 		else
 		{
-			// Save inventory before teleporting to a different map
-			if (m_inventoryRepo)
-			{
-				auto& inventory = m_character->GetInventory();
-				if (inventory.IsDirty())
-				{
-					inventory.SaveToRepository();
-				}
-			}
-
-			// Send transfer pending state. This will show up the loading screen at the client side and will
-			// tell the realm where our character should be sent to
-			SendPacket([mapId](game::OutgoingPacket& packet)
-				{
-					packet.Start(game::realm_client_packet::TransferPending);
-					packet << io::write<uint32>(mapId);
-					packet.Finish();
-				});
-
-			// Initialize teleport request at realm
-			const uint64 guid = m_character->GetGuid();
-			m_connector.SendTeleportRequest(guid, mapId, position, facing);
-
-			// No longer watch tile
-			VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-			tile.GetWatchers().remove(this);
-
-			// Remove the character from the world (this will save the character)
-			m_worldInstance->RemoveGameObject(*m_character);
-
-			// Notify realm that our character left this world instance (this will commit the pending teleport request)
-			m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
-
-			// Destroy player instance
-			m_character.reset();
-			m_manager.RemovePlayer(shared_from_this());
+			BeginMapTransfer(mapId, position, facing);
 		}
+	}
+
+	void Player::BeginMapTransfer(const uint32 mapId, const Vector3& position, const Radian& facing)
+	{
+		// Save inventory before teleporting to a different map
+		if (m_inventoryRepo)
+		{
+			auto& inventory = m_character->GetInventory();
+			if (inventory.IsDirty())
+			{
+				inventory.SaveToRepository();
+			}
+		}
+
+		// Send transfer pending state. This will show up the loading screen at the client side and will
+		// tell the realm where our character should be sent to
+		SendPacket([mapId](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::TransferPending);
+				packet << io::write<uint32>(mapId);
+				packet.Finish();
+			});
+
+		// Initialize teleport request at realm
+		const uint64 guid = m_character->GetGuid();
+		m_connector.SendTeleportRequest(guid, mapId, position, facing);
+
+		// No longer watch tile
+		VisibilityTile& tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
+		tile.GetWatchers().remove(this);
+
+		// Remove the character from the world (this will save the character)
+		m_worldInstance->RemoveGameObject(*m_character);
+
+		// Notify realm that our character left this world instance (this will commit the pending teleport request)
+		m_connector.NotifyWorldInstanceLeft(guid, auth::world_left_reason::Teleport);
+
+		// Destroy player instance
+		m_character.reset();
+		m_manager.RemovePlayer(shared_from_this());
 	}
 
 	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)

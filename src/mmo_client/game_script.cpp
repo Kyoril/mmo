@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
 #include "console/console.h"
@@ -871,6 +872,29 @@ namespace mmo
 		outUsable = false;
 	}
 
+	void GameScript::GetVendorBuybackItemInfo(int32 slot, const ItemInfo *&outItem, String &outIcon, int32 &outPrice, int32 &outQuantity) const
+	{
+		const auto &buyBackItems = m_vendorClient.GetBuyBackItems();
+		if (slot < 0 || slot >= buyBackItems.size() || buyBackItems[slot].itemData == nullptr)
+		{
+			outItem = nullptr;
+			outIcon.clear();
+			outPrice = 0;
+			outQuantity = 0;
+			return;
+		}
+
+		outItem = buyBackItems[slot].itemData;
+
+		const auto *displayData = m_project.itemDisplays.getById(buyBackItems[slot].displayId);
+		if (displayData)
+		{
+			outIcon = displayData->icon().c_str();
+		}
+		outPrice = buyBackItems[slot].price;
+		outQuantity = buyBackItems[slot].stackCount;
+	}
+
 	void GameScript::GetTrainerSpellInfo(int32 slot, int32 &outSpellId, String &outName, String &outIcon, int32 &outPrice, bool &outKnown) const
 	{
 		const auto &trainerSpells = m_trainerClient.GetTrainerSpells();
@@ -902,7 +926,9 @@ namespace mmo
 					   luabind::scope(
 						   luabind::class_<mmo::RealmData>("RealmData")
 							   .def_readonly("id", &mmo::RealmData::id)
-							   .def_readonly("name", &mmo::RealmData::name)),
+							   .def_readonly("name", &mmo::RealmData::name)
+							   .def_readonly("population", &mmo::RealmData::population)
+							   .def_readonly("playerCount", &mmo::RealmData::playerCount)),
 
 					   luabind::scope(
 						   luabind::class_<mmo::CharacterView>("CharacterView")
@@ -1035,6 +1061,7 @@ namespace mmo
 							   .def("GetSpellCritChance", &UnitHandle::GetSpellCritChance)
 							   .def("GetMeleeCritChance", &UnitHandle::GetMeleeCritChance)
 							   .def("GetManaRegen", &UnitHandle::GetManaRegen)
+							   .def("GetManaRegenCasting", &UnitHandle::GetManaRegenCasting)
 							   .def("GetArmor", &UnitHandle::GetArmor)
 							   .def("GetTalentPoints", &UnitHandle::GetTalentPoints)
 							   .def("GetAvailableAttributePoints", &UnitHandle::GetAvailableAttributePoints)
@@ -1724,6 +1751,8 @@ namespace mmo
 
 					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &, int32 &, bool &)>>("GetVendorItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity, int32 &out_numAvailable, bool &out_usable)
 																																{ return this->GetVendorItemInfo(slot, out_item, out_icon, out_price, out_quantity, out_numAvailable, out_usable); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>, luabind::pure_out_value<6>, luabind::pure_out_value<7>>()),
+					   luabind::def<std::function<void(int32, const ItemInfo *&, String &, int32 &, int32 &)>>("GetVendorBuybackItemInfo", [this](int32 slot, const ItemInfo *&out_item, String &out_icon, int32 &out_price, int32 &out_quantity)
+																																{ return this->GetVendorBuybackItemInfo(slot, out_item, out_icon, out_price, out_quantity); }, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>, luabind::pure_out_value<5>>()),
 					   luabind::def_lambda("BuyVendorItem", [this](uint32 slot)
 										   { this->BuyVendorItem(slot, 1); }),
 
@@ -2213,13 +2242,22 @@ namespace mmo
 			return;
 		}
 
-		m_realmConnector.SendChatMessage(message, chatType, target ? target : s_emptyTarget);
+		// A message of only blanks or leftovers of deleted input would show up as an empty line
+		// (and an empty chat bubble) for everyone, so it is not sent at all. The realm cleans
+		// the text the same way, this just saves the round trip.
+		const String text = SanitizeChatText(message);
+		if (text.empty())
+		{
+			return;
+		}
+
+		m_realmConnector.SendChatMessage(text, chatType, target ? target : s_emptyTarget);
 
 		if (chatType == ChatType::Whisper)
 		{
 			FrameManager::Get().TriggerLuaEvent("CHAT_MSG_WHISPER_INFORM",
 				std::string(target ? target : ""),
-				std::string(message));
+				text);
 		}
 	}
 

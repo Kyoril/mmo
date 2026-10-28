@@ -11,9 +11,15 @@
 #include "sub_mesh.h"
 #include "material_manager.h"
 #include "light.h"
+#include "particle_emitter.h"
+#include "particle_emitter_serializer.h"
+#include "world_model_flatten.h"
 #include "world_model_manager.h"
 #include "log/default_log_levels.h"
+#include "assets/asset_registry.h"
 #include "base/profiler.h"
+#include "binary_io/reader.h"
+#include "binary_io/stream_source.h"
 
 #include <algorithm>
 #include <cmath>
@@ -82,6 +88,7 @@ namespace mmo
         ClearDoodads(scene);
         ClearKitContent(scene);
         ClearLights(scene);
+        ClearParticleSystems(scene);
     }
 
     void WorldModelInstance::ClearGeometry(Scene* scene)
@@ -115,6 +122,28 @@ namespace mmo
         }
         m_groupRenderables.clear();
 
+        for (auto& viz : m_clusterRenderables)
+        {
+            if (viz.entity && viz.node)
+            {
+                viz.node->DetachObject(*viz.entity);
+            }
+
+            if (scene)
+            {
+                if (viz.entity)
+                {
+                    scene->DestroyEntity(*viz.entity);
+                }
+                if (viz.node)
+                {
+                    scene->DestroySceneNode(*viz.node);
+                }
+            }
+        }
+        m_clusterRenderables.clear();
+        m_clusterGeometry.reset();
+
         ClearBatches(scene);
         m_mergedGeometry.reset();
 
@@ -133,7 +162,7 @@ namespace mmo
 
             for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
             {
-                if (meshRef.visible && !meshRef.meshPath.empty())
+                if (meshRef.visible && !meshRef.meshPath.empty() && !IsParticleSystemPath(meshRef.meshPath))
                 {
                     outMeshPaths.push_back(meshRef.meshPath);
                 }
@@ -149,7 +178,8 @@ namespace mmo
             for (uint32 i = 0; i < doodadSets[0].count; ++i)
             {
                 const uint32 doodadIndex = doodadSets[0].startIndex + i;
-                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size())
+                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size() &&
+                    !IsParticleSystemPath(doodadNames[doodads[doodadIndex].nameIndex]))
                 {
                     outMeshPaths.push_back(doodadNames[doodads[doodadIndex].nameIndex]);
                 }
@@ -285,6 +315,7 @@ namespace mmo
                 {
                     ClearDoodads(&sceneNode->GetScene());
                     CreateDoodads(sceneNode->GetScene());
+                    CreateParticleSystems(sceneNode->GetScene());
                 }
             }
         }
@@ -302,6 +333,7 @@ namespace mmo
             {
                 ClearKitContent(&sceneNode->GetScene());
                 CreateKitContent(sceneNode->GetScene());
+                CreateParticleSystems(sceneNode->GetScene());
             }
         }
     }
@@ -442,6 +474,7 @@ namespace mmo
         ClearDoodads(&scene);
         ClearKitContent(&scene);
         ClearLights(&scene);
+        ClearParticleSystems(&scene);
     }
 
     const String& WorldModelInstance::GetMovableType() const
@@ -470,6 +503,14 @@ namespace mmo
                 {
                     meshViz.entity->VisitRenderables(visitor, debugRenderables);
                 }
+            }
+        }
+
+        for (const auto& viz : m_clusterRenderables)
+        {
+            if (viz.entity)
+            {
+                viz.entity->VisitRenderables(visitor, debugRenderables);
             }
         }
 
@@ -579,7 +620,17 @@ namespace mmo
             else
             {
                 m_currentGroup = DetermineCurrentGroup(camera);
-                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups);
+                PortalInteriorView ownView;
+                CollectVisiblePortalGroups(*m_worldModel, modelToWorld, PortalFrustum::FromCamera(camera), m_visibleGroups,
+                    m_clusterRenderables.empty() ? nullptr : &ownView);
+
+                // Standing in one of this model's own rooms hides the outdoor clusters like any other outdoors
+                UpdateClusterVisibility(ownView.eyeInInterior ? &ownView : nullptr);
+            }
+
+            if (outsideView)
+            {
+                UpdateClusterVisibility(outsideView);
             }
         }
 
@@ -708,6 +759,9 @@ namespace mmo
                 // Dress the shell with its prop kits, after the doodads and before the children
                 CreateKitContent(sceneNode->GetScene());
 
+                // Particle systems referenced like meshes (.hpar), once doodads and kits are known
+                CreateParticleSystems(sceneNode->GetScene());
+
                 // Instantiate nested world models last, so they hang off a fully built parent
                 CreateChildInstances(sceneNode->GetScene());
 
@@ -766,7 +820,7 @@ namespace mmo
         }
 
         const auto* meshRef = group->GetMeshRef(refIndex);
-        if (!meshRef)
+        if (!meshRef || IsParticleSystemPath(meshRef->meshPath))
         {
             return;
         }
@@ -1329,7 +1383,7 @@ namespace mmo
             for (size_t refIndex = 0; refIndex < meshRefs.size(); ++refIndex)
             {
                 const auto& meshRef = meshRefs[refIndex];
-                if (!meshRef.visible)
+                if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
                 {
                     continue;
                 }
@@ -1409,6 +1463,48 @@ namespace mmo
             return;
         }
 
+        const auto& doodads = m_worldModel->GetDoodads();
+        const auto& doodadNames = m_worldModel->GetDoodadNames();
+
+        // Gather the doodads of the active sets, deriving the room each one sits in.
+        //
+        // The room has to be derived by point-in-group testing: WorldModelGroup::GetDoodadRefs()
+        // looks like it exists for exactly this, but nothing in the serializer or the editor ever
+        // populates it, so it is always empty.
+        std::vector<WorldModelPlacementInput> placements;
+
+        for (const uint32 doodadIndex : GetActiveDoodadIndices())
+        {
+            const auto& doodad = doodads[doodadIndex];
+            if (IsParticleSystemPath(doodadNames[doodad.nameIndex]))
+            {
+                continue;
+            }
+
+            const int32 groupIndex = FindGroupContaining(doodad.position);
+
+            WorldModelPlacementInput placement;
+            placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
+            placement.sourceIndex = doodadIndex;
+            placement.meshPath = doodadNames[doodad.nameIndex];
+            placement.position = doodad.position;
+            placement.rotation = doodad.rotation;
+            placement.scale = Vector3(doodad.scale, doodad.scale, doodad.scale);
+
+            placements.push_back(std::move(placement));
+        }
+
+        RealizePlacements(scene, placements, m_doodadInstances, m_doodadBatches, m_doodadCollisionProxies);
+    }
+
+    std::vector<uint32> WorldModelInstance::GetActiveDoodadIndices() const
+    {
+        std::vector<uint32> indices;
+        if (!m_worldModel)
+        {
+            return indices;
+        }
+
         const auto& doodadSets = m_worldModel->GetDoodadSets();
         const auto& doodads = m_worldModel->GetDoodads();
         const auto& doodadNames = m_worldModel->GetDoodadNames();
@@ -1429,44 +1525,104 @@ namespace mmo
             setsToLoad.push_back({activeSet.startIndex, activeSet.count});
         }
 
-        // Gather the doodads of the active sets, deriving the room each one sits in.
-        //
-        // The room has to be derived by point-in-group testing: WorldModelGroup::GetDoodadRefs()
-        // looks like it exists for exactly this, but nothing in the serializer or the editor ever
-        // populates it, so it is always empty.
-        std::vector<WorldModelPlacementInput> placements;
-
         for (const auto& [startIndex, count] : setsToLoad)
         {
             for (uint32 i = 0; i < count; ++i)
             {
                 const uint32 doodadIndex = startIndex + i;
-                if (doodadIndex >= doodads.size())
+                if (doodadIndex < doodads.size() && doodads[doodadIndex].nameIndex < doodadNames.size())
                 {
-                    continue;
+                    indices.push_back(doodadIndex);
                 }
-
-                const auto& doodad = doodads[doodadIndex];
-                if (doodad.nameIndex >= doodadNames.size())
-                {
-                    continue;
-                }
-
-                const int32 groupIndex = FindGroupContaining(doodad.position);
-
-                WorldModelPlacementInput placement;
-                placement.groupIndex = groupIndex < 0 ? WorldModelNoGroup : static_cast<size_t>(groupIndex);
-                placement.sourceIndex = doodadIndex;
-                placement.meshPath = doodadNames[doodad.nameIndex];
-                placement.position = doodad.position;
-                placement.rotation = doodad.rotation;
-                placement.scale = Vector3(doodad.scale, doodad.scale, doodad.scale);
-
-                placements.push_back(std::move(placement));
             }
         }
 
-        RealizePlacements(scene, placements, m_doodadInstances, m_doodadBatches, m_doodadCollisionProxies);
+        return indices;
+    }
+
+    void WorldModelInstance::CollectSoundEmitters(std::vector<PlacedSoundEmitter>& out) const
+    {
+        if (!m_worldModel)
+        {
+            return;
+        }
+
+        Vector3 placementPosition;
+        Quaternion placementOrientation;
+        Vector3 placementScale;
+        GetPlacementTransform(placementPosition, placementOrientation, placementScale);
+
+        // A mesh placed in model space, inside a placement in world space. Composed point by point
+        // rather than as one transform, which a non-uniform placement scale would distort.
+        const auto addMesh = [&](const String& meshPath, const Vector3& position, const Quaternion& rotation, const Vector3& scale)
+        {
+            if (meshPath.empty() || IsParticleSystemPath(meshPath))
+            {
+                return;
+            }
+
+            // Cached: every mesh of the instance was loaded when its geometry was created
+            const MeshPtr mesh = MeshManager::Get().Load(meshPath);
+            if (!mesh || mesh->GetSoundEmitters().empty())
+            {
+                return;
+            }
+
+            std::vector<PlacedSoundEmitter> local;
+            AppendPlacedSoundEmitters(*mesh, position, rotation, scale, local);
+            for (PlacedSoundEmitter& emitter : local)
+            {
+                const Vector3 scaled(emitter.position.x * placementScale.x, emitter.position.y * placementScale.y, emitter.position.z * placementScale.z);
+                emitter.position = placementPosition + placementOrientation * scaled;
+                out.push_back(emitter);
+            }
+        };
+
+        for (size_t groupIndex = 0; groupIndex < m_worldModel->GetGroupCount(); ++groupIndex)
+        {
+            if (const auto* group = m_worldModel->GetGroup(groupIndex))
+            {
+                for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+                {
+                    if (meshRef.visible)
+                    {
+                        addMesh(meshRef.meshPath, meshRef.position, meshRef.rotation, meshRef.scale);
+                    }
+                }
+            }
+        }
+
+        const auto& doodads = m_worldModel->GetDoodads();
+        const auto& doodadNames = m_worldModel->GetDoodadNames();
+        for (const uint32 doodadIndex : GetActiveDoodadIndices())
+        {
+            const auto& doodad = doodads[doodadIndex];
+            addMesh(doodadNames[doodad.nameIndex], doodad.position, doodad.rotation, Vector3(doodad.scale, doodad.scale, doodad.scale));
+        }
+
+        for (const auto& kit : m_kits)
+        {
+            if (!kit)
+            {
+                continue;
+            }
+
+            for (const WorldModelMeshRef& prop : kit->props)
+            {
+                if (prop.visible)
+                {
+                    addMesh(prop.meshPath, prop.position, prop.rotation, prop.scale);
+                }
+            }
+        }
+
+        for (const ChildInstance& child : m_childInstances)
+        {
+            if (child.instance)
+            {
+                child.instance->CollectSoundEmitters(out);
+            }
+        }
     }
 
     void WorldModelInstance::RealizePlacements(Scene& scene, const std::vector<WorldModelPlacementInput>& placements,
@@ -1597,7 +1753,7 @@ namespace mmo
 
             for (const auto& prop : kit->props)
             {
-                if (!prop.visible || prop.meshPath.empty())
+                if (!prop.visible || prop.meshPath.empty() || IsParticleSystemPath(prop.meshPath))
                 {
                     continue;
                 }
@@ -1833,5 +1989,137 @@ namespace mmo
             lightInstance.node = nullptr;
         }
         lights.clear();
+    }
+
+    void WorldModelInstance::CreateParticleSystems(Scene& scene)
+    {
+        PROFILE_SCOPE("WMO: CreateParticleSystems");
+        ClearParticleSystems(&scene);
+
+        if (!m_worldModel)
+        {
+            return;
+        }
+
+        const auto add = [&](const String& path, const Vector3& position, const Quaternion& rotation, const Vector3& scale)
+        {
+            if (!IsParticleSystemPath(path))
+            {
+                return;
+            }
+
+            const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(path);
+            if (!file)
+            {
+                WLOG("World model '" << m_name << "': cannot open particle system " << path);
+                return;
+            }
+
+            io::StreamSource source(*file);
+            io::Reader reader(source);
+            ParticleSystemSerializer serializer;
+            ParticleSystemParameters parameters;
+            if (!serializer.Deserialize(parameters, reader))
+            {
+                WLOG("World model '" << m_name << "': cannot read particle system " << path);
+                return;
+            }
+
+            const String name = m_name + "_particles" + std::to_string(m_particleCounter++);
+            ParticleSystem* system = scene.CreateParticleEmitter(name);
+            if (!system)
+            {
+                return;
+            }
+
+            system->SetSystemParameters(parameters);
+
+            ParticleInstance instance;
+            instance.system = system;
+            instance.node = &scene.CreateSceneNode(name + "_node");
+            instance.node->SetPosition(position);
+            instance.node->SetOrientation(rotation);
+            instance.node->SetScale(scale);
+
+            if (m_parentNode)
+            {
+                static_cast<SceneNode*>(m_parentNode)->AddChild(*instance.node);
+            }
+            else
+            {
+                scene.GetRootSceneNode().AddChild(*instance.node);
+            }
+
+            instance.node->AttachObject(*system);
+            system->Play();
+
+            m_particleInstances.push_back(instance);
+        };
+
+        for (size_t groupIndex = 0; groupIndex < m_worldModel->GetGroupCount(); ++groupIndex)
+        {
+            if (const auto* group = m_worldModel->GetGroup(groupIndex))
+            {
+                for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+                {
+                    if (meshRef.visible)
+                    {
+                        add(meshRef.meshPath, meshRef.position, meshRef.rotation, meshRef.scale);
+                    }
+                }
+            }
+        }
+
+        const auto& doodads = m_worldModel->GetDoodads();
+        const auto& doodadNames = m_worldModel->GetDoodadNames();
+        for (const uint32 doodadIndex : GetActiveDoodadIndices())
+        {
+            const auto& doodad = doodads[doodadIndex];
+            add(doodadNames[doodad.nameIndex], doodad.position, doodad.rotation, Vector3(doodad.scale, doodad.scale, doodad.scale));
+        }
+
+        for (const auto& kit : m_kits)
+        {
+            if (!kit)
+            {
+                continue;
+            }
+
+            for (const WorldModelMeshRef& prop : kit->props)
+            {
+                if (prop.visible)
+                {
+                    add(prop.meshPath, prop.position, prop.rotation, prop.scale);
+                }
+            }
+        }
+    }
+
+    void WorldModelInstance::ClearParticleSystems(Scene* scene)
+    {
+        for (ParticleInstance& instance : m_particleInstances)
+        {
+            if (instance.system && instance.node)
+            {
+                instance.node->DetachObject(*instance.system);
+            }
+
+            if (scene)
+            {
+                if (instance.system)
+                {
+                    scene->DestroyParticleEmitter(*instance.system);
+                }
+                if (instance.node)
+                {
+                    scene->DestroySceneNode(*instance.node);
+                }
+            }
+
+            instance.system = nullptr;
+            instance.node = nullptr;
+        }
+
+        m_particleInstances.clear();
     }
 }

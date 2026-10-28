@@ -18,11 +18,33 @@ sys.dont_write_bytecode = True
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "bugs"))
 
-from bugloop import gitops, winlock  # noqa: E402
+from bugloop import gitops, merge_resolve, winlock  # noqa: E402
+
+GOOD_REVIEW = {"keeps_ours": True, "keeps_theirs": True, "adds_unrelated": False, "problems": [], "summary": "ok"}
 
 
 def git(cwd, *args):
 	return gitops.run_git(cwd, *args).stdout.strip()
+
+
+class FakeRunner:
+	"""Stands in for ClaudeRunner: the merge agent runs `edit(worktree root)`, the review answers `review`."""
+
+	def __init__(self, edit=None, review=None):
+		self.edit = edit
+		self.review = review or GOOD_REVIEW
+		self.agent_inputs = []
+		self.review_inputs = []
+
+	def agent(self, prompt, input_text, cwd, timeout, max_usd):
+		self.agent_inputs.append(input_text)
+		if self.edit:
+			self.edit(cwd)
+		return {}
+
+	def structured(self, prompt, input_text, schema, tools, cwd, timeout):
+		self.review_inputs.append(input_text)
+		return self.review
 
 
 def write(path, text):
@@ -95,6 +117,26 @@ class GitopsTests(unittest.TestCase):
 		self.assertEqual(self.wt.file_bytes(base, "data/client/data.txt"), b"one\n")
 		self.assertEqual(self.wt.file_bytes(head, "data/client/data.txt"), b"two\n")
 		self.assertIsNone(self.wt.file_bytes(head, "missing.txt"))
+
+	def test_stale_index_locks_are_cleared_and_fresh_ones_kept(self):
+		# 2026-10-23: a restart killed the loop during a submodule checkout; its index.lock stalled
+		# every fix and ship ("Unable to create .../index.lock: File exists").
+		self.assertEqual(self.wt.clear_stale_locks(), [])  # no worktree yet
+		self.wt.prepare()
+		parent_lock = os.path.join(git(self.wt.path, "rev-parse", "--absolute-git-dir"), "index.lock")
+		sub_lock = os.path.join(git(self.wt.sub_path("data/client"), "rev-parse", "--absolute-git-dir"), "index.lock")
+		for path in (parent_lock, sub_lock):
+			write(path, "")
+		old = os.path.getmtime(parent_lock) - 3600
+		os.utime(sub_lock, (old, old))
+		removed = self.wt.clear_stale_locks()
+		self.assertEqual(removed, [os.path.normcase(os.path.normpath(sub_lock))])
+		self.assertFalse(os.path.exists(sub_lock))
+		self.assertTrue(os.path.exists(parent_lock))
+		os.utime(parent_lock, (old, old))
+		self.wt.clear_stale_locks()
+		self.assertFalse(os.path.exists(parent_lock))
+		git(self.wt.sub_path("data/client"), "status")
 
 	def test_untracked_file_is_not_clean(self):
 		self.make_fix()
@@ -214,6 +256,46 @@ class GitopsTests(unittest.TestCase):
 		git(self.main, "add", "-A")
 		git(self.main, "commit", "-m", "note\n\nMerge bugfix/x (not really)")
 		self.assertIsNone(self.wt.merged("bugfix/x"))
+
+	def push_to_develop(self, name):
+		"""Someone else pushes develop, e.g. while the loop's gate runs."""
+		write(os.path.join(self.main, name), name + "\n")
+		git(self.main, "add", "-A")
+		git(self.main, "commit", "-m", "elsewhere: " + name)
+		git(self.main, "push", "origin", "develop")
+
+	def test_ship_starts_over_when_develop_moves_during_the_gate(self):
+		# 2026-10-24: develop was pushed while the loop gated b36cfb9b; its push was rejected
+		# ("tip is behind its remote counterpart") and the fix parked.
+		_, head = self.make_fix()
+		self.push_to_develop("first.txt")
+		gates = []
+
+		def gate():
+			gates.append(True)
+			if len(gates) == 1:
+				self.push_to_develop("during_gate.txt")
+			return True
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", gate)
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(len(gates), 2)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
+		self.assertEqual(git(self.origin, "show", "develop:during_gate.txt"), "during_gate.txt")
+		self.assertEqual(git(self.origin, "rev-parse", "develop^2"), head)
+
+	def test_ship_gives_up_when_develop_keeps_moving(self):
+		_, head = self.make_fix()
+		self.push_to_develop("first.txt")
+		gates = []
+
+		def gate():
+			gates.append(True)
+			self.push_to_develop("during_gate_{}.txt".format(len(gates)))
+			return True
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", gate, attempts=2)
+		self.assertFalse(result.ok)
+		self.assertIn("develop kept moving: 2 attempts", result.reason)
+		self.assertEqual(len(gates), 2)
 
 	def test_ship_gates_the_merge_when_develop_moved(self):
 		_, head = self.make_fix()
@@ -358,6 +440,178 @@ class GitopsTests(unittest.TestCase):
 			with self.assertRaises(ValueError):
 				worktree.delete_backup("master")
 			run.assert_not_called()
+
+	# ---- merge conflicts with develop
+
+	def move_develop_file(self, path, text):
+		write(os.path.join(self.main, *path.split("/")), text)
+		git(self.main, "add", "-A")
+		git(self.main, "commit", "-m", "elsewhere: " + path)
+		git(self.main, "push", "origin", "develop")
+
+	def resolver(self, edit=None, review=None):
+		runner = FakeRunner(edit, review)
+		self.wt.resolver = merge_resolve.ConflictResolver(gitops.run_git, runner, {"merge": "m", "merge_review": "r"}, {"merge_review": {}})
+		return runner
+
+	def test_ship_resolves_a_text_conflict_and_gates_the_result(self):
+		_, head = self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+		runner = self.resolver(edit=lambda root: write(os.path.join(root, "src", "a.cpp"), "int a = 2;\nint b = 1;\n"))
+		gated = []
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x (bug-loop, gate green at 1)\n\nCo-Authored-By: t", lambda: gated.append(True) or True)
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(gated, [True])
+		self.assertEqual(len(runner.agent_inputs), 1)
+		self.assertIn("src/a.cpp", runner.agent_inputs[0])
+		self.assertIn("--- RESOLUTION\nint a = 2;\nint b = 1;\n", runner.review_inputs[0])
+		self.assertEqual(self.wt.resolutions[0]["text"][0]["review"], "conflicts")
+		self.assertEqual(git(self.origin, "show", "develop:src/a.cpp"), "int a = 2;\nint b = 1;")
+		message = git(self.origin, "log", "-1", "--format=%B", "develop")
+		self.assertIn("Conflicts with origin/develop resolved by the bug loop in: src/a.cpp", message)
+		self.assertTrue(message.rstrip().endswith("Co-Authored-By: t"))
+		self.assertEqual([item["path"] for item in self.wt.resolutions[0]["text"]], ["src/a.cpp"])
+
+	def assert_refused(self, result, before, text):
+		self.assertFalse(result.ok)
+		self.assertTrue(result.conflict)
+		self.assertIn(text, result.reason)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), before)
+		self.assertNotEqual(gitops.run_git(self.wt.path, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode, 0)
+		self.assertTrue(self.wt.is_clean())
+
+	def test_ship_refuses_a_resolution_the_review_rejects(self):
+		_, head = self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+		self.resolver(edit=lambda root: write(os.path.join(root, "src", "a.cpp"), "int a = 2;\n"),
+			review={"keeps_ours": True, "keeps_theirs": False, "adds_unrelated": False, "problems": ["drops int b"], "summary": ""})
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "drops int b")
+
+	def test_ship_refuses_a_resolver_that_touches_other_files(self):
+		_, head = self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+
+		def edit(root):
+			write(os.path.join(root, "src", "a.cpp"), "int a = 2;\nint b = 1;\n")
+			write(os.path.join(root, "src", "extra.cpp"), "int sneaky = 1;\n")
+		runner = self.resolver(edit=edit)
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "outside the conflict")
+		self.assertEqual(runner.review_inputs, [])
+
+	def test_ship_refuses_conflict_markers_left_behind(self):
+		_, head = self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+		self.resolver(edit=lambda root: None)
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "conflict markers")
+
+	def test_ship_without_a_resolver_reports_the_conflict(self):
+		_, head = self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "manual merge")
+
+	def test_ship_merges_game_data_both_sides_changed_without_a_model(self):
+		# 2026-10-22: four parked fixes could not ship because develop had changed the same .data
+		# file (binary to git) in other entries.
+		def entry(entry_id, value):
+			payload = bytes([0x08, entry_id, 0x10, value])
+			return bytes([0x0A, len(payload)]) + payload
+
+		with open(os.path.join(self.sub_seed, "items.data"), "wb") as handle:
+			handle.write(entry(1, 10) + entry(2, 20))
+		git(self.sub_seed, "add", "-A")
+		git(self.sub_seed, "commit", "-m", "items")
+		git(self.sub_seed, "push", self.sub_origin, "master")
+		sub = os.path.join(self.main, "data", "client")
+		git(sub, "fetch", "origin")
+		git(sub, "checkout", "--detach", "origin/master")
+		git(self.main, "add", "data/client")
+		git(self.main, "commit", "-m", "bump data/client")
+		git(self.main, "push", "origin", "develop")
+
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		wt_sub = self.wt.sub_path("data/client")
+		with open(os.path.join(wt_sub, "items.data"), "wb") as handle:
+			handle.write(entry(1, 11) + entry(2, 20))
+		git(wt_sub, "commit", "-am", "fix item 1")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "bump data")
+		head = self.wt.head()
+
+		with open(os.path.join(self.sub_seed, "items.data"), "wb") as handle:
+			handle.write(entry(1, 10) + entry(2, 22))
+		git(self.sub_seed, "commit", "-am", "elsewhere: item 2")
+		git(self.sub_seed, "push", self.sub_origin, "master")
+		git(sub, "fetch", "origin")
+		git(sub, "checkout", "--detach", "origin/master")
+		git(self.main, "add", "data/client")
+		git(self.main, "commit", "-m", "bump data/client again")
+		git(self.main, "push", "origin", "develop")
+
+		self.wt.resolver = merge_resolve.ConflictResolver(gitops.run_git)
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertTrue(result.ok, result.reason)
+		shipped = gitops.run_git(self.sub_origin, "show", "master:items.data", binary=True).stdout
+		self.assertEqual(shipped, entry(1, 11) + entry(2, 22))
+		self.assertEqual(self.wt.resolutions[0]["data"], ["data/client/items.data"])
+
+	HEADER = "namespace game\n{\n\tconstexpr uint32 ProtocolVersion = 0x00000001;\n}\n"
+
+	def protocol_conflict(self):
+		"""Both sides bump the protocol to the same version: git merges the header cleanly and only
+		the docs conflict (bug b36cdaa3, 2026-10-23)."""
+		self.move_develop_file("src/shared/game_protocol/game_protocol.h", self.HEADER)
+		self.move_develop_file("docs/protocol_versions.md", "| 1 | base |\n")
+		base = self.wt.prepare()
+		self.wt.start_branch("bugfix/x", base)
+		write(os.path.join(self.wt.path, "src", "shared", "game_protocol", "game_protocol.h"), self.HEADER.replace("01;", "02;"))
+		write(os.path.join(self.wt.path, "docs", "protocol_versions.md"), "| 1 | base |\n| 2 | fix |\n")
+		git(self.wt.path, "add", "-A")
+		git(self.wt.path, "commit", "-m", "fix bumps the protocol")
+		head = self.wt.head()
+		write(os.path.join(self.main, "src", "shared", "game_protocol", "game_protocol.h"), self.HEADER.replace("01;", "02;"))
+		self.move_develop_file("docs/protocol_versions.md", "| 1 | base |\n| 2 | develop |\n")
+		return head
+
+	def resolve_protocol(self, header):
+		def edit(root):
+			write(os.path.join(root, "docs", "protocol_versions.md"), "| 1 | base |\n| 2 | develop |\n| 3 | fix |\n")
+			write(os.path.join(root, "src", "shared", "game_protocol", "game_protocol.h"), header)
+		return self.resolver(edit=edit)
+
+	def test_ship_lets_the_resolver_raise_a_cleanly_merged_protocol_version(self):
+		head = self.protocol_conflict()
+		runner = self.resolve_protocol(self.HEADER.replace("01;", "03;"))
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: True)
+		self.assertTrue(result.ok, result.reason)
+		self.assertIn("0x00000003", git(self.origin, "show", "develop:src/shared/game_protocol/game_protocol.h"))
+		self.assertIn("not a conflict", runner.review_inputs[0])
+		self.assertIn("+\tconstexpr uint32 ProtocolVersion = 0x00000003;", runner.review_inputs[0])
+
+	def test_ship_refuses_other_header_changes_next_to_the_version(self):
+		head = self.protocol_conflict()
+		self.resolve_protocol(self.HEADER.replace("01;", "03;").replace("namespace game", "namespace other"))
+		before = git(self.origin, "rev-parse", "develop")
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", lambda: self.fail("nothing to gate"))
+		self.assert_refused(result, before, "beyond its ProtocolVersion")
+
+	def test_resume_branch_resolves_a_text_conflict(self):
+		self.make_fix()
+		self.move_develop_file("src/a.cpp", "int a = 1;\nint b = 1;\n")
+		self.resolver(edit=lambda root: write(os.path.join(root, "src", "a.cpp"), "int a = 2;\nint b = 1;\n"))
+		self.wt.prepare()
+		head = self.wt.resume_branch("bugfix/x")
+		self.assertEqual(git(self.wt.path, "show", head + ":src/a.cpp"), "int a = 2;\nint b = 1;")
+		self.assertEqual(self.wt.fork_point("bugfix/x"), git(self.origin, "rev-parse", "develop"))
+		self.assertTrue(self.wt.is_clean())
 
 	def move_develop_submodule(self, name, text):
 		"""Someone else lands a data change: submodule master and develop's pointer move together."""

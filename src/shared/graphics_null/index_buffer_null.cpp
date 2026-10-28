@@ -2,6 +2,7 @@
 
 #include "index_buffer_null.h"
 
+#include <cstring>
 
 namespace mmo
 {
@@ -9,12 +10,18 @@ namespace mmo
 		: IndexBuffer(indexCount, indexSize)
 		, m_device(device)
 	{
-		m_indices.resize(indexCount);
+		// Kept at the real index size and with the initial contents, so mapping reads back what was
+		// written (mesh serialization and geometry merging read buffers back).
+		m_indices.resize(indexCount * (indexSize == IndexBufferSize::Index_16 ? sizeof(uint16) : sizeof(uint32)), 0);
+		if (initialData && !m_indices.empty())
+		{
+			std::memcpy(m_indices.data(), initialData, m_indices.size());
+		}
 	}
 
 	void * IndexBufferNull::Map(LockOptions options)
 	{
-		return &m_indices[0];
+		return m_indices.data();
 	}
 
 	void IndexBufferNull::Unmap()

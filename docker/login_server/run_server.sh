@@ -39,7 +39,14 @@ log =
         fileName = "logs/logs"
         buffering = 0
 )
+crashReport =
+(
+	enabled = ${CRASH_REPORT_ENABLED:-1}
+	apiUrl = "${CRASH_REPORT_API_URL:-https://error.mmo-dev.net}"
+)
 EOF
 
-# Start the server
-./login_server
+# Start the server. exec replaces this shell, so the server is PID 1 and gets docker's SIGTERM
+# itself: bash as PID 1 neither forwards it nor dies of it, and docker would SIGKILL the server
+# after the grace period instead of letting it save and stop.
+exec ./login_server

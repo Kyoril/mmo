@@ -2,6 +2,9 @@
 
 #include "world_model_instance.h"
 #include "world_model_merge.h"
+#include "world_model_flatten.h"
+#include "world_model_manager.h"
+#include "mesh_merge.h"
 
 #include "entity.h"
 #include "material_manager.h"
@@ -15,7 +18,6 @@
 #include "base/profiler.h"
 
 #include <algorithm>
-#include <cstring>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -42,172 +44,36 @@ namespace mmo
 		std::vector<Group> groups;
 	};
 
+	/// @brief The outdoor geometry of a top-level world model and every child world model it nests,
+	///        merged per cluster cell (see WorldModelClusterSize).
+	struct WorldModelClusterGeometry
+	{
+		struct Cluster
+		{
+			/// @brief Cell centre in top-level world model space; the meshes are relative to it.
+			Vector3 origin;
+
+			/// @brief Merged meshes; more than one only when a material exceeds the vertex limit.
+			std::vector<MeshPtr> structure;
+
+			/// @brief Merged small placements (IsWorldModelDetail), drawn close up only, casting no shadow.
+			std::vector<MeshPtr> detail;
+		};
+
+		std::vector<Cluster> clusters;
+	};
+
 	namespace
 	{
-		/// @brief CPU copy of one submesh, read back from its GPU buffers.
-		struct SubMeshGeometry
-		{
-			std::vector<WorldModelMergeVertex> vertices;
-			std::vector<uint32> indices;
-		};
-
-		bool HasMergeableLayout(const VertexData& vertexData)
-		{
-			if (!vertexData.vertexDeclaration || !vertexData.vertexBufferBinding ||
-				vertexData.vertexBufferBinding->GetBufferCount() != 1 ||
-				vertexData.vertexDeclaration->GetVertexSize(0) != sizeof(WorldModelMergeVertex))
-			{
-				return false;
-			}
-
-			// The offsets the static mesh loader uses (MeshDeserializer) - anything else is another layout
-			const auto* decl = vertexData.vertexDeclaration;
-			const auto offsetOf = [decl](const VertexElementSemantic semantic) -> int32
-			{
-				const VertexElement* element = decl->FindElementBySemantic(semantic);
-				return element ? static_cast<int32>(element->GetOffset()) : -1;
-			};
-
-			return offsetOf(VertexElementSemantic::Position) == offsetof(WorldModelMergeVertex, pos) &&
-				offsetOf(VertexElementSemantic::Diffuse) == offsetof(WorldModelMergeVertex, color) &&
-				offsetOf(VertexElementSemantic::Normal) == offsetof(WorldModelMergeVertex, normal) &&
-				offsetOf(VertexElementSemantic::Binormal) == offsetof(WorldModelMergeVertex, binormal) &&
-				offsetOf(VertexElementSemantic::Tangent) == offsetof(WorldModelMergeVertex, tangent) &&
-				offsetOf(VertexElementSemantic::TextureCoordinate) == offsetof(WorldModelMergeVertex, uv) &&
-				!decl->FindElementBySemantic(VertexElementSemantic::BlendIndices);
-		}
-
-		bool ReadSubMesh(const SubMesh& subMesh, SubMeshGeometry& out)
-		{
-			PROFILE_SCOPE("WMO: ReadSubMesh (GPU readback)");
-			const VertexData& vertexData = *subMesh.vertexData;
-			const IndexData& indexData = *subMesh.indexData;
-			const VertexBufferPtr& vertexBuffer = vertexData.vertexBufferBinding->GetBuffer(0);
-			if (!vertexBuffer || !indexData.indexBuffer)
-			{
-				return false;
-			}
-
-			const auto* vertexBytes = static_cast<const uint8*>(vertexBuffer->Map(LockOptions::ReadOnly));
-			if (!vertexBytes)
-			{
-				return false;
-			}
-
-			out.vertices.resize(vertexData.vertexCount);
-			std::memcpy(out.vertices.data(), vertexBytes + vertexData.vertexStart * sizeof(WorldModelMergeVertex),
-				vertexData.vertexCount * sizeof(WorldModelMergeVertex));
-			vertexBuffer->Unmap();
-
-			const void* indexBytes = indexData.indexBuffer->Map(LockOptions::ReadOnly);
-			if (!indexBytes)
-			{
-				return false;
-			}
-
-			out.indices.resize(indexData.indexCount);
-			if (indexData.indexBuffer->GetIndexSize() == IndexBufferSize::Index_16)
-			{
-				const auto* indices = static_cast<const uint16*>(indexBytes) + indexData.indexStart;
-				std::copy_n(indices, indexData.indexCount, out.indices.begin());
-			}
-			else
-			{
-				const auto* indices = static_cast<const uint32*>(indexBytes) + indexData.indexStart;
-				std::copy_n(indices, indexData.indexCount, out.indices.begin());
-			}
-			indexData.indexBuffer->Unmap();
-
-			return true;
-		}
-
-		/// @brief Merged geometry being collected for one material of one chunk.
-		struct MaterialBucket
-		{
-			MaterialPtr material;
-			std::vector<WorldModelMergeVertex> vertices;
-			std::vector<uint32> indices;
-		};
-
-		MeshPtr CreateMergedMesh(const String& name, std::map<String, MaterialBucket>& buckets)
-		{
-			PROFILE_SCOPE("WMO: CreateMergedMesh");
-			if (buckets.empty())
-			{
-				return nullptr;
-			}
-
-			auto mesh = std::make_shared<Mesh>(name);
-			AABB bounds;
-			bounds.SetNull();
-
-			auto& device = GraphicsDevice::Get();
-			for (auto& [materialName, bucket] : buckets)
-			{
-				if (bucket.indices.empty())
-				{
-					continue;
-				}
-
-				SubMesh& subMesh = mesh->CreateSubMesh();
-				subMesh.useSharedVertices = false;
-				subMesh.SetMaterial(bucket.material);
-
-				subMesh.vertexData = std::make_unique<VertexData>(&device);
-				subMesh.vertexData->vertexCount = static_cast<uint32>(bucket.vertices.size());
-				subMesh.vertexData->vertexStart = 0;
-
-				uint32 offset = 0;
-				auto* decl = subMesh.vertexData->vertexDeclaration;
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Position).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::ColorArgb, VertexElementSemantic::Diffuse).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Normal).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Binormal).GetSize();
-				offset += decl->AddElement(0, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
-				decl->AddElement(0, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate);
-
-				subMesh.vertexData->vertexBufferBinding->SetBinding(0, device.CreateVertexBuffer(
-					static_cast<uint32>(bucket.vertices.size()), sizeof(WorldModelMergeVertex), BufferUsage::StaticWriteOnly, bucket.vertices.data()));
-
-				subMesh.indexData = std::make_unique<IndexData>();
-				subMesh.indexData->indexStart = 0;
-				subMesh.indexData->indexCount = static_cast<uint32>(bucket.indices.size());
-				if (bucket.vertices.size() <= 0xFFFF)
-				{
-					std::vector<uint16> narrow(bucket.indices.begin(), bucket.indices.end());
-					subMesh.indexData->indexBuffer = device.CreateIndexBuffer(
-						static_cast<uint32>(narrow.size()), IndexBufferSize::Index_16, BufferUsage::StaticWriteOnly, narrow.data());
-				}
-				else
-				{
-					subMesh.indexData->indexBuffer = device.CreateIndexBuffer(
-						static_cast<uint32>(bucket.indices.size()), IndexBufferSize::Index_32, BufferUsage::StaticWriteOnly, bucket.indices.data());
-				}
-
-				for (const auto& vertex : bucket.vertices)
-				{
-					bounds.Combine(vertex.pos);
-				}
-			}
-
-			if (mesh->GetSubMeshCount() == 0)
-			{
-				return nullptr;
-			}
-
-			mesh->SetBounds(bounds);
-			return mesh;
-		}
-
 		/// @brief Merges a world model's groups, all at once or a few groups per call.
 		class MergedGeometryBuilder final
 		{
 		public:
-			explicit MergedGeometryBuilder(const WorldModel& model)
-				: m_model(model)
+			explicit MergedGeometryBuilder(const WorldModelPtr& model)
+				: m_model(*model)
 				, m_merged(std::make_shared<WorldModelMergedGeometry>())
 			{
-				m_merged->groups.resize(model.GetGroupCount());
+				m_merged->groups.resize(model->GetGroupCount());
 			}
 
 			/// @brief Merges up to maxGroups more groups. Returns true once every group is merged.
@@ -225,7 +91,7 @@ namespace mmo
 				}
 
 				// The read-back copies are only needed while merging
-				m_readBack.clear();
+				m_readBack.Clear();
 				return true;
 			}
 
@@ -244,14 +110,20 @@ namespace mmo
 				}
 
 				auto& out = m_merged->groups[groupIndex];
-				std::map<String, MaterialBucket> structure;
-				std::map<String, MaterialBucket> detail;
+				MeshMergeBuckets structure;
+				MeshMergeBuckets detail;
+
+				// Outdoor groups are merged per area into the top-level instance's clusters instead; their
+				// placements still need collision proxies, and unmergeable ones still their own entities.
+				const bool clustered = WorldModelInstance::IsClusteredGroup(*group);
 
 				const auto& meshRefs = group->GetMeshRefs();
 				for (size_t refIndex = 0; refIndex < meshRefs.size(); ++refIndex)
 				{
 					const WorldModelMeshRef& meshRef = meshRefs[refIndex];
-					if (!meshRef.visible)
+
+					// Particle systems (.hpar) are created by WorldModelInstance::CreateParticleSystems
+					if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
 					{
 						continue;
 					}
@@ -260,6 +132,12 @@ namespace mmo
 					if (!mesh || !WorldModelInstance::CanMergeMesh(*mesh))
 					{
 						out.fallbackRefs.push_back(refIndex);
+						continue;
+					}
+
+					if (clustered)
+					{
+						out.mergedRefs.push_back(refIndex);
 						continue;
 					}
 
@@ -275,25 +153,19 @@ namespace mmo
 					for (uint16 subIndex = 0; subIndex < mesh->GetSubMeshCount() && complete; ++subIndex)
 					{
 						SubMesh& subMesh = mesh->GetSubMesh(subIndex);
-						const auto key = std::make_pair(mesh.get(), subIndex);
-						auto it = readBack.find(key);
-						if (it == readBack.end())
+						const MeshMergeGeometry* geometry = readBack.Get(*mesh, subIndex);
+						if (!geometry)
 						{
-							SubMeshGeometry geometry;
-							if (!ReadSubMesh(subMesh, geometry))
-							{
-								complete = false;
-								break;
-							}
-							it = readBack.emplace(key, std::move(geometry)).first;
+							complete = false;
+							break;
 						}
 
 						const MaterialPtr material = overrideMaterial ? overrideMaterial : subMesh.GetMaterial();
 						const String materialName = material ? String(material->GetName()) : String();
-						MaterialBucket& bucket = chunk[materialName];
+						MeshMergeBucket& bucket = chunk[materialName];
 						bucket.material = material;
-						AppendTransformedGeometry(it->second.vertices.data(), it->second.vertices.size(),
-							it->second.indices.data(), it->second.indices.size(), transform, bucket.vertices, bucket.indices);
+						AppendTransformedGeometry(geometry->vertices.data(), geometry->vertices.size(),
+							geometry->indices.data(), geometry->indices.size(), transform, bucket.vertices, bucket.indices);
 					}
 
 					if (!complete)
@@ -315,7 +187,197 @@ namespace mmo
 			size_t m_nextGroup = 0;
 
 			/// Every distinct submesh is read back once, however often it is placed
-			std::map<std::pair<const Mesh*, uint16>, SubMeshGeometry> m_readBack;
+			MeshReadBackCache m_readBack;
+		};
+
+		/// @brief Merges the clustered groups of a world model tree per cluster cell, a few groups per call.
+		class ClusterGeometryBuilder final
+		{
+		public:
+			explicit ClusterGeometryBuilder(const WorldModelPtr& root)
+				: m_rootKey(reinterpret_cast<uintptr_t>(root.get()))
+				, m_result(std::make_shared<WorldModelClusterGeometry>())
+			{
+				Collect(*root, FlattenTransform{}, {});
+			}
+
+			/// @brief Merges up to maxGroups more groups. Returns true once every group is merged.
+			bool Step(const size_t maxGroups)
+			{
+				PROFILE_SCOPE("WMO: BuildClusters");
+				for (size_t built = 0; built < maxGroups && m_nextWork < m_work.size(); ++built)
+				{
+					MergeGroup(m_work[m_nextWork++]);
+				}
+
+				if (m_nextWork < m_work.size())
+				{
+					return false;
+				}
+
+				if (!m_finished)
+				{
+					Finish();
+					m_finished = true;
+				}
+
+				return true;
+			}
+
+			[[nodiscard]] const std::shared_ptr<WorldModelClusterGeometry>& GetResult() const { return m_result; }
+
+		private:
+			struct Work
+			{
+				/// The root (alive while the cache steps it) or a child held in m_children
+				const WorldModel* model { nullptr };
+				FlattenTransform toRoot;
+				size_t groupIndex { 0 };
+			};
+
+			struct Cell
+			{
+				std::unique_ptr<MeshMergeAccumulator> structure;
+				std::unique_ptr<MeshMergeAccumulator> detail;
+			};
+
+			/// Lists the clustered groups of a model and, by the rules CreateChildInstances instantiates
+			/// children with, of its nested children, so exactly what the instances show is covered.
+			void Collect(const WorldModel& model, const FlattenTransform& toRoot, const std::vector<const WorldModel*>& ancestors)
+			{
+				for (size_t groupIndex = 0; groupIndex < model.GetGroupCount(); ++groupIndex)
+				{
+					const WorldModelGroup* group = model.GetGroup(groupIndex);
+					if (group && WorldModelInstance::IsClusteredGroup(*group))
+					{
+						m_work.push_back(Work{ &model, toRoot, groupIndex });
+					}
+				}
+
+				if (ancestors.size() >= WorldModelInstance::MaxChildDepth)
+				{
+					return;
+				}
+
+				std::vector<const WorldModel*> chain = ancestors;
+				chain.push_back(&model);
+
+				for (const WorldModelChildRef& childRef : model.GetChildRefs())
+				{
+					if (!childRef.visible || childRef.wmoPath.empty())
+					{
+						continue;
+					}
+
+					WorldModelPtr child = WorldModelManager::Get().Load(childRef.wmoPath);
+					if (!child || std::find(chain.begin(), chain.end(), child.get()) != chain.end())
+					{
+						continue;
+					}
+
+					const WorldModel& childModel = *child;
+					m_children.push_back(std::move(child));
+					Collect(childModel, toRoot.Compose(childRef.position, childRef.rotation, childRef.scale), chain);
+				}
+			}
+
+			void MergeGroup(const Work& work)
+			{
+				const WorldModelGroup* group = work.model->GetGroup(work.groupIndex);
+				if (!group)
+				{
+					return;
+				}
+
+				for (const WorldModelMeshRef& meshRef : group->GetMeshRefs())
+				{
+					// The same placements the per-group merge counts as merged (it gives them collision);
+					// the rest keep their own entities in the instance owning the group
+					if (!meshRef.visible || IsParticleSystemPath(meshRef.meshPath))
+					{
+						continue;
+					}
+
+					const MeshPtr mesh = MeshManager::Get().Load(meshRef.meshPath);
+					if (!mesh || !WorldModelInstance::CanMergeMesh(*mesh))
+					{
+						continue;
+					}
+
+					const FlattenTransform placement = work.toRoot.Compose(meshRef.position, meshRef.rotation, meshRef.scale);
+					const auto cellIndex = GetWorldModelClusterCell(placement.position);
+					Cell& cell = m_cells[cellIndex];
+
+					const float maxScale = std::max({ std::abs(placement.scale.x), std::abs(placement.scale.y), std::abs(placement.scale.z) });
+					auto& accumulator = IsWorldModelDetail(mesh->GetBoundRadius() * maxScale) ? cell.detail : cell.structure;
+					if (!accumulator)
+					{
+						accumulator = std::make_unique<MeshMergeAccumulator>(m_readBack);
+					}
+
+					// A mesh reference's override replaces the material of every submesh
+					const std::vector<String> overrides = meshRef.materialOverride.empty()
+						? std::vector<String>()
+						: std::vector<String>(mesh->GetSubMeshCount(), meshRef.materialOverride);
+
+					const Matrix4 transform = Matrix4::GetTrans(-GetWorldModelClusterOrigin(cellIndex)) * placement.ToMatrix();
+					if (!accumulator->Add(*mesh, transform, overrides))
+					{
+						WLOG("Could not merge mesh " << meshRef.meshPath << " completely into its world model cluster");
+					}
+				}
+			}
+
+			void Finish()
+			{
+				const String prefix = "WorldModelCluster_" + std::to_string(m_rootKey) + "_";
+				for (auto& [index, cell] : m_cells)
+				{
+					WorldModelClusterGeometry::Cluster cluster;
+					cluster.origin = GetWorldModelClusterOrigin(index);
+
+					const String name = prefix + std::to_string(index.first) + "_" + std::to_string(index.second);
+					const auto createParts = [&name](const std::unique_ptr<MeshMergeAccumulator>& accumulator, const char* suffix, std::vector<MeshPtr>& out)
+					{
+						if (!accumulator)
+						{
+							return;
+						}
+
+						auto& parts = accumulator->GetParts();
+						for (size_t part = 0; part < parts.size(); ++part)
+						{
+							if (MeshPtr mesh = CreateMergedMesh(name + suffix + std::to_string(part), parts[part]))
+							{
+								out.push_back(std::move(mesh));
+							}
+						}
+					};
+
+					createParts(cell.structure, "_structure", cluster.structure);
+					createParts(cell.detail, "_detail", cluster.detail);
+					if (!cluster.structure.empty() || !cluster.detail.empty())
+					{
+						m_result->clusters.push_back(std::move(cluster));
+					}
+				}
+
+				// Only needed while merging
+				m_cells.clear();
+				m_readBack.Clear();
+				m_children.clear();
+			}
+
+			uintptr_t m_rootKey;
+			std::shared_ptr<WorldModelClusterGeometry> m_result;
+			std::vector<Work> m_work;
+			size_t m_nextWork = 0;
+			bool m_finished = false;
+			std::vector<WorldModelPtr> m_children;
+
+			/// Declared before the cells, whose accumulators read through it
+			MeshReadBackCache m_readBack;
+			std::map<std::pair<int32, int32>, Cell> m_cells;
 		};
 
 		size_t GetMeshBytes(const MeshPtr& mesh)
@@ -343,20 +405,49 @@ namespace mmo
 			return bytes;
 		}
 
-		/// @brief Merged geometry per world model, shared by all live instances of it, and kept for a
-		///        while after the last one is gone (see WorldModelInstance::SetMergedGeometryRetention).
+		size_t GetGeometryBytes(const WorldModelMergedGeometry& geometry)
+		{
+			size_t bytes = 0;
+			for (const auto& group : geometry.groups)
+			{
+				bytes += GetMeshBytes(group.structure) + GetMeshBytes(group.detail);
+			}
+			return bytes;
+		}
+
+		size_t GetGeometryBytes(const WorldModelClusterGeometry& geometry)
+		{
+			size_t bytes = 0;
+			for (const auto& cluster : geometry.clusters)
+			{
+				for (const MeshPtr& mesh : cluster.structure)
+				{
+					bytes += GetMeshBytes(mesh);
+				}
+				for (const MeshPtr& mesh : cluster.detail)
+				{
+					bytes += GetMeshBytes(mesh);
+				}
+			}
+			return bytes;
+		}
+
+		/// @brief Geometry built from a world model (per group merges, or the clusters of a whole tree),
+		///        shared by all live instances of it, and kept for a while after the last one is gone
+		///        (see WorldModelInstance::SetMergedGeometryRetention).
+		template <typename Builder, typename Geometry>
 		class MergedGeometryCache final
 		{
 		public:
 			/// @brief Returns the model's merged geometry, merging whatever is not merged yet.
-			std::shared_ptr<const WorldModelMergedGeometry> GetOrBuild(const WorldModelPtr& model)
+			std::shared_ptr<const Geometry> GetOrBuild(const WorldModelPtr& model)
 			{
 				return Advance(model, std::numeric_limits<size_t>::max());
 			}
 
 			/// @brief Merges up to maxGroups more groups of the model. Returns its merged geometry once
 			///        complete, null while groups remain.
-			std::shared_ptr<const WorldModelMergedGeometry> Advance(const WorldModelPtr& model, const size_t maxGroups)
+			std::shared_ptr<const Geometry> Advance(const WorldModelPtr& model, const size_t maxGroups)
 			{
 				std::scoped_lock lock(m_mutex);
 
@@ -388,17 +479,14 @@ namespace mmo
 					return nullptr;
 				}
 
-				std::shared_ptr<const WorldModelMergedGeometry> built = builder->builder.GetResult();
+				std::shared_ptr<const Geometry> built = builder->builder.GetResult();
 				m_builders.erase(model.get());
 
 				Entry entry;
 				entry.model = model;
 				entry.weak = built;
 				entry.lastUse = ++m_useCounter;
-				for (const auto& group : built->groups)
-				{
-					entry.bytes += GetMeshBytes(group.structure) + GetMeshBytes(group.detail);
-				}
+				entry.bytes = GetGeometryBytes(*built);
 				if (m_retentionBytes > 0)
 				{
 					entry.strong = built;
@@ -430,26 +518,26 @@ namespace mmo
 			{
 				explicit PendingBuild(const WorldModelPtr& source)
 					: model(source)
-					, builder(*source)
+					, builder(source)
 				{
 				}
 
 				std::weak_ptr<WorldModel> model;
-				MergedGeometryBuilder builder;
+				Builder builder;
 			};
 
 			struct Entry
 			{
 				std::weak_ptr<WorldModel> model;
-				std::weak_ptr<const WorldModelMergedGeometry> weak;
+				std::weak_ptr<const Geometry> weak;
 
 				/// Set while retention is on: keeps the geometry alive after its last instance.
-				std::shared_ptr<const WorldModelMergedGeometry> strong;
+				std::shared_ptr<const Geometry> strong;
 
 				size_t bytes = 0;
 				uint64 lastUse = 0;
 
-				[[nodiscard]] std::shared_ptr<const WorldModelMergedGeometry> Get() const
+				[[nodiscard]] std::shared_ptr<const Geometry> Get() const
 				{
 					return strong ? strong : weak.lock();
 				}
@@ -511,9 +599,18 @@ namespace mmo
 			uint64 m_useCounter = 0;
 		};
 
-		MergedGeometryCache& GetMergedGeometryCache()
+		using GroupGeometryCache = MergedGeometryCache<MergedGeometryBuilder, WorldModelMergedGeometry>;
+		using ClusterGeometryCache = MergedGeometryCache<ClusterGeometryBuilder, WorldModelClusterGeometry>;
+
+		GroupGeometryCache& GetMergedGeometryCache()
 		{
-			static MergedGeometryCache s_cache;
+			static GroupGeometryCache s_cache;
+			return s_cache;
+		}
+
+		ClusterGeometryCache& GetClusterGeometryCache()
+		{
+			static ClusterGeometryCache s_cache;
 			return s_cache;
 		}
 
@@ -533,33 +630,31 @@ namespace mmo
 		return GetMergedGeometryCache().Advance(model, std::max<size_t>(1, maxGroups));
 	}
 
+	std::shared_ptr<const void> WorldModelInstance::PrewarmClusterGeometry(const WorldModelPtr& model, const size_t maxGroups)
+	{
+		if (!model)
+		{
+			return nullptr;
+		}
+
+		return GetClusterGeometryCache().Advance(model, std::max<size_t>(1, maxGroups));
+	}
+
 	void WorldModelInstance::SetMergedGeometryRetention(const size_t bytes)
 	{
+		// Each cache gets the budget: the clusters of a town hold about what its groups did before
 		GetMergedGeometryCache().SetRetention(bytes);
+		GetClusterGeometryCache().SetRetention(bytes);
+	}
+
+	bool WorldModelInstance::IsClusteredGroup(const WorldModelGroup& group)
+	{
+		return !group.IsInterior() && group.GetContainmentVolumes().empty();
 	}
 
 	bool WorldModelInstance::CanMergeMesh(const Mesh& mesh)
 	{
-		if (mesh.HasSkeleton() || mesh.GetSubMeshCount() == 0)
-		{
-			return false;
-		}
-
-		for (uint16 i = 0; i < mesh.GetSubMeshCount(); ++i)
-		{
-			const SubMesh& subMesh = mesh.GetSubMesh(i);
-			if (subMesh.useSharedVertices || !subMesh.vertexData || !subMesh.indexData || subMesh.indexData->indexCount == 0)
-			{
-				return false;
-			}
-
-			if (!HasMergeableLayout(*subMesh.vertexData))
-			{
-				return false;
-			}
-		}
-
-		return true;
+		return mmo::CanMergeMesh(mesh);
 	}
 
 	void WorldModelInstance::BuildMergedGeometry(Scene& scene)
@@ -653,5 +748,91 @@ namespace mmo
 		EnsureBatchRootNode(scene);
 		BuildCollisionProxies(scene, collisionBuckets, m_collisionProxies);
 		m_batchesDirty = true;
+
+		// The outdoor groups of this model and of every nested child are drawn by the top-level instance
+		if (m_ancestors.empty())
+		{
+			BuildClusterGeometry(scene);
+		}
+	}
+
+	void WorldModelInstance::BuildClusterGeometry(Scene& scene)
+	{
+		PROFILE_SCOPE("WMO: BuildClusterGeometry");
+
+		m_clusterGeometry = GetClusterGeometryCache().GetOrBuild(m_worldModel);
+		if (!m_clusterGeometry)
+		{
+			return;
+		}
+
+		SceneNode& parent = m_parentNode ? *static_cast<SceneNode*>(m_parentNode) : scene.GetRootSceneNode();
+
+		// Distance culling measures from the node, which sits at the cell centre: a detail placement in
+		// a corner of the cell must not vanish before it is WorldModelDetailDistance away
+		constexpr float cellHalfDiagonal = WorldModelClusterSize * 0.70711f;
+
+		for (size_t clusterIndex = 0; clusterIndex < m_clusterGeometry->clusters.size(); ++clusterIndex)
+		{
+			const auto& cluster = m_clusterGeometry->clusters[clusterIndex];
+
+			const auto addMesh = [&](const MeshPtr& mesh, const String& suffix, const bool isDetail)
+			{
+				MeshVisualization viz;
+				viz.mesh = mesh;
+
+				const String name = m_name + "_cluster" + std::to_string(clusterIndex) + suffix;
+				viz.node = &scene.CreateSceneNode(name);
+				viz.node->SetPosition(cluster.origin);
+				parent.AddChild(*viz.node);
+
+				viz.entity = scene.CreateEntity(name + "_entity", mesh);
+				if (viz.entity)
+				{
+					// Like the merged group meshes: no collision tree, the query flags only serve picking
+					// in the world editor; collision comes from each instance's proxies.
+					viz.entity->SetQueryFlags(GetQueryFlags());
+					if (isDetail)
+					{
+						viz.entity->SetRenderingDistance(WorldModelDetailDistance + cellHalfDiagonal);
+						viz.entity->SetCastShadows(false);
+					}
+					viz.node->AttachObject(*viz.entity);
+				}
+
+				m_clusterRenderables.push_back(std::move(viz));
+			};
+
+			for (size_t part = 0; part < cluster.structure.size(); ++part)
+			{
+				addMesh(cluster.structure[part], "_structure" + std::to_string(part), false);
+			}
+			for (size_t part = 0; part < cluster.detail.size(); ++part)
+			{
+				addMesh(cluster.detail[part], "_detail" + std::to_string(part), true);
+			}
+		}
+	}
+
+	void WorldModelInstance::UpdateClusterVisibility(const PortalInteriorView* interiorView)
+	{
+		for (const MeshVisualization& viz : m_clusterRenderables)
+		{
+			if (!viz.entity)
+			{
+				continue;
+			}
+
+			// From inside a room, the outdoors is only what its doors show
+			bool visible = interiorView == nullptr;
+			if (!visible)
+			{
+				const AABB& bounds = viz.entity->GetWorldBoundingBox(true);
+				visible = std::any_of(interiorView->exteriorFrustums.begin(), interiorView->exteriorFrustums.end(),
+					[&bounds](const PortalFrustum& frustum) { return frustum.IsVisible(bounds); });
+			}
+
+			viz.entity->SetVisible(visible);
+		}
 	}
 }

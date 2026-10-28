@@ -94,6 +94,12 @@ message CombatSettings {
 	// Damage multiplier of a critical direct damage spell hit (1.5 = +50%). CritDamageBonus
 	// spell modifiers scale the bonus part of it.
 	optional float spell_crit_multiplier = 31 [default = 1.5];
+
+	// === Mana Regeneration ===
+	// Share (in percent) of a unit's normal mana regeneration that keeps flowing while it is
+	// casting, i.e. during the five seconds after it last spent mana. ModCastingManaRegenPercent
+	// auras (talents, buffs) add percentage points on top; the total is clamped to 0..100.
+	optional float casting_mana_regen_percent = 32 [default = 30.0];
 }
 
 // Wrapper for loading

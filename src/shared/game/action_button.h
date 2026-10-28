@@ -2,6 +2,7 @@
 
 #include "base/typedefs.h"
 
+#include <array>
 #include <map>
 
 namespace io
@@ -52,7 +53,15 @@ namespace mmo
 
 	typedef action_button_type::Enum ActionButtonType;
 
-	constexpr uint32 MaxActionButtons = 12;
+	/// Number of action buttons a single action bar holds.
+	constexpr uint32 ActionButtonsPerBar = 12;
+
+	/// Number of action bars a character has: the main bar plus the second bar above it, which the
+	/// player can show through the interface options.
+	constexpr uint32 ActionBarCount = 2;
+
+	/// Total number of action button slots a character owns across all action bars.
+	constexpr uint32 MaxActionButtons = ActionButtonsPerBar * ActionBarCount;
 
 	/// Defines data of an action button.
 	struct ActionButton final

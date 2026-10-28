@@ -100,9 +100,44 @@ namespace mmo
 		return "Textures/Minimaps/" + worldName + "/" + std::to_string(pageIndex) + ".htex";
 	}
 
-	MinimapBaker::Stats MinimapBaker::BakeAll(const bool onlyStale, const Region& region)
+	std::vector<MinimapBaker::PageCoord> MinimapBaker::CollectPages(const bool onlyStale, const Region& region, Stats& stats)
 	{
-		Stats stats;
+		std::vector<PageCoord> pages;
+		for (uint32 z = 0; z < m_terrain.GetHeight(); ++z)
+		{
+			for (uint32 x = 0; x < m_terrain.GetWidth(); ++x)
+			{
+				if (!region.Contains(x, z) || !AssetRegistry::HasFile(m_terrain.GetPageFilename(x, z)))
+				{
+					continue;
+				}
+
+				const terrain::Page* page = m_terrain.GetPage(x, z);
+				if (!page)
+				{
+					continue;
+				}
+
+				if (onlyStale && !page->IsChanged() && IsUpToDate(x, z))
+				{
+					++stats.upToDate;
+					continue;
+				}
+
+				pages.push_back({ x, z });
+			}
+		}
+
+		return pages;
+	}
+
+	bool MinimapBaker::BakeSinglePage(const uint32 x, const uint32 z)
+	{
+		terrain::Page* page = m_terrain.GetPage(x, z);
+		if (!page)
+		{
+			return false;
+		}
 
 		auto& gx = GraphicsDevice::Get();
 		gx.CaptureState();
@@ -111,47 +146,27 @@ namespace mmo
 		const bool lodWasEnabled = m_terrain.IsLodEnabled();
 		m_terrain.SetLodEnabled(false);
 
-		{
-			for (uint32 z = 0; z < m_terrain.GetHeight(); ++z)
-			{
-				for (uint32 x = 0; x < m_terrain.GetWidth(); ++x)
-				{
-					if (!AssetRegistry::HasFile(m_terrain.GetPageFilename(x, z)))
-					{
-						continue;
-					}
-
-					terrain::Page* page = m_terrain.GetPage(x, z);
-					if (!page)
-					{
-						continue;
-					}
-
-					if (!region.Contains(x, z))
-					{
-						continue;
-					}
-
-					if (onlyStale && !page->IsChanged() && IsUpToDate(x, z))
-					{
-						++stats.upToDate;
-						continue;
-					}
-
-					if (BakePage(*page, x, z))
-					{
-						++stats.baked;
-					}
-					else
-					{
-						++stats.failed;
-					}
-				}
-			}
-		}
+		const bool baked = BakePage(*page, x, z);
 
 		m_terrain.SetLodEnabled(lodWasEnabled);
 		gx.RestoreState();
+		return baked;
+	}
+
+	MinimapBaker::Stats MinimapBaker::BakeAll(const bool onlyStale, const Region& region)
+	{
+		Stats stats;
+		for (const PageCoord& page : CollectPages(onlyStale, region, stats))
+		{
+			if (BakeSinglePage(page.x, page.z))
+			{
+				++stats.baked;
+			}
+			else
+			{
+				++stats.failed;
+			}
+		}
 
 		ILOG("Minimap bake finished: " << stats.baked << " baked, " << stats.upToDate << " up to date, " << stats.failed << " failed");
 		return stats;

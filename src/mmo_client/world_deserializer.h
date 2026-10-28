@@ -8,6 +8,7 @@
 #include <asio/io_service.hpp>
 
 #include "base/id_generator.h"
+#include "math/aabb.h"
 #include "math/quaternion.h"
 #include "math/vector3.h"
 #include "paging/page.h"
@@ -21,6 +22,7 @@ namespace mmo
 	class Scene;
 	class WorldModelInstance;
 	class InstancedFoliage;
+	class AmbientSoundEmitters;
 
 	namespace world_version
 	{
@@ -60,16 +62,35 @@ namespace mmo
 
 		void UnloadAllEntities();
 
-		/// @brief Whether page entities are still being read or world models still being prepared.
+		/// @brief Whether page entity or foliage files are still being read, or world models still
+		///        being prepared.
 		/// @details World models are created over several dispatcher steps, so a caller that must see
 		///          the finished world (the loading screen) keeps pumping the work queue and dispatcher
-		///          until this returns false.
-		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingWorldModels > 0; }
+		///          until this returns false. Foliage files count too, so the loading screen also
+		///          waits for a page's trees.
+		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0 || m_pendingWorldModels > 0; }
+
+		/// @brief Whether content that may pass a bounds test is still on its way: an entity or
+		///        foliage file not handled yet (where its content lands is not known), or a world
+		///        model placement still being prepared whose bounds (child world models included)
+		///        pass the test. A placement whose model or child models are not all loaded yet
+		///        always counts.
+		/// @param isRelevant Tests a placement's world-space bounds, e.g. against a camera frustum.
+		bool HasPendingWorldModels(const std::function<bool(const AABB&)>& isRelevant) const;
+
+		/// @brief Sets where placements register the looping sounds of their meshes, or null for none.
+		/// @details Placements created from then on register; unloading a placement removes its
+		///          sounds again. The instance never touches the target from its destructor, so the
+		///          owner clears it when it drops the world.
+		void SetAmbientSounds(AmbientSoundEmitters* ambientSounds) { m_ambientSounds = ambientSounds; }
 
 	protected:
 		Entity* CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId);
 
 		WorldModelInstance* CreateWorldModelEntity(const String& assetName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId, const std::vector<String>& kitPaths);
+
+		/// @brief Removes the mesh sounds a placement registered, if any.
+		void RemoveAmbientSounds(uint8 ownerKind, uint64 uniqueId) const;
 
 		static uint16 BuildPageIndex(uint8 x, const uint8 y)
 		{
@@ -137,11 +158,20 @@ namespace mmo
 		/// @brief Entity files posted to the work queue whose result has not been handled on the main thread yet.
 		std::atomic<uint32> m_pendingEntityFiles{ 0 };
 
+		/// @brief Foliage files posted to the work queue whose result has not been handled on the main thread yet.
+		std::atomic<uint32> m_pendingFoliageFiles{ 0 };
+
 		/// @brief World model preparations that have neither created their instance nor been dropped yet.
 		uint32 m_pendingWorldModels = 0;
 
+		/// @brief The preparations counted by m_pendingWorldModels, for HasPendingWorldModels.
+		std::map<const WorldModelPreparation*, std::weak_ptr<WorldModelPreparation>> m_preparations;
+
 		/// @brief Hardware-instanced renderer for authored foliage (trees) loaded per page.
 		std::unique_ptr<InstancedFoliage> m_foliage;
+
+		/// @brief Receives the mesh sounds of streamed placements. Not owned; may be null.
+		AmbientSoundEmitters* m_ambientSounds = nullptr;
 	};
 
 	/// @brief Supports deserializing a world from a file.

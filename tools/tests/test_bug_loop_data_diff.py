@@ -116,6 +116,19 @@ class DecoderTests(unittest.TestCase):
 				data_diff.DataDecoder(folder, protoc=os.path.join(folder, "protoc.exe"))
 			self.assertIsNone(data_diff.find_protoc(folder))
 
+	def test_schema_finds_the_singular_proto_of_a_plural_file(self):
+		# item_displays.data is described by item_display.proto (message ItemDisplayData).
+		with tempfile.TemporaryDirectory() as folder:
+			proto_dir = os.path.join(folder, "src", "shared", "proto_data")
+			os.makedirs(proto_dir)
+			with open(os.path.join(proto_dir, "item_display.proto"), "w", encoding="utf-8") as handle:
+				handle.write("message ItemDisplayEntry {}\nmessage ItemDisplayData {}\n")
+			decoder = data_diff.DataDecoder(folder, compile_modules=lambda: None)
+			module = mock.Mock(ItemDisplayData=mock.Mock(DESCRIPTOR="item display schema"))
+			with mock.patch.dict(sys.modules, {"item_display_pb2": module}):
+				self.assertEqual(decoder.schema("data/editor/data/item_displays.data"), "item display schema")
+				self.assertIsNone(decoder.schema("data/editor/data/unknown.data"))
+
 	def make_decoder(self, folder):
 		proto_dir = os.path.join(folder, "src", "shared", "proto_data")
 		os.makedirs(proto_dir)
@@ -164,6 +177,19 @@ class RealDataTests(unittest.TestCase):
 			message = decoder.decode("zones", handle.read())
 		self.assertIsNotNone(message)
 		self.assertTrue(data_diff.leaf_items(message))
+
+	def test_every_game_data_file_has_a_schema(self):
+		# A file the decoder cannot read parks every fix to it ("no schema to decode it"):
+		# item_displays.data did until SCHEMA_ALIASES named item_display.proto for it.
+		decoder = data_diff.DataDecoder(REPO_ROOT, protoc=PROTOC)
+		folder = os.path.dirname(ZONES)
+		for name in sorted(os.listdir(folder)):
+			stem, suffix = os.path.splitext(name)
+			# npc_texts.data is a leftover no code reads and no schema describes.
+			if suffix != ".data" or stem == "npc_texts":
+				continue
+			with open(os.path.join(folder, name), "rb") as handle:
+				self.assertIsNotNone(decoder.decode(stem, handle.read()), name)
 
 
 if __name__ == "__main__":

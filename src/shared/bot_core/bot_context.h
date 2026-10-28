@@ -62,11 +62,11 @@ namespace mmo
 		/// Gets whether authoritative movement info has been cached locally.
 		bool HasAuthoritativeMovementInfo() const { return m_hasAuthoritativeMovementInfo; }
 
-		/// Persists the authoritative current map id.
+		/// Persists the authoritative current map id. Any id counts as known, including 0.
 		void SetCurrentMapId(uint32 mapId);
 
-		/// Updates the current map id from a world-sync packet.
-		/// A zero map id is treated as unknown and will not overwrite an already-known non-zero map.
+		/// Updates the current map id from a world-sync packet. The server's map id is taken as it
+		/// is: map 0 is a real map, not a placeholder for "unknown".
 		void UpdateCurrentMapIdFromWorldSync(uint32 mapId);
 
 		/// Checks whether a current map id is known.
@@ -352,6 +352,15 @@ namespace mmo
 		/// @param targetPosition The target position.
 		/// @return The angle in radians.
 		Radian GetAngleTo(const Vector3& targetPosition) const;
+
+		/// Whether the bot faces a unit to within tolerance radians, as last sent to the server.
+		/// A unit it does not see counts as faced: there is nothing to turn to.
+		[[nodiscard]] bool IsFacing(uint64 targetGuid, float tolerance) const;
+
+		/// Whether a closed door stands between the bot and a position: the straight line to it
+		/// passes within a few yards of the door, which stands somewhere along it. Whatever is
+		/// there can be neither reached nor seen.
+		[[nodiscard]] bool IsBehindClosedDoor(const Vector3& position) const;
 
 	private:
 		std::shared_ptr<BotRealmConnector> m_realmConnector;

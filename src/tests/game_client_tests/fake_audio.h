@@ -39,9 +39,31 @@ namespace mmo
 			return m_volume;
 		}
 
+		void SetPlaybackPosition(const float seconds) override
+		{
+			m_playbackPosition = seconds;
+		}
+
+		float GetPlaybackPosition() const
+		{
+			return m_playbackPosition;
+		}
+
+		void Set3DSpread(const float degrees) override
+		{
+			m_spread = degrees;
+		}
+
+		float GetSpread() const
+		{
+			return m_spread;
+		}
+
 	private:
 		float m_pitch = 1.0f;
 		float m_volume = 1.0f;
+		float m_playbackPosition = 0.0f;
+		float m_spread = 0.0f;
 	};
 
 	/// @brief Headless IAudio double: hands out incrementing sound / channel indices and
@@ -95,19 +117,28 @@ namespace mmo
 			return CreateSound(fileName);
 		}
 
+		SoundIndex CreateLoopedStream3D(const String& fileName) override
+		{
+			return CreateSound(fileName);
+		}
+
 		SoundIndex CreateSound(const String& fileName, SoundType) override
 		{
 			return CreateSound(fileName);
 		}
 
-		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, float, SoundCategory) override
+		void PlaySound(const SoundIndex sound, ChannelIndex* channelIndex, const float priority, SoundCategory) override
 		{
-			Start(sound, channelIndex);
+			Start(sound, channelIndex, priority);
 		}
 
-		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3&, float, float, float, SoundCategory) override
+		void PlaySound3D(const SoundIndex sound, ChannelIndex* channelIndex, const Vector3& position, float, float, const float priority, SoundCategory) override
 		{
-			Start(sound, channelIndex);
+			Start(sound, channelIndex, priority);
+			if (channelIndex)
+			{
+				channelPositions[*channelIndex] = position;
+			}
 		}
 
 		void StopSound(ChannelIndex* channelIndex) override
@@ -141,6 +172,20 @@ namespace mmo
 			return soundLength;
 		}
 
+		/// Sound indices reported as still opening by IsSoundLoading.
+		std::set<SoundIndex> loadingSounds;
+
+		bool IsSoundLoading(const SoundIndex sound) override
+		{
+			return loadingSounds.count(sound) != 0;
+		}
+
+		/// @brief Index the next created sound gets, so a test can mark it loading beforehand.
+		SoundIndex GetNextSoundIndex() const
+		{
+			return m_nextSound;
+		}
+
 		ISoundInstance* GetSoundInstance(SoundIndex) override
 		{
 			return nullptr;
@@ -172,6 +217,18 @@ namespace mmo
 			lowPassCutoffHz = cutoffHz;
 		}
 
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override
+		{
+			listenerForward = forward;
+			listenerUp = up;
+		}
+
+		/// @brief The listener forward direction last requested.
+		Vector3 listenerForward { 0.0f, 0.0f, -1.0f };
+
+		/// @brief The listener up direction last requested.
+		Vector3 listenerUp { 0.0f, 1.0f, 0.0f };
+
 		/// @brief The low-pass cutoff last requested, in Hz. 0 means the audio is dry.
 		float lowPassCutoffHz = 0.0f;
 
@@ -181,6 +238,24 @@ namespace mmo
 			return m_channels[channel].GetVolume();
 		}
 
+		/// @brief Gets the playback position last set on the given channel, in seconds.
+		float GetChannelPlaybackPosition(const ChannelIndex channel)
+		{
+			return m_channels[channel].GetPlaybackPosition();
+		}
+
+		/// @brief Gets the 3D spread in degrees last set on the given channel.
+		float GetChannelSpread(const ChannelIndex channel)
+		{
+			return m_channels[channel].GetSpread();
+		}
+
+		/// @brief World position each 3D channel was started at.
+		std::map<ChannelIndex, Vector3> channelPositions;
+
+		/// @brief Priority each channel was started with.
+		std::map<ChannelIndex, float> channelPriorities;
+
 		/// @brief Whether a sound created from the given file was played at least once.
 		bool PlayedFile(const String& fileName) const
 		{
@@ -188,13 +263,14 @@ namespace mmo
 		}
 
 	private:
-		void Start(const SoundIndex sound, ChannelIndex* channelIndex)
+		void Start(const SoundIndex sound, ChannelIndex* channelIndex, const float priority)
 		{
 			const auto it = m_files.find(sound);
 			playedFiles.push_back(it == m_files.end() ? String() : it->second);
 
 			const ChannelIndex channel = m_nextChannel++;
 			startedChannels.push_back(channel);
+			channelPriorities[channel] = priority;
 
 			if (channelIndex)
 			{

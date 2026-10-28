@@ -19,7 +19,11 @@ namespace mmo
 	/// per-page water-surface vertex heights, and replicates the terrain's world→page math to provide
 	/// authoritative `HasWater` / `GetWaterSurface` checks for swim validation.
 	///
-	/// Modeled on ServerCollisionMap: pages are loaded once on construction and absent pages skipped.
+	/// Modeled on ServerCollisionMap: pages are loaded once on construction.
+	///
+	/// On a map with terrain, a page without a page file is open ocean at the sea level, exactly as
+	/// the client's terrain treats it (terrain::Page::IsOceanPlaceholder), and so is everything off
+	/// the page grid. A map without any page file (an interior, WMO-only map) has no water at all.
 	class ServerWaterMap final : public NonCopyable
 	{
 	public:
@@ -28,8 +32,9 @@ namespace mmo
 		explicit ServerWaterMap(const std::string& mapName);
 		~ServerWaterMap() override = default;
 
-		/// @brief Returns true when at least one page with water was loaded.
-		[[nodiscard]] bool IsLoaded() const { return !m_pages.empty(); }
+		/// @brief Returns true when the map has terrain (and therefore at least its open ocean) or at
+		///        least one page with water.
+		[[nodiscard]] bool IsLoaded() const { return m_hasTerrain || !m_pages.empty(); }
 
 		/// @brief Returns true if there is a water quad at the given world XZ position.
 		[[nodiscard]] bool HasWater(float x, float z) const;
@@ -56,8 +61,21 @@ namespace mmo
 		/// Returns the page record for the given page indices, or nullptr if not loaded.
 		[[nodiscard]] const PageWater* GetPage(uint32 pageX, uint32 pageZ) const;
 
+		/// Returns true if a position lies in open ocean: on a terrain map, over a page without a
+		/// page file or off the page grid.
+		[[nodiscard]] bool IsOpenOcean(int32 pageX, int32 pageZ) const;
+
 	private:
 		/// Loaded page water records keyed by (pageX + pageZ * MaxPages).
 		std::unordered_map<uint32, PageWater> m_pages;
+
+		/// Whether a page file exists, indexed (pageX + pageZ * MaxPages).
+		std::vector<bool> m_pageFileExists;
+
+		/// Whether any page file exists, i.e. whether the map has terrain at all.
+		bool m_hasTerrain = false;
+
+		/// Height of the open ocean, from the world file's terrain chunk.
+		float m_seaLevel = 0.0f;
 	};
 }

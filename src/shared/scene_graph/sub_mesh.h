@@ -3,6 +3,8 @@
 #pragma once
 
 #include <set>
+#include <utility>
+#include <vector>
 
 #include "graphics/graphics_device.h"
 #include "graphics/material.h"
@@ -32,6 +34,9 @@ namespace mmo
 		/// @brief Gets the material assigned to this sub mesh.
 		[[nodiscard]] MaterialPtr& GetMaterial() { return m_material; }
 
+		/// @brief Gets the material assigned to this sub mesh.
+		[[nodiscard]] const MaterialPtr& GetMaterial() const { return m_material; }
+
 		void SetMaterialName(const String& name);
 
 		/// @brief Sets the material used by this sub mesh.
@@ -42,7 +47,7 @@ namespace mmo
 
 		void ClearBoneAssignments();
 
-		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		typedef std::vector<std::pair<size_t, VertexBoneAssignment>> VertexBoneAssignmentList;
 		const VertexBoneAssignmentList& GetBoneAssignments() const { return m_boneAssignments; }
 
 		void CompileBoneAssignments();

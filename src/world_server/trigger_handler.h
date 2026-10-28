@@ -246,14 +246,19 @@ namespace mmo
 		/// Plays a sound entry at a position for every player in range, possibly repeated.
 		void HandlePlaySound(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Executes one trigger picked at random from the ids in the action's data.
+		void HandleRandomTrigger(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Sends a positional sound entry to every player of a world instance within a radius.
 		/// @returns Number of players the sound was sent to.
 		uint32 PlaySoundAtPosition(WorldInstance& world, uint32 sound, const Vector3& position, float radius);
 
 		/// Collects all alive players currently in the given world instance.
 		/// @param world The world instance to enumerate. May be nullptr.
+		/// @param includeObservers If true, invisible GMs are included. Target selection must leave this
+		///        false so an observing GM never influences an encounter; only message delivery passes true.
 		/// @return Vector of alive player units (possibly empty).
-		std::vector<GameUnitS*> GetPlayersInWorld(WorldInstance* world) const;
+		std::vector<GameUnitS*> GetPlayersInWorld(WorldInstance* world, bool includeObservers = false) const;
 
 		/// Invokes a callback for each target an action resolves to. For most targets this is a single
 		/// object; for the AllPlayers target it is every player in the instance.

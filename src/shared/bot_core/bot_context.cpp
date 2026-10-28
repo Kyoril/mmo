@@ -43,25 +43,18 @@ namespace mmo
 
 	void BotContext::SetCurrentMapId(const uint32 mapId)
 	{
+		// Map 0 is a map like any other - "Development" on the dev realm - not "unknown". Treating
+		// it as unknown made the movement controller guess the map from whichever nav mesh offered
+		// the shortest path, and bots on map 0 walked another map's mesh: through the walls of an
+		// inn that mesh knows nothing about, and onto the floor above rats in its cellar.
 		m_currentMapId = mapId;
-		m_hasCurrentMapId = mapId != 0;
+		m_hasCurrentMapId = true;
 	}
 
 	void BotContext::UpdateCurrentMapIdFromWorldSync(const uint32 mapId)
 	{
-		if (mapId != 0)
-		{
-			SetCurrentMapId(mapId);
-			return;
-		}
-
-		if (m_hasCurrentMapId && m_currentMapId != 0)
-		{
-			return;
-		}
-
-		m_currentMapId = 0;
-		m_hasCurrentMapId = false;
+		// The world server says where the character is; there is nothing better to go by.
+		SetCurrentMapId(mapId);
 	}
 
 	void BotContext::SendChatMessage(const std::string& message, ChatType chatType, const std::string& target)
@@ -810,7 +803,7 @@ namespace mmo
 		const BotUnit* target = GetUnit(targetGuid);
 		if (target)
 		{
-			FacePosition(target->GetPosition());
+			FacePosition(target->GetPositionAt(GetAsyncTimeMs()));
 		}
 	}
 
@@ -832,6 +825,69 @@ namespace mmo
 		}
 
 		return GetDistanceTo(target->GetPosition());
+	}
+
+	bool BotContext::IsBehindClosedDoor(const Vector3& position) const
+	{
+		// A door this far from the line still blocks it: a nave entrance is wider than a door
+		// leaf, and a line passing five yards beside the Hollow Choir seal still ran into it.
+		constexpr float DoorHalfWidth = 6.0f;
+
+		const Vector3 from = m_cachedMovementInfo.position;
+		const float segX = position.x - from.x;
+		const float segZ = position.z - from.z;
+		const float lengthSquared = segX * segX + segZ * segZ;
+		if (lengthSquared < 0.01f)
+		{
+			return false;
+		}
+
+		// A unit standing this close to a closed door counts as behind it even when the door lies a
+		// little past it on the line: the Hollow Choir's corridor pack stands two yards behind the
+		// barrier, seen at a slant the door "was not between", and the tank walked up to the barrier
+		// for it and pulled the pack and Cantor Veyr through it.
+		constexpr float DoorTightRadius = 4.0f;
+
+		for (const Vector3& door : GetObjectManager().GetClosedDoorPositions())
+		{
+			const float t = ((door.x - from.x) * segX + (door.z - from.z) * segZ) / lengthSquared;
+			if (t <= 0.0f)
+			{
+				continue;
+			}
+			if (t >= 1.0f)
+			{
+				const float ux = position.x - door.x;
+				const float uz = position.z - door.z;
+				if (ux * ux + uz * uz <= DoorTightRadius * DoorTightRadius)
+				{
+					return true;
+				}
+				continue;
+			}
+
+			const float dx = from.x + segX * t - door.x;
+			const float dz = from.z + segZ * t - door.z;
+			if (dx * dx + dz * dz <= DoorHalfWidth * DoorHalfWidth)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool BotContext::IsFacing(const uint64 targetGuid, const float tolerance) const
+	{
+		const BotUnit* target = GetUnit(targetGuid);
+		if (!target || targetGuid == GetSelectedCharacterGuid())
+		{
+			return true;
+		}
+
+		const float wanted = GetAngleTo(target->GetPositionAt(GetAsyncTimeMs())).GetValueRadians();
+		const float facing = m_cachedMovementInfo.facing.GetValueRadians();
+		return std::abs(std::remainder(wanted - facing, 2.0f * 3.14159265f)) <= tolerance;
 	}
 
 	Radian BotContext::GetAngleTo(const Vector3& targetPosition) const

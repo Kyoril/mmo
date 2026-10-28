@@ -2,7 +2,8 @@
 
 """Mechanical diff guard: decides, without any model, whether a bug-loop diff may ship without
 human review. A triage or fixer that was talked into something cannot talk its way past this
-file. Every rule errs towards parking: a parked fix costs a review, a bad ship costs players."""
+file. The rules park what could weaken security or the server's economy; ordinary client and
+gameplay code ships on the gates (fast gate here, full gate and E2E in the nightly before deploy)."""
 
 import collections
 import os
@@ -35,7 +36,36 @@ ALLOWED_ROOTS = (
 	"src/shared/graphics/", "src/shared/graphics_d3d11/", "src/shared/graphics_metal/", "src/shared/terrain/",
 	"src/shared/deferred_shading/", "src/shared/audio/", "src/shared/math/", "src/shared/client_data/",
 	"data/client/Interface/", "data/client/Locales/", "data/editor/data/", "data/scripts/",
+	# Bots are a client-side test and load tool: they cannot do anything a player client cannot.
+	"src/shared/bot_core/", "src/shared/bot_ai/", "src/shared/bot_chat/",
+	# Prose only: nothing builds, loads or runs it.
+	"docs/", "e2e/README.md",
 )
+# The client's copy of a game data file (data/client/ClientDB/<name>.data) is exported from the
+# editor's data/editor/data/<name>.data. It ships when the editor file changes with it, because the
+# guard decodes and judges that one; a client-only data change still parks.
+CLIENT_DB_PREFIX = "data/client/ClientDB/"
+# A test suite's CMakeLists.txt registers sources and suites. CMake can run anything at configure
+# time, so only lines of these shapes may change; anything else parks as before.
+TEST_CMAKE = re.compile(r"^src/tests/([a-z0-9_]+/)?CMakeLists\.txt$")
+_CMAKE_WORD = r"[A-Za-z0-9_]+"
+_CMAKE_SOURCE = r"\$\{CMAKE_CURRENT_SOURCE_DIR\}(/[A-Za-z0-9_.\-]+)+\.(cpp|cc|cxx|c|h|hpp)"
+_CMAKE_DIR = r"\$\{CMAKE_SOURCE_DIR\}(/[A-Za-z0-9_.\-]+)+"
+TEST_CMAKE_LINE = re.compile(
+	r"^\s*(#.*"
+	r"|mmo_add_test\(" + _CMAKE_WORD + r"(\s+(" + _CMAKE_WORD + r"|\$\{" + _CMAKE_WORD + r"\}))*\)?"
+	r"|(" + _CMAKE_WORD + r"|\$\{" + _CMAKE_WORD + r"\})(\s+(" + _CMAKE_WORD + r"|\$\{" + _CMAKE_WORD + r"\}))*\)?"
+	r"|add_subdirectory\(" + _CMAKE_WORD + r"\)"
+	r"|(target_sources|target_include_directories|target_compile_definitions)\(" + _CMAKE_WORD + r"\s+PRIVATE"
+	r"|set_source_files_properties\("
+	r"|PROPERTIES\s+HEADER_FILE_ONLY\s+(TRUE|ON)\s*\)?"
+	r"|" + _CMAKE_SOURCE +
+	r"|" + _CMAKE_DIR +
+	r"|MMO_[A-Z0-9_]+=\"" + _CMAKE_DIR + r"\""
+	r"|if\s*\((NOT\s+)?MMO_[A-Z0-9_]+(\s+(OR|AND)\s+(NOT\s+)?MMO_[A-Z0-9_]+)*\)"
+	r"|if\s*\(EXISTS\s+\"" + _CMAKE_DIR + r"\"\)"
+	r"|else\(\)|endif\(\)|\)"
+	r")?\s*\)?\s*$")
 
 # An additional deny layer inside (and outside) the allow-list.
 PROTECTED_PREFIXES = (
@@ -65,6 +95,8 @@ ROOT_SUFFIXES = (
 	("data/client/Locales/", (".txt",)),
 	("data/editor/data/", (".data",)),
 	("data/scripts/", (".lua",)),
+	("docs/", (".md",)),
+	("e2e/README.md", (".md",)),
 )
 # File types each test root may ship. A C-family test may only #include headers (TEST_INCLUDE).
 TEST_SUFFIXES = (
@@ -74,8 +106,7 @@ TEST_SUFFIXES = (
 HEADER_SUFFIXES = (".h", ".hpp", ".hxx", ".inl")
 # Server-authoritative code: here an edit to reward, loot or economy logic needs a human, literals or not.
 SERVER_ROOTS = ("src/shared/game/", "src/shared/game_server/", "src/world_server/", "src/realm_server/", "data/scripts/")
-# Client UI Lua cannot cheat the server, so a numeric condition alone does not park there.
-CLIENT_UI_ROOT = "data/client/Interface/"
+# The client cannot cheat the server, so tuned values and numeric conditions only park server code.
 
 
 def _word_pattern(words):
@@ -122,6 +153,7 @@ LUA_LOADER = re.compile(r"\b(require|dofile|loadstring|loadfile)\b|\bload\s*\(")
 GOTO = re.compile(r"\bgoto\b")
 # The one preprocessor directive a test may change: an include of a header by a plain path.
 TEST_INCLUDE = re.compile(r'^\s*#\s*include\s*(?:<([^<>"]+)>|"([^<>"]+)")\s*(?://.*)?$')
+PRAGMA_ONCE = re.compile(r"^\s*#\s*pragma\s+once\s*(?://.*)?$")
 # Line separators str.splitlines() honours, other control characters, and bidi overrides.
 CONTROL = re.compile("[\x00-\x08\x0a-\x1f\x7f\x85\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$")
@@ -247,7 +279,26 @@ def parse_unified_diff(text):
 
 
 def _protected(path):
+	if TEST_CMAKE.match(path):
+		return False  # judged line by line instead (_test_cmake_reasons)
 	return path.startswith(PROTECTED_PREFIXES) or bool(PROTECTED_NAMES.search(path))
+
+
+def _client_db_mirror(path, listed):
+	"""data/client/ClientDB/<name>.data changed together with data/editor/data/<name>.data."""
+	if not path.startswith(CLIENT_DB_PREFIX) or not path.endswith(".data") or "/" in path[len(CLIENT_DB_PREFIX):]:
+		return False
+	return DATA_PREFIX + path[len(CLIENT_DB_PREFIX):] in listed
+
+
+def _test_cmake_reasons(hunk):
+	reasons = []
+	for line in hunk.added + hunk.removed:
+		if CONTROL.search(line):
+			reasons.append("{}: control character in a changed line".format(hunk.path))
+		elif not TEST_CMAKE_LINE.match(line):
+			reasons.append("{}: CMake line outside the test-registration shapes: {}".format(hunk.path, _short(line)))
+	return reasons
 
 
 def _is_test(path):
@@ -278,6 +329,17 @@ def _plain_header(match):
 		return False
 	# <vector> has no suffix; anything with one must be a header.
 	return target.lower().endswith(HEADER_SUFFIXES) or (angle is not None and "." not in parts[-1])
+
+
+def _harmless_directive(path, line):
+	"""An include of a header by a plain path, or "#pragma once" in a header: every new header and
+	most fixes need one, and neither can disable code the way #if 0 or #define can."""
+	if not path.lower().endswith(C_FAMILY_SUFFIXES):
+		return False
+	if PRAGMA_ONCE.match(line):
+		return path.lower().endswith(HEADER_SUFFIXES)
+	include = TEST_INCLUDE.match(line)
+	return include is not None and _plain_header(include)
 
 
 def _test_line_reasons(hunk):
@@ -355,7 +417,7 @@ def _line_reasons(hunk):
 		elif REJECTION.search(line):
 			reasons.append("{}: removed a rejection path: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
-		if PREPROCESSOR.search(line):
+		if PREPROCESSOR.search(line) and not _harmless_directive(path, line):
 			reasons.append("{}: preprocessor directive changed: {}".format(path, _short(line)))
 		if lua and LUA_LOADER.search(line):
 			reasons.append("{}: loads code (require/dofile/load): {}".format(path, _short(line)))
@@ -379,11 +441,11 @@ def _line_reasons(hunk):
 		if path.lower().endswith(C_FAMILY_SUFFIXES) and line.rstrip().endswith("\\"):
 			reasons.append("{}: removed a line continuation: {}".format(path, _short(line)))
 	for line in removed_new + added_new:
-		if not NUMERIC_LITERAL.search(line):
+		if not server or not NUMERIC_LITERAL.search(line) or _comment_only(line, lua):
 			continue
 		if TUNED.search(line):
 			reasons.append("{}: changed a tuned value: {}".format(path, _short(line)))
-		elif not path.startswith(CLIENT_UI_ROOT) and CONDITION.search(CONDITION_NOISE.sub(" ", line)):
+		elif CONDITION.search(CONDITION_NOISE.sub(" ", line)):
 			reasons.append("{}: changed a numeric condition: {}".format(path, _short(line)))
 	return reasons
 
@@ -442,6 +504,9 @@ def _hunk_reasons(hunks, listed, load_data):
 			reasons.append("{}: {}".format(path, problem))
 		if any("Subproject commit" in line for line in hunk.removed + hunk.added + list(hunk.unchanged)):
 			reasons.append("{}: Subproject commit line in diff (submodule pointer)".format(path))
+		if TEST_CMAKE.match(path):
+			reasons.extend(_test_cmake_reasons(hunk))
+			continue
 		if _is_test(path):
 			reasons.extend(_test_line_reasons(hunk))
 			continue
@@ -494,6 +559,35 @@ def is_production(path):
 	return not _is_test(path)
 
 
+# Findings that point the reviewer at something but do not park a fix on their own; the review and
+# the gate decide. Since 2026-10-17 they caused most parks (tuned values and numeric conditions 66,
+# the allow-list and file types 42), and the maintainer shipped those fixes as they were. Protected
+# paths, security-sensitive edits, server-side reward and economy logic and economy data, size
+# limits, file types in test folders (the gate compiles and runs them) and preprocessor directives
+# keep parking: an ordinary #include or #pragma once never raises one (_harmless_directive); what
+# is left are shapes like `#define private public` or `#if 0` around a check.
+ADVISORY_FINDINGS = re.compile(r": (changed a tuned value|changed a numeric condition|outside the auto-ship allow-list)(:|$)")
+FILE_TYPE_FINDING = ": file type not allowed to auto-ship here"
+# Client data cannot cheat the server: a changed client data file is a note for the reviewer.
+CLIENT_DATA_PREFIX = "data/client/"
+
+
+# Server files whose numbers are economy: a tuned value or numeric condition there keeps parking,
+# even without an economy word on the line (`if (count > 1)` in loot_instance.cpp).
+ECONOMY_PATH = re.compile(r"loot|reward|vendor|quest|xp|experience|money|gold|price|trade|auction|honor|reputation"
+	r"|drop|credit|level|talent|trainer|inventory|mail|bank", re.IGNORECASE)
+
+
+def is_advisory(reason):
+	path, _, finding = reason.partition(": ")
+	if ADVISORY_FINDINGS.search(reason):
+		tuned = finding.startswith(("changed a tuned value", "changed a numeric condition"))
+		return not (tuned and path.startswith(SERVER_ROOTS) and ECONOMY_PATH.search(path.rsplit("/", 1)[-1]))
+	if reason.endswith(FILE_TYPE_FINDING):
+		return not _is_test(path)
+	return path.startswith(CLIENT_DATA_PREFIX) and finding == "binary file changed"
+
+
 def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, max_entries=5, max_test_lines=MAX_TEST_LINES):
 	reasons = []
 	data = {}
@@ -501,6 +595,7 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 	test_lines = 0
 	hunks = parse_unified_diff(diff_text)
 	hunk_paths = {hunk.path for hunk in hunks if hunk.path}
+	listed = {change.path for change in changes}
 	for change in changes:
 		path = change.path
 		if path in SUBMODULE_ROOTS:
@@ -509,9 +604,11 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 			reasons.append("{}: tools/tests changes run on CI and gates; never auto-shipped".format(path))
 		if _protected(path):
 			reasons.append("{}: protected path".format(path))
+		if _client_db_mirror(path, listed):
+			continue  # the editor file it is exported from is judged instead
 		if not _allowed(path):
 			reasons.append("{}: outside the auto-ship allow-list".format(path))
-		elif not _suffix_allowed(path):
+		elif not _suffix_allowed(path) and not TEST_CMAKE.match(path):
 			reasons.append("{}: file type not allowed to auto-ship here".format(path))
 		if path.startswith(DATA_PREFIX) and path.endswith(".data"):
 			reasons.extend(_data_reasons(path, load_data, decoder, max_entries, data))
@@ -534,4 +631,7 @@ def evaluate(changes, diff_text, load_data=None, decoder=None, max_lines=150, ma
 	if test_lines > max_test_lines:
 		reasons.append("{} changed test lines (limit {})".format(test_lines, max_test_lines))
 	reasons.extend(_hunk_reasons(hunks, {change.path for change in changes}, load_data))
-	return {"auto_ship_allowed": not reasons, "reasons": reasons, "changed_lines": changed_lines, "data": data}
+	advisories = [reason for reason in reasons if is_advisory(reason)]
+	reasons = [reason for reason in reasons if not is_advisory(reason)]
+	return {"auto_ship_allowed": not reasons, "reasons": reasons, "advisories": advisories,
+		"changed_lines": changed_lines, "data": data}

@@ -85,6 +85,10 @@ namespace mmo
 		void SetVolume(float volume) override;
 		float GetVolume() const override;
 
+		void SetPlaybackPosition(float seconds) override;
+
+		void Set3DSpread(float degrees) override;
+
 		// Add sound tracking
 		SoundIndex GetSoundIndex() const;
 		void SetSoundIndex(SoundIndex soundIndex);
@@ -111,6 +115,9 @@ namespace mmo
 
 		void Update(const Vector3& listenerPosition, float time) override;
 
+		/// @copydoc IAudio::SetListenerOrientation
+		void SetListenerOrientation(const Vector3& forward, const Vector3& up) override;
+
 		SoundIndex CreateSound(const String &fileName) override;
 
 		SoundIndex CreateStream(const String &fileName) override;
@@ -118,6 +125,8 @@ namespace mmo
 		SoundIndex CreateLoopedSound(const String &fileName) override;
 
 		SoundIndex CreateLoopedStream(const String &fileName) override;
+
+		SoundIndex CreateLoopedStream3D(const String& fileName) override;
 
 		SoundIndex CreateSound(const String &fileName, SoundType type) override;
 
@@ -135,7 +144,12 @@ namespace mmo
 
 		void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) override;
 
+		/// @copydoc IAudio::Set3DListenerRelativePosition
+		void Set3DListenerRelativePosition(ChannelIndex channelIndex, const Vector3& offset) override;
+
 		float GetSoundLength(SoundIndex sound) override;
+
+		bool IsSoundLoading(SoundIndex sound) override;
 
 		ISoundInstance *GetSoundInstance(SoundIndex sound) override;
 
@@ -159,6 +173,8 @@ namespace mmo
 		SoundIndex m_nextSoundInstanceIndex;
 		FMOD::System *m_system;
 		Vector3	m_prevListenerPosition;
+		Vector3 m_listenerForward = Vector3::NegativeUnitZ;
+		Vector3 m_listenerUp = Vector3::UnitY;
 		SoundInstanceVector m_soundInstanceVector;
 		FMODChannelInstance m_channelArray[MaximumSoundChannels];
 

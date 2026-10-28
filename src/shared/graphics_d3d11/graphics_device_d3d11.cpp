@@ -8,6 +8,7 @@
 #include "occlusion_query_d3d11.h"
 #include "sampler_state_d3d11.h"
 #include "volume_texture_d3d11.h"
+#include "texture_array_d3d11.h"
 #include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
 #include "material_compiler_d3d11.h"
@@ -1779,6 +1780,19 @@ namespace mmo
 			const char* formatName = format == VolumeFormat::R8 ? "R8" : "RGBA16F";
 			WLOG("Failed to create " << width << "x" << height << "x" << depth << " " << formatName
 				<< (writable ? " writable" : "") << " volume texture - CreateTexture3D/SRV/UAV failed");
+			return nullptr;
+		}
+
+		return texture;
+	}
+
+	TextureArrayPtr GraphicsDeviceD3D11::CreateTextureArray(const uint16 width, const uint16 height, const uint16 layers, const TextureArrayFormat format, const bool writable, const bool mipmapped)
+	{
+		auto texture = std::make_shared<TextureArrayD3D11>(*this, width, height, layers, format, writable, mipmapped);
+		if (!texture->IsValid())
+		{
+			WLOG("Failed to create " << width << "x" << height << "x" << layers << " texture array"
+				<< (writable ? " (writable)" : "") << (mipmapped ? " (mipmapped)" : "") << " - CreateTexture2D/SRV/UAV failed");
 			return nullptr;
 		}
 

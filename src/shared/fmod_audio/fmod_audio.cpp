@@ -1,16 +1,64 @@
 
 #include "fmod_audio.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <thread>
 #include <unordered_set>
 
 #ifdef _WIN32
 
 #include "assets/asset_registry.h"
+#include "base/profiler.h"
 
 #include "log/default_log_levels.h"
 
 namespace mmo
 {
+	namespace
+	{
+		/// Encodes a sound instance pointer as the "file name" handed to FMOD. FMOD treats the name as a
+			/// C string and, for FMOD_NONBLOCKING sounds, copies it for its loader thread, so a raw pointer
+			/// cast would be cut off at its first zero byte. Hex text survives that copy.
+			String EncodeInstanceName(const FMODSoundInstance* instance)
+			{
+				char buffer[32];
+				std::snprintf(buffer, sizeof(buffer), "%llx", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(instance)));
+				return buffer;
+			}
+
+			/// Whether a non-blocking sound is still opening, or seeking back to its start after a stop.
+		/// Either way FMOD refuses to play it (FMOD_ERR_NOTREADY) until it is done.
+		bool IsOpening(FMOD::Sound* sound)
+		{
+			FMOD_OPENSTATE state = FMOD_OPENSTATE_READY;
+			if (!sound || sound->getOpenState(&state, nullptr, nullptr, nullptr) != FMOD_OK)
+			{
+				return false;
+			}
+
+			return state == FMOD_OPENSTATE_LOADING || state == FMOD_OPENSTATE_CONNECTING || state == FMOD_OPENSTATE_SETPOSITION;
+		}
+
+		/// Blocks until a non-blocking sound has opened. Only reached by callers that play a stream
+		/// without polling IsSoundLoading first; they pay the open on their own thread as before.
+		void WaitUntilOpened(FMOD::Sound* sound)
+		{
+			if (!IsOpening(sound))
+			{
+				return;
+			}
+
+			PROFILE_SCOPE("Audio: wait for stream open");
+			while (IsOpening(sound))
+			{
+				std::this_thread::yield();
+			}
+		}
+	}
+
 	FMODSoundInstance::FMODSoundInstance()
 	{
 		Clear();
@@ -152,6 +200,32 @@ namespace mmo
 		return 1.0f;
 	}
 
+	void FMODChannelInstance::SetPlaybackPosition(const float seconds)
+	{
+		if (!m_channel)
+		{
+			return;
+		}
+
+		FMOD::Sound* sound = nullptr;
+		unsigned int lengthMs = 0;
+		if (m_channel->getCurrentSound(&sound) != FMOD_OK || !sound || sound->getLength(&lengthMs, FMOD_TIMEUNIT_MS) != FMOD_OK || lengthMs == 0)
+		{
+			return;
+		}
+
+		const auto positionMs = static_cast<unsigned int>(std::max(0.0f, seconds) * 1000.0f) % lengthMs;
+		m_channel->setPosition(positionMs, FMOD_TIMEUNIT_MS);
+	}
+
+	void FMODChannelInstance::Set3DSpread(const float degrees)
+	{
+		if (m_channel)
+		{
+			m_channel->set3DSpread(degrees);
+		}
+	}
+
 	SoundIndex FMODChannelInstance::GetSoundIndex() const
 	{
 		return m_soundIndex;
@@ -208,7 +282,8 @@ namespace mmo
 			return;
 		}
 
-		result = m_system->init(MaximumSoundChannels, FMOD_INIT_NORMAL, 0);
+		// Scene cameras use a right-handed basis (forward = -Z, up = +Y).
+		result = m_system->init(MaximumSoundChannels, FMOD_INIT_3D_RIGHTHANDED, 0);
 		if (result != FMOD_OK)
 		{
 			m_system->release();
@@ -286,6 +361,12 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::SetListenerOrientation(const Vector3& forward, const Vector3& up)
+	{
+		m_listenerForward = forward.NormalizedCopy();
+		m_listenerUp = up.NormalizedCopy();
+	}
+
 	void FMODAudio::Update(const Vector3& listenerPos, float time)
 	{
 		FMOD_VECTOR listenerPosition;
@@ -310,16 +391,15 @@ namespace mmo
 		listenerPosition.y = listenerPos.y;
 		listenerPosition.z = listenerPos.z;
 		
-		// TODO
-		listenerForward.x = 1.0f;
-		listenerForward.y = 0.0f;
-		listenerForward.z = 0.0f;
+		listenerForward.x = m_listenerForward.x;
+		listenerForward.y = m_listenerForward.y;
+		listenerForward.z = m_listenerForward.z;
 		
-		// TODO
-		listenerUp.x = 0.0f;
-		listenerUp.y = 1.0f;
-		listenerUp.z = 0.0f;
+		listenerUp.x = m_listenerUp.x;
+		listenerUp.y = m_listenerUp.y;
+		listenerUp.z = m_listenerUp.z;
 		
+		// Intentionally zero: the Doppler scale is 1.0, so a listener velocity would shift the pitch of every 3D sound while moving.
 		listenerVelocity.x = 0.0f;
 		listenerVelocity.y = 0.0f;
 		listenerVelocity.z = 0.0f;
@@ -372,6 +452,11 @@ namespace mmo
 		return CreateSound(fileName, SoundType::SoundLooped2D);
 	}
 
+	SoundIndex FMODAudio::CreateLoopedStream3D(const String& fileName)
+	{
+		return CreateSound(fileName, SoundType::StreamLooped3D);
+	}
+
 	SoundIndex FMODAudio::CreateSound(const String& fileName, SoundType type)
 	{
 		// Check cache first
@@ -411,23 +496,35 @@ namespace mmo
 		newSoundInstance->SetFileName(fullPathName);
 		newSoundInstance->SetType(type);
 
+		const String instanceName = EncodeInstanceName(newSoundInstance);
+
 		switch (type)
 		{
 		case SoundType::Sound3D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_3D, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::SoundLooped3D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
+			break;
+
+		case SoundType::StreamLooped3D:
+			result = m_system->createStream(instanceName.c_str(), FMOD_LOOP_NORMAL | FMOD_3D, 0, &sound);
 			break;
 
 		case SoundType::Sound2D:
-			result = m_system->createSound((const char *)newSoundInstance, FMOD_DEFAULT, 0, &sound);
+			result = m_system->createSound(instanceName.c_str(), FMOD_DEFAULT, 0, &sound);
 			break;
 
 		case SoundType::SoundLooped2D:
-			result = m_system->createStream((const char *)newSoundInstance, FMOD_LOOP_NORMAL | FMOD_2D, 0, &sound);
+		{
+			// Opening a stream parses the file and fills its first decode buffer, which took 15-60 ms
+			// for zone music and ambience. FMOD does that on its loader thread instead; the file
+			// callbacks it runs there only use the thread-safe AssetRegistry.
+			PROFILE_SCOPE("Audio: createStream");
+			result = m_system->createStream(instanceName.c_str(),FMOD_LOOP_NORMAL | FMOD_2D | FMOD_NONBLOCKING, 0, &sound);
 			break;
+		}
 
 		default:
 			ELOG("Could not load sound " << fileName << ": Invalid sound type!");
@@ -483,6 +580,7 @@ namespace mmo
 
 		ASSERT((sound >= 0) && (static_cast<size_t>(sound) < m_soundInstanceVector.size()));
 		FMODSoundInstance& instance = m_soundInstanceVector[sound];
+		WaitUntilOpened(instance.GetFMODSound());
 
 		// Distance cull: don't even start non-looped 3D one-shots that the listener could
 		// never hear - they would only waste a channel while being silent.
@@ -536,9 +634,9 @@ namespace mmo
 		channel->setVolume(1.0);
 
 		// For 3D sounds, set proper rolloff mode to ensure sounds beyond max distance are inaudible
-		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D)
+		if (instance.GetType() == SoundType::Sound3D || instance.GetType() == SoundType::SoundLooped3D || instance.GetType() == SoundType::StreamLooped3D)
 		{
-			channel->setMode(FMOD_3D | FMOD_3D_LINEARSQUAREROLLOFF);
+			channel->setMode(FMOD_3D | FMOD_3D_WORLDRELATIVE | FMOD_3D_LINEARSQUAREROLLOFF);
 			channel->set3DLevel(1.0f);
 
 			// Apply spatial attributes while still paused so the sound never plays a single
@@ -689,6 +787,30 @@ namespace mmo
 		}
 	}
 
+	void FMODAudio::Set3DListenerRelativePosition(const ChannelIndex channelIndex, const Vector3& offset)
+	{
+		if (channelIndex == InvalidChannel || !m_system)
+		{
+			return;
+		}
+
+		FMOD::Channel* channel = nullptr;
+		if (m_system->getChannel(channelIndex, &channel) != FMOD_OK || !channel)
+		{
+			return;
+		}
+
+		// Right-handed listener space faces -Z. Head-relative playback prevents the
+		// player from overtaking a footstep and hearing its tail switch to the other ear.
+		const Vector3 right = m_listenerForward.Cross(m_listenerUp).NormalizedCopy();
+		const FMOD_VECTOR position = { offset.Dot(right), offset.Dot(m_listenerUp), -offset.Dot(m_listenerForward) };
+		const FMOD_VECTOR velocity = { 0.0f, 0.0f, 0.0f };
+		FMOD_MODE mode = FMOD_DEFAULT;
+		channel->getMode(&mode);
+		channel->setMode((mode & ~FMOD_3D_WORLDRELATIVE) | FMOD_3D_HEADRELATIVE);
+		channel->set3DAttributes(&position, &velocity);
+	}
+
 	float FMODAudio::GetSoundLength(SoundIndex sound)
 	{
 		if (sound == InvalidSound)
@@ -704,6 +826,7 @@ namespace mmo
 		FMODSoundInstance &soundInstance = m_soundInstanceVector[sound];
 		if (soundInstance.GetFMODSound())
 		{
+			WaitUntilOpened(soundInstance.GetFMODSound());
 			result = soundInstance.GetFMODSound()->getLength(&soundLength, FMOD_TIMEUNIT_MS);
 			if (result != FMOD_OK)
 			{
@@ -715,6 +838,16 @@ namespace mmo
 		}
 
 		return 0.0f;
+	}
+
+	bool FMODAudio::IsSoundLoading(const SoundIndex sound)
+	{
+		if (sound == InvalidSound || static_cast<size_t>(sound) >= m_soundInstanceVector.size())
+		{
+			return false;
+		}
+
+		return IsOpening(m_soundInstanceVector[sound].GetFMODSound());
 	}
 
 	ISoundInstance* FMODAudio::GetSoundInstance(SoundIndex sound)
@@ -848,7 +981,12 @@ namespace mmo
 		assert(name);
 
 		// Create sound instance pointer
-		FMODSoundInstance *soundInstance = reinterpret_cast<FMODSoundInstance *>(const_cast<char *>(name));
+		FMODSoundInstance *soundInstance = reinterpret_cast<FMODSoundInstance *>(static_cast<uintptr_t>(std::strtoull(name, nullptr, 16)));
+		if (!soundInstance)
+		{
+			*filesize = 0;
+			return FMOD_ERR_FILE_NOTFOUND;
+		}
 
 		*handle = (void *)soundInstance;
 

@@ -40,7 +40,11 @@ struct MockDatabase : IDatabase {
     bool SetRealmFeatureRequirement(uint32, uint32, bool, bool) override { return true; }
     bool RemoveRealmFeatureRequirement(uint32, uint32) override { return true; }
     std::vector<RealmFeatureRequirement> GetRealmFeatureRequirements(uint32) override { return {}; }
-    std::optional<uint32> GetRealmIdByName(const std::string&) override { return std::nullopt; }
+    std::optional<uint32> realmIdByName = std::nullopt;
+    std::optional<uint32> GetRealmIdByName(const std::string&) override { return realmIdByName; }
+    bool setRealmCapacityResult = true;
+    std::optional<std::pair<uint32, uint32>> lastRealmCapacity;
+    bool SetRealmCapacity(uint32 realmId, uint32 capacity) override { lastRealmCapacity = std::make_pair(realmId, capacity); return setRealmCapacityResult; }
     std::optional<AccountAuthData> GetAccountAuthData(std::string) override { return std::nullopt; }
     StatsSummary GetStatsSummary() override { return {}; }
     std::vector<StatsBucket> GetLoginTimeSeries(StatsRange) override { return {}; }

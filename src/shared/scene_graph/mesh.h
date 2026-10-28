@@ -8,6 +8,7 @@
 #include "graphics/index_buffer.h"
 #include "graphics/vertex_buffer.h"
 #include "math/aabb.h"
+#include "math/quaternion.h"
 #include "skeleton.h"
 
 #include <map>
@@ -28,6 +29,39 @@ namespace mmo
 		float weight;
 	};
 
+	/// @brief A looping positional sound carried by a mesh asset.
+	/// @details Every placement of the mesh plays it at the offset, which follows the placement's
+	///          rotation and scale. Playback settings (category, looping, attenuation, fades) come
+	///          from the referenced SoundEntry; the emitter only adds where and how loud.
+	struct MeshSoundEmitter
+	{
+		/// @brief Id of the SoundEntry to play.
+		uint32 soundEntryId = 0;
+
+		/// @brief Position in mesh-local space.
+		Vector3 offset = Vector3::Zero;
+
+		/// @brief Multiplier on the entry's volume.
+		float volume = 1.0f;
+
+		/// @brief Audible range override in metres. 0 uses the entry's max distance.
+		float maxDistance = 0.0f;
+	};
+
+	/// @brief A mesh sound emitter of one placement, resolved to world space.
+	struct PlacedSoundEmitter
+	{
+		uint32 soundEntryId = 0;
+		Vector3 position = Vector3::Zero;
+		float volume = 1.0f;
+		float maxDistance = 0.0f;
+	};
+
+	class Mesh;
+
+	/// @brief Appends the sound emitters of a mesh placed with the given transform, in world space.
+	void AppendPlacedSoundEmitters(const Mesh& mesh, const Vector3& position, const Quaternion& orientation, const Vector3& scale, std::vector<PlacedSoundEmitter>& out);
+
 	class Mesh final
 	{
         friend class SubMesh;
@@ -37,7 +71,10 @@ namespace mmo
 	public:
 		typedef std::vector<std::unique_ptr<SubMesh>> SubMeshList;
 		typedef std::unordered_map<std::string, uint16> SubMeshNameMap;
-		typedef std::multimap<size_t, VertexBoneAssignment> VertexBoneAssignmentList;
+		/// Bone weights as (vertex index, assignment), sorted by vertex index once compiled. A vector,
+		/// not a multimap: character meshes carry ~75k of them, and a node allocation each was most
+		/// of their load time.
+		typedef std::vector<std::pair<size_t, VertexBoneAssignment>> VertexBoneAssignmentList;
 		typedef std::vector<uint16> IndexMap;
 
 	public:
@@ -110,6 +147,12 @@ namespace mmo
 
 		AABBTree& GetCollisionTree() { return m_collisionTree; }
 
+		/// @brief Gets the looping positional sounds every placement of this mesh plays.
+		[[nodiscard]] const std::vector<MeshSoundEmitter>& GetSoundEmitters() const { return m_soundEmitters; }
+
+		/// @brief Replaces the sound emitters of this mesh.
+		void SetSoundEmitters(std::vector<MeshSoundEmitter> emitters) { m_soundEmitters = std::move(emitters); }
+
     protected:
 		bool m_boneAssignmentsOutOfDate { false };
 
@@ -133,6 +176,7 @@ namespace mmo
 		VertexBoneAssignmentList m_boneAssignments;
 		std::vector<Matrix4> m_boneMatrices;
 		AABBTree m_collisionTree {};
+		std::vector<MeshSoundEmitter> m_soundEmitters;
 	};
 
 	typedef std::shared_ptr<Mesh> MeshPtr;

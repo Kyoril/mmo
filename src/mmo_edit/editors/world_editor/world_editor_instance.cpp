@@ -6,6 +6,7 @@
 #include <DetourDebugDraw.h>
 #include <imgui_internal.h>
 
+#include <chrono>
 #include <set>
 #include "editor_host.h"
 #include "icon_font.h"
@@ -56,7 +57,14 @@
 
 #include "stb_dxt.h"
 #include "minimap_baker.h"
+#include "page_bake_utils.h"
 #include "terrain_lod_baker.h"
+#include "glue_bake/glue_scene_baker.h"
+#include "terrain/far_terrain.h"
+#include "tex/png_writer.h"
+#include "graphics/material_instance.h"
+#include "base/clock.h"
+#include "base/profiler.h"
 
 namespace mmo
 {
@@ -371,9 +379,17 @@ namespace mmo
 			[this]()
 			{ Render(); },
 			[this]()
-			{ GenerateMinimaps(); },
+			{ m_openMinimapBakeDialog = true; },
 			[this]()
-			{ GenerateTerrainLod(true); });
+			{ GenerateTerrainLod(true); },
+			[this]()
+			{
+				String summary;
+				if (!BakeGlueScene(*this, GlueSceneDefinitionPath, summary))
+				{
+					ELOG("Bake Glue Scene failed: " << summary);
+				}
+			});
 
 		// Load and set transform mode icons
 		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
@@ -496,6 +512,16 @@ namespace mmo
 			DLOG("Loaded " << m_fogVolumes.size() << " local fog volume(s) for map " << fogFileName);
 		}
 
+		// River flow paths (editor-only; the pages carry the computed flow).
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->LoadFlowPaths(GetFlowPathsFileName());
+		}
+
+		CreateFarTerrain();
+
+		m_worldSettingsPanel->SetExtraContent([this]() { DrawViewSettings(); });
+
 		s_lastCreated = this;
 	}
 
@@ -525,6 +551,8 @@ namespace mmo
 		m_foliage.reset();
 		// Procedural grass also owns scene nodes and render chunks; destroy before Scene::Clear().
 		m_grass.reset();
+		// The distant terrain hangs its stand-ins below the terrain's scene node.
+		m_farTerrain.reset();
 		m_worldGrid.reset();
 		// Destroy the terrain before clearing the scene. Terrain pages own water render
 		// objects and page scene nodes that live in the scene; Scene::Clear() would destroy
@@ -631,7 +659,10 @@ namespace mmo
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
 
+		UpdateFarTerrain();
+
 		UpdateUnderwaterPreview(deltaTimeSeconds);
+		UpdateOcean();
 
 		if (m_lastAvailViewportSize.x <= 0.0f || m_lastAvailViewportSize.y <= 0.0f)
 			return;
@@ -663,6 +694,8 @@ namespace mmo
 		const String spawnListId = "Spawns##" + GetAssetPath().string();
 
 		HandleKeyboardShortcuts();
+
+		DrawMinimapBakeDialog();
 
 		// Pick up kits saved by the prop kit editor since the last frame.
 		PollKitCache();
@@ -995,8 +1028,23 @@ namespace mmo
 		}
 	}
 
+	String WorldEditorInstance::GetFlowPathsFileName() const
+	{
+		Path flowPath = m_assetPath;
+		flowPath.replace_extension(".hflow");
+		String fileName = flowPath.string();
+		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
+		return fileName;
+	}
+
 	bool WorldEditorInstance::Save()
 	{
+		// River flow first: a pending flow apply changes terrain pages, which are saved below.
+		if (m_waterEditMode)
+		{
+			m_waterEditMode->SaveFlowPaths(GetFlowPathsFileName());
+		}
+
 		// Build mesh name index map (only for mesh entities)
 		std::map<String, uint32> entityNames;
 		for (const auto &mapEntity : m_mapEntities)
@@ -1047,9 +1095,12 @@ namespace mmo
 			}
 
 			ChunkWriter terrainWriter(terrainChunk, writer);
+			// The sea level trails the chunk: older readers stop after the material name, and a
+			// chunk without it means sea level 0.
 			writer
 				<< io::write<uint8>(m_hasTerrain)
-				<< io::write_dynamic_range<uint16>(defaultMaterialName);
+				<< io::write_dynamic_range<uint16>(defaultMaterialName)
+				<< io::write<float>(m_terrain->GetSeaLevel());
 			terrainWriter.Finish();
 		}
 
@@ -1064,6 +1115,7 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world file " << GetAssetPath());
+		RemindGlueBakeMayBeStale(*this);
 
 		struct MaterialOverride
 		{
@@ -1892,6 +1944,397 @@ namespace mmo
 		m_cameraVelocity = Vector3::Zero;
 	}
 
+	EditorViewpoint WorldEditorInstance::GetViewpoint() const
+	{
+		EditorViewpoint viewpoint;
+		viewpoint.position = m_camera->GetDerivedPosition();
+
+		const Vector3 forward = m_cameraAnchor->GetDerivedOrientation() * Vector3::NegativeUnitZ;
+		viewpoint.yawDegrees = Radian(std::atan2(-forward.x, -forward.z)).GetValueDegrees();
+		if (viewpoint.yawDegrees < 0.0f)
+		{
+			viewpoint.yawDegrees += 360.0f;
+		}
+		viewpoint.pitchDegrees = Radian(std::asin(std::clamp(forward.y, -1.0f, 1.0f))).GetValueDegrees();
+		viewpoint.fovDegrees = m_camera->GetFOVy().GetValueDegrees();
+		if (m_skyComponent)
+		{
+			viewpoint.timeOfDay = m_skyComponent->GetNormalizedTimeOfDay();
+		}
+		return viewpoint;
+	}
+
+	void WorldEditorInstance::SetViewpoint(const EditorViewpoint& viewpoint)
+	{
+		// Yaw about the world up axis, then pitch about the rotated right axis: the same order the
+		// mouse look uses, so dragging afterwards continues smoothly.
+		const Quaternion orientation =
+			Quaternion(Degree(viewpoint.yawDegrees), Vector3::UnitY) *
+			Quaternion(Degree(std::clamp(viewpoint.pitchDegrees, -89.0f, 89.0f)), Vector3::UnitX);
+
+		m_cameraAnchor->SetOrientation(orientation);
+
+		// The camera hangs behind the anchor; place the anchor so the eye lands on the position.
+		m_cameraAnchor->SetPosition(viewpoint.position - orientation * m_cameraNode->GetPosition());
+		m_cameraVelocity = Vector3::Zero;
+
+		m_camera->SetFOVy(Degree(std::clamp(viewpoint.fovDegrees, 5.0f, 150.0f)));
+
+		// Derived transforms are refreshed lazily during rendering; page streaming reads the camera's
+		// derived position before the next frame, so bring it up to date now.
+		m_cameraAnchor->Update(true, true);
+		m_camera->InvalidateView();
+
+		if (viewpoint.timeOfDay >= 0.0f && m_skyComponent)
+		{
+			m_skyComponent->SetNormalizedTimeOfDay(std::fmod(viewpoint.timeOfDay, 1.0f));
+		}
+	}
+
+	void WorldEditorInstance::CreateFarTerrain()
+	{
+		m_farTerrain.reset();
+
+		if (!m_terrain || !m_hasTerrain)
+		{
+			return;
+		}
+
+		// Same material setup as the client's WorldState::CreateFarTerrain, so the distance looks alike.
+		const MaterialPtr parent = MaterialManager::Get().Load("Models/Terrain/FarTerrain.hmat");
+		if (!parent)
+		{
+			WLOG("Distant terrain disabled: its material could not be loaded");
+			return;
+		}
+
+		auto material = std::make_shared<MaterialInstance>("EditorFarTerrain", parent);
+		material->SetTextureParameter("Normal", "Textures/Character/BaseFlattenNormalMap.htex");
+		material->SetScalarParameter("Specular", 0.2f);
+		material->SetScalarParameter("Roughness", 1.0f);
+
+		auto& workQueue = m_workQueue;
+		auto& dispatcher = m_dispatcher;
+		m_farTerrain = std::make_unique<terrain::FarTerrain>(
+			*m_terrain,
+			std::move(material),
+			[&workQueue](std::function<void()> work) { workQueue.post(std::move(work)); },
+			[&dispatcher](std::function<void()> work) { dispatcher.post(std::move(work)); });
+	}
+
+	void WorldEditorInstance::UpdateFarTerrain()
+	{
+		if (!m_farTerrain && m_hasTerrain)
+		{
+			CreateFarTerrain();
+		}
+
+		const uint32 radius = m_hasTerrain ? m_farTerrainRadius : 0;
+		if (m_farTerrain)
+		{
+			if (m_farTerrain->GetRadius() != radius)
+			{
+				m_farTerrain->SetRadius(radius);
+			}
+
+			m_farTerrain->Update(m_camera->GetDerivedPosition());
+		}
+
+		// Far clip as in the client: half a page beyond the distant selection while it has pages.
+		constexpr float defaultFarClip = 1000.0f;
+		const bool hasDistantTerrain = m_farTerrain && radius > 0 && m_farTerrain->GetReadyPageCount() > 0;
+		const float farClip = hasDistantTerrain
+			? std::max(defaultFarClip, (static_cast<float>(radius) + 1.5f) * static_cast<float>(terrain::constants::PageSize))
+			: defaultFarClip;
+
+		if (m_camera->GetFarClipDistance() != farClip)
+		{
+			m_camera->SetFarClipDistance(farClip);
+		}
+	}
+
+	bool WorldEditorInstance::WaitForStreaming(const float timeoutSeconds)
+	{
+		const GameTime deadline = GetAsyncTimeMs() + static_cast<GameTime>(timeoutSeconds * 1000.0f);
+
+		while (GetAsyncTimeMs() < deadline)
+		{
+			const PagePosition center = GetPagePositionFromCamera();
+			m_memoryPointOfView->UpdateCenter(center);
+			m_visibleSection->UpdateCenter(center);
+			UpdateFarTerrain();
+
+			while (m_dispatcher.poll_one() > 0)
+			{
+			}
+
+			bool pagesLoaded = true;
+			if (m_hasTerrain && m_terrain)
+			{
+				for (int32 z = static_cast<int32>(center.y()) - 1; z <= static_cast<int32>(center.y()) + 1 && pagesLoaded; ++z)
+				{
+					for (int32 x = static_cast<int32>(center.x()) - 1; x <= static_cast<int32>(center.x()) + 1; ++x)
+					{
+						if (x < 0 || z < 0 || x >= 64 || z >= 64)
+						{
+							continue;
+						}
+
+						// Every page with a tile file must finish loading; pages that have not even
+						// started streaming yet count as not loaded.
+						terrain::Page* page = m_terrain->GetPage(x, z);
+						if (page && !page->IsLoaded() && AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)))
+						{
+							pagesLoaded = false;
+							break;
+						}
+					}
+				}
+			}
+
+			const bool farLoaded = !m_farTerrain || m_farTerrain->GetRadius() == 0 || m_farTerrain->GetLoadingPageCount() == 0;
+
+			if (pagesLoaded && farLoaded)
+			{
+				ILOG("Streaming ready around page " << center.x() << "," << center.y() << " ("
+					<< (m_farTerrain ? m_farTerrain->GetReadyPageCount() : 0) << " distant pages)");
+				return true;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+		const PagePosition center = GetPagePositionFromCamera();
+		for (int32 z = static_cast<int32>(center.y()) - 1; z <= static_cast<int32>(center.y()) + 1; ++z)
+		{
+			for (int32 x = static_cast<int32>(center.x()) - 1; x <= static_cast<int32>(center.x()) + 1; ++x)
+			{
+				if (terrain::Page* page = m_terrain ? m_terrain->GetPage(x, z) : nullptr)
+				{
+					if (!page->IsLoaded())
+					{
+						WLOG("Page " << x << "," << z << " not loaded (prepared " << page->IsPrepared() << ", file "
+							<< AssetRegistry::HasFile(m_terrain->GetPageFilename(x, z)) << ")");
+					}
+				}
+			}
+		}
+		WLOG("Streaming did not finish within " << timeoutSeconds << " seconds; capturing what is loaded");
+		return false;
+	}
+
+	bool WorldEditorInstance::CaptureViewpoint(const EditorViewpoint& viewpoint, const uint32 width, const uint32 height,
+		const std::filesystem::path& path, const bool showGrass, const uint32 warmupFrames)
+	{
+		if (width == 0 || height == 0 || width > 8192 || height > 8192)
+		{
+			ELOG("Capture size " << width << "x" << height << " is not supported");
+			return false;
+		}
+
+		const EditorViewpoint previous = GetViewpoint();
+		SetViewpoint(viewpoint);
+		WaitForStreaming(120.0f);
+
+		// Editor helpers do not belong in the picture.
+		const bool gridWasVisible = m_worldGrid && m_worldGrid->IsVisible();
+		if (m_worldGrid) m_worldGrid->SetVisible(false);
+		const bool debugBoxWasVisible = m_debugBoundingBox && m_debugBoundingBox->IsVisible();
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(false);
+
+		const bool grassWasVisible = m_grass && m_grass->IsVisible();
+		if (m_grass && showGrass != grassWasVisible)
+		{
+			m_grass->SetVisible(showGrass);
+			if (showGrass)
+			{
+				m_grass->RebuildAll();
+			}
+		}
+
+		auto& gx = GraphicsDevice::Get();
+		m_deferredRenderer->Resize(width, height);
+		m_camera->SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+
+		// Exposure adaptation, temporal shadows and the volumetric fog history need a few frames to
+		// settle; the last of these frames is the one that is saved.
+		constexpr float frameTime = 1.0f / 30.0f;
+
+		// The renderer only counts draws per pass while the profiler is on
+		const bool profilerWasEnabled = Profiler::GetInstance().IsEnabled();
+		Profiler::GetInstance().SetEnabled(true);
+		for (uint32 frame = 0; frame <= warmupFrames; ++frame)
+		{
+			while (m_dispatcher.poll_one() > 0)
+			{
+			}
+
+			UpdateFarTerrain();
+			if (m_grass && m_grass->IsVisible())
+			{
+				m_grass->Update(*m_camera);
+			}
+			if (m_skyComponent)
+			{
+				m_skyComponent->SetPosition(m_camera->GetDerivedPosition());
+				m_skyComponent->Update(frameTime, 0);
+				UpdateEnvironment(frameTime);
+			}
+			UpdateOcean();
+
+			gx.Reset();
+			gx.SetViewport(0, 0, width, height, 0.0f, 1.0f);
+			m_camera->SetFillMode(FillMode::Solid);
+			m_camera->InvalidateView();
+			m_deferredRenderer->Render(m_scene, *m_camera);
+		}
+
+		// Draw calls of the saved frame per render pass, so a capture also answers "how many batches here"
+		{
+			std::ostringstream draws;
+			double total = 0.0;
+			for (const auto& [name, value] : Profiler::GetInstance().GetCounters())
+			{
+				if (name.rfind("Draws: ", 0) == 0)
+				{
+					draws << " " << name.substr(7) << "=" << value;
+					total += value;
+				}
+			}
+			ILOG("Capture draws at " << viewpoint.ToString() << ": total=" << total << draws.str());
+		}
+		Profiler::GetInstance().SetEnabled(profilerWasEnabled);
+
+		bool written = false;
+		const auto target = std::dynamic_pointer_cast<RenderTexture>(m_deferredRenderer->GetFinalRenderTarget());
+		if (!target || target->GetColorFormat() != PixelFormat::R16G16B16A16)
+		{
+			ELOG("Capture: unexpected final render target");
+		}
+		else
+		{
+			gx.FlushCommands();
+
+			const uint32 pixelCount = width * height;
+			std::vector<uint16> halfPixels(static_cast<size_t>(pixelCount) * 4);
+			if (target->GetPixelDataSize() != halfPixels.size() * sizeof(uint16))
+			{
+				ELOG("Capture: render target size does not match " << width << "x" << height);
+			}
+			else
+			{
+				target->CopyPixelDataTo(reinterpret_cast<uint8*>(halfPixels.data()));
+
+				// The tonemap output is already display-referred (gamma applied), so only quantize.
+				std::vector<uint8> rgba(static_cast<size_t>(pixelCount) * 4);
+				for (size_t i = 0; i < halfPixels.size(); ++i)
+				{
+					const float value = (i % 4 == 3) ? 1.0f : page_bake::HalfToFloat(halfPixels[i]);
+					rgba[i] = static_cast<uint8>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+				}
+
+				written = tex::WritePng(path, width, height, rgba.data());
+				if (written)
+				{
+					ILOG("Captured " << width << "x" << height << " view " << viewpoint.ToString() << " to " << path.string());
+				}
+				else
+				{
+					ELOG("Capture: failed to write " << path.string());
+				}
+			}
+		}
+
+		// Back to the interactive state.
+		if (m_grass && m_grass->IsVisible() != grassWasVisible)
+		{
+			m_grass->SetVisible(grassWasVisible);
+		}
+		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
+		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBoxWasVisible);
+
+		if (m_lastAvailViewportSize.x > 0.0f && m_lastAvailViewportSize.y > 0.0f)
+		{
+			m_deferredRenderer->Resize(static_cast<uint32>(m_lastAvailViewportSize.x), static_cast<uint32>(m_lastAvailViewportSize.y));
+		}
+
+		SetViewpoint(previous);
+		return written;
+	}
+
+	void WorldEditorInstance::DrawViewSettings()
+	{
+		if (!ImGui::CollapsingHeader("View", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			return;
+		}
+
+		int radius = static_cast<int>(m_farTerrainRadius);
+		if (ImGui::SliderInt("Distant Terrain", &radius, 0, 16, radius == 0 ? "Off" : "%d pages"))
+		{
+			SetFarTerrainRadius(static_cast<uint32>(radius));
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Draws the baked low-detail terrain (.tlod) beyond the streamed pages, like the "
+				"client's TerrainFarRadius (default 4). Bake it with Generate Terrain LOD after sculpting.");
+		}
+		if (m_farTerrain && m_farTerrainRadius > 0)
+		{
+			ImGui::TextDisabled("%u of %u distant pages ready", m_farTerrain->GetReadyPageCount(), m_farTerrain->GetVisiblePageCount());
+		}
+
+		float fov = m_camera->GetFOVy().GetValueDegrees();
+		if (ImGui::SliderFloat("Field of View", &fov, 10.0f, 120.0f, "%.0f deg"))
+		{
+			m_camera->SetFOVy(Degree(fov));
+			m_camera->InvalidateView();
+		}
+
+		ImGui::Separator();
+
+		const EditorViewpoint current = GetViewpoint();
+		const String currentText = current.ToString();
+		ImGui::TextWrapped("Viewpoint: %s", currentText.c_str());
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("x, y, z, yaw, pitch, field of view, time of day. Yaw 0 looks north, 90 west.\n"
+				"mmo_edit --capture-view <world.hwld> --view \"<viewpoint>\" --out shot.png takes the same picture unattended.");
+		}
+
+		if (ImGui::Button("Copy Viewpoint"))
+		{
+			ImGui::SetClipboardText(currentText.c_str());
+			m_viewpointText = currentText;
+		}
+
+		ImGui::InputText("##viewpoint", &m_viewpointText);
+		ImGui::SameLine();
+		const auto parsed = EditorViewpoint::Parse(m_viewpointText);
+		ImGui::BeginDisabled(!parsed.has_value());
+		if (ImGui::Button("Go") && parsed)
+		{
+			SetViewpoint(*parsed);
+		}
+		ImGui::EndDisabled();
+
+		ImGui::InputInt2("Capture Size", m_captureSize);
+		m_captureSize[0] = std::clamp(m_captureSize[0], 16, 8192);
+		m_captureSize[1] = std::clamp(m_captureSize[1], 16, 8192);
+
+		if (ImGui::Button("Capture Screenshot"))
+		{
+			const auto now = std::chrono::system_clock::now().time_since_epoch();
+			const std::filesystem::path path = std::filesystem::path("screenshots") /
+				(m_assetPath.stem().string() + "_" + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(now).count()) + ".png");
+			CaptureViewpoint(current, static_cast<uint32>(m_captureSize[0]), static_cast<uint32>(m_captureSize[1]), path, m_showFoliage);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Renders the current view at the capture size into screenshots/ next to the editor executable.");
+		}
+	}
+
 	void WorldEditorInstance::AddAreaTrigger(proto::AreaTriggerEntry &trigger, bool select)
 	{
 		// Create manual render object for visualization
@@ -2153,6 +2596,9 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
 		if (m_foliage) m_foliage->SetVisible(false);
 
+		// The stand-ins would draw over the pages being baked, and must reload the new bake anyway.
+		if (m_farTerrain) m_farTerrain->Clear();
+
 		TerrainLodBaker::Stats stats;
 		{
 			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; });
@@ -2176,6 +2622,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// editor helper are left out by the baker, which keeps only the terrain and these subtrees.
 		// Entities only exist for streamed-in pages, so each page's neighbourhood is loaded on demand.
 		MinimapBaker::Stats stats;
+
+		// Distant stand-ins hang below the terrain node the baker keeps, and lie over pages that are not streamed in.
+		if (m_farTerrain)
+		{
+			m_farTerrain->Clear();
+		}
+
 		{
 			MinimapBaker baker(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
 				[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
@@ -2189,6 +2642,138 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_minimapPanel.Refresh();
 
 		return stats.failed == 0;
+	}
+
+	void WorldEditorInstance::StartMinimapBake(const bool onlyStale)
+	{
+		if (m_minimapBake || !m_terrain || !m_hasTerrain)
+		{
+			return;
+		}
+
+		// Distant stand-ins hang below the terrain node the baker keeps: keep them away until the bake ends.
+		m_minimapBakeFarTerrainRadius = m_farTerrainRadius;
+		m_farTerrainRadius = 0;
+		if (m_farTerrain)
+		{
+			m_farTerrain->Clear();
+		}
+
+		m_minimapBakeStats = MinimapBaker::Stats{};
+		m_minimapBake = std::make_unique<MinimapBaker>(m_scene, *m_terrain, m_assetPath.filename().replace_extension().string(),
+			[this](const uint32 x, const uint32 z) { return PrepareMinimapBakeEntities(x, z); },
+			[this]() { return m_dispatcher.poll_one() > 0; });
+		m_minimapBakeQueue = m_minimapBake->CollectPages(onlyStale, MinimapBaker::Region{}, m_minimapBakeStats);
+		m_minimapBakeNext = 0;
+		ILOG("Minimap bake started: " << m_minimapBakeQueue.size() << " page(s), " << m_minimapBakeStats.upToDate << " up to date");
+	}
+
+	void WorldEditorInstance::TickMinimapBake()
+	{
+		if (!m_minimapBake)
+		{
+			return;
+		}
+
+		// At least one page per frame, then as many as fit the budget, so the editor keeps drawing.
+		constexpr auto frameBudget = std::chrono::milliseconds(100);
+		const auto tickStart = std::chrono::steady_clock::now();
+		do
+		{
+			if (m_minimapBakeNext >= m_minimapBakeQueue.size())
+			{
+				FinishMinimapBake();
+				return;
+			}
+
+			const MinimapBaker::PageCoord page = m_minimapBakeQueue[m_minimapBakeNext++];
+			if (m_minimapBake->BakeSinglePage(page.x, page.z))
+			{
+				++m_minimapBakeStats.baked;
+			}
+			else
+			{
+				++m_minimapBakeStats.failed;
+			}
+		} while (std::chrono::steady_clock::now() - tickStart < frameBudget);
+	}
+
+	void WorldEditorInstance::FinishMinimapBake()
+	{
+		if (!m_minimapBake)
+		{
+			return;
+		}
+
+		m_minimapBake.reset();
+		ReleaseMinimapBakeEntities();
+		m_farTerrainRadius = m_minimapBakeFarTerrainRadius;
+
+		ILOG("Minimap bake finished: " << m_minimapBakeStats.baked << " baked, " << m_minimapBakeStats.upToDate << " up to date, "
+			<< m_minimapBakeStats.failed << " failed, " << (m_minimapBakeQueue.size() - m_minimapBakeNext) << " not baked");
+		m_minimapBakeQueue.clear();
+		m_minimapBakeNext = 0;
+
+		// Force the minimap teleport panel to reload the freshly generated tiles.
+		m_minimapPanel.Refresh();
+	}
+
+	void WorldEditorInstance::DrawMinimapBakeDialog()
+	{
+		const char* popupId = "Generate Minimaps";
+		if (m_openMinimapBakeDialog)
+		{
+			ImGui::OpenPopup(popupId);
+			m_openMinimapBakeDialog = false;
+		}
+
+		if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			return;
+		}
+
+		if (!m_minimapBake)
+		{
+			ImGui::TextUnformatted("Bake the minimap tiles of the terrain pages of this world.");
+			ImGui::TextDisabled("World model edits do not change the page files: bake all pages after them.");
+			if (ImGui::Button("Changed pages"))
+			{
+				StartMinimapBake(true);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("All pages"))
+			{
+				StartMinimapBake(false);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Close"))
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		else
+		{
+			TickMinimapBake();
+
+			const size_t total = m_minimapBakeQueue.size();
+			if (m_minimapBake && total > 0)
+			{
+				const MinimapBaker::PageCoord& page = m_minimapBakeQueue[std::min(m_minimapBakeNext, total - 1)];
+				ImGui::Text("Page %zu of %zu (%u, %u)", m_minimapBakeNext, total, page.x, page.z);
+				ImGui::ProgressBar(static_cast<float>(m_minimapBakeNext) / static_cast<float>(total), ImVec2(320.0f, 0.0f));
+				if (ImGui::Button("Cancel"))
+				{
+					FinishMinimapBake();
+				}
+			}
+
+			if (!m_minimapBake)
+			{
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		ImGui::EndPopup();
 	}
 
 	std::vector<const SceneNode*> WorldEditorInstance::PrepareMinimapBakeEntities(const uint32 x, const uint32 z)
@@ -2265,6 +2850,258 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		m_bakeEntityPages.clear();
+	}
+
+	void WorldEditorInstance::ForceLoadPages(const std::vector<PagePosition>& pages)
+	{
+		if (!m_terrain)
+		{
+			return;
+		}
+
+		for (const PagePosition& page : pages)
+		{
+			if (page.x() >= m_terrain->GetWidth() || page.y() >= m_terrain->GetHeight())
+			{
+				continue;
+			}
+
+			const uint8 px = static_cast<uint8>(page.x());
+			const uint8 pz = static_cast<uint8>(page.y());
+			const uint16 pageIndex = BuildPageIndex(px, pz);
+
+			// Streaming loads a page's entities and foliage together, so a page with entities has both.
+			if (m_entityPages.contains(pageIndex))
+			{
+				continue;
+			}
+
+			LoadPageEntities(px, pz);
+			m_bakeEntityPages.insert(pageIndex);
+
+			if (m_foliage)
+			{
+				LoadPageFoliage(px, pz);
+				m_bakeFoliagePages.insert(pageIndex);
+			}
+		}
+	}
+
+	void WorldEditorInstance::ReleaseForcedPages()
+	{
+		ReleaseMinimapBakeEntities();
+
+		if (m_foliage && !m_bakeFoliagePages.empty())
+		{
+			for (const uint16 pageIndex : m_bakeFoliagePages)
+			{
+				m_foliage->UnloadPage(pageIndex);
+			}
+			m_foliage->RebuildDirtyCells();
+		}
+
+		m_bakeFoliagePages.clear();
+	}
+
+	void WorldEditorInstance::ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const
+	{
+		for (const auto& mapEntity : m_mapEntities)
+		{
+			if (!mapEntity)
+			{
+				continue;
+			}
+
+			const SceneNode& node = mapEntity->GetSceneNode();
+
+			GlueBakePlacement placement;
+			placement.position = node.GetDerivedPosition();
+			placement.rotation = node.GetDerivedOrientation();
+			placement.scale = node.GetDerivedScale();
+
+			if (mapEntity->IsWorldModelEntity())
+			{
+				const WorldModelInstance* instance = mapEntity->GetWorldModelInstance();
+				if (!instance || !instance->GetWorldModel())
+				{
+					continue;
+				}
+
+				placement.isWorldModel = true;
+				placement.assetPath = mapEntity->GetAssetName();
+				placement.worldModel = instance->GetWorldModel();
+				placement.doodadSet = instance->GetActiveDoodadSet();
+				placement.kitPaths = mapEntity->GetKitPaths();
+			}
+			else
+			{
+				const Entity* entity = mapEntity->GetEntity();
+				if (!entity || !entity->GetMesh())
+				{
+					continue;
+				}
+
+				placement.mesh = entity->GetMesh();
+				placement.assetPath = String(placement.mesh->GetName());
+
+				// Overrides are applied to the sub entities; the .wobj's list is not kept around.
+				bool anyOverride = false;
+				std::vector<String> overrides(entity->GetNumSubEntities());
+				for (uint16 i = 0; i < entity->GetNumSubEntities(); ++i)
+				{
+					const SubEntity* subEntity = entity->GetSubEntity(i);
+					const MaterialPtr material = subEntity ? subEntity->GetMaterial() : nullptr;
+					if (material && material != subEntity->GetSubMesh().GetMaterial())
+					{
+						overrides[i] = String(material->GetName());
+						anyOverride = true;
+					}
+				}
+
+				if (anyOverride)
+				{
+					placement.materialOverrides = std::move(overrides);
+				}
+			}
+
+			visitor(placement);
+		}
+	}
+
+	void WorldEditorInstance::ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const
+	{
+		if (!m_foliage)
+		{
+			return;
+		}
+
+		std::vector<InstancedFoliageInstance> instances;
+		for (const PagePosition& page : pages)
+		{
+			if (page.x() > 0xFF || page.y() > 0xFF)
+			{
+				continue;
+			}
+
+			instances.clear();
+			m_foliage->GetInstancesForPage(BuildPageIndex(static_cast<uint8>(page.x()), static_cast<uint8>(page.y())), instances);
+			for (const InstancedFoliageInstance& instance : instances)
+			{
+				visitor(instance);
+			}
+		}
+	}
+
+	const terrain::Page* WorldEditorInstance::GetPreparedTerrainPage(const PagePosition& page)
+	{
+		if (!m_terrain || !m_hasTerrain || page.x() >= m_terrain->GetWidth() || page.y() >= m_terrain->GetHeight())
+		{
+			return nullptr;
+		}
+
+		const String pageFile = m_terrain->GetBaseFileName() + "/" + std::to_string(page.x()) + "_" + std::to_string(page.y()) + ".tile";
+		if (!AssetRegistry::HasFile(pageFile))
+		{
+			return nullptr;
+		}
+
+		terrain::Page* terrainPage = m_terrain->GetPage(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()));
+		if (!terrainPage || !terrainPage->Prepare() || terrainPage->IsOceanPlaceholder())
+		{
+			return nullptr;
+		}
+
+		return terrainPage;
+	}
+
+	bool WorldEditorInstance::RenderTerrainPageColors(const std::vector<PagePosition>& pages, const uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out)
+	{
+		out.assign(pages.size(), std::vector<uint8>());
+		if (!m_terrain || !m_hasTerrain)
+		{
+			return false;
+		}
+
+		// Hidden by the baker along with everything else outside the terrain, but foliage keeps its own
+		// visibility flag on top of its scene objects (see GenerateTerrainLod).
+		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
+		if (m_foliage)
+		{
+			m_foliage->SetVisible(false);
+		}
+
+		bool success = true;
+		{
+			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; }, textureSize);
+			for (size_t i = 0; i < pages.size(); ++i)
+			{
+				if (!baker.RenderPageColor(static_cast<uint32>(pages[i].x()), static_cast<uint32>(pages[i].y()), out[i], options))
+				{
+					out[i].clear();
+					success = false;
+				}
+			}
+		}
+
+		if (m_foliage)
+		{
+			m_foliage->SetVisible(foliageWasVisible);
+		}
+		return success;
+	}
+
+	bool WorldEditorInstance::SetFoliageVisible(const bool visible)
+	{
+		if (!m_foliage)
+		{
+			return false;
+		}
+
+		const bool wasVisible = m_foliage->IsVisible();
+		m_foliage->SetVisible(visible);
+		return wasVisible;
+	}
+
+	std::vector<String> WorldEditorInstance::GetPageInputFiles(const PagePosition& page) const
+	{
+		std::vector<String> files;
+		if (page.x() > 0xFF || page.y() > 0xFF)
+		{
+			return files;
+		}
+
+		const auto toAssetPath = [](String path)
+		{
+			std::transform(path.begin(), path.end(), path.begin(), [](const char c) { return c == '\\' ? '/' : c; });
+			return path;
+		};
+
+		if (m_terrain)
+		{
+			const String pageFile = m_terrain->GetBaseFileName() + "/" + std::to_string(page.x()) + "_" + std::to_string(page.y()) + ".tile";
+			if (AssetRegistry::HasFile(pageFile))
+			{
+				files.push_back(pageFile);
+			}
+		}
+
+		const uint16 pageIndex = BuildPageIndex(static_cast<uint8>(page.x()), static_cast<uint8>(page.y()));
+		const std::filesystem::path worldDirectory = m_assetPath.parent_path() / m_assetPath.filename().replace_extension();
+
+		const String foliageFile = toAssetPath((worldDirectory / "Foliage" / (std::to_string(pageIndex) + ".hfol")).string());
+		if (AssetRegistry::HasFile(foliageFile))
+		{
+			files.push_back(foliageFile);
+		}
+
+		// Trailing slash: page 771's prefix must not also match page 7710's directory.
+		const String entityDirectory = toAssetPath((worldDirectory / "Entities" / std::to_string(pageIndex)).string()) + "/";
+		for (const auto& file : AssetRegistry::ListFiles(entityDirectory, ".wobj"))
+		{
+			files.push_back(file);
+		}
+
+		return files;
 	}
 
 	Camera &WorldEditorInstance::GetCamera() const
@@ -2719,6 +3556,24 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::UpdateOcean()
+	{
+		if (!m_deferredRenderer || !m_camera)
+		{
+			return;
+		}
+
+		// The FFT ocean draws the ocean to the horizon from the terrain's ocean mask; while it runs,
+		// the terrain leaves its ocean quads out of the water mesh (lakes and rivers stay meshed, and
+		// the minimap bake keeps drawing ocean through its own water mode). Hidden water hides it too.
+		terrain::Terrain* terrain = (m_terrain && m_terrain->IsWaterVisible()) ? m_terrain.get() : nullptr;
+
+		// Resolved every frame, so edits in the Water Profile editor show up live.
+		const auto* profile = m_editor.GetProject().waterProfiles.getById(static_cast<uint32>(terrain::WaterType::Ocean));
+		const OceanSettings settings = profile != nullptr ? ToOceanSettings(*profile) : OceanSettings();
+		m_oceanFeed.Update(m_deferredRenderer->GetOceanPass(), terrain, m_camera->GetDerivedPosition(), settings);
+	}
+
 	void WorldEditorInstance::UpdateUnderwaterPreview(const float deltaSeconds)
 	{
 		if (!m_waterVolume || !m_deferredRenderer || !m_camera)
@@ -2802,13 +3657,19 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			EnsurePageIsLoaded(pos);
 
 			LoadPageEntities(pos.x(), pos.y());
-			LoadPageFoliage(pos.x(), pos.y());
+
+			// ForceLoadPages may have loaded the foliage already: streaming owns it from now on.
+			if (m_bakeFoliagePages.erase(BuildPageIndex(pos.x(), pos.y())) == 0)
+			{
+				LoadPageFoliage(pos.x(), pos.y());
+			}
 			RegisterPageFoliage(pos.x(), pos.y());
 		}
 		else
 		{
 			UnloadPageEntities(pos.x(), pos.y());
 			UnregisterPageFoliage(pos.x(), pos.y());
+			m_bakeFoliagePages.erase(BuildPageIndex(pos.x(), pos.y()));
 
 			if (m_foliage)
 			{
@@ -2832,7 +3693,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		{
 			m_dispatcher.post([this, pos]()
 							  { EnsurePageIsLoaded(pos); });
+			return;
 		}
+
+		// Grass layers come from the materials of a fully loaded page. Page::Load creates one tile
+		// per call, so the registration in OnPageAvailabilityChanged usually saw an unfinished page
+		// and skipped it; this is the first point at which every tile exists.
+		RegisterPageFoliage(pos.x(), pos.y());
 	}
 
 	void WorldEditorInstance::Visit(SelectedMapEntity &selectable)
@@ -3899,6 +4766,17 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		String defaultTerrainMaterial;
 		reader >> io::read<uint8>(m_hasTerrain) >> io::read_container<uint16>(defaultTerrainMaterial);
+
+		// Optional trailing sea level (worlds saved before it existed have their sea at 0).
+		const size_t readSoFar = sizeof(uint8) + sizeof(uint16) + defaultTerrainMaterial.size();
+		if (reader && chunkSize >= readSoFar + sizeof(float))
+		{
+			float seaLevel = terrain::constants::DefaultSeaLevel;
+			if (reader >> io::read<float>(seaLevel))
+			{
+				m_terrain->SetSeaLevel(seaLevel);
+			}
+		}
 
 		if (!defaultTerrainMaterial.empty())
 		{

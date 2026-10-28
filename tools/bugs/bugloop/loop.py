@@ -12,8 +12,8 @@ import re
 import traceback
 import urllib.error
 
-from . import ci_runs, github, gitops, guard, inputs, notify, state as loop_state, verdicts, verification
-from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError
+from . import ci_runs, github, gitops, guard, inputs, notify, state as loop_state, status as loop_status, verdicts, verification
+from .claude import REVIEW_TOOLS, TRIAGE_TOOLS, ClaudeError, ClaudeUnavailable
 
 CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 # watch() returns this at the UTC day boundary; the scheduled task restarts the loop from a
@@ -22,7 +22,9 @@ RESTART_EXIT_CODE = 75
 # A change set is exempt from the regression-proof requirement only when every non-test path is
 # data; the fixer's own `data_only` claim is never trusted.
 # Client UI Lua under data/client/Interface/ cannot cheat the server, so it needs no proof either.
-DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/")
+DATA_ONLY_ROOTS = ("data/editor/data/", "data/client/Locales/", "data/client/Interface/", "data/client/ClientDB/")
+# Prose a fix may carry along; it neither needs nor provides a regression proof.
+DOC_ROOTS = ("docs/", "e2e/README.md")
 # Statuses of bugs parked for the maintainer.
 PARKED_STATUSES = ("pr_open", "needs_decision")
 # The web UI shows the candidate diff; the API stores at most this much.
@@ -30,6 +32,16 @@ REVIEW_DIFF_LIMIT = 128 * 1024
 TRUNCATION_MARKER = "\n... (diff truncated for the web UI)"
 # Guided refixes a maintainer may request per bug.
 MAX_REFIX = 3
+# A refix whose branch cannot take today's develop restarts from develop; the fixer is told so.
+RESTART_NOTE = ("the earlier fix branch could not be merged with today's develop ({}). This attempt starts from "
+	"today's develop: re-apply the earlier change (earlier_diff) on the current code, adapting it where develop "
+	"changed the same places, together with any guidance.")
+# The guidance of an automatic re-application after a ship conflict nothing could resolve.
+REAPPLY_GUIDANCE = ("From the bug loop, not the maintainer: this fix could not be merged with today's develop ({}). "
+	"Re-apply the same fix on today's develop: keep its intent and its regression test, adapt it to what develop "
+	"changed in the same places, and change nothing else.")
+# How much of the earlier diff a restarted refix sees.
+EARLIER_DIFF_LIMIT = 40000
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
 FEATURE_REASON = "feature: shipping needs the maintainer's approval"
 # A bug the loop gave up on (needs-info) and that only the maintainer can move on: the web UI lists
@@ -44,6 +56,9 @@ BUG_ID = re.compile(r"^[0-9a-f]{24}$")
 RED_REASON = "develop is red"
 # The pre-ship CI check failed (not GitHub: the bug API, say): the CI state is unknown, so nothing ships.
 CI_UNKNOWN_REASON = "CI check failed"
+# The breaker stops every ship. A maintainer's ship decision waits for it in the ship queue instead
+# of being used up; an auto-ship parks.
+BREAKER_REASON = "the circuit breaker is tripped"
 # The emergency ticket auto-ships only through its CI-verified path (_check_pending_ci).
 EMERGENCY_REASON = "emergency fix: ships only after a green Linux CI run or on the maintainer's decision"
 # Statuses of a GitHub run that has not finished yet.
@@ -66,6 +81,24 @@ ANNOUNCED_ELSEWHERE = ("shipped", "shipped-by-maintainer", "refix-limit", "shipp
 # Per-attempt outcomes of the open phase's emergency ticket: the CI messages say what matters,
 # once per event, never per attempt.
 EMERGENCY_QUIET = ("fix-started", "interrupted", "needs-info", "loop-error", "claimed-elsewhere")
+# The note in gate.json of a candidate that parks for other reasons: its gate run would change
+# nothing (a ship decision gates the merge anyway), so it is skipped to get to the next bug sooner.
+GATE_SKIPPED = "skipped: the candidate parks for other reasons; a ship decision runs the fast gate on the merge"
+
+
+REPLAY_DIR = "replay"
+# The maintainer decisions `bug_loop.py replay` can carry out again, as the bug history records them.
+REPLAY_PREFIXES = (("refix", "decision: refix: "), ("implement", IMPLEMENT_HISTORY_PREFIX))
+
+
+def request_replay(artifacts_dir, bug_id):
+	"""Asks the running loop to carry out the bug's newest maintainer refix or implement decision again
+	(one the loop could not finish, e.g. during a Claude outage). Only the decision's text in the bug
+	history, written with the maintainer key, is used; the request itself carries nothing."""
+	folder = os.path.join(artifacts_dir, REPLAY_DIR)
+	os.makedirs(folder, exist_ok=True)
+	with open(os.path.join(folder, bug_id), "w", encoding="utf-8") as handle:
+		handle.write("")
 
 
 class WorktreeUnavailable(RuntimeError):
@@ -79,8 +112,28 @@ def valid_bug_id(bug_id):
 
 
 def proof_exempt(changes):
-	production = [change for change in changes if guard.is_production(change.path)]
+	production = [change for change in changes if guard.is_production(change.path) and not change.path.startswith(DOC_ROOTS)]
 	return bool(production) and all(change.path.startswith(DATA_ONLY_ROOTS) for change in production)
+
+
+# Park reasons the fixer can repair on its own branch: what the reviewer found, a regression proof
+# that failed or is missing, a red gate, a fixer that was only fairly sure. Everything else (the
+# guard, a design question, a weakened security property, an unusable review) needs the maintainer.
+SELF_CORRECTABLE = ("proof: ", "the fast gate is red", "fixer confidence is medium")
+NOT_SELF_CORRECTABLE = ("review: design question", "review: the diff reduces a security")
+
+
+def self_correctable(reasons):
+	"""True when every reason (the feature approval aside) is one a further fix round can repair."""
+	relevant = [reason for reason in reasons if reason != FEATURE_REASON]
+	if not relevant:
+		return False
+	for reason in relevant:
+		if reason.startswith(NOT_SELF_CORRECTABLE):
+			return False
+		if not (reason.startswith(SELF_CORRECTABLE) or reason.startswith("review: ")):
+			return False
+	return True
 
 
 def short_id(bug_id):
@@ -138,16 +191,20 @@ class DryRunApi:
 
 def decide(fix, review, guard_result, proof, gate):
 	"""Every reason that forbids auto-ship. Empty means eligible; the breaker, the daily cap
-	and the freeze window are checked at ship time."""
+	and the freeze window are checked at ship time. `gate` None: not run."""
 	reasons = []
-	if fix.get("confidence") != "high":
+	# Medium confidence ships when a regression test proves the fix (fails before, passes after).
+	proven = proof is not None and proof["ok"]
+	# A data or UI fix has no regression proof to give (proof None: exempt); a clean review is its proof.
+	reviewed = proof is None and not verdicts.review_blockers(review)
+	if fix.get("confidence") != "high" and not (fix.get("confidence") == "medium" and (proven or reviewed)):
 		reasons.append("fixer confidence is {}".format(fix.get("confidence")))
 	reasons.extend(verdicts.review_blockers(review))
 	reasons.extend("guard: " + reason for reason in guard_result["reasons"])
 	if proof is not None and not proof["ok"]:
 		reasons.append("proof: " + proof["reason"])
-	if not gate["ok"]:
-		reasons.append("the full gate is red")
+	if gate is not None and not gate["ok"]:
+		reasons.append("the fast gate is red")
 	return reasons
 
 
@@ -160,6 +217,8 @@ class BugLoop:
 		self.worktree = worktree
 		self.verifier = verifier
 		self.decoder = decoder
+		# Whether Claude can run in this poll (see _claude_ready); True until a poll says otherwise.
+		self._claude_ok = True
 		self.config = config
 		self.state = state
 		self.prompts = prompts
@@ -176,6 +235,11 @@ class BugLoop:
 		# GitHub Actions client of the CI watch; None turns the watch off.
 		self.github = github
 		self._backfilled = False
+		# status.json: what the loop does right now, for `bug_loop.py status`.
+		self._status_name = loop_status.DRY_STATUS_FILE if dry_run else loop_status.STATUS_FILE
+		self._started_at = clock().isoformat()
+		self._stage_key = None
+		self._stage_since = self._started_at
 
 	# ---- small helpers
 
@@ -204,6 +268,7 @@ class BugLoop:
 	def _finish(self, bug_id, outcome, announce=True, **details):
 		self.state.mark_attempted(bug_id, outcome)
 		self.state.record(bug_id, outcome, **details)
+		self._count_for_mode(outcome)
 		self.log("bug {}: {} {}".format(bug_id, outcome, json.dumps(details, default=str) if details else ""))
 		if announce:
 			self._announce(bug_id, outcome, details)
@@ -222,6 +287,81 @@ class BugLoop:
 		except Exception:  # a notification must never stop the loop
 			self.log(traceback.format_exc())
 
+	# ---- status and mode
+
+	def _stage(self, stage, bug_id=None, branch=None, detail="", until=None):
+		"""Rewrites status.json. A status that cannot be written never stops the loop."""
+		try:
+			now = self.clock()
+			if (stage, bug_id) != self._stage_key:
+				self._stage_key = (stage, bug_id)
+				self._stage_since = now.isoformat()
+			outcomes = self.state.data["outcomes"]
+			next_fix = self.state.next_fix()
+			snapshot = {
+				"pid": os.getpid(),
+				"dry_run": self.dry_run,
+				"started_at": self._started_at,
+				"updated_at": now.isoformat(),
+				"stage": stage,
+				"stage_since": self._stage_since,
+				"bug": bug_id,
+				"branch": branch,
+				"summary": self._summary(bug_id) if bug_id else "",
+				"detail": detail,
+				"until": until.isoformat() if until else None,
+				"mode": self.state.data.get("mode"),
+				# The next bug to fix first, then the rest in queue order.
+				"fix_queue": sorted((item["bug"] for item in self.state.data["fix_queue"]), key=lambda bug: bug != next_fix),
+				"ship_queue": len(self.state.data["ship_queue"]),
+				"invocations": self.state.data["invocations"],
+				"budget": self.config.invocation_budget_per_day,
+				"autoships": self.state.data["autoships"],
+				"autoship_cap": self.config.autoship_cap_per_day,
+				"breaker": loop_state.breaker_active(self.artifacts_dir),
+				"develop_red": self._develop_red(),
+				"last_outcome": outcomes[-1] if outcomes else None,
+			}
+			loop_status.write(self.artifacts_dir, snapshot, self._status_name)
+		except Exception:
+			self.log(traceback.format_exc())
+
+	def _update_mode(self):
+		"""busy while bugs are queued and the budget allows a fix, paused while they are queued but
+		the budget is used up, idle with an empty queue. Each change is logged and announced once;
+		the mode lives in the state, so a restart does not announce it again."""
+		queue = len(self.state.data["fix_queue"])
+		reason = ""
+		if not queue:
+			name = "idle"
+		elif not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			name = "paused"
+			reason = "daily Claude budget used up ({} of {}); resumes at 00:00 UTC".format(
+				self.state.data["invocations"], self.config.invocation_budget_per_day)
+		else:
+			name = "busy"
+		previous = self.state.data.get("mode") or {}
+		if previous.get("name") == name:
+			return
+		now = self.clock()
+		self.state.data["mode"] = {"name": name, "since": now.isoformat(), "reason": reason, "counts": {}}
+		self.log("mode: {} -> {}{}".format(previous.get("name") or "none", name, " ({})".format(reason) if reason else ""))
+		# The first mode after an upgrade is only recorded: nothing changed for the maintainer.
+		if self.dry_run or not previous.get("name") or not self.config.notify_status_changes:
+			return
+		poll = min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds
+		try:
+			self.notifier.send(notify.mode_message(name, previous, now, queue, reason, max(1, poll // 60)))
+		except Exception:  # a notification must never stop the loop
+			self.log(traceback.format_exc())
+
+	def _count_for_mode(self, outcome):
+		"""Counts a finished bug for the current mode; the idle message reports the busy stretch."""
+		mode = self.state.data.get("mode")
+		if mode is not None:
+			counts = mode.setdefault("counts", {})
+			counts[outcome] = counts.get(outcome, 0) + 1
+
 	# ---- one poll
 
 	def poll_once(self):
@@ -229,11 +369,13 @@ class BugLoop:
 		now = self.clock()
 		today = now.strftime("%Y-%m-%d")
 		self.state.roll(today)
+		self._stage("polling")
 		if self.state.data.get("pending_summary"):
 			if not self.dry_run:
 				self._send_daily_summary(self.state.data["pending_summary"])
 			self.state.data["pending_summary"] = None
 		self._check_nightly_breaker(now)
+		self._claude_ok = self._claude_ready(now)
 		worked = False
 		if not self.dry_run:
 			# First, so a red develop is known before anything can ship in this poll. A failure that is
@@ -245,17 +387,20 @@ class BugLoop:
 				self.log(traceback.format_exc())
 			self._backfill_review_diffs()
 			worked = self._handle_decisions() or worked
+			worked = self._replay_requests() or worked
 			self._release_stale_claims()
 			self._reconcile_parked()
 		self._ship_queued(now)
 		worked = self._triage_new() or worked
+		# Before the fix below, which can take an hour: a backlog that just appeared is announced now.
+		self._update_mode()
 		if not self.dry_run and self.github is not None:
 			self._check_pending_ci(now)
 			# The emergency ticket goes before every other bug; the ordinary fix waits for the next poll.
 			due = self._emergency_due()
 			if due and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				self._notify_budget_exhausted(now)
-			elif due and self._worktree_waiting(now):
+			elif due and (self._worktree_waiting(now) or not self._claude_ok):
 				# The emergency ticket still goes first: nothing else is fixed until the worktree works.
 				return self._end_poll(worked)
 			elif due:
@@ -272,7 +417,8 @@ class BugLoop:
 					self._finish(ticket, "loop-error")
 				return self._end_poll(True)
 		bug_id = self.state.next_fix()
-		if bug_id is not None and not self._worktree_waiting(now) and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+		if bug_id is not None and self._claude_ok and not self._worktree_waiting(now) \
+				and self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 			try:
 				self._fix(bug_id)
 				worked = True
@@ -286,6 +432,7 @@ class BugLoop:
 		return self._end_poll(worked)
 
 	def _end_poll(self, worked):
+		self._update_mode()
 		self._write_daily_report()
 		self.state.save()
 		return worked
@@ -301,7 +448,9 @@ class BugLoop:
 			if self.clock().strftime("%Y-%m-%d") != day:
 				return RESTART_EXIT_CODE
 			if not worked:
-				sleep(min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds)
+				seconds = min(self.config.poll_seconds, self.config.ci_poll_seconds) if self.github else self.config.poll_seconds
+				self._stage("sleeping", until=self.clock() + datetime.timedelta(seconds=seconds))
+				sleep(seconds)
 
 	def _safe_release(self, bug_id, note, status="triaged", **fields):
 		try:
@@ -326,7 +475,7 @@ class BugLoop:
 				if self.dry_run:
 					continue
 				self.state.forget(bug_id)
-			if not self.state.budget_left(self.config.invocation_budget_per_day):
+			if not self.state.budget_left(self.config.invocation_budget_per_day) or not self._claude_ok:
 				break
 			try:
 				self._triage(bug_id)
@@ -378,6 +527,7 @@ class BugLoop:
 			if other.get("_id") != bug.get("_id") and other.get("status") in verdicts.OPEN_STATUSES]
 
 	def _triage(self, bug_id):
+		self._stage("triaging", bug_id)
 		bug = self.api.show(bug_id)
 		self._write(bug_id, "report.json", bug)
 		related = self._related(bug)
@@ -385,6 +535,10 @@ class BugLoop:
 			raw = self.runner.structured(self.prompts["triage"], inputs.build_triage_input(bug, related),
 				self.schemas["triage"], TRIAGE_TOOLS, self._bug_dir(bug_id), self.config.step_timeout_seconds)
 			verdict = verdicts.parse_verdict(raw, [other["_id"] for other in related])
+		except ClaudeUnavailable as error:
+			# Not the report's fault: no triage failure is counted; it is triaged once Claude is back.
+			self._claude_failed(str(error))
+			return
 		except (ClaudeError, verdicts.VerdictError) as error:
 			self._triage_failed(bug_id, error)
 			return
@@ -428,9 +582,11 @@ class BugLoop:
 
 	# ---- fix
 
-	def _fix(self, bug_id, guidance=None, feature=None, emergency=None):
+	def _fix(self, bug_id, guidance=None, feature=None, emergency=None, self_correct=False):
 		"""`emergency` is the CI context of the red phase when bug_id is its emergency ticket: the
-		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop."""
+		fixer then sees only the loop's CI task and log, and a locally green fix goes to CI, not develop.
+		`self_correct`: an automatic round on the candidate's branch; the fixer sees the park reasons
+		of the previous round as untrusted findings (PREVIOUS ATTEMPT), never as maintainer guidance."""
 		if not valid_bug_id(bug_id):
 			self.state.drop_fix(bug_id)
 			self.log("dropping a queued fix with a malformed bug id: {!r}".format(bug_id)[:200])
@@ -439,6 +595,7 @@ class BugLoop:
 			raise ValueError("an emergency fix for {} which is not the recorded emergency ticket".format(bug_id))
 		# Before the bug is touched (queue, claim, attempt): a worktree that cannot reach develop
 		# raises WorktreeUnavailable and leaves everything as it was for a later poll.
+		self._stage("preparing", bug_id)
 		base = self._prepare_worktree()
 		self.state.drop_fix(bug_id)
 		self.state.mark_attempted(bug_id, "fix-started")
@@ -455,21 +612,24 @@ class BugLoop:
 		# a failed feature run goes back to where `implement` can be chosen again; a failed
 		# emergency run goes back to `triaged`, where the loop retries it while attempts remain;
 		# any other failed fix goes to the maintainer's needs-info list (the loop never polls `triaged`).
-		failed_status = "pr_open" if guidance else "triaged"
-		fresh_feature = bool(feature) and not guidance
+		failed_status = "pr_open" if guidance or self_correct else "triaged"
+		fresh_feature = bool(feature) and not guidance and not self_correct
 		if fresh_feature:
 			failed_fields = {"triage": {"category": "design_request"}}
 			again = "; decide again"
 		elif emergency is not None:
 			failed_fields = {}
 			again = self._retry_note()
+		elif self_correct:
+			failed_fields = {}
+			again = "; the earlier candidate on the branch waits for a decision"
 		elif not guidance:
 			failed_fields = {"triage": {"category": NEEDS_INFO_CATEGORY}}
 			again = NEEDS_INFO_HINT
 		else:
 			failed_fields = {}
 			again = ""
-		resume = bool(guidance) or bool(emergency and emergency.get("resume"))
+		resume = bool(guidance) or self_correct or bool(emergency and emergency.get("resume"))
 		previous = self._previous_attempt(bug_id) if resume else None
 		try:
 			self.api.claim(bug_id, self.config.worker)
@@ -504,14 +664,18 @@ class BugLoop:
 			try:
 				start = self.worktree.resume_branch(branch)
 				base = self.worktree.fork_point(branch)
+				self._write_resolutions(bug_id)
 			except Exception as error:
 				if emergency is None:
-					self._release(bug_id, "pr_open", "cannot refix {}: {}; decide again".format(branch, str(error)[:300]))
-					self._finish(bug_id, "needs-info", reason="branch unusable")
-					return
-				# The emergency branch is only a convenience: start again from develop.
-				self.log("emergency fix: cannot resume {} ({}); starting fresh".format(branch, str(error)[:200]))
-				previous = None
+					# The branch cannot take today's develop (a conflict nothing could resolve): the fixer
+					# re-applies the earlier change on a fresh branch from develop, with its diff in hand.
+					self.log("bug {}: cannot bring {} up to date ({}); the refix starts from develop".format(bug_id, branch, str(error)[:300]))
+					previous = dict(previous or {}, restarted_from_develop=RESTART_NOTE.format(str(error)[:500]),
+						earlier_diff=self._earlier_diff(bug_id))
+				else:
+					# The emergency branch is only a convenience: start again from develop.
+					self.log("emergency fix: cannot resume {} ({}); starting fresh".format(branch, str(error)[:200]))
+					previous = None
 				start = None
 		if start is None:
 			self.worktree.start_branch(branch, base)
@@ -523,11 +687,16 @@ class BugLoop:
 			fix_input = inputs.build_emergency_fix_input(bug_id, emergency, branch, fix_path, previous=previous)
 		else:
 			fix_input = inputs.build_fix_input(bug, verdict, branch, fix_path, guidance=guidance, previous=previous, feature=feature)
+		self._stage("fixing", bug_id, branch, detail="guided refix" if guidance else "self-correcting" if self_correct else
+			"feature" if feature else "emergency fix" if emergency is not None else "")
 		try:
 			result = self.runner.agent(self.prompts["fix"], fix_input,
 				self.worktree.path, self.config.fix_timeout_seconds, self.config.fix_max_usd)
 			self._write(bug_id, "fix_result.json", result)
 			fix = verdicts.load_fix(fix_path)
+		except ClaudeUnavailable as error:
+			self._claude_interrupted(bug_id, error, verdict, guidance, feature, emergency, self_correct, fresh_feature)
+			return
 		except (ClaudeError, verdicts.VerdictError) as error:
 			self._release(bug_id, failed_status, "needs-info: the fix stage failed: " + str(error)[:500] + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason=str(error)[:300])
@@ -562,7 +731,11 @@ class BugLoop:
 			self._release(bug_id, failed_status, "needs-info: the fixer moved the branch away from the checked-out commit" + again, **failed_fields)
 			self._finish(bug_id, "needs-info", reason="fixer moved the branch")
 			return
-		self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance, feature=feature, emergency=emergency)
+		try:
+			self._verify_and_ship(bug_id, verdict, fix, branch, base, head, guidance=guidance, feature=feature, emergency=emergency)
+		except ClaudeUnavailable as error:
+			# The review could not run: the candidate on the branch is kept, the round runs again later.
+			self._claude_interrupted(bug_id, error, verdict, guidance, feature, emergency, self_correct, fresh_feature)
 
 	def _verify_and_ship(self, bug_id, verdict, fix, branch, base, head, guidance=None, feature=None, emergency=None):
 		changes = self.worktree.changes(base, head)
@@ -584,9 +757,14 @@ class BugLoop:
 			if emergency is not None:
 				self._park_emergency(bug_id, "parked: " + reasons[0])
 			return
-		review = self._review(bug_id, verdict, fix, diff_text, guard_result["reasons"], guidance=guidance, feature=feature,
+		self._stage("reviewing", bug_id, branch)
+		review = self._review(bug_id, verdict, fix, diff_text,
+			guard_result["reasons"] + ["advisory (does not park; check it): " + note for note in guard_result.get("advisories", [])],
+			guidance=guidance, feature=feature,
 			ci_failure=(emergency.get("excerpt") or "(no log)") if emergency is not None else None)
+		self._stage("waiting-for-gate-lock", bug_id, branch)
 		with self.lock():
+			self._stage("proving", bug_id, branch)
 			proof = None
 			if fix["regression_test"]["kind"] == "none":
 				if not proof_exempt(changes):
@@ -597,9 +775,18 @@ class BugLoop:
 					# The CI failure does not reproduce on Windows; the Linux CI run on the pushed head is the proof.
 					proof = dict(proof, ok=True, waived="the test passed before the fix on Windows; the Linux CI run is the proof")
 				self._write(bug_id, "proof.json", proof)
-			self.worktree.checkout(head)
-			gate = self.verifier.gate("full")
-			self._write(bug_id, "gate.json", gate)
+			# A candidate that parks anyway skips the gate; emergency fixes and features always run it
+			# (the CI push and the "Feature ready" ping rely on a green result).
+			doomed = decide(fix, review, guard_result, proof, None)
+			if doomed and emergency is None and not self.state.is_feature(bug_id):
+				gate = None
+				self._write(bug_id, "gate.json", {"ok": None, "tier": "fast", "skipped": GATE_SKIPPED})
+			else:
+				self._stage("gating", bug_id, branch)
+				self.worktree.checkout(head)
+				# E2E needs the local MySQL and runs again in the nightly before anything is deployed.
+				gate = self.verifier.gate("fast")
+				self._write(bug_id, "gate.json", gate)
 		reasons = decide(fix, review, guard_result, proof, gate)
 		if emergency is not None:
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
@@ -616,6 +803,8 @@ class BugLoop:
 		else:
 			green = False
 		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
+		if reasons and self._self_correct(bug_id, branch, reasons, guidance, feature):
+			return
 		if reasons:
 			ready = green and feature and not guidance
 			# The "Feature ready" ping replaces the status message of this park.
@@ -626,11 +815,36 @@ class BugLoop:
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
 
+	def _self_correct(self, bug_id, branch, reasons, guidance, feature):
+		"""Runs another fix round on the branch instead of parking, when the fixer can repair every
+		reason itself and rounds and budget are left. True when it took over the bug."""
+		if not self_correctable(reasons):
+			return False
+		if self.state.self_correct_count(bug_id) >= self.config.self_correct_rounds:
+			return False
+		if not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+			return False
+		self.state.count_self_correct(bug_id)
+		round_no = self.state.self_correct_count(bug_id)
+		self.state.record(bug_id, "self-correcting", branch=branch, round=round_no, reasons=reasons[:10])
+		self.state.save()
+		self.log("bug {}: self-correcting, round {} of {}: {}".format(bug_id, round_no, self.config.self_correct_rounds,
+			"; ".join(reasons)[:500]))
+		# Parked on paper first: an interrupted or failed round leaves a reviewable candidate behind.
+		self._update(bug_id, status="pr_open", prUrl="branch:" + branch, release_claim=True,
+			note="self-correcting (round {} of {}): {}".format(round_no, self.config.self_correct_rounds, "; ".join(reasons))[:1800])
+		self._upload_diff(bug_id)
+		self._backup_branch(bug_id, branch)
+		self._fix(bug_id, guidance=guidance, feature=feature, self_correct=True)
+		return True
+
 	def _review(self, bug_id, verdict, fix, diff_text, guard_reasons, guidance=None, feature=None, ci_failure=None):
 		try:
 			review = self.runner.structured(self.prompts["review"],
 				inputs.build_review_input(verdict, fix, diff_text, guard_reasons, guidance=guidance, feature=feature, ci_failure=ci_failure),
 				self.schemas["review"], REVIEW_TOOLS, self.worktree.path, self.config.step_timeout_seconds)
+		except ClaudeUnavailable:
+			raise
 		except ClaudeError as error:
 			review = {"error": str(error)[:500]}
 		self._write(bug_id, "review.json", review)
@@ -672,6 +886,8 @@ class BugLoop:
 			guidance = (decision.get("guidance") or "").strip()
 			if action in ("refix", "implement") and not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 				continue  # stays pending until tomorrow's budget
+			if action in ("refix", "implement") and not self._claude_ok:
+				continue  # stays pending until Claude runs again
 			if action == "refix" and not guidance:
 				# Without guidance a refix would be a fresh fix that resets the branch.
 				try:
@@ -754,6 +970,8 @@ class BugLoop:
 			self._finish(bug_id, "refix-limit")
 			return
 		self.state.count_refix(bug_id)
+		# The maintainer's guidance starts a new candidate: it gets its own self-correction rounds.
+		self.state.reset_self_correct(bug_id)
 		self._recover_feature(bug_id)
 		# A feature accepted before descriptions were kept has none; it still parks via is_feature.
 		feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
@@ -853,6 +1071,14 @@ class BugLoop:
 			current = self.worktree.head(branch)
 		except Exception:
 			current = None
+		shipped = None if current else self.worktree.merged(branch)
+		if shipped:
+			# A second click while the first ship waited in the queue (develop red, breaker, freeze):
+			# the fix is on develop already. On 2026-10-26 this reopened a shipped bug as "branch moved".
+			self._update(bug_id, status="resolved", release_claim=True,
+				note="already shipped in {}; this ship decision has nothing left to do".format(shipped))
+			self._finish(bug_id, "already-shipped", announce=False, commit=shipped)
+			return
 		if not head or current != head:
 			self._park(bug_id, branch, ["branch moved since it was parked (or no candidate commit is recorded); decide again"])
 			return
@@ -863,16 +1089,18 @@ class BugLoop:
 		if not approved or uploaded is None or hashlib.sha256(uploaded.encode("utf-8")).hexdigest() != approved:
 			self._park(bug_id, branch, ["the diff you approved does not match the candidate commit; decide again"])
 			return
-		if loop_state.breaker_active(self.artifacts_dir):
-			self._park(bug_id, branch, ["the circuit breaker is tripped"])
-			return
 		summary = self._summary(bug_id)
 		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
-			self._update(bug_id, note="already queued to ship after the freeze window")
+			self._update(bug_id, note="already queued to ship")
+			return
+		if loop_state.breaker_active(self.artifacts_dir):
+			# The decision stays valid: it ships once the breaker is cleared (by hand, or by the next
+			# green nightly when the loop tripped it), so the maintainer never has to decide again.
+			self._queue_held(bug_id, branch, summary, head, BREAKER_REASON, "maintainer approved {}".format(branch), by_maintainer=True)
 			return
 		reason = self._ci_hold(bug_id)
 		if reason:
-			self._queue_for_ci(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
+			self._queue_held(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
@@ -971,7 +1199,7 @@ class BugLoop:
 	def _ship_blockers(self, by_maintainer=False):
 		blockers = []
 		if loop_state.breaker_active(self.artifacts_dir):
-			blockers.append("the circuit breaker is tripped")
+			blockers.append(BREAKER_REASON)
 		if not by_maintainer and not self.state.autoship_left(self.config.autoship_cap_per_day):
 			blockers.append("the daily auto-ship cap is reached")
 		return blockers
@@ -992,7 +1220,7 @@ class BugLoop:
 			return
 		reason = self._ci_hold(bug_id)
 		if reason:
-			self._queue_for_ci(bug_id, branch, summary, head, reason, "fix ready on {}".format(branch))
+			self._queue_held(bug_id, branch, summary, head, reason, "fix ready on {}".format(branch))
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head)
@@ -1021,12 +1249,15 @@ class BugLoop:
 			return RED_REASON
 		return ""
 
-	def _queue_for_ci(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
+	def _queue_held(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
 		self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=by_maintainer)
 		self.state.mark_attempted(bug_id, "ship-queued")
 		self.state.record(bug_id, "ship-queued", branch=branch, reason=reason)
 		self.state.save()
-		when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
+		if reason == BREAKER_REASON:
+			when = "ships once the breaker is cleared"
+		else:
+			when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
 		try:
 			self._update(bug_id, note="{}; {}: {}".format(what, reason, when))
 		except Exception:  # the fix is queued; a lost note must not throw it away
@@ -1042,12 +1273,17 @@ class BugLoop:
 		else:
 			label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
 		message = "Merge {} (bug-loop, {})\n\nBug {}: {}\n\n{}".format(branch, label, bug_id, summary, CO_AUTHOR)
+		self._stage("shipping", bug_id, branch, detail=label)
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
+		resolved = self._write_resolutions(bug_id)
 		if not result.ok:
-			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency)
+			reapply = getattr(result, "conflict", False) and not emergency and self._may_reapply(bug_id)
+			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency and not reapply)
 			if emergency:
 				self._park_emergency(bug_id, "ship: " + result.reason)
+			elif reapply:
+				self._reapply(bug_id, result.reason)
 			return
 		if not by_maintainer and not emergency:
 			self.state.count_autoship()
@@ -1065,8 +1301,9 @@ class BugLoop:
 						result.commit, CI_NAMES["push"], head[:8]))
 			else:
 				self._update(bug_id, status="resolved", release_claim=True,
-					note="shipped by the bug loop{} in {}; reaches players with the next nightly deploy".format(
-						" on the maintainer's decision" if by_maintainer else "", result.commit))
+					note="shipped by the bug loop{} in {}{}; reaches players with the next nightly deploy".format(
+						" on the maintainer's decision" if by_maintainer else "", result.commit,
+						" (merge conflicts with develop resolved in {})".format(", ".join(resolved[:5])) if resolved else ""))
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit)
 			if emergency:
 				self.notifier.send(notify.emergency_shipped_message(self.notifier, bug_id, result.commit))
@@ -1075,6 +1312,37 @@ class BugLoop:
 		except Exception:
 			self.log(traceback.format_exc())
 			self._finish(bug_id, outcome, branch=branch, commit=result.commit, bookkeeping_failed=True)
+
+	def _write_resolutions(self, bug_id):
+		"""Records the merge conflicts the last ship or refix merge resolved (merge.json); returns the files."""
+		reports = list(getattr(self.worktree, "resolutions", None) or [])
+		if not reports:
+			return []
+		self._write(bug_id, "merge.json", reports)
+		return [path for report in reports for path in report.get("data", []) + [item.get("path") for item in report.get("text", [])]]
+
+	def _earlier_diff(self, bug_id):
+		text = self._review_diff_text(bug_id) or ""
+		return text[:EARLIER_DIFF_LIMIT] + ("\n... (truncated)" if len(text) > EARLIER_DIFF_LIMIT else "")
+
+	def _may_reapply(self, bug_id):
+		return (bug_id != self.state.emergency_ticket() and self.state.reapply_count(bug_id) < self.config.max_reapply
+			and self.state.budget_left(self.config.invocation_budget_per_day, needed=2))
+
+	def _reapply(self, bug_id, reason):
+		"""A ship ran into a conflict with develop nothing could resolve: the fixer re-applies the fix on
+		today's develop at once (the parked branch stays the backup until then). The new candidate goes
+		through guard, review, proof and gate again: it auto-ships only if it qualifies on its own,
+		otherwise it parks and a ship decision is needed again."""
+		self.state.count_reapply(bug_id)
+		self.state.save()
+		self.log("bug {}: re-applying the fix on today's develop after: {}".format(bug_id, reason[:300]))
+		try:
+			self._recover_feature(bug_id)
+			feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
+			self._fix(bug_id, guidance=REAPPLY_GUIDANCE.format(reason[:500]), feature=feature)
+		except Exception:  # the bug is parked already; it waits for the maintainer as before
+			self.log(traceback.format_exc())
 
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
@@ -1100,6 +1368,9 @@ class BugLoop:
 					elif not by_maintainer and self.state.is_feature(item["bug"]):
 						# Defence in depth: only a maintainer decision ships a feature.
 						self._park(item["bug"], item["branch"], [FEATURE_REASON])
+					elif blockers and by_maintainer:
+						# Only the breaker holds a maintainer's ship: it keeps its place until the breaker is cleared.
+						kept.append(item)
 					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:
@@ -1208,6 +1479,131 @@ class BugLoop:
 			down["notified"] = True
 			self.notifier.send(notify.worktree_down_message(minutes, error))
 		self.state.save()
+
+	def _claude_ready(self, now):
+		"""False while Claude cannot run (logged out, no credit). Once the retry is due, one tiny probe
+		call decides; the first success ends the pause and replays the decisions it interrupted."""
+		down = self.state.data.get("claude_down")
+		if not down:
+			return True
+		if now < datetime.datetime.fromisoformat(down["retry_at"]):
+			return False
+		try:
+			self.runner.probe(self.artifacts_dir)
+		except ClaudeError as error:
+			self._claude_failed(str(error))
+			return False
+		self.log("claude runs again (down since {})".format(down.get("since")))
+		self.state.data["claude_down"] = None
+		self.state.save()
+		self.notifier.send(notify.claude_up_message())
+		self._replay_deferred()
+		return True
+
+	def _claude_failed(self, error):
+		"""Starts or extends the Claude pause; the maintainer hears of it once, at once: it needs a human."""
+		now = self.clock()
+		self._claude_ok = False
+		down = self.state.data.get("claude_down") or {"since": now.isoformat(), "notified": False}
+		down["error"] = error[-1000:]
+		down["retry_at"] = (now + datetime.timedelta(minutes=self.config.claude_retry_minutes)).isoformat()
+		self.state.data["claude_down"] = down
+		self.log("claude unavailable, retrying after {}: {}".format(down["retry_at"], error[-300:]))
+		if not down["notified"]:
+			down["notified"] = True
+			self.notifier.send(notify.claude_down_message(error))
+		self.state.save()
+
+	def _claude_interrupted(self, bug_id, error, verdict, guidance, feature, emergency, self_correct, fresh_feature):
+		"""Claude stopped working in the middle of a fix: undo what the attempt used up and put the bug
+		back where it was, so it runs again once Claude is back. Nothing is blamed on the bug."""
+		self._claude_failed(str(error))
+		waiting = "waiting: Claude cannot run on the loop machine ({}); ".format(str(error)[:200])
+		if emergency is not None:
+			phase = self.state.ci_phase()
+			if phase is not None:
+				phase["attempts"] = max(0, phase.get("attempts", 1) - 1)
+			self._safe_release(bug_id, waiting + "the emergency fix runs once it is back")
+		elif self_correct:
+			self._safe_release(bug_id, waiting + "the candidate on the branch waits for a decision", status="pr_open")
+		elif fresh_feature:
+			self._defer_decision(bug_id, "implement", feature)
+			self._safe_release(bug_id, waiting + "your feature decision runs once it is back",
+				triage={"category": "design_request"})
+		elif guidance:
+			self.state.data["refix_rounds"][bug_id] = max(0, self.state.refix_count(bug_id) - 1)
+			self._defer_decision(bug_id, "refix", guidance)
+			self._safe_release(bug_id, waiting + "your refix runs once it is back", status="pr_open")
+		else:
+			self._safe_release(bug_id, waiting + "the fix runs once it is back")
+			self.state.enqueue_fix(bug_id, (verdict or {}).get("severity") or "medium", "")
+		self.state.data["attempts"].pop(bug_id, None)
+		self.state.record(bug_id, "claude-unavailable")
+		self.state.save()
+
+	def _defer_decision(self, bug_id, action, guidance):
+		deferred = self.state.data.setdefault("deferred_decisions", [])
+		deferred[:] = [item for item in deferred if item.get("bug") != bug_id]
+		deferred.append({"bug": bug_id, "action": action, "guidance": guidance})
+
+	def _replay_requests(self):
+		"""Carries out `bug_loop.py replay` requests: the newest maintainer refix or implement decision in
+		each bug's history. Returns True when it ran one."""
+		folder = os.path.join(self.artifacts_dir, REPLAY_DIR)
+		if not os.path.isdir(folder):
+			return False
+		worked = False
+		for bug_id in sorted(os.listdir(folder)):
+			if not self._claude_ok or not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				break
+			os.remove(os.path.join(folder, bug_id))
+			if not valid_bug_id(bug_id):
+				continue
+			action = guidance = None
+			for entry in self.api.show(bug_id).get("history") or []:
+				change = entry.get("change") if isinstance(entry, dict) else None
+				if not isinstance(change, str) or entry.get("actor") != "maintainer":
+					continue
+				for name, prefix in REPLAY_PREFIXES:
+					if change.startswith(prefix):
+						action, guidance = name, change[len(prefix):].strip()[:4000]
+			if not action or not guidance:
+				self.log("bug {}: replay requested, but its history has no maintainer refix or implement decision".format(bug_id))
+				continue
+			self.log("bug {}: replaying the maintainer's {} decision on request".format(bug_id, action))
+			try:
+				if action == "refix":
+					self._refix(bug_id, guidance)
+				else:
+					self._implement(bug_id, guidance)
+			except WorktreeUnavailable:
+				request_replay(self.artifacts_dir, bug_id)  # again at the next poll
+			except Exception:
+				self.log(traceback.format_exc())
+			worked = True
+		return worked
+
+	def _replay_deferred(self):
+		"""Runs the refix and implement decisions a Claude outage interrupted, in their order."""
+		deferred = self.state.data.get("deferred_decisions") or []
+		self.state.data["deferred_decisions"] = []
+		self.state.save()
+		for item in deferred:
+			bug_id, action, guidance = item.get("bug"), item.get("action"), item.get("guidance")
+			if not valid_bug_id(bug_id) or not guidance:
+				continue
+			self.log("bug {}: replaying the {} decision a Claude outage interrupted".format(bug_id, action))
+			try:
+				if action == "refix":
+					self._refix(bug_id, guidance)
+				elif action == "implement":
+					self._implement(bug_id, guidance)
+			except WorktreeUnavailable:
+				self._defer_decision(bug_id, action, guidance)
+			except Exception:
+				self.log(traceback.format_exc())
+			if not self._claude_ok:
+				break
 
 	def _worktree_waiting(self, now):
 		"""True while the worktree back-off holds every fix (emergency or queued)."""
@@ -1668,6 +2064,15 @@ class BugLoop:
 			# The maintainer reset the breaker: what tripped it last time is history.
 			self.state.data["breaker_source"] = None
 			self.state.save()
+		if name and report and report.get("passed") and self._breaker_tripped_by_loop() 				and _nightly_run_id(name) != self.state.data["breaker_source"]["nightly_run"]:
+			# A newer Nightly Release is green: develop no longer has what tripped the breaker. Only
+			# the loop's own trip clears itself; a hold set by hand (or on top of the trip) stays.
+			tripped_by = self.state.data["breaker_source"]["nightly_run"]
+			loop_state.reset_breaker(self.artifacts_dir)
+			self.state.data["breaker_source"] = None
+			self.state.save()
+			self.log("circuit breaker cleared: {} is green (tripped by nightly run {})".format(name, tripped_by))
+			self.notifier.send(notify.breaker_cleared_message("{} is green".format(name)))
 		if name and name not in self.state.data["seen_red_reports"] and loop_state.red_nightly_blames_loop(report):
 			self.state.data["seen_red_reports"].append(name)
 			if loop_state.trip_breaker(self.artifacts_dir, "nightly {} is red and includes bug-loop merges".format(name), now):
@@ -1684,14 +2089,20 @@ class BugLoop:
 		itself for a red Nightly Release run that belongs to the current red phase, so the fix
 		repairs exactly what tripped it. A manual trip, a trip for another run, or a breaker file
 		rewritten since the trip keeps blocking."""
+		if not self._breaker_tripped_by_loop():
+			return False
+		run_id = self.state.data["breaker_source"]["nightly_run"]
+		phase = self.state.ci_phase()
+		return phase is not None and run_id in (phase.get("nightly_red_runs") or [])
+
+	def _breaker_tripped_by_loop(self):
+		"""True when the breaker is tripped and the loop tripped it itself for a red Nightly Release
+		run, with nothing added since: a manual trip, or a breaker file rewritten (`breaker on` on
+		top of the trip, a reset and a new trip) is the maintainer's."""
 		if not loop_state.breaker_active(self.artifacts_dir):
 			return False
 		source = self.state.data.get("breaker_source") or {}
-		run_id = source.get("nightly_run")
-		if run_id is None or source.get("text") != loop_state.breaker_text(self.artifacts_dir):
-			return False
-		phase = self.state.ci_phase()
-		return phase is not None and run_id in (phase.get("nightly_red_runs") or [])
+		return source.get("nightly_run") is not None and source.get("text") == loop_state.breaker_text(self.artifacts_dir)
 
 	def _write_daily_report(self):
 		day = self.state.data["day"]

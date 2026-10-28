@@ -49,6 +49,10 @@ Assert(banditHealth > 0, "bandit should spawn alive")
 -- swing timer running that would strip the stealth aura a moment later.
 TargetUnit(bandit)
 Assert(CastSpell(FIREBALL, bandit), "Fireball cast request should be accepted")
+-- Let our own Fireball land before anything else: a creature standing nearby can hurt the
+-- bandit first, and a Stealth request sent while Fireball is still casting is dropped.
+Assert(WaitUntil(function() return LastCastResult() == "ok" end, 10000, "fireball cast finishes"),
+	"fireball cast should succeed, got: " .. LastCastResult())
 Assert(WaitUntil(function() return GetHealth(bandit) < banditHealth end, 15000, "bandit takes the hit"),
 	"bandit should take damage, which puts us on its threat list")
 

@@ -22,6 +22,7 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/material_manager.h"
 #include "scene_graph/mesh_serializer.h"
+#include "scene_graph/mesh_sound_emitter_spec.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/skeleton.h"
 
@@ -36,6 +37,9 @@
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/render_operation.h"
 #include "scene_graph/skeleton_serializer.h"
+#include "base/chunk_writer.h"
+#include "binary_io/reader.h"
+#include "binary_io/stream_source.h"
 
 namespace mmo
 {
@@ -98,6 +102,12 @@ namespace mmo
 		m_selectedBoneAxis = std::make_unique<AxisDisplay>(m_scene, "SelectedBoneAxis");
 		m_selectedBoneNode->AddChild(m_selectedBoneAxis->GetSceneNode());
 
+		// Marker for the selected sound emitter, hidden until one is selected
+		m_soundEmitterNode = m_scene.GetRootSceneNode().CreateChildSceneNode("SoundEmitterMarker");
+		m_soundEmitterAxis = std::make_unique<AxisDisplay>(m_scene, "SoundEmitterAxis");
+		m_soundEmitterNode->AddChild(m_soundEmitterAxis->GetSceneNode());
+		UpdateSoundEmitterMarker();
+
 		// Debug skeleton rendering
 		if (m_entity->HasSkeleton())
 		{
@@ -126,6 +136,7 @@ namespace mmo
 		m_worldGrid.reset();
 		m_axisDisplay.reset();
 		m_selectedBoneAxis.reset();
+		m_soundEmitterAxis.reset();
 
 		m_scene.Clear();
 	}
@@ -607,6 +618,45 @@ namespace mmo
 			}
 			return result;
 		}
+
+		/// Reads the material path each SUBM chunk of a mesh file names, in submesh order, without
+		/// loading the mesh. A loaded mesh only knows the material it ended up with.
+		bool ReadSubMeshMaterialNames(const String& assetPath, std::vector<String>& out_materials)
+		{
+			const auto file = AssetRegistry::OpenFile(assetPath);
+			if (!file)
+			{
+				return false;
+			}
+
+			io::StreamSource source{ *file };
+			io::Reader reader{ source };
+
+			const ChunkMagic subMeshMagic = { { 'S', 'U', 'B', 'M' } };
+			out_materials.clear();
+			while (true)
+			{
+				uint32 chunkId = 0, chunkSize = 0;
+				if (!(reader >> io::read<uint32>(chunkId) >> io::read<uint32>(chunkSize)))
+				{
+					return true;
+				}
+
+				const size_t chunkStart = source.position();
+				if (chunkId == *subMeshMagic)
+				{
+					String name, material;
+					if (!(reader >> io::read_container<uint8>(name) >> io::read_container<uint16>(material)))
+					{
+						return false;
+					}
+
+					out_materials.push_back(material);
+				}
+
+				source.seek(chunkStart + chunkSize);
+			}
+		}
 	}
 
 	bool MeshEditorInstance::StairsToRampInFile(const String& assetPath)
@@ -698,6 +748,95 @@ namespace mmo
 		}
 
 		ILOG("Set submesh material: " << assetPath << " submesh " << index << " -> " << materialPath);
+		return true;
+	}
+
+	bool MeshEditorInstance::SetSoundEmittersInFile(const String& assetPath, const String& spec)
+	{
+		std::vector<MeshSoundEmitter> emitters;
+		String error;
+		if (!ParseMeshSoundEmitterSpec(spec, emitters, error))
+		{
+			ELOG("Set mesh sounds: " << assetPath << ": " << error);
+			return false;
+		}
+
+		// Read the recipe first: saving without it would drop the mesh's collision shapes.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (!LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) || recipeResult == collision_recipe_read::Corrupt)
+		{
+			ELOG("Set mesh sounds: cannot read " << assetPath);
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Set mesh sounds: cannot load " << assetPath);
+			return false;
+		}
+
+		mesh->SetSoundEmitters(emitters);
+		if (!SaveMeshWithRecipe(mesh, assetPath, recipeResult == collision_recipe_read::Read ? &recipe : nullptr))
+		{
+			return false;
+		}
+
+		ILOG("Set mesh sounds: " << assetPath << " -> " << emitters.size() << " emitter(s) [" << FormatMeshSoundEmitterSpec(emitters) << "]");
+		return true;
+	}
+
+	bool MeshEditorInstance::ResaveMeshFile(const String& assetPath)
+	{
+		// Read the recipe first: saving without it would drop the mesh's collision shapes.
+		CollisionRecipe recipe;
+		collision_recipe_read::Type recipeResult = collision_recipe_read::Absent;
+		if (!LoadMeshCollisionRecipe(assetPath, recipe, recipeResult) || recipeResult == collision_recipe_read::Corrupt)
+		{
+			ELOG("Resave mesh: cannot read " << assetPath);
+			return false;
+		}
+
+		const MeshPtr mesh = MeshManager::Get().Load(assetPath);
+		if (!mesh)
+		{
+			ELOG("Resave mesh: cannot load " << assetPath);
+			return false;
+		}
+
+		// A material that failed to load was replaced by the default one, and saving would make
+		// that permanent.
+		std::vector<String> fileMaterials;
+		if (!ReadSubMeshMaterialNames(assetPath, fileMaterials) || fileMaterials.size() != mesh->GetSubMeshCount())
+		{
+			ELOG("Resave mesh: cannot read the submesh materials of " << assetPath);
+			return false;
+		}
+
+		for (uint16 i = 0; i < mesh->GetSubMeshCount(); ++i)
+		{
+			const MaterialPtr& material = mesh->GetSubMesh(i).GetMaterial();
+			if (!material || material->GetName() != fileMaterials[i])
+			{
+				ELOG("Resave mesh: " << assetPath << " submesh " << i << " cannot load its material " << fileMaterials[i] << ", refusing to save");
+				return false;
+			}
+		}
+
+		// A skinned mesh whose skeleton is missing is broken content; do not touch it.
+		if (mesh->HasSkeleton() && !mesh->GetSkeleton())
+		{
+			ELOG("Resave mesh: " << assetPath << " cannot load its skeleton " << mesh->GetSkeletonName() << ", refusing to save");
+			return false;
+		}
+
+		if (!SaveMeshWithRecipe(mesh, assetPath, recipeResult == collision_recipe_read::Read ? &recipe : nullptr))
+		{
+			return false;
+		}
+
+		ILOG("Resave mesh: saved " << assetPath);
 		return true;
 	}
 
@@ -1021,9 +1160,145 @@ namespace mmo
 				ImGui::Unindent();
 			}
 
+			ImGui::Spacing();
+
+			DrawSoundEmitters();
+
 			ImGui::PopStyleVar(2);
 		}
 		ImGui::End();
+	}
+
+	void MeshEditorInstance::DrawSoundEmitters()
+	{
+		if (!ImGui::CollapsingHeader("Sounds"))
+		{
+			return;
+		}
+
+		ImGui::Indent();
+		ImGui::TextWrapped("Looping sounds every placement of this mesh plays. Use a looped 3D sound entry; "
+			"the offset is in mesh space and follows the placement's rotation and scale.");
+		ImGui::Spacing();
+
+		std::vector<MeshSoundEmitter> emitters = m_mesh->GetSoundEmitters();
+		bool changed = false;
+		int32 removeIndex = -1;
+
+		for (size_t i = 0; i < emitters.size(); ++i)
+		{
+			MeshSoundEmitter& emitter = emitters[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			const bool selected = m_selectedSoundEmitter == static_cast<int32>(i);
+			const String header = "Emitter " + std::to_string(i + 1);
+			if (ImGui::Selectable(header.c_str(), selected))
+			{
+				m_selectedSoundEmitter = selected ? -1 : static_cast<int32>(i);
+			}
+
+			static ImGuiTextFilter s_emitterSoundFilter;
+			DrawSoundEntryCombo(m_editor.GetProject().sounds, "Sound", emitter.soundEntryId, s_emitterSoundFilter,
+				[&emitter, &changed](const uint32 soundId)
+				{
+					emitter.soundEntryId = soundId;
+					changed = true;
+				});
+
+			if (const auto* entry = m_editor.GetProject().sounds.getById(emitter.soundEntryId))
+			{
+				if (!entry->looped() || !entry->is_3d())
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Not a looped 3D sound: this emitter stays silent in game.");
+				}
+				else if (emitter.maxDistance <= 0.0f)
+				{
+					ImGui::TextDisabled("Audible up to %.1f m (sound entry)", entry->max_distance());
+				}
+			}
+
+			changed |= ImGui::DragFloat3("Offset", emitter.offset.Ptr(), 0.01f);
+			changed |= ImGui::SliderFloat("Volume", &emitter.volume, 0.0f, 2.0f, "%.2f");
+			changed |= ImGui::DragFloat("Max Distance", &emitter.maxDistance, 0.1f, 0.0f, 500.0f, emitter.maxDistance <= 0.0f ? "(entry)" : "%.1f m");
+
+			if (IAudio* audio = m_editor.GetAudio(); audio && emitter.soundEntryId != 0)
+			{
+				if (ImGui::Button("Preview"))
+				{
+					// Played once as a 2D sound: a looped entry previewed as a loop would never stop
+					if (const auto* entry = m_editor.GetProject().sounds.getById(emitter.soundEntryId); entry && entry->files_size() > 0)
+					{
+						SoundIndex soundIdx = audio->FindSound(entry->files(0), SoundType::Sound2D);
+						if (soundIdx == InvalidSound)
+						{
+							soundIdx = audio->CreateSound(entry->files(0), SoundType::Sound2D);
+						}
+						if (soundIdx != InvalidSound)
+						{
+							ChannelIndex channel = InvalidChannel;
+							audio->PlaySound(soundIdx, &channel);
+						}
+					}
+				}
+				ImGui::SameLine();
+			}
+
+			if (ImGui::Button("Remove"))
+			{
+				removeIndex = static_cast<int32>(i);
+			}
+
+			ImGui::Separator();
+			ImGui::PopID();
+		}
+
+		if (removeIndex >= 0)
+		{
+			emitters.erase(emitters.begin() + removeIndex);
+			if (m_selectedSoundEmitter >= removeIndex)
+			{
+				m_selectedSoundEmitter = m_selectedSoundEmitter == removeIndex ? -1 : m_selectedSoundEmitter - 1;
+			}
+			changed = true;
+		}
+
+		if (ImGui::Button("Add Sound"))
+		{
+			// Start at the top centre of the mesh, where flames and glowing parts usually sit
+			MeshSoundEmitter emitter;
+			const AABB& bounds = m_mesh->GetBounds();
+			emitter.offset = Vector3(bounds.GetCenter().x, bounds.max.y, bounds.GetCenter().z);
+			emitters.push_back(emitter);
+			m_selectedSoundEmitter = static_cast<int32>(emitters.size() - 1);
+			changed = true;
+		}
+
+		if (changed)
+		{
+			m_mesh->SetSoundEmitters(std::move(emitters));
+		}
+
+		UpdateSoundEmitterMarker();
+		ImGui::Unindent();
+	}
+
+	void MeshEditorInstance::UpdateSoundEmitterMarker()
+	{
+		if (!m_soundEmitterNode || !m_soundEmitterAxis)
+		{
+			return;
+		}
+
+		const auto& emitters = m_mesh->GetSoundEmitters();
+		if (m_selectedSoundEmitter < 0 || m_selectedSoundEmitter >= static_cast<int32>(emitters.size()))
+		{
+			m_selectedSoundEmitter = -1;
+			m_soundEmitterAxis->SetVisible(false);
+			return;
+		}
+
+		m_soundEmitterNode->SetPosition(emitters[m_selectedSoundEmitter].offset);
+		m_soundEmitterAxis->SetVisible(true);
 	}
 
 	void MeshEditorInstance::DrawAnimationTimeline()

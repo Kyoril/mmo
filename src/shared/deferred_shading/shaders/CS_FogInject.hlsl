@@ -1,10 +1,13 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 // Fills every froxel with this frame's fog: extinction from height fog times wind-scrolled noise, and
-// the light scattered toward the camera (fog ambient + shadowed sun + unshadowed point and spot
-// lights). Output rgb = radiance * sigmaScatter, a = sigmaTotal: sigmaTotal is the zone fog's sigma plus
-// every local fog volume's density at the froxel, sigmaScatter the same sum with each volume's density
-// tinted by its colour. Local volumes share the zone fog's lighting.
+// the light scattered toward the camera. u0: rgb = (fog ambient + unshadowed point and spot lights) *
+// sigmaScatter, a = sigmaTotal; jittered and accumulated by CS_FogTemporal. u1: rgb = sigmaScatter * sun
+// visibility - the shadowed sun WITHOUT its phase function, which CS_FogIntegrate applies for the current
+// view rays. u1 is deterministic per cell and bypasses the history.
+// sigmaTotal is the zone fog's sigma plus every local fog volume's density at the froxel, sigmaScatter
+// the same sum with each volume's density tinted by its colour. Local volumes share the zone fog's
+// lighting.
 //
 // Point and spot lights come from the deferred renderer's light buffer (t9), local fog volumes from the
 // fog volume buffer (t10). Each 8x8x8 thread group culls the frame's lights and volumes once against its
@@ -41,9 +44,13 @@ cbuffer ShadowBuffer : register(b3)
 };
 
 RWTexture3D<float4> InjectOutput : register(u0);
+RWTexture3D<float4> InjectSunOutput : register(u1);
 
 StructuredBuffer<Light> Lights : register(t9);
 StructuredBuffer<FogVolume> FogVolumes : register(t10);
+Texture3D<float4> ColumnFarDepth : register(t11);
+Texture2D FogShadowMap : register(t12);  // coarse sun shadow over the whole fog range (FogShadowViewProj), when FogShadowValid  // r = farthest depth seen through each grid column (CS_FogDepthTiles)
+Texture3D<float> BlueNoise : register(t13);  // BLUE_NOISE_SIZE^2 x 1 tiling blue noise rank map (temporal sun modes)
 
 static const uint FOG_GROUP_SIZE = 8;
 static const uint FOG_GROUP_THREADS = FOG_GROUP_SIZE * FOG_GROUP_SIZE * FOG_GROUP_SIZE;
@@ -55,47 +62,239 @@ groupshared uint s_blockLights[MAX_BLOCK_LIGHTS];    // indices into Lights
 groupshared uint s_blockVolumeHits;                  // fog volumes that reach the block (may exceed the capacity)
 groupshared uint s_blockVolumes[MAX_BLOCK_VOLUMES];  // indices into FogVolumes
 
-// One hardware-PCF tap in the cascade covering this distance. 1 = lit.
-// viewDepth: distance along the camera's forward axis (not radial distance to the camera) - matches
-// how CascadeSplitDistances is built (the lighting shader also selects cascades by view depth).
-float SampleSunVisibility(float3 worldPos, float viewDepth)
+// Zone fog extinction at a world position: height fog times the wind-scrolled noise.
+float ZoneSigmaAt(float3 worldPos)
 {
-    if (CascadeCount == 0)
+    // The pattern moves with the wind: the noise at p now is the noise that was at p - offset.
+    float3 noiseUvw = float3(worldPos.x / NoiseSize - WindOffset.x, worldPos.y / NoiseSize, worldPos.z / NoiseSize - WindOffset.y);
+    return FogDensityAt(worldPos.y) * NoiseDensityFactor(NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f), NoiseAmount);
+}
+
+// Width of the dithered band around each cascade split in SunMode 2, as a fraction of the cell's view depth.
+static const float CascadeBlendBand = 0.2f;
+
+// Most depth taps per cell. Mirrors VolumetricFogSettings::MaxSunTapsZ.
+static const uint MAX_SUN_TAPS_Z = 16;
+
+// Fewest depth taps per cell on the fog shadow map path. Mirrors VolumetricFogSettings::MinFogShadowTapsZ.
+static const uint MIN_FOG_SHADOW_TAPS_Z = 2;
+
+// Edge length of the fog noise volume in texels. Mirrors VolumetricFogSettings::NoiseResolution.
+static const float NOISE_RESOLUTION = 64.0f;
+
+// This frame's sample offset of froxel id inside its cell: depth in slices and xy in cells, each in [0, 1).
+// The box filter mode moves the whole grid by one shared Halton offset (Jitter/ScreenJitter). The temporal
+// sun modes give every froxel its own offset from a blue noise texture, advanced by the golden ratio each
+// frame: neighbouring froxels then sample different parts of their cells in the same frame, so what the
+// history has to absorb is fine-grained noise rather than the whole volume shifting in step.
+void FroxelJitter(uint3 id, out float depthJitter, out float2 screenJitter)
+{
+    if (SunMode == 0)
+    {
+        depthJitter = Jitter;
+        screenJitter = ScreenJitter;
+        return;
+    }
+
+    // Three reads at fixed offsets give three decorrelated values per column; the slice index shifts them
+    // by R3 sequence steps so the froxels of one column do not all share the same offset.
+    int2 p = int2(id.xy);
+    float3 noise = float3(
+        BlueNoise.Load(int4(p & (BLUE_NOISE_SIZE - 1), 0, 0)),
+        BlueNoise.Load(int4((p + int2(17, 41)) & (BLUE_NOISE_SIZE - 1), 0, 0)),
+        BlueNoise.Load(int4((p + int2(43, 13)) & (BLUE_NOISE_SIZE - 1), 0, 0)));
+    float3 j = frac(noise + GoldenJitter + float(id.z) * float3(0.8191725f, 0.6710436f, 0.5497005f));
+    depthJitter = j.x;
+    screenJitter = j.yz;
+}
+
+// Box-filters the sun's shadowed scattering over a cell with one tap pattern. A tap's world position is
+// CameraPosition + depth * (ray + sub.x * cellX + sub.y * cellY) (all per metre of view depth); the cascade
+// projection is orthographic, so its shadow-space position is the same affine expression in light space.
+// Returns x = mean(visibility * zone sigma), y = mean(visibility), z = mean(zone sigma). shadowed = false treats
+// every tap as lit.
+// Sun visibility at a light-space position: one bilinear comparison, or with filterTexel > 0 four of them one texel
+// apart, a tent over 4x4 texels, so the result is a smooth function of the position and cannot pick out single canopy
+// gaps. Positions outside the map count as lit.
+float SunVisibility(Texture2D shadowMap, float3 light, float filterTexel)
+{
+    float2 uv = light.xy * float2(0.5f, -0.5f) + 0.5f;
+    if (!all(uv >= 0.0f) || !all(uv <= 1.0f) || light.z < 0.0f || light.z > 1.0f)
     {
         return 1.0f;
     }
 
-    uint cascade = CascadeCount - 1;
-    for (uint i = 0; i < CascadeCount; ++i)
+    float compare = light.z - ShadowBias;
+    if (filterTexel <= 0.0f)
     {
-        if (viewDepth <= CascadeSplitDistances[i])
+        return shadowMap.SampleCmpLevelZero(ShadowSampler, uv, compare);
+    }
+
+    return 0.25f * (
+        shadowMap.SampleCmpLevelZero(ShadowSampler, uv + float2(-filterTexel, -filterTexel), compare) +
+        shadowMap.SampleCmpLevelZero(ShadowSampler, uv + float2(filterTexel, -filterTexel), compare) +
+        shadowMap.SampleCmpLevelZero(ShadowSampler, uv + float2(-filterTexel, filterTexel), compare) +
+        shadowMap.SampleCmpLevelZero(ShadowSampler, uv + float2(filterTexel, filterTexel), compare));
+}
+
+float3 SumCellSunTaps(Texture2D shadowMap, bool shadowed, float3 lightOrigin, float3 lightRay, float3 lightX, float3 lightY,
+    float3 rayPerDepth, float3 cellX, float3 cellY, uint3 id, float depthJitter, float2 screenJitter, uint tapsZ, float filterTexel)
+{
+    float3 sum = float3(0.0f, 0.0f, 0.0f);
+    [loop]
+    for (uint k = 0; k < tapsZ; ++k)
+    {
+        // The pattern is offset by this frame's jitter (FroxelJitter; 0.5 = centred without jitter).
+        float depth = SliceToDepth((float(id.z) + (float(k) + depthJitter) / float(tapsZ)) / float(GridDepth));
+
+        // A filtered lookup already spans more than the cell's cross-section (the tent covers ~4 fog shadow
+        // texels, metres wide), so the coarse map is read once per depth layer on the cell's centre line instead
+        // of at every tap across the cell: the same value at a quarter of the comparisons.
+        float layerVisibility = 1.0f;
+        if (shadowed && filterTexel > 0.0f)
         {
-            cascade = i;
-            break;
+            layerVisibility = SunVisibility(shadowMap, lightOrigin + depth * lightRay, filterTexel);
+        }
+
+        // Each depth layer shifts its xy strata by an R2 sequence step, so the layers do not stack their
+        // taps in the same columns and together cover the cell's cross-section evenly.
+        float2 layerOffset = frac(screenJitter + float(k) * float2(0.7548777f, 0.5698403f));
+        [loop]
+        for (uint j = 0; j < SunTapsXY; ++j)
+        {
+            [loop]
+            for (uint i = 0; i < SunTapsXY; ++i)
+            {
+                float2 sub = (float2(i, j) + layerOffset) / float(SunTapsXY) - 0.5f;
+
+                float visibility = layerVisibility;
+                if (shadowed && filterTexel <= 0.0f)
+                {
+                    visibility = SunVisibility(shadowMap, lightOrigin + depth * (lightRay + sub.x * lightX + sub.y * lightY), 0.0f);
+                }
+
+                // The fog density is filtered with the same taps: a single noise sample per cell slides
+                // through noise features smaller than the cell as the camera moves, and the shafts show it.
+                float3 worldPos = CameraPosition + depth * (rayPerDepth + sub.x * cellX + sub.y * cellY);
+                float zoneSigma = ZoneSigmaAt(worldPos);
+                sum += float3(visibility * zoneSigma, visibility, zoneSigma);
+            }
         }
     }
 
-    float4 lightSpace = mul(float4(worldPos, 1.0f), CascadeViewProj[cascade]);
-    if (lightSpace.w <= 0.0f)
+    return sum / float(SunTapsXY * SunTapsXY * tapsZ);
+}
+
+// Depth taps a cell needs so that consecutive taps land at most about two fog shadow texels apart (each tap is a
+// tent over 4x4 texels, see SunVisibility) and one fog noise texel apart along the ray. A froxel far away is a
+// needle several metres long; its shadow-space projection crosses many texels, and with a fixed, smaller tap count
+// the taps skip across shadow edges, so the shafts flicker back and forth as the cells slide through the world while
+// walking (measured: the back-and-forth vanishes with enough depth taps, while more taps across the cell change
+// nothing). A near froxel is a few centimetres deep and needs only the minimum. Mirrors
+// volumetric_fog::FogShadowDepthTaps in volumetric_fog_settings.h.
+uint FogShadowDepthTaps(uint3 id, float3 lightRay, float3 rayPerDepth)
+{
+    float cellDepth = SliceToDepth(float(id.z + 1) / float(GridDepth)) - SliceToDepth(float(id.z) / float(GridDepth));
+    float twoTexelSteps = cellDepth * length(lightRay.xy) * 0.25f * FogShadowMapSize;
+    float noiseSteps = cellDepth * length(rayPerDepth) * NOISE_RESOLUTION / max(NoiseSize, 1e-3f);
+    return clamp(uint(ceil(max(twoTexelSteps, noiseSteps))), MIN_FOG_SHADOW_TAPS_Z, MAX_SUN_TAPS_Z);
+}
+
+// Direction through a screen UV scaled to one metre of view depth.
+float3 RayPerDepth(float2 uv)
+{
+    float3 ray = FogWorldRay(uv);
+    return ray / max(dot(ray, CameraForward), 1e-4f);
+}
+
+// The sun's shadowed scattering of froxel id, box-filtered over the whole cell (SunTapsXY^2 x SunTapsZ taps
+// on a fixed pattern) with the same taps every frame: x = mean(visibility * zone fog sigma), y = mean
+// visibility (for the local fog volumes, which are evaluated at the cell centre only), z = mean zone fog sigma
+// (the cell's extinction, so it is as deterministic as the shafts it dims).
+//
+// A single shadow tap per froxel resolves canopy detail far finer than the grid (a leaf gap is a fraction
+// of a 12 px cell at 50 m), so which cells read "lit" depends on exactly where the sample lands - and every
+// camera move moves the grid. The same holds for the wind noise in the fog density. Jittering the sample and
+// averaging through the temporal history hides that at rest but smears and lags while moving. The box filter
+// is the value the cell should have; it changes only as fast as the cell actually slides through the shadow
+// and the noise, so this volume needs no history at all.
+//
+// The shadow comes from the fog's own coarse shadow map when there is one (FogShadowValid): the cascades
+// resolve single leaves, far finer than these taps can sample, so with them the taps hit a different random set
+// of leaf gaps after every step and the shafts rearranged while walking. Without it, one cascade per cell,
+// chosen by the cell centre's view depth. Taps outside the map count as lit.
+float3 CellSunScattering(uint3 id, float depthJitter, float2 screenJitter)
+{
+    float2 cell = 1.0f / float2(GridWidth, GridHeight);
+    float2 uv = (float2(id.xy) + 0.5f) * cell;
+    float centerDepth = SliceToDepth((float(id.z) + 0.5f) / float(GridDepth));
+
+    // SunMode 2 dithers the cascade choice across a band around every split (and fades to lit across the end of
+    // the last cascade): a hard split sits at a fixed view depth, so walking sweeps it through the shafts and the
+    // cells behind it flip from one cascade's shadow to the next in a single frame. The per-froxel blue noise moves
+    // every frame, so the history turns the dither into a blend.
+    bool pastLastCascade = false;
+    float selectDepth = centerDepth;
+    if (SunMode == 2)
     {
-        return 1.0f;
+        float n = frac(depthJitter + screenJitter.x + screenJitter.y);
+        selectDepth = centerDepth * (1.0f + CascadeBlendBand * (n - 0.5f));
+        pastLastCascade = CascadeCount > 0 && selectDepth > CascadeSplitDistances[CascadeCount - 1];
     }
 
-    float3 ndc = lightSpace.xyz / lightSpace.w;
-    float2 uv = ndc.xy * float2(1.0f, -1.0f) * 0.5f + 0.5f;
-    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f || ndc.z < 0.0f || ndc.z > 1.0f)
+    uint cascade = 0;
+    if (CascadeCount > 0)
     {
-        return 1.0f;
+        cascade = CascadeCount - 1;
+        for (uint c = 0; c < CascadeCount; ++c)
+        {
+            if (selectDepth <= CascadeSplitDistances[c])
+            {
+                cascade = c;
+                break;
+            }
+        }
     }
 
-    float compareDepth = ndc.z - ShadowBias;
-    switch (cascade)
+    float3 rayPerDepth = RayPerDepth(uv);
+    float3 cellX = RayPerDepth(uv + float2(cell.x * 0.5f, 0.0f)) - RayPerDepth(uv - float2(cell.x * 0.5f, 0.0f));
+    float3 cellY = RayPerDepth(uv + float2(0.0f, cell.y * 0.5f)) - RayPerDepth(uv - float2(0.0f, cell.y * 0.5f));
+
+    // SunMode 2 (temporal, cascades) samples the surface cascades even when the fog shadow map exists.
+    bool useFogShadowMap = FogShadowValid != 0 && SunMode != 2;
+    float4x4 m = useFogShadowMap ? FogShadowViewProj : CascadeViewProj[cascade];
+    float3 lightOrigin = mul(float4(CameraPosition, 1.0f), m).xyz;
+    float3 lightRay = mul(float4(rayPerDepth, 0.0f), m).xyz;
+    float3 lightX = mul(float4(cellX, 0.0f), m).xyz;
+    float3 lightY = mul(float4(cellY, 0.0f), m).xyz;
+
+    // One assignment per path and a single return: returns inside the switch after an early return left the
+    // result "potentially uninitialized" for the compiler (X4000).
+    float3 result;
+    bool shadowed = CascadeCount > 0 && !pastLastCascade;
+    if (useFogShadowMap)
     {
-        case 0: return ShadowMapCascade0.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        case 1: return ShadowMapCascade1.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        case 2: return ShadowMapCascade2.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
-        default: return ShadowMapCascade3.SampleCmpLevelZero(ShadowSampler, uv, compareDepth);
+        result = SumCellSunTaps(FogShadowMap, true, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id, depthJitter, screenJitter,
+            SunMode == 0 ? FogShadowDepthTaps(id, lightRay, rayPerDepth) : SunTapsZ, 1.0f / FogShadowMapSize);
     }
+    else if (cascade == 0)
+    {
+        result = SumCellSunTaps(ShadowMapCascade0, shadowed, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id, depthJitter, screenJitter, SunTapsZ, 0.0f);
+    }
+    else if (cascade == 1)
+    {
+        result = SumCellSunTaps(ShadowMapCascade1, shadowed, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id, depthJitter, screenJitter, SunTapsZ, 0.0f);
+    }
+    else if (cascade == 2)
+    {
+        result = SumCellSunTaps(ShadowMapCascade2, shadowed, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id, depthJitter, screenJitter, SunTapsZ, 0.0f);
+    }
+    else
+    {
+        result = SumCellSunTaps(ShadowMapCascade3, shadowed, lightOrigin, lightRay, lightX, lightY, rayPerDepth, cellX, cellY, id, depthJitter, screenJitter, SunTapsZ, 0.0f);
+    }
+
+    return result;
 }
 
 // World-space bounding sphere (xyz center, w radius) of one 8x8x8 froxel block: the sphere around the
@@ -254,23 +453,54 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
 
         const float debugSigma = 0.02f;
         InjectOutput[id] = float4(color * debugSigma, debugSigma);
+        InjectSunOutput[id] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         return;
     }
 
-    // 2. This froxel.
-    float2 uv = (float2(id.xy) + 0.5f) / float2(GridWidth, GridHeight);
+    // A cell that starts behind the farthest surface seen by every pixel that samples it (its own column and,
+    // through the composite's bilinear lookup, its neighbours) never shows its sun term: skip its shadow taps.
+    // Behind the ground or a tree trunk that is most of the grid.
+    float farDepth = 0.0f;
+    [unroll]
+    for (int dy = -1; dy <= 1; ++dy)
+    {
+        [unroll]
+        for (int dx = -1; dx <= 1; ++dx)
+        {
+            int2 column = clamp(int2(id.xy) + int2(dx, dy), int2(0, 0), int2(GridWidth, GridHeight) - 1);
+            farDepth = max(farDepth, ColumnFarDepth.Load(int4(column, 0, 0)).r);
+        }
+    }
+    // The half-float far depth may round down by a few centimetres; the margin keeps the test conservative.
+    bool hiddenCell = SliceToDepth(float(id.z) / float(GridDepth)) > farDepth * 1.002f;
+
+    // 2. This froxel. Visible cells take their zone fog density from the same fixed taps as the sun (cell
+    //    average, see CellSunScattering): a single sample per cell, jittered and blended through the history,
+    //    made the extinction - and with it every shaft behind it - change noisily from frame to frame while
+    //    walking. Hidden cells (behind every surface) keep the cheap single sample.
+    float depthJitter;
+    float2 screenJitter;
+    FroxelJitter(id, depthJitter, screenJitter);
+
+    float2 uv = (float2(id.xy) + screenJitter) / float2(GridWidth, GridHeight);
     float3 ray = FogWorldRay(uv);
-    float viewDepth = SliceToDepth((float(id.z) + Jitter) / float(GridDepth));
+    float viewDepth = SliceToDepth((float(id.z) + depthJitter) / float(GridDepth));
     float3 worldPos = FogWorldPosition(ray, viewDepth);
 
-    // The pattern moves with the wind: the noise at p now is the noise that was at p - offset.
-    float3 noiseUvw = float3(worldPos.x / NoiseSize - WindOffset.x, worldPos.y / NoiseSize, worldPos.z / NoiseSize - WindOffset.y);
-    float noise = NoiseVolume.SampleLevel(NoiseSampler, noiseUvw, 0.0f);
+    // The box filter's sun taps sit on a fixed, centred pattern: the sun volume has no history in that mode, so a
+    // per-frame jitter of its taps (the ambient sample above does jitter while gxVolumetricFogHistory > 0) would be
+    // pure frame-to-frame noise in the shafts. Only the temporal modes, which accumulate the sun, jitter it.
+    float3 sun = float3(0.0f, 0.0f, 0.0f);
+    if (!hiddenCell)
+    {
+        sun = SunMode == 0 ? CellSunScattering(id, 0.5f, float2(0.5f, 0.5f)) : CellSunScattering(id, depthJitter, screenJitter);
+    }
+    float sigma = hiddenCell ? ZoneSigmaAt(worldPos) : sun.z;
 
-    float sigma = FogDensityAt(worldPos.y) * NoiseDensityFactor(noise, NoiseAmount);
-    float visibility = SampleSunVisibility(worldPos, viewDepth);
-    float3 radiance = FogSource(dot(ray, SunDirection), visibility);
-    radiance += BlockLightScattering(worldPos, ray, blockLightCount);
+    // The sun's phase function is NOT applied here: it depends on the view direction, and the temporal
+    // history would keep it as seen from where the camera used to be. Only the view-independent parts go
+    // into the volumes; CS_FogIntegrate applies the sun phase for the current rays.
+    float3 radiance = FogTint + BlockLightScattering(worldPos, ray, blockLightCount);
 
     uint blockVolumeCount = min(s_blockVolumeHits, MAX_BLOCK_VOLUMES);
     float sigmaTotal = sigma;
@@ -278,4 +508,14 @@ void main(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint group
     AccumulateFogVolumes(worldPos, blockVolumeCount, sigmaTotal, sigmaScatter);
 
     InjectOutput[id] = float4(radiance * sigmaScatter, sigmaTotal);
+
+    // 3. The sun's shadowed scattering: the zone fog's part box-filtered over the cell with fixed taps; local fog
+    //    volumes from the froxel sample, scaled by the cell's mean visibility.
+    float3 sunScatter = float3(0.0f, 0.0f, 0.0f);
+    if (!hiddenCell)
+    {
+        sunScatter = sun.x.xxx + (sigmaScatter - sigma.xxx) * sun.y;
+    }
+
+    InjectSunOutput[id] = float4(sunScatter, 0.0f);
 }

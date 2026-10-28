@@ -768,8 +768,8 @@ namespace mmo
 				const float offsetRight = projVis->has_spawn_offset_right() ? projVis->spawn_offset_right() : 0.0f;
 				const float offsetUp = projVis->has_spawn_offset_up() ? projVis->spawn_offset_up() : 0.0f;
 
-				// Launch from the spawn bone (e.g. the casting hand) as posed right now: spawning is
-				// already delayed to the cast animation's release, so this is where the hand is.
+				// Launch from the spawn bone (e.g. the casting hand) as posed when the server
+				// releases the spell, keeping projectile travel aligned with server impact timing.
 				const Vector3 boneStart = projVis->has_spawn_bone()
 					? UnitBoneWorldPosition(*caster, projVis->spawn_bone(), SpawnFallbackHeight)
 					: baseStartPosition;

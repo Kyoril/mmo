@@ -46,6 +46,9 @@ namespace mmo
 		
         /// First queue (after backgrounds), used for skies if rendered first
 		SkiesEarly = 5,
+
+		/// Cloud layers drawn over the early sky, before any world geometry
+		SkiesClouds = 6,
 		WorldGeometry1 = 25,
 		
 		/// The default render queue

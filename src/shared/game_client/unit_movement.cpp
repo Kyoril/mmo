@@ -2,6 +2,7 @@
 
 #include "game_unit_c.h"
 #include "movement_log.h"
+#include "game/movement_ability.h"
 #include "log/default_log_levels.h"
 
 #include <sstream>
@@ -33,8 +34,9 @@ namespace mmo
 	constexpr float MIN_TICK_TIME = 1e-6f;
 
 	/// Submersion (water surface above feet) required before the player starts swimming.
-	/// Intended to scale with unit height later.
-	constexpr float SWIM_START_DEPTH = 1.5f;
+	/// Intended to scale with unit height later. Shared with the server, which lifts the
+	/// navigation paths of swimming creatures into the water surface band.
+	constexpr float SWIM_START_DEPTH = swim::StartDepth;
 
 	/// While swimming, if submersion drops below this AND the unit is resting on walkable floor,
 	/// the player stops swimming and resumes walking (shallow water / wading out).
@@ -46,7 +48,7 @@ namespace mmo
 	/// torso sits in the water with only head and shoulders above it — at 0.9 the whole back
 	/// floated above the surface. Kept close to SWIM_START_DEPTH so wading in does not snap the
 	/// body down when swimming starts.
-	constexpr float SWIM_SURFACE_MARGIN = 1.5f;
+	constexpr float SWIM_SURFACE_MARGIN = swim::SurfaceMargin;
 
 	constexpr float MIN_FLOOR_DIST = 0.019f;
 	constexpr float MAX_FLOOR_DIST = 0.024f;
@@ -62,6 +64,70 @@ namespace mmo
 	constexpr float MAX_VELOCITY_BOOST_FACTOR = 2.0f;
 
 	static const auto s_stringColor = Color(0.0f, 0.66f, 1.0f);
+
+	namespace
+	{
+	/// @brief Normal of the triangle a collision result was produced by, oriented to the side the
+	/// capsule touched it from. Falls back to the contact normal without a usable triangle.
+	Vector3 faceNormalTowardsContact(const CollisionResult& collisionRes)
+	{
+		Vector3 faceNormal = (collisionRes.b - collisionRes.a).Cross(collisionRes.c - collisionRes.a);
+		const float length = faceNormal.GetLength();
+		if (length < 1.e-6f)
+		{
+			return collisionRes.contactNormal;
+		}
+
+		faceNormal /= length;
+		if (faceNormal.Dot(collisionRes.contactNormal) < 0.f)
+		{
+			faceNormal = -faceNormal;
+		}
+
+		return faceNormal;
+	}
+
+	/// @brief Moves the most relevant of several simultaneous blocking hits to the front.
+	/// A capsule touching an edge reports every face that meets there at the same time of impact.
+	/// Taking whichever came first makes the result depend on triangle order and flip between frames.
+	/// Prefers the contact that opposes the sweep most, then the face that does: for a downward
+	/// floor sweep over a ledge that is the flat top rather than the wall below it, and for a
+	/// sideways sweep into a step it is the wall.
+	void promoteBestSimultaneousHit(std::vector<CollisionHitResult>& hits, const Vector3& sweepDirection, const float sweepDistance)
+	{
+		const auto first = std::find_if(hits.begin(), hits.end(), [](const CollisionHitResult& hit) { return hit.bBlockingHit; });
+		if (first == hits.end())
+		{
+			return;
+		}
+
+		// Hits within a millimetre of travel count as simultaneous.
+		const float tieTime = first->Time + 0.001f / std::max(sweepDistance, 0.001f);
+		constexpr float normalEpsilon = 1.e-3f;
+
+		auto best = first;
+		for (auto it = std::next(first); it != hits.end() && it->Time <= tieTime; ++it)
+		{
+			if (!it->bBlockingHit)
+			{
+				continue;
+			}
+
+			const float contactDot = it->Normal.Dot(sweepDirection);
+			const float bestContactDot = best->Normal.Dot(sweepDirection);
+			if (contactDot < bestContactDot - normalEpsilon ||
+				(contactDot <= bestContactDot + normalEpsilon && it->ImpactNormal.Dot(sweepDirection) < best->ImpactNormal.Dot(sweepDirection) - normalEpsilon))
+			{
+				best = it;
+			}
+		}
+
+		if (best != first)
+		{
+			std::iter_swap(first, best);
+		}
+	}
+	}
 
 	void FindFloorResult::SetFromSweep(const CollisionHitResult& hit, const float sweepFloorDistance,
 	                                   const bool isWalkableFloor)
@@ -304,11 +370,11 @@ namespace mmo
 		GetUpdatedNode().SetPosition(currentPos);
 	}
 
-	void UnitMovement::RemotePlayerMoveCollide(const Vector3& delta)
+	int32 UnitMovement::RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals)
 	{
 		if (delta.IsZero())
 		{
-			return;
+			return 0;
 		}
 
 		const Quaternion rot = GetUpdatedNode().GetOrientation();
@@ -327,14 +393,31 @@ namespace mmo
 			// reads as stuttering on staircases while the real player climbs fluidly.
 			if (CanStepUp(hit) && StepUp(GetGravityDirection(), delta * remainingFraction, hit, nullptr))
 			{
-				return;
+				return 0;
+			}
+
+			int32 numNormals = 0;
+			if (outBlockingNormals)
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
 			}
 
 			// Slide the remaining fraction of the move along the wall so the character
 			// moves parallel to the surface rather than stopping dead — same behaviour
 			// as the local player against the same geometry.
+			const Vector3 firstNormal = hit.Normal;
 			SlideAlongSurface(delta, remainingFraction, hit.Normal, hit, false);
+
+			// The slide reports the surface it ran into last (an inside corner, say).
+			if (outBlockingNormals && hit.IsValidBlockingHit() && !hit.Normal.IsNearlyEqual(firstNormal))
+			{
+				outBlockingNormals[numNormals++] = hit.Normal;
+			}
+
+			return numNormals;
 		}
+
+		return 0;
 	}
 
 	Vector3 UnitMovement::ConstrainInputAcceleration(const Vector3& inputAcceleration) const
@@ -613,16 +696,11 @@ namespace mmo
 			MaintainHorizontalGroundVelocity();
 			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, -m_gravityDirection);
 
-			// If we were pressing against a wall last frame, project the input acceleration
-			// onto the wall plane before CalcVelocity. This prevents CalcVelocity from
-			// rebuilding the into-wall component each frame, which would otherwise let
-			// the wall-parallel speed exceed the geometrically correct fraction of max speed.
-			if (m_hasWallContact)
-			{
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, m_wallContactNormal);
-			}
-
-			// Clear wall contact — MoveAlongFloor will re-set it if still blocked this tick.
+			// The input acceleration is deliberately not projected onto a wall the unit pressed
+			// against: CalcVelocity accelerates to max speed in whatever direction it points, so a
+			// projected acceleration turns any push into the wall into a full-speed slide along it.
+			// Kept as it is, the move points into the wall and the slide keeps only the parallel
+			// part of the run speed (speed * sin(angle to the wall normal)).
 			m_hasWallContact = false;
 
 			// Apply acceleration
@@ -1178,11 +1256,10 @@ namespace mmo
 			const Vector3 wallNormal = hit.Normal;
 			SlideAlongSurface(delta, 1.f, wallNormal, hit, true);
 
-			// Record wall contact and project both velocity and acceleration.
+			// Record wall contact and strip the into-wall velocity.
 			m_hasWallContact = true;
 			m_wallContactNormal = wallNormal;
 			m_velocity = Vector3::VectorPlaneProject(m_velocity, wallNormal);
-			m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 			const Vector3 postSlidePos = GetUpdatedNode().GetPosition();
 			MOVEMENT_EVENT("SLIDE_PENETRATION",
@@ -1223,10 +1300,6 @@ namespace mmo
 				// Record wall contact so next frame's CalcVelocity projects acceleration correctly.
 				m_hasWallContact = true;
 				m_wallContactNormal = wallNormal;
-
-				// Project acceleration (already done redundantly here, but kept for the penetration
-				// path and any sub-iteration that calls MoveAlongFloor multiple times per tick).
-				m_acceleration = Vector3::VectorPlaneProject(m_acceleration, wallNormal);
 
 				// Project velocity onto the wall plane only when we have meaningful into-wall
 				// momentum: either (a) we just hit the wall this frame (hit.Time > 0) so we need
@@ -1314,7 +1387,9 @@ namespace mmo
 
 	bool UnitMovement::CanEverSwim() const
 	{
-		// Players can swim; creatures currently cannot.
+		// Only the locally controlled player simulates swimming here (see UpdateSwimState).
+		// Creature swimming is server driven: the server lifts their paths into the water
+		// surface band and UpdateRemoteSwimState keeps them there.
 		return m_movedUnit.IsPlayer();
 	}
 
@@ -1727,7 +1802,12 @@ namespace mmo
 
 						m_velocity.y = 0.f;
 						CalcVelocity(timeTick, m_fallingLateralFriction, false, maxDeceleration);
-						velocityNoAirControl = Vector3(m_velocity.x, oldVelocity.z, m_velocity.z);
+						// Horizontal components come from the acceleration-free CalcVelocity above,
+						// the vertical one from the velocity before this step. Taking the vertical
+						// component from oldVelocity.z instead turned the horizontal run speed into
+						// upward speed, so deflecting off a wall while falling launched the unit up
+						// its face for as long as the player kept pushing into it.
+						velocityNoAirControl = Vector3(m_velocity.x, oldVelocity.y, m_velocity.z);
 
 						velocityNoAirControl = NewFallVelocity(velocityNoAirControl, gravity, gravityTime);
 					}
@@ -2027,6 +2107,19 @@ namespace mmo
 		SafeMoveNode(forwardDelta, rotation, true, &hit);
 		MOVEMENT_LOG("StepUp: Forward move delta=(" << forwardDelta.x << "," << forwardDelta.y << "," << forwardDelta.z << "), hit=" << hit.bBlockingHit << ", time=" << hit.Time);
 
+		// Something is still in the way at step height: the obstacle is taller than a step.
+		const bool forwardBlocked = hit.bBlockingHit;
+		if (forwardBlocked && didBoostForward)
+		{
+			// The boost exists to clear a stair edge, and there is none to clear. Sliding the
+			// boosted distance along the wall instead would move the unit a fixed distance per
+			// tick, regardless of the tick length: along a wall at high frame rates that is far
+			// above run speed (and trips the server's speed check). MoveAlongFloor slides instead.
+			MOVEMENT_LOG("StepUp: Failed - boosted forward move blocked, this is a wall");
+			scopedStepUpMovement.RevertMove();
+			return false;
+		}
+
 		// Check result of forward movement
 		if (hit.bBlockingHit)
 		{
@@ -2094,6 +2187,16 @@ namespace mmo
 			if (deltaZ > m_maxStepHeight)
 			{
 				MOVEMENT_LOG("StepUp: Failed - deltaZ > maxStepHeight (" << deltaZ << " > " << m_maxStepHeight << ")");
+				scopedStepUpMovement.RevertMove();
+				return false;
+			}
+
+			// Blocked at step height and back down on the floor we started from: nothing was
+			// stepped onto, the move only slid along a wall. Leave that to MoveAlongFloor, which
+			// slides without lifting and dropping the unit (a visible bob every other frame).
+			if (forwardBlocked && deltaZ <= MAX_FLOOR_DIST)
+			{
+				MOVEMENT_LOG("StepUp: Failed - only slid along a wall (deltaZ=" << deltaZ << ")");
 				scopedStepUpMovement.RevertMove();
 				return false;
 			}
@@ -2605,11 +2708,8 @@ namespace mmo
 
 						outHits.push_back(hitResult);
 
-						// Check if we should stop collecting hits
-						if (params.bFindClosestOnly && hitResult.bBlockingHit)
-						{
-							break;
-						}
+						// bFindClosestOnly does not stop here: every face of a collidable is hit at the
+						// same time, and the closest one is chosen among all of them below.
 
 						if (params.MaxHits > 0 && outHits.size() >= params.MaxHits)
 						{
@@ -2627,10 +2727,11 @@ namespace mmo
 		}
 
 		// Sort hits by time/distance (closest first)
-		std::sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+		std::stable_sort(outHits.begin(), outHits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 		{
 			return a.Time < b.Time;
 		});
+		promoteBestSimultaneousHit(outHits, sweepVector / sweepDistance, sweepDistance);
 
 		return static_cast<int32>(outHits.size());
 	}
@@ -2715,10 +2816,11 @@ namespace mmo
 		if (!hits.empty())
 		{
 			// Sort by time and get first blocking hit
-			std::sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
+			std::stable_sort(hits.begin(), hits.end(), [](const CollisionHitResult& a, const CollisionHitResult& b)
 			{
 				return a.Time < b.Time;
 			});
+			promoteBestSimultaneousHit(hits, sweepVector / sweepDistance, sweepDistance);
 
 			const CollisionHitResult* blockingHit = CollisionHitResult::GetFirstBlockingHit(hits);
 			outHit = blockingHit ? *blockingHit : hits[0];
@@ -2826,9 +2928,13 @@ namespace mmo
 			// This is critical for step-up logic to correctly determine impact height
 			result.ImpactPoint = collisionRes.contactPoint;
 
-			// Set normals
-			result.ImpactNormal = collisionRes.contactNormal;
-			result.Normal = collisionRes.contactNormal; // For capsule sweeps, these are typically the same
+			// Normal is the direction from the contact point to the capsule, ImpactNormal the normal
+			// of the face that was hit (as in Unreal). They differ whenever the capsule touches an
+			// edge or vertex: resting on a ledge, the contact direction tilts towards horizontal
+			// as the capsule moves outwards, while the face it stands on is still flat. Walkability
+			// is judged by the face, so the two must not be conflated.
+			result.Normal = collisionRes.contactNormal;
+			result.ImpactNormal = faceNormalTowardsContact(collisionRes);
 		}
 
 		return result;
@@ -3151,11 +3257,21 @@ namespace mmo
 			const float shrinkHeight = (pawnHalfHeight - pawnRadius) * (1.f - shrinkScale);
 			const float traceDist = sweepDistance + shrinkHeight;
 
+			// Unreal shrinks the capsule around its centre, which lifts its bottom by ShrinkHeight. Our
+			// sweep capsule has a fixed size and is placed by its feet, so the start is lifted instead;
+			// sweeping from the feet would make every floor read ShrinkHeight too close, and the unit
+			// would ride that far above the ground wherever the sweep (not the line trace) finds it.
+			const Vector3 traceStart = capsuleLocation - GetGravityDirection() * shrinkHeight;
+
 			CollisionHitResult hit(1.f);
-			bBlockingHit = SweepSingleCast(capsuleLocation, capsuleLocation + GetGravityDirection() * traceDist, hit);
+			bBlockingHit = SweepSingleCast(traceStart, traceStart + GetGravityDirection() * traceDist, hit);
 
 			if (bBlockingHit)
 			{
+				// Report the location in feet space again, like a sweep from capsuleLocation would
+				// (perching measures the impact height against it).
+				hit.Location += GetGravityDirection() * shrinkHeight;
+
 				// Reduce hit distance by ShrinkHeight because we shrank the capsule for the trace.
 				// We allow negative distances here, because this allows us to pull out of penetrations.
 				const float maxPenetrationAdjust = std::max(MAX_FLOOR_DIST, pawnRadius);
@@ -3447,6 +3563,16 @@ namespace mmo
 			}
 		}
 
+		// A creature swims at the water surface instead of being snapped onto the bottom of the
+		// water body it is in: the server paths it on a nav mesh baked on the ground. Players
+		// are left alone - the local one runs its own swim simulation in UpdateSwimState /
+		// HandleSwimming, and a remote one is placed by the height its own client reports, which
+		// is also where it dives to.
+		if (!m_movedUnit.IsPlayer() && UpdateRemoteSwimState(currentPosition, closestHitY, foundGround))
+		{
+			return true;
+		}
+
 		if (!foundGround)
 		{
 			return false;
@@ -3467,6 +3593,90 @@ namespace mmo
 		Vector3 newPosition = currentPosition;
 		newPosition.y = targetY;
 		GetUpdatedNode().SetPosition(newPosition);
+
+		return true;
+	}
+
+	bool UnitMovement::UpdateRemoteSwimState(const Vector3& position, const float groundY, const bool hasGround)
+	{
+		const auto stopSwimming = [this]()
+			{
+				if (m_movedUnit.GetMovementInfo().IsSwimming())
+				{
+					m_movedUnit.OnStopSwimming();
+				}
+
+				return false;
+			};
+
+		float surfaceY = 0.0f;
+		if (!m_movedUnit.QueryWaterAt(position.x, position.z, surfaceY))
+		{
+			return stopSwimming();
+		}
+
+		// Above the surface (on a bridge over the water, or falling towards it): not in the
+		// water at all, so the height stays with the ground below.
+		if (position.y > surfaceY)
+		{
+			return stopSwimming();
+		}
+
+		// Water the unit can stand in is waded through on the ground rather than swum in. With
+		// no ground within reach the water is deeper than the search band, so it is swum in.
+		if (hasGround && (surfaceY - groundY) < SWIM_START_DEPTH)
+		{
+			return stopSwimming();
+		}
+
+		if (!m_movedUnit.GetMovementInfo().IsSwimming())
+		{
+			m_movedUnit.OnStartSwimming();
+		}
+
+		// Float at the surface: the swim animation lays the body out flat, so only the surface
+		// margin of it stays submerged.
+		Vector3 newPosition = position;
+		newPosition.y = surfaceY - SWIM_SURFACE_MARGIN;
+		GetUpdatedNode().SetPosition(newPosition);
+
+		return true;
+	}
+
+	bool UnitMovement::SettleOnFloor()
+	{
+		FindFloorResult floorResult;
+		FindFloor(GetUpdatedNode().GetPosition(), floorResult, nullptr);
+
+		if (!floorResult.IsWalkableFloor())
+		{
+			return false;
+		}
+
+		m_currentFloor = floorResult;
+		AdjustFloorHeight();
+
+		return true;
+	}
+
+	bool UnitMovement::CorrectRemoteGroundHeight(const float maxCorrectionDistance, const std::optional<float> referenceHeight)
+	{
+		// The capsule is what decides where the owning client stands this character, so it is also
+		// what decides where we have to draw it. Only when there is no floor within the capsule's
+		// reach does the coarse ray search have to pull the unit back to a surface first.
+		if (SettleOnFloor())
+		{
+			return true;
+		}
+
+		if (!CorrectGroundHeight(maxCorrectionDistance, referenceHeight))
+		{
+			return false;
+		}
+
+		// The ray search leaves the feet on the surface itself. Settle on it right away so the
+		// recovered unit matches the owning client in this frame rather than in the next one.
+		SettleOnFloor();
 
 		return true;
 	}

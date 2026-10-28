@@ -7,6 +7,7 @@
 #include "hpak_v1_0/header.h"
 
 #include <fstream>
+#include <mutex>
 
 namespace mmo
 {
@@ -17,6 +18,8 @@ namespace mmo
 		std::string m_name;
 		hpak::v1_0::Header m_header;
 		std::unique_ptr<std::ifstream> m_file;
+		/// Serializes reads, which share the archive's file handle. Opens come from the main and the streaming thread.
+		std::mutex m_readLock;
 
 	public:
 		HPAKArchive(const std::string& filename);

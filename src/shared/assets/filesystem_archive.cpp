@@ -36,7 +36,16 @@ namespace mmo
 			return false;
 		}
 
-		return std::filesystem::remove(std::filesystem::path(m_name) / filename);
+		// The error code overload: the throwing one aborts the process (no exceptions) on a file that is still open
+		std::error_code error;
+		const bool removed = std::filesystem::remove(std::filesystem::path(m_name) / filename, error);
+		if (error)
+		{
+			WLOG("Cannot delete file " << filename << ": " << error.message());
+			return false;
+		}
+
+		return removed;
 	}
 
 	const std::string & FileSystemArchive::GetName() const

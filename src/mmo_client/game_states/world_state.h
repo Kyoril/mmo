@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "shared/audio/audio.h"
 #include "mmo_client/char_creation//char_select.h"
 #include "mmo_client/data/client_cache.h"
@@ -44,13 +46,18 @@
 #include "ui/world_text_frame.h"
 
 #include "game_client/net_client.h"
+#include "game_client/ambient_sound_emitters.h"
+#include "game_client/water_ambience.h"
 #include "game_client/sound_entry_player.h"
 #include "game_client/combat_sound_player.h"
 #include "deferred_shading/water_volume_system.h"
+#include "deferred_shading/ocean_feed.h"
 #include "game_common/fog_volume.h"
 #include "debug_path_visualizer.h"
 #include "scene_graph/foliage.h"
 #include "terrain/far_terrain.h"
+#include "terrain/ocean_mask.h"
+#include "terrain/terrain.h"
 
 #include <map>
 #include <optional>
@@ -222,15 +229,6 @@ namespace mmo
 
 		void OnTargetLevelChanged(uint64 monitoredGuid);
 
-		// Forward declaration for PendingProjectile (defined below)
-		struct PendingProjectile;
-
-		/// @brief Spawns a pending projectile and removes it from the pending list.
-		void SpawnPendingProjectile(PendingProjectile* pending);
-
-		/// @brief Updates pending projectiles (checks for animation end fallback).
-		void UpdatePendingProjectiles();
-
 		void OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue);
@@ -310,12 +308,22 @@ namespace mmo
 
 		bool OnKeyUp(int32 key);
 
+		/// Builds the binding key name for a virtual key code, prefixed with the modifiers currently
+		/// held (ALT-, CTRL-, SHIFT-) when that combination is actually bound or a key capture is
+		/// pending. Unbound combinations keep the plain key name, so holding a modifier never swallows
+		/// an existing binding.
+		[[nodiscard]] String ResolveBindingKeyName(int32 key) const;
+
 		void OnIdle(float deltaSeconds, GameTime timestamp);
 
 		/// Called when the screen layer should be painted. Should paint the scene.
 		void OnPaint();
 
 		void CheckForZoneUpdate();
+
+		/// @brief Resolves a zone's music (or ambience) sound id, falling back along the parent zone chain.
+		/// @return The sound entry id, or 0 for none.
+		uint32 ResolveZoneSound(const proto_client::ZoneEntry *zone, bool music) const;
 
 		/// @brief Retargets the environment to the profile of a zone. Snaps on world enter and on
 		///        teleports (a move of more than 200 m within one update), fades otherwise.
@@ -608,6 +616,10 @@ namespace mmo
 
 		void Command_Godmode(const std::string &cmd, const std::string &args) const;
 
+		void Command_Invisible(const std::string &cmd, const std::string &args) const;
+
+		void Command_Ghost(const std::string &cmd, const std::string &args) const;
+
 		void Command_Damage(const std::string &cmd, const std::string &args) const;
 
 		void Command_ResetCooldowns(const std::string &cmd, const std::string &args) const;
@@ -724,6 +736,9 @@ namespace mmo
 		///			underwater post-process and the audio low-pass.
 		std::unique_ptr<WaterVolumeSystem> m_waterVolume;
 
+		/// Feeds the FFT ocean (sea level, ocean mask, Ocean water profile) every frame.
+		OceanFeed<terrain::Terrain> m_oceanFeed { static_cast<float>(terrain::ocean_mask::TexelSize) };
+
 		/// @brief Asset name of the caustics texture last handed to the underwater pass, so the
 		///			texture is only looked up again when the liquid in front of the camera changes.
 		String m_underwaterCausticsTexture;
@@ -739,6 +754,9 @@ namespace mmo
 
 		/// @brief Recomputes submersion and pushes it to the renderer and the audio device.
 		void UpdateWaterVolume(float deltaSeconds);
+
+		/// Hands the terrain's sea to the FFT ocean renderer and applies the Ocean water profile.
+		void UpdateOcean();
 
 		/// @brief Gets the deferred renderer behind the world frame, or nullptr when the world
 		///			frame or its renderer does not exist yet.
@@ -768,21 +786,6 @@ namespace mmo
 
 		std::unique_ptr<ProjectileManager> m_projectileManager;
 
-		/// @brief Structure to track pending projectile spawns waiting for SpellGo animation notify.
-		struct PendingProjectile
-		{
-			uint32 spellId = 0;
-			uint64 casterGuid = 0;
-			uint64 targetGuid = 0;
-			const proto_client::SpellVisualization* visualization = nullptr;
-			bool hasCastSucceededAnimation = false;
-			GameTime creationTime = 0;
-			scoped_connection_container connections;
-		};
-
-		/// @brief List of pending projectiles waiting for SpellGo animation notify.
-		std::vector<std::unique_ptr<PendingProjectile>> m_pendingProjectiles;
-
 		TimerQueue &m_timers;
 		/// The attack swing outcome the server last reported. The error message and voice line for
 		/// it are repeated on a timer until a different outcome arrives -- including
@@ -794,6 +797,11 @@ namespace mmo
 		uint32 m_attackSwingErrorGeneration{0};
 
 		Bindings m_bindings;
+
+		/// Binding key name a held key was pressed with, by virtual key code. The key up event has to
+		/// reach the same binding as the key down event even if the player let go of a modifier in
+		/// between, or action buttons would stay stuck in their pushed state.
+		std::map<int32, String> m_pressedKeyBindings;
 
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 
@@ -813,6 +821,15 @@ namespace mmo
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
 		std::thread m_backgroundLoader;
+
+		/// Bumped by OnLeave() whenever the world (and its Terrain/Page objects) is torn down.
+		/// m_workQueue and m_dispatcher are stopped and reset there, not recreated, so a handler
+		/// queued before the stop can still be lying in one of their queues the next time this
+		/// state is entered; such a handler captures raw Page pointers that are dangling by then.
+		/// Async continuations that hold a raw Page pointer across m_workQueue/m_dispatcher must
+		/// capture the generation at post time and compare it here before touching that pointer.
+		std::atomic<uint64> m_worldGeneration{ 0 };
+
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
@@ -852,6 +869,10 @@ namespace mmo
 		CrossfadingSoundLoop m_zoneMusic;
 		/// Crossfading zone ambience slot, driven by ZoneEntry::ambience_sound.
 		CrossfadingSoundLoop m_zoneAmbience;
+		/// Looping sounds of placed meshes (torches, campfires, portals) near the player.
+		AmbientSoundEmitters m_ambientSounds;
+		/// Water bed and swim loops driven by the terrain water around the player.
+		WaterAmbience m_waterAmbience;
 
 		CharSelect &m_charSelect;
 		GuildClient &m_guildClient;
@@ -905,6 +926,9 @@ namespace mmo
 		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
 
 		bool m_timeSyncResponseSent = false;
+
+		/// True between TransferPending and NewWorld; later TransferPending packets for the same transfer are ignored.
+		bool m_transferPending = false;
 
 		AreaTriggerManager m_areaTriggerManager;
 

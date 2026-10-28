@@ -1,10 +1,13 @@
 
 #include "unit_handle.h"
 
+#include "class_name_localizer.h"
 #include "game_aura_c.h"
 #include "game_player_c.h"
 #include "game_unit_c.h"
 #include "base/clock.h"
+#include "frame_ui/frame_mgr.h"
+#include "frame_ui/localization.h"
 #include "game/spell_negativity.h"
 #include "log/default_log_levels.h"
 #include "shared/client_data/proto_client/classes.pb.h"
@@ -12,6 +15,18 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Translates a class name from the game data using the active locale's Localization.txt.
+		const std::string& LocalizeClassDisplayName(const std::string& className)
+		{
+			return LocalizeClassName(className, [](const std::string& key)
+				{
+					return FrameManager::Get().GetLocalization().FindStringById(key);
+				});
+		}
+	}
+
 	AuraHandle::AuraHandle(GameAuraC& aura)
 		: WeakHandle(aura, aura.removed)
 	{
@@ -140,7 +155,7 @@ namespace mmo
 				return nullptr;
 			}
 
-			return classEntry->name().c_str();
+			return LocalizeClassDisplayName(classEntry->name()).c_str();
 		}
 
 		return nullptr;
@@ -169,7 +184,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		return classEntry->name().c_str();
+		return LocalizeClassDisplayName(classEntry->name()).c_str();
 	}
 
 	int32 UnitHandle::GetKnownClassLevel(const uint32 index) const
@@ -413,6 +428,12 @@ namespace mmo
 	{
 		if (!CheckNonNull()) return 0.0f;
 		return Get()->GetManaRegen();
+	}
+
+	float UnitHandle::GetManaRegenCasting() const
+	{
+		if (!CheckNonNull()) return 0.0f;
+		return Get()->GetManaRegenCasting();
 	}
 
 	float UnitHandle::GetArmorReductionFactor() const

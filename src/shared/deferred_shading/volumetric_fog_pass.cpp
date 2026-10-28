@@ -13,10 +13,13 @@
 // Mirrors the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
 #ifdef _WIN32
 #	include <Windows.h>
+#	include "shaders/CS_FogDepthTiles.h"
 #	include "shaders/CS_FogInject.h"
 #	include "shaders/CS_FogTemporal.h"
 #	include "shaders/CS_FogIntegrate.h"
 #	include "shaders/PS_FogComposite.h"
+#	define MMO_FOG_DEPTH_TILES_CS_BYTECODE g_CS_FogDepthTiles
+#	define MMO_FOG_DEPTH_TILES_CS_SIZE std::size(g_CS_FogDepthTiles)
 #	define MMO_FOG_INJECT_CS_BYTECODE g_CS_FogInject
 #	define MMO_FOG_INJECT_CS_SIZE std::size(g_CS_FogInject)
 #	define MMO_FOG_TEMPORAL_CS_BYTECODE g_CS_FogTemporal
@@ -26,6 +29,8 @@
 #	define MMO_FOG_COMPOSITE_PS_BYTECODE g_PS_FogComposite
 #	define MMO_FOG_COMPOSITE_PS_SIZE std::size(g_PS_FogComposite)
 #else
+#	define MMO_FOG_DEPTH_TILES_CS_BYTECODE nullptr
+#	define MMO_FOG_DEPTH_TILES_CS_SIZE 0
 #	define MMO_FOG_INJECT_CS_BYTECODE nullptr
 #	define MMO_FOG_INJECT_CS_SIZE 0
 #	define MMO_FOG_TEMPORAL_CS_BYTECODE nullptr
@@ -76,13 +81,22 @@ namespace mmo
 
 			uint32 lightCount;
 			float lightScatterStrength;
-			float lightPadding[2];
+			float screenJitter[2];
 
 			uint32 fogVolumeCount;
-			float fogVolumePadding[3];
+			uint32 sunTapsXY;
+			uint32 sunTapsZ;
+			uint32 fogShadowValid;
+
+			Matrix4 fogShadowViewProj;
+
+			float sunTemporalBlend;
+			uint32 sunMode;
+			float goldenJitter;
+			float fogShadowMapSize;
 		};
 
-		static_assert(sizeof(VolumetricFogConstants) == 256, "VolumetricFogConstants must match the HLSL layout");
+		static_assert(sizeof(VolumetricFogConstants) == 336, "VolumetricFogConstants must match the HLSL layout");
 
 		uint32 groupCount(const uint32 cells)
 		{
@@ -120,6 +134,7 @@ namespace mmo
 
 		if (MMO_FOG_INJECT_CS_SIZE > 0)
 		{
+			m_depthTilesCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_FOG_DEPTH_TILES_CS_BYTECODE, MMO_FOG_DEPTH_TILES_CS_SIZE);
 			m_injectCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_FOG_INJECT_CS_BYTECODE, MMO_FOG_INJECT_CS_SIZE);
 			m_temporalCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_FOG_TEMPORAL_CS_BYTECODE, MMO_FOG_TEMPORAL_CS_SIZE);
 			m_integrateCs = m_device.CreateShader(ShaderType::ComputeShader, MMO_FOG_INTEGRATE_CS_BYTECODE, MMO_FOG_INTEGRATE_CS_SIZE);
@@ -141,6 +156,14 @@ namespace mmo
 		{
 			const std::vector<uint8> noise = GenerateFogNoise(noiseSize, noiseSeed);
 			m_noiseVolume->Upload(noise.data(), noise.size());
+		}
+
+		constexpr uint32 blueNoiseSize = VolumetricFogSettings::BlueNoiseResolution;
+		m_blueNoise = m_device.CreateVolumeTexture(blueNoiseSize, blueNoiseSize, 1, VolumeFormat::R8, false);
+		if (m_blueNoise)
+		{
+			const std::vector<uint8> blueNoise = GenerateBlueNoise(blueNoiseSize, noiseSeed);
+			m_blueNoise->Upload(blueNoise.data(), blueNoise.size());
 		}
 	}
 
@@ -171,7 +194,7 @@ namespace mmo
 
 	bool VolumetricFogPass::SupportsVolume() const
 	{
-		return m_injectCs && m_temporalCs && m_integrateCs && m_noiseVolume && m_linearClampSampler && m_noiseSampler;
+		return m_depthTilesCs && m_injectCs && m_temporalCs && m_integrateCs && m_noiseVolume && m_blueNoise && m_linearClampSampler && m_noiseSampler;
 	}
 
 	void VolumetricFogPass::ReleaseVolumes()
@@ -179,6 +202,10 @@ namespace mmo
 		m_injectVolume.reset();
 		m_historyVolumes[0].reset();
 		m_historyVolumes[1].reset();
+		m_injectSunVolume.reset();
+		m_historySunVolumes[0].reset();
+		m_historySunVolumes[1].reset();
+		m_columnFarDepth.reset();
 		m_gridWidth = 0;
 		m_gridHeight = 0;
 		m_gridDepth = 0;
@@ -220,8 +247,12 @@ namespace mmo
 		VolumeTexturePtr injectVolume = create();
 		VolumeTexturePtr historyVolume0 = create();
 		VolumeTexturePtr historyVolume1 = create();
+		VolumeTexturePtr injectSunVolume = create();
+		VolumeTexturePtr historySunVolume0 = create();
+		VolumeTexturePtr historySunVolume1 = create();
+		VolumeTexturePtr columnFarDepth = m_device.CreateVolumeTexture(static_cast<uint16>(gridWidth), static_cast<uint16>(gridHeight), 1, VolumeFormat::RGBA16F, true);
 
-		if (!injectVolume || !historyVolume0 || !historyVolume1)
+		if (!injectVolume || !historyVolume0 || !historyVolume1 || !injectSunVolume || !historySunVolume0 || !historySunVolume1 || !columnFarDepth)
 		{
 			// Allocation failure (e.g. exhausted VRAM at a high quality preset): fall back to no volume
 			// rather than leaving a partially-populated set of volumes for Render to bind. Render treats
@@ -244,6 +275,10 @@ namespace mmo
 		m_injectVolume = std::move(injectVolume);
 		m_historyVolumes[0] = std::move(historyVolume0);
 		m_historyVolumes[1] = std::move(historyVolume1);
+		m_injectSunVolume = std::move(injectSunVolume);
+		m_historySunVolumes[0] = std::move(historySunVolume0);
+		m_historySunVolumes[1] = std::move(historySunVolume1);
+		m_columnFarDepth = std::move(columnFarDepth);
 
 		m_gridWidth = gridWidth;
 		m_gridHeight = gridHeight;
@@ -253,7 +288,8 @@ namespace mmo
 	}
 
 	void VolumetricFogPass::Render(Camera& camera, const WindState& wind, RenderTexture& sceneColor, RenderTexture& gbufferNormalRT, RenderTexture& output,
-		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, ConstantBuffer& shadowBuffer,
+		const std::array<RenderTexturePtr, NUM_SHADOW_CASCADES>& cascadeShadowMaps, RenderTexture* fogShadowMap, const Matrix4& fogShadowViewProj,
+		ConstantBuffer& shadowBuffer,
 		ConstantBuffer& cameraBuffer, StructuredBuffer& lights, const uint32 lightCount, SamplerState& shadowSampler, VertexBuffer& quad,
 		ShaderBase& fullscreenVs)
 	{
@@ -281,18 +317,28 @@ namespace mmo
 		const float clampedRange = std::max(m_settings.range, VolumetricFogSettings::MinRange);
 
 		const float resetDistance = VolumetricFogSettings::HistoryResetDistance;
-		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || clampedRange != m_prevRange)
+		if ((cameraPosition - m_prevCameraPosition).GetSquaredLength() > resetDistance * resetDistance || clampedRange != m_prevRange
+			|| m_settings.sunMode != m_prevSunMode)
 		{
 			m_historyValid = false;
 		}
+
+		// The temporal sun modes replace the box filter's many fixed taps with one jittered tap per froxel and
+		// let a neighbourhood-clamped history average it over frames, for the ambient fog as well as the sun.
+		const bool temporalSun = m_settings.IsSunTemporal();
+		const float historyWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : m_settings.historyWeight;
+		const float sunHistoryWeight = temporalSun ? VolumetricFogSettings::TemporalSunHistoryWeight : 0.0f;
 
 		VolumetricFogConstants constants{};
 		constants.inverseViewProj = viewProj.Inverse();
 		constants.prevViewProj = m_prevViewProj;
 		copyVector(cameraForward, constants.cameraForward);
-		constants.jitter = volumetric_fog::JitterForFrame(m_frameIndex);
+		// Jitter only pays off when the history accumulates it; without history it is pure per-frame noise,
+		// so the samples stay at the froxel centres.
+		const bool jittered = m_settings.jitterEnabled && historyWeight > 0.0f;
+		constants.jitter = jittered ? volumetric_fog::JitterForFrame(m_frameIndex) : 0.5f;
 		copyVector(m_prevCameraPosition, constants.prevCameraPosition);
-		constants.temporalBlend = VolumetricFogSettings::TemporalBlend;
+		constants.temporalBlend = historyWeight;
 		copyVector(m_prevCameraForward, constants.prevCameraForward);
 		constants.historyValid = m_historyValid ? 1.0f : 0.0f;
 		constants.gridWidth = m_gridWidth;
@@ -311,9 +357,19 @@ namespace mmo
 		constants.volumeEnabled = volumeEnabled ? 1.0f : 0.0f;
 		constants.lightCount = lightCount;
 		constants.lightScatterStrength = m_settings.lightScatterStrength;
-		constants.lightPadding[0] = 0.0f;
-		constants.lightPadding[1] = 0.0f;
+		const auto [screenJitterX, screenJitterY] = volumetric_fog::ScreenJitterForFrame(m_frameIndex);
+		constants.screenJitter[0] = jittered ? screenJitterX : 0.5f;
+		constants.screenJitter[1] = jittered ? screenJitterY : 0.5f;
 		constants.fogVolumeCount = m_fogVolumeCount;
+		constants.sunTapsXY = temporalSun ? 1u : std::clamp(m_settings.sunTapsXY, 1u, VolumetricFogSettings::MaxSunTapsXY);
+		constants.sunTapsZ = temporalSun ? 1u : std::clamp(m_settings.sunTapsZ, 1u, VolumetricFogSettings::MaxSunTapsZ);
+		constants.fogShadowValid = fogShadowMap ? 1u : 0u;
+		constants.fogShadowMapSize = fogShadowMap ? static_cast<float>(fogShadowMap->RenderTarget::GetWidth()) : 0.0f;
+		constants.fogShadowViewProj = fogShadowViewProj;
+		const bool sunHistory = sunHistoryWeight > 0.0f;
+		constants.sunTemporalBlend = sunHistory ? sunHistoryWeight : 0.0f;
+		constants.sunMode = m_settings.sunMode;
+		constants.goldenJitter = volumetric_fog::GoldenJitterForFrame(m_frameIndex);
 		m_fogBuffer->Update(&constants);
 
 		if (volumeEnabled)
@@ -324,6 +380,15 @@ namespace mmo
 
 			// --- Inject -----------------------------------------------------------------------
 			m_device.BeginGpuScope("GPU: Fog inject");
+
+			// Farthest depth seen through each grid column first: cells behind every surface their pixels
+			// can see skip the sun shadow taps.
+			gbufferNormalRT.Bind(ShaderType::ComputeShader, 0);
+			m_columnFarDepth->BindWritable(0);
+			m_depthTilesCs->Set();
+			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), 1);
+			m_device.ClearComputeBindings();
+
 			m_noiseVolume->Bind(ShaderType::ComputeShader, 0);
 			for (uint32 i = 0; i < NUM_SHADOW_CASCADES; ++i)
 			{
@@ -337,7 +402,14 @@ namespace mmo
 				// The inject shader only reads t10 while FogVolumeCount > 0.
 				m_fogVolumeBuffer->BindToStage(ShaderType::ComputeShader, 10);
 			}
+			m_columnFarDepth->Bind(ShaderType::ComputeShader, 11);
+			if (fogShadowMap)
+			{
+				fogShadowMap->Bind(ShaderType::ComputeShader, 12);
+			}
+			m_blueNoise->Bind(ShaderType::ComputeShader, 13);
 			m_injectVolume->BindWritable(0);
+			m_injectSunVolume->BindWritable(1);
 			m_injectCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));
 			m_device.ClearComputeBindings();
@@ -351,6 +423,13 @@ namespace mmo
 			history->Bind(ShaderType::ComputeShader, 1);
 			m_linearClampSampler->Bind(ShaderType::ComputeShader, 0);
 			temporalTarget->BindWritable(0);
+			const VolumeTexturePtr& temporalSunTarget = m_historySunVolumes[m_historyIndex];
+			if (sunHistory)
+			{
+				m_injectSunVolume->Bind(ShaderType::ComputeShader, 2);
+				m_historySunVolumes[1 - m_historyIndex]->Bind(ShaderType::ComputeShader, 3);
+				temporalSunTarget->BindWritable(1);
+			}
 			m_temporalCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), groupCount(m_gridDepth));
 			m_device.ClearComputeBindings();
@@ -360,6 +439,7 @@ namespace mmo
 			// integrate step writes its front-to-back accumulation back into it instead of a fourth
 			// volume.
 			temporalTarget->Bind(ShaderType::ComputeShader, 0);
+			(sunHistory ? temporalSunTarget : m_injectSunVolume)->Bind(ShaderType::ComputeShader, 1);
 			m_injectVolume->BindWritable(0);
 			m_integrateCs->Set();
 			m_device.Dispatch(groupCount(m_gridWidth), groupCount(m_gridHeight), 1);
@@ -430,6 +510,7 @@ namespace mmo
 		m_prevCameraPosition = cameraPosition;
 		m_prevCameraForward = cameraForward;
 		m_prevRange = clampedRange;
+		m_prevSunMode = m_settings.sunMode;
 		++m_frameIndex;
 	}
 }

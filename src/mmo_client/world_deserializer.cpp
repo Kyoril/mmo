@@ -2,12 +2,15 @@
 #include "world_deserializer.h"
 
 #include <filesystem>
+#include <map>
+#include <optional>
 #include <set>
 #include <utility>
 
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
 #include "console/console_var.h"
+#include "game_client/ambient_sound_emitters.h"
 #include "game_common/world_entity_loader.h"
 #include "game_common/world_foliage.h"
 #include "game_states/login_state.h"
@@ -16,10 +19,13 @@
 #include "scene_graph/entity.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/material_manager.h"
+#include "scene_graph/mesh.h"
 #include "scene_graph/mesh_manager.h"
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/scene_node.h"
 #include "scene_graph/scene.h"
+#include "game_client/placement_bounds.h"
+#include "scene_graph/world_model.h"
 #include "scene_graph/world_model_instance.h"
 #include "scene_graph/world_model_manager.h"
 #include "base/profiler.h"
@@ -38,6 +44,17 @@ namespace mmo
 			return ConsoleVarMgr::RegisterConsoleVar("gxWorldModelMerging",
 				"Whether each world model group's static geometry is merged into one mesh per material (a few draw calls per group). Takes effect for world models loaded afterwards.", "1");
 		}
+
+		std::vector<AmbientSoundSource> ToAmbientSources(const std::vector<PlacedSoundEmitter>& emitters)
+		{
+			std::vector<AmbientSoundSource> sources;
+			sources.reserve(emitters.size());
+			for (const PlacedSoundEmitter& emitter : emitters)
+			{
+				sources.push_back(AmbientSoundSource{ emitter.soundEntryId, emitter.position, emitter.volume, emitter.maxDistance });
+			}
+			return sources;
+		}
 	}
 
 	struct ClientWorldInstance::WorldModelPreparation
@@ -54,8 +71,49 @@ namespace mmo
 		std::vector<WorldModelPtr> models;
 		size_t nextMerge = 0;
 
+		/// The loaded world models by path, to find child models for the bounds.
+		std::map<String, WorldModelPtr> modelsByPath;
+
+		/// The placement's world-space bounds including every child model, once all are loaded.
+		std::optional<AABB> worldBounds;
+
+		/// Bounds of a loaded model in its own space, grown by its visible child models (nested
+		/// ones included). A model's own bounds only cover its own groups. Null if not loaded.
+		AABB LocalBounds(const String& path, const int depth) const
+		{
+			const auto it = modelsByPath.find(path);
+			if (it == modelsByPath.end() || !it->second)
+			{
+				return AABB();
+			}
+
+			AABB bounds = it->second->GetBoundingBox();
+
+			// The same depth limit WorldModelInstance uses for nested children.
+			constexpr int maxDepth = 8;
+			if (depth >= maxDepth)
+			{
+				return bounds;
+			}
+
+			for (const WorldModelChildRef& childRef : it->second->GetChildRefs())
+			{
+				if (!childRef.visible || childRef.wmoPath.empty() || childRef.wmoPath == path)
+				{
+					continue;
+				}
+
+				bounds = CombineChildBounds(bounds, LocalBounds(childRef.wmoPath, depth + 1), childRef.position, childRef.rotation, childRef.scale);
+			}
+
+			return bounds;
+		}
+
 		/// Keeps the merged geometry alive until the instance holds it itself.
 		std::vector<std::shared_ptr<const void>> mergedGeometry;
+
+		/// Whether the outdoor clusters of the placement are built (after every model's own merge).
+		bool clustersMerged = false;
 
 		std::vector<String> pendingKits;
 
@@ -135,6 +193,8 @@ namespace mmo
 		String baseFileName = (std::filesystem::path(m_name) / "Entities" / std::to_string(pageIndex)).string();
 		std::transform(baseFileName.begin(), baseFileName.end(), baseFileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 
+		PROFILE_SCOPE("Stream: LoadPageEntities");
+
 		auto files = AssetRegistry::ListFiles(baseFileName, ".wobj");
 
 		for (const auto& file : files)
@@ -172,6 +232,8 @@ namespace mmo
 				continue;
 			}
 
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
+
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
@@ -188,6 +250,8 @@ namespace mmo
 				++it;
 				continue;
 			}
+
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
 
 			if (it->second.instance)
 			{
@@ -214,6 +278,8 @@ namespace mmo
 		// Unload regular entities
 		for (auto it = m_entities.begin(); it != m_entities.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::MapEntity, it->first);
+
 			Entity* entity = it->second.entity;
 			SceneNode* node = it->second.node;
 			entity->DetachFromParent();
@@ -225,6 +291,8 @@ namespace mmo
 		// Unload world models
 		for (auto it = m_worldModels.begin(); it != m_worldModels.end();)
 		{
+			RemoveAmbientSounds(ambient_sound_owner::WorldModel, it->first);
+
 			if (it->second.instance)
 			{
 				it->second.instance->Destroy(m_scene);
@@ -243,6 +311,14 @@ namespace mmo
 		}
 
 		m_loadedPages.clear();
+	}
+
+	void ClientWorldInstance::RemoveAmbientSounds(const uint8 ownerKind, const uint64 uniqueId) const
+	{
+		if (m_ambientSounds)
+		{
+			m_ambientSounds->Remove(static_cast<ambient_sound_owner::Type>(ownerKind), uniqueId);
+		}
 	}
 
 	Entity* ClientWorldInstance::CreateMapEntity(const String& meshName, const Vector3& position, const Quaternion& orientation, const Vector3& scale, uint64 uniqueId)
@@ -270,6 +346,13 @@ namespace mmo
 
 		const PagePosition page = GetPagePosition(position);
 		m_entities.emplace(uniqueId, EntityPlacement{ .pageIndex= BuildPageIndex(page.x(), page.y()), .entity= entity, .node= node });
+
+		if (m_ambientSounds && entity->GetMesh() && !entity->GetMesh()->GetSoundEmitters().empty())
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			AppendPlacedSoundEmitters(*entity->GetMesh(), position, orientation, scale, emitters);
+			m_ambientSounds->Add(ambient_sound_owner::MapEntity, uniqueId, ToAmbientSources(emitters));
+		}
 
 		return entity;
 	}
@@ -343,6 +426,17 @@ namespace mmo
 		node->SetScale(scale);
 		node->AttachObject(*worldModelInstance);
 
+		// The placement transform comes from the node, so this has to follow the attach above
+		if (m_ambientSounds)
+		{
+			std::vector<PlacedSoundEmitter> emitters;
+			worldModelInstance->CollectSoundEmitters(emitters);
+			if (!emitters.empty())
+			{
+				m_ambientSounds->Add(ambient_sound_owner::WorldModel, uniqueId, ToAmbientSources(emitters));
+			}
+		}
+
 		// Get the raw pointer before moving ownership
 		WorldModelInstance* rawInstance = worldModelInstance.get();
 
@@ -375,6 +469,10 @@ namespace mmo
 			--m_pendingEntityFiles;
 			return;
 		}
+
+		// Read the entity's meshes, world model, materials and textures here, so the main thread does not
+		// pay the disk latency of each first open inside its frame when it creates the entity.
+		AssetRegistry::PrefetchReferences(filename);
 
 		const auto& entity = loader.GetEntity();
 
@@ -449,6 +547,7 @@ namespace mmo
 
 		// Released by ContinueWorldModelEntity once the instance exists or the preparation is dropped
 		++m_pendingWorldModels;
+		m_preparations.emplace(preparation.get(), preparation);
 		ContinueWorldModelEntity(preparation);
 	}
 
@@ -472,6 +571,7 @@ namespace mmo
 		if (!m_loadedPages.contains(preparation->pageIndex))
 		{
 			--m_pendingWorldModels;
+			m_preparations.erase(preparation.get());
 			return;
 		}
 
@@ -496,6 +596,7 @@ namespace mmo
 					}
 				}
 
+				prep.modelsByPath[path] = model;
 				prep.models.push_back(std::move(model));
 			}
 		}
@@ -542,15 +643,67 @@ namespace mmo
 				++prep.nextMerge;
 			}
 		}
+		else if (prep.merging && !prep.clustersMerged)
+		{
+			// The outdoor clusters of the whole placement (it and its children), a group per step as well
+			const auto rootIt = prep.modelsByPath.find(prep.entity.meshName);
+			if (rootIt == prep.modelsByPath.end() || !rootIt->second)
+			{
+				prep.clustersMerged = true;
+			}
+			else if (auto clusters = WorldModelInstance::PrewarmClusterGeometry(rootIt->second, 1))
+			{
+				prep.mergedGeometry.push_back(std::move(clusters));
+				prep.clustersMerged = true;
+			}
+		}
 		else
 		{
 			// Everything is cached now, so this only creates the instances and their entities
 			CreateWorldModelEntity(prep.entity.meshName, prep.entity.position, prep.entity.rotation, prep.entity.scale, prep.entity.uniqueId, prep.entity.kitPaths);
 			--m_pendingWorldModels;
+			m_preparations.erase(preparation.get());
 			return;
 		}
 
 		PostPreparationStep(preparation);
+	}
+
+	bool ClientWorldInstance::HasPendingWorldModels(const std::function<bool(const AABB&)>& isRelevant) const
+	{
+		if (m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0)
+		{
+			return true;
+		}
+
+		for (const auto& [key, weak] : m_preparations)
+		{
+			const std::shared_ptr<WorldModelPreparation> preparation = weak.lock();
+			if (!preparation)
+			{
+				continue;
+			}
+
+			// Until the placed model and all of its child models are loaded, where the placement
+			// shows is not known: it counts (child models can stand anywhere around the root).
+			if (preparation->models.empty() || !preparation->pendingModels.empty())
+			{
+				return true;
+			}
+
+			if (!preparation->worldBounds)
+			{
+				preparation->worldBounds = TransformPlacementBounds(preparation->LocalBounds(preparation->entity.meshName, 0),
+					preparation->entity.position, preparation->entity.rotation, preparation->entity.scale);
+			}
+
+			if (preparation->worldBounds->IsNull() || isRelevant(*preparation->worldBounds))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	void ClientWorldInstance::LoadPageFoliage(const uint8 x, const uint8 y)
@@ -561,6 +714,7 @@ namespace mmo
 		std::transform(fileName.begin(), fileName.end(), fileName.begin(), [](char c) { return c == '\\' ? '/' : c; });
 
 		std::weak_ptr weak = weak_from_this();
+		++m_pendingFoliageFiles;
 		m_workQueue.post([weak, pageIndex, fileName]()
 			{
 				const auto strong = weak.lock();
@@ -579,6 +733,7 @@ namespace mmo
 		std::unique_ptr<std::istream> filePtr = AssetRegistry::OpenFile(filename);
 		if (!filePtr)
 		{
+			--m_pendingFoliageFiles;
 			return;
 		}
 
@@ -588,8 +743,12 @@ namespace mmo
 		if (!loader.Read(reader))
 		{
 			ELOG("Failed to read foliage file " << filename << "!");
+			--m_pendingFoliageFiles;
 			return;
 		}
+
+		// The tree meshes, their materials and textures, read ahead of the main thread's cell rebuild.
+		AssetRegistry::PrefetchReferences(filename);
 
 		auto instances = std::make_shared<std::vector<FoliageInstance>>(loader.TakeInstances());
 
@@ -597,15 +756,19 @@ namespace mmo
 		m_dispatcher.post([weak, pageIndex, instances]()
 			{
 				const auto strong = weak.lock();
-				if (!strong || !strong->m_foliage)
+				if (!strong)
 				{
 					return;
 				}
 
-				if (!strong->m_loadedPages.contains(pageIndex))
+				--strong->m_pendingFoliageFiles;
+
+				if (!strong->m_foliage || !strong->m_loadedPages.contains(pageIndex))
 				{
 					return;
 				}
+
+				PROFILE_SCOPE("Stream: PageTrees");
 
 				for (const auto& source : *instances)
 				{
@@ -840,6 +1003,23 @@ namespace mmo
 		if (hasTerrain)
 		{
 			m_world.GetTerrain()->SetDefaultMaterial(MaterialManager::Get().Load(defaultMaterialName));
+		}
+
+		// Optional trailing sea level (worlds saved before it existed have their sea at 0).
+		const size_t readSoFar = sizeof(uint8) + sizeof(uint16) + defaultMaterialName.size();
+		if (chunkSize >= readSoFar + sizeof(float))
+		{
+			float seaLevel = terrain::constants::DefaultSeaLevel;
+			if (!(reader >> io::read<float>(seaLevel)))
+			{
+				ELOG("Failed to read terrain sea level: Unexpected end of file");
+				return false;
+			}
+
+			if (hasTerrain)
+			{
+				m_world.GetTerrain()->SetSeaLevel(seaLevel);
+			}
 		}
 
 		return reader;

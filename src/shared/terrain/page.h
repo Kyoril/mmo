@@ -97,6 +97,12 @@ namespace mmo
 
 			uint32 GetLayersAt(size_t x, size_t y) const;
 
+			/// @brief The material a tile is drawn with: its own, or the terrain's default material when it has none.
+			/// @param x Tile X index within the page (0..15).
+			/// @param y Tile Y index within the page (0..15).
+			/// @remark Works on a prepared page; the tiles themselves do not need to exist.
+			[[nodiscard]] MaterialPtr GetTileMaterial(uint32 x, uint32 y) const;
+
 			float GetSmoothHeightAt(float x, float y) const;
 
 			Vector3 GetSmoothNormalAt(float x, float y) const;
@@ -147,6 +153,29 @@ namespace mmo
 			bool IsLoaded() const;
 
 			bool IsLoadable() const;
+
+			/// @brief Whether this page is a prepared ocean placeholder: its page file does not exist,
+			///        so it holds no terrain at all and is open ocean at the terrain's sea level.
+			/// @remark A placeholder allocates no terrain arrays, creates no tiles and no water render
+			///         object, is never marked changed and is never saved. It reports prepared and,
+			///         once Load() ran, loaded, so streaming treats it like any other page. Returns
+			///         false while the page is not prepared, which is how "no file" stays
+			///         distinguishable from "not streamed in yet".
+			[[nodiscard]] bool IsOceanPlaceholder() const;
+
+			/// @brief Turns a prepared ocean placeholder into a real, editable page: flat terrain at
+			///        seabedHeight, every water quad of every tile filled with ocean at seaLevel.
+			/// @details Marks the page changed so the editor saves it. If the placeholder was loaded,
+			///          its tiles and water render object are built right away. Main thread only.
+			/// @param seabedHeight Terrain height of the new page.
+			/// @param seaLevel Water surface height of the new page.
+			/// @return True if the page was a placeholder and has been materialised.
+			bool MaterializeOceanPlaceholder(float seabedHeight, float seaLevel);
+
+			/// @brief Gets the outer terrain heights (OuterVerticesPerPageSide² floats, page-local).
+			/// @return The heights, or null while the page holds no terrain (not prepared, or an ocean
+			///         placeholder).
+			[[nodiscard]] const float* GetOuterHeights() const { return m_heightmap.empty() ? nullptr : m_heightmap.data(); }
 
 			const AABB &GetBoundingBox() const;
 
@@ -240,6 +269,31 @@ namespace mmo
 			/// @brief Get the material name used for all water in this page.
 			const String& GetWaterMaterialName() const { return m_waterMaterialName; }
 
+			/// @brief Whether this page's water carries river flow data.
+			[[nodiscard]] bool HasWaterFlow() const { return !m_waterFlowUVs.empty(); }
+
+			/// @brief Per-vertex river flow speed, one byte per outer vertex (0 = still, 255 = full).
+			/// @return The speed grid, empty when the page has no flow data.
+			[[nodiscard]] const std::vector<uint8>& GetWaterFlowSpeeds() const { return m_waterFlowSpeeds; }
+
+			/// @brief Replaces this page's river flow. Does not rebuild the water mesh.
+			/// @param uvs OuterVerticesPerPageSide² (u, v) pairs, u downstream and v across the river.
+			/// @param speeds OuterVerticesPerPageSide² flow speeds (0..255).
+			void SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds);
+
+			/// @brief Removes this page's river flow, so its water falls back to world UVs. Does not
+			///	       rebuild the water mesh.
+			void ClearWaterFlow();
+
+			/// @brief Gets the river flow at an outer vertex.
+			/// @param pageVertX Outer vertex x on the page.
+			/// @param pageVertZ Outer vertex z on the page.
+			/// @param u Receives the downstream coordinate.
+			/// @param v Receives the across coordinate.
+			/// @param speed Receives the flow speed (0..1).
+			/// @return False if the page has no flow or the vertex is out of range.
+			bool GetWaterFlow(uint32 pageVertX, uint32 pageVertZ, float& u, float& v, float& speed) const;
+
 			/// @brief Set the material name used for all water in this page.
 			void SetWaterMaterialName(const String& name);
 
@@ -255,7 +309,11 @@ namespace mmo
 			/// does not depend on the scene depth/refraction textures (which are not bound during
 			/// minimap generation), so water reliably shows up on the generated minimap tiles.
 			/// @param enabled True to switch to minimap water rendering, false to restore normal water.
-			void SetMinimapWaterMode(bool enabled);
+			/// @param includeOcean Whether ocean quads are drawn in minimap mode. The minimap shows
+			///        them; the distant-terrain colour bake leaves them out, because the ocean is drawn
+			///        to the horizon by its own renderer and the bake has to show the seabed. Ignored
+			///        when enabled is false.
+			void SetMinimapWaterMode(bool enabled, bool includeOcean = true);
 
 			/// @brief Check if an inner vertex is marked as a hole
 			/// @param localTileX Tile X coordinate (0-15)
@@ -283,6 +341,7 @@ namespace mmo
 			bool ReadMCWLChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			bool ReadMCWQChunk(io::Reader &reader, uint32 header, uint32 size);
+			bool ReadWaterFlowChunk(io::Reader &reader, uint32 header, uint32 size);
 
 			bool ReadMCVRChunk(io::Reader &reader, uint32 header, uint32 size);
 
@@ -318,6 +377,16 @@ namespace mmo
 			bool ReadMCVSChunk(io::Reader &reader, uint32 header, uint32 size);
 
 		private:
+			/// @brief Allocates every terrain and water array at its full size with blank defaults
+			///        (height 0, normals up, white, base layer only, no holes, no water).
+			void AllocateTerrainArrays();
+
+			/// @brief Frees every terrain and water array (storage, not just contents).
+			void ReleaseTerrainArrays();
+
+			/// @brief Tells the terrain that data the ocean mask depends on changed.
+			void NotifyOceanMaskChanged();
+
 			void UpdateBoundingBox();
 
 			void UpdateMaterial();
@@ -358,10 +427,20 @@ namespace mmo
 			std::vector<uint8> m_waterTypes;
 			/// Optional material name applied to all water geometry in this page.
 			String m_waterMaterialName;
+			/// Optional river flow: flow-aligned water UVs per outer vertex (2 floats each) and a flow
+			/// speed byte per outer vertex. Both empty when the water does not flow.
+			std::vector<float> m_waterFlowUVs;
+			std::vector<uint8> m_waterFlowSpeeds;
 			/// Runtime render object for water quads (created on Load, destroyed on Destroy).
 			ManualRenderObject* m_waterRenderObject{nullptr};
 			/// When true, water is rebuilt with an opaque solid-colour material for minimap rendering.
 			bool m_minimapWaterMode{false};
+			/// Whether ocean quads are drawn in minimap water mode (see SetMinimapWaterMode).
+			bool m_minimapIncludesOcean{true};
+			/// True while the prepared page is an ocean placeholder (no page file, no terrain data).
+			/// Written by PrepareParse (possibly on the streaming thread) before m_prepared is
+			/// published, read on the main thread only after it.
+			bool m_oceanPlaceholder{false};
 			/// Resolves a liquid type to a material asset name. May be empty, in which case water
 			/// falls back to the page's own material name.
 			static std::function<String(WaterType)> ms_waterMaterialResolver;

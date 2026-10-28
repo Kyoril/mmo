@@ -114,3 +114,8 @@ if (MSVC AND MMO_DISABLE_ITERATOR_DEBUG)
 endif()
 
 add_subdirectory(src)
+
+foreach(externalProject IN LISTS MMO_EXTERNAL_PROJECTS)
+	get_filename_component(externalName "${externalProject}" NAME)
+	add_subdirectory("${externalProject}" "${CMAKE_BINARY_DIR}/external/${externalName}")
+endforeach()

@@ -75,6 +75,102 @@ namespace mmo
 		out.waterType = static_cast<uint8>(json.value("waterType", 1));
 		out.skipExistingPages = json.value("skipExistingPages", false);
 		out.fillExistingZones = json.value("fillExistingZones", false);
+		out.applyAsDelta = json.value("applyAsDelta", false);
+		out.setWaterMaterial = json.value("setWaterMaterial", false);
+		if (const auto flow = json.find("waterFlow"); flow != json.end() && flow->is_object())
+		{
+			out.flowUVScale = flow->value("uvScale", 1.0f / 16.0f);
+			out.flowFalloff = flow->value("falloff", 60.0f);
+			out.flowMinSpeed = flow->value("minSpeed", 0.08f);
+			if (const auto path = flow->find("path"); path != flow->end() && path->is_array())
+			{
+				for (const auto &point : *path)
+				{
+					if (!point.is_array() || point.size() < 2)
+					{
+						ELOG("Zone metadata waterFlow path points must be [x, z] or [x, z, halfWidth]!");
+						return false;
+					}
+					ZoneMeta::FlowPoint flowPoint;
+					flowPoint.x = point[0].get<float>();
+					flowPoint.z = point[1].get<float>();
+					flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : 10.0f;
+					out.flowPath.push_back(flowPoint);
+				}
+			}
+			if (const auto branches = flow->find("branches"); branches != flow->end() && branches->is_array())
+			{
+				for (const auto &branch : *branches)
+				{
+					std::vector<ZoneMeta::FlowPoint> points;
+					for (const auto &point : branch)
+					{
+						if (!point.is_array() || point.size() < 2)
+						{
+							ELOG("Zone metadata waterFlow branch points must be [x, z] or [x, z, halfWidth]!");
+							return false;
+						}
+						ZoneMeta::FlowPoint flowPoint;
+						flowPoint.x = point[0].get<float>();
+						flowPoint.z = point[1].get<float>();
+						flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : 10.0f;
+						points.push_back(flowPoint);
+					}
+					if (points.size() >= 2)
+					{
+						out.flowBranches.push_back(std::move(points));
+					}
+				}
+			}
+			if (out.flowPath.size() < 2)
+			{
+				ELOG("Zone metadata waterFlow needs a path of at least two points!");
+				return false;
+			}
+		}
+
+		if (const auto tiles = json.find("tileMaterials"); tiles != json.end() && tiles->is_object())
+		{
+			const String mask = tiles->value("mask", String());
+			out.tileMaterialMask = std::filesystem::path(mask).is_absolute() ? std::filesystem::path(mask) : path.parent_path() / mask;
+			out.tileMaterials = tiles->value("materials", std::vector<String>());
+			if (mask.empty() || out.tileMaterials.empty())
+			{
+				ELOG("Zone metadata tileMaterials needs a mask and at least one material!");
+				return false;
+			}
+		}
+		if (const String clearWater = json.value("clearWaterMask", String()); !clearWater.empty())
+		{
+			out.clearWaterMask = std::filesystem::path(clearWater).is_absolute() ? std::filesystem::path(clearWater) : path.parent_path() / clearWater;
+		}
+		if (const String levelMap = json.value("waterLevelMap", String()); !levelMap.empty())
+		{
+			out.waterLevelMap = std::filesystem::path(levelMap).is_absolute() ? std::filesystem::path(levelMap) : path.parent_path() / levelMap;
+			out.waterLevelMapMinY = json.value("waterLevelMapMinY", 0.0f);
+			out.waterLevelMapMaxY = json.value("waterLevelMapMaxY", 0.0f);
+			out.waterLevelMapType = static_cast<uint8>(json.value("waterLevelMapType", 1));
+		}
+
+		out.paint.clear();
+		if (const auto paint = json.find("paint"); paint != json.end() && paint->is_array())
+		{
+			for (const auto &entry : *paint)
+			{
+				ZoneMeta::PaintLayer layer;
+				const String mask = entry.value("mask", String());
+				layer.mask = std::filesystem::path(mask).is_absolute() ? std::filesystem::path(mask) : path.parent_path() / mask;
+				layer.layer = static_cast<uint8>(entry.value("layer", 0));
+				layer.strength = entry.value("strength", 1.0f);
+				layer.remove = entry.value("mode", String()) == "remove";
+				if (mask.empty() || layer.layer > 3)
+				{
+					ELOG("Zone metadata paint entries need a mask and a layer from 0 to 3!");
+					return false;
+				}
+				out.paint.push_back(layer);
+			}
+		}
 
 		if (const String zoneMap = json.value("zoneMap", String()); !zoneMap.empty())
 		{

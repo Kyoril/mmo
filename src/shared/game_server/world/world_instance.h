@@ -25,6 +25,8 @@
 #include "shared/proto_data/trigger_event_index.h"
 #include "shared/proto_data/trigger_event_filter.h"
 
+#include "game/movement_ability.h"
+#include "game_server/deep_water_nav_filter.h"
 #include "nav_mesh/map.h"
 #include "nav_mesh/door_volume.h"
 #include "nav_mesh/instance_query_filter.h"
@@ -63,9 +65,16 @@ namespace mmo
 		/// @return true when the ray reaches posB unobstructed.
 		virtual bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) = 0;
 
-		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const = 0;
+		/// @brief Finds a path between two world positions.
+		/// @param movementAbilities movement_ability flags of the moving unit. Water deep enough
+		///        to swim in is carved out of the navigation mesh for a unit which can not swim,
+		///        so its path is routed around the water body like around a wall.
+		virtual bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path, MovementAbilityFlags movementAbilities = movement_ability::Default) const = 0;
 
-		virtual bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const = 0;
+		/// @brief Picks a random reachable point around a center position.
+		/// @param movementAbilities movement_ability flags of the unit the point is for, see
+		///        CalculatePath.
+		virtual bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, MovementAbilityFlags movementAbilities = movement_ability::Default) const = 0;
 
 		/// @brief Gets the water surface height at the given world position, if water is present.
 		/// @param pos World position to query (only X/Z are used).
@@ -135,14 +144,14 @@ namespace mmo
 			return true;
 		}
 
-		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override
+		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path, MovementAbilityFlags /*movementAbilities*/ = movement_ability::Default) const override
 		{
 			out_path.push_back(start);
 			out_path.push_back(destination);
 			return true;
 		}
 
-		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override
+		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, MovementAbilityFlags /*movementAbilities*/ = movement_ability::Default) const override
 		{
 			const float x = fmod(rand(), (radius * 2)) - radius;
 			const float z = fmod(rand(), (radius * 2)) - radius;
@@ -177,9 +186,9 @@ namespace mmo
 
 		bool IsInLineOfSightEx(const Vector3& posA, const Vector3& posB, Vector3& hitPoint) override;
 
-		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const override;
+		bool CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path, MovementAbilityFlags movementAbilities = movement_ability::Default) const override;
 
-		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const override;
+		bool FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, MovementAbilityFlags movementAbilities = movement_ability::Default) const override;
 
 		bool GetWaterSurface(const Vector3& pos, float& outSurfaceY) const override;
 
@@ -211,6 +220,15 @@ namespace mmo
 		/// a and b, grown by margin. No-op once streaming has completed.
 		void EnsureNavLoaded(const Vector3& a, const Vector3& b, float margin) const;
 
+		/// @brief The query filter to path a unit with the given movement abilities with: deep
+		/// water is carved out of the mesh for a unit which is not able to swim.
+		[[nodiscard]] const dtQueryFilter& GetQueryFilter(MovementAbilityFlags movementAbilities) const;
+
+		/// @brief Vertical half-extent for the nav mesh search under the endpoints of a path.
+		/// @details A swimming unit floats in the water surface band, which lies far above the
+		/// nav mesh baked on the bottom of the water body.
+		[[nodiscard]] float GetSearchExtentY(const Vector3& start, const Vector3& destination) const;
+
 	private:
 		/// Shared by every instance of the map. Streaming is driven by MapStaticDataRegistry.
 		std::shared_ptr<MapStaticData> m_staticData;
@@ -218,6 +236,8 @@ namespace mmo
 		std::unique_ptr<ServerCollisionMap> m_collisionMap;
 		/// This instance's door state on the shared nav mesh.
 		nav::InstanceQueryFilter m_queryFilter;
+		/// m_queryFilter with deep water carved out, for units which are not able to swim.
+		DeepWaterQueryFilter m_landQueryFilter;
 
 		struct NavObstacle
 		{
@@ -474,6 +494,14 @@ namespace mmo
 		/// Removes the dynamic collision registered for the given door, if any.
 		void UnregisterDoorCollision(uint64 guid);
 
+		/// Removes an object from every visibility tile still holding it. Used when an object is
+		/// missing from the tile its position maps to - on removal, or when it moves on. Logs where
+		/// it was found, since that means it moved without the grid being told.
+		/// @param object The object.
+		/// @param expectedTile The tile its position maps to.
+		/// @param context What was being done to the object, for the log line ("removed", "moved").
+		void ForgetObjectInAllTiles(GameObjectS& object, const TileIndex2D& expectedTile, const char* context) const;
+
 	private:
 		Universe& m_universe;
 		IdGenerator<uint64>& m_objectIdGenerator;
@@ -545,6 +573,9 @@ namespace mmo
 		/// Active repeating OnTimer timers for instance-owned (map) triggers.
 		std::vector<std::unique_ptr<Countdown>> m_instanceTimers;
 
+		/// Players counted towards the instance (game-master observers are not), by guid. Removal
+		/// uncounts exactly the players that were counted on entry.
+		std::unordered_set<uint64> m_countedPlayers;
 		/// Number of players currently in this instance (tracked for wipe detection).
 		uint32 m_playerCount{ 0 };
 
