@@ -6,7 +6,9 @@
 -- the spending of that class on login so the points can be spent again.
 --
 -- Additive: `character_classes`.`attr_0` .. `attr_4` stay and are still written for attribute ids
--- 0 - 4, so a rolled back server build keeps working. Drop them in a later release.
+-- 0 - 4, so a rolled back server build keeps working. A row the old build saved has `attr_layout` 0
+-- again; the new build then reads that row's spending from the legacy columns instead of the
+-- (stale) `character_class_attributes` rows. Drop the columns in a later release.
 
 CREATE TABLE IF NOT EXISTS `character_class_attributes` (
   `character` bigint unsigned NOT NULL,

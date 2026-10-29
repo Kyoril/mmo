@@ -44,6 +44,10 @@ Every formula that named an attribute now takes it from data:
 | Health / mana regen | `StatSpirit / spiritPer*Regen` | `repeated AttributeRatioSource healthRegenSources / manaRegenSources` (`value / pointsPer`) |
 | Melee crit | `5 + Agility / 20` for all units | `5 + Σ value / pointsPer` over the class's / unit class's `meleeCritSources` |
 | Dodge | `base + Agility / 20` for all units | `base + Σ value / pointsPer` over `dodgeSources` |
+
+Creatures that do not use the stat based system have no unit class and therefore no crit/dodge
+sources. Their agility was always 0, so the only difference is that an agility buff on such a creature
+no longer adds crit or dodge.
 | Item stats | `item_stat::Agility..Stamina` (2..6) and a switch | `item_stat::AttributeStart + id` (64 + id); data remapped |
 | ModStat / ModStatPct auras | misc value 0..4 | misc value = attribute id (unchanged values) |
 
@@ -58,7 +62,9 @@ migrated data produces bit-identical floats.
 * DB: new table `character_class_attributes (character, class, attribute, points)` and a new column
   `character_classes.attr_layout`. The migration copies `attr_0..attr_4` into the table and sets the
   layout of rows that spent points to the hash of the shipped layout. The old columns stay (additive
-  migration) and are no longer written.
+  migration) and are still written for ids 0 - 4, so a rolled back build reads current values. A row
+  saved by such an old build has `attr_layout` 0 again, and the new build then loads that class's
+  spending from the old columns instead of the stale per-attribute rows.
 * `attributeLayout` is a hash of the sorted attribute ids (FNV-1a), stored per class. When a class's
   spending is applied (login, class change) and points were spent under a different layout, that
   class's spending is cleared, so all points can be spent again, and the client gets the existing

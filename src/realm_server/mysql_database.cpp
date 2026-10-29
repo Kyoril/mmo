@@ -817,7 +817,7 @@ namespace mmo
 				}
 
 				// Load known classes (per-class level, xp and the attribute layout of their spending).
-				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_layout` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
+				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_layout`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
 				if (classSelect.Success())
 				{
 					mysql::Row classRow(classSelect);
@@ -828,6 +828,19 @@ namespace mmo
 						classRow.GetField<uint8, uint16>(1, classData.classLevel);
 						classRow.GetField(2, classData.classXp);
 						classRow.GetField(3, classData.attributeLayout);
+
+						// Layout 0: the row was last written by a server build that predates data-driven
+						// attributes (e.g. after a rollback), which only maintains the legacy columns for
+						// attribute ids 0 - 4 and leaves character_class_attributes stale. Rows written by
+						// this build always carry a non-zero layout and are read from that table below.
+						if (classData.attributeLayout == 0)
+						{
+							for (uint32 attribute = 0; attribute < 5; ++attribute)
+							{
+								classRow.GetField(4 + attribute, classData.attributePointsSpent[attribute]);
+							}
+						}
+
 						result.knownClasses.push_back(std::move(classData));
 
 						classRow = mysql::Row::Next(classSelect);
@@ -853,7 +866,11 @@ namespace mmo
 
 						const auto classIt = std::find_if(result.knownClasses.begin(), result.knownClasses.end(),
 							[classId](const CharacterClassData& classData) { return classData.classId == classId; });
-						if (classIt != result.knownClasses.end() && attribute < MaxAttributes)
+						if (classIt != result.knownClasses.end() && classIt->attributeLayout == 0)
+						{
+							// Spending of this class comes from the legacy columns (see above)
+						}
+						else if (classIt != result.knownClasses.end() && attribute < MaxAttributes)
 						{
 							classIt->attributePointsSpent[attribute] = points;
 						}
