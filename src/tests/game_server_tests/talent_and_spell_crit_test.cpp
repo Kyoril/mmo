@@ -39,11 +39,11 @@ namespace
 				auto* values = cls->add_levelbasevalues();
 				values->set_health(100);
 				values->set_mana(100);
-				values->set_stamina(10);
-				values->set_strength(10);
-				values->set_agility(10);
-				values->set_intellect(10);
-				values->set_spirit(10);
+				values->add_attributes(10);
+				values->add_attributes(10);
+				values->add_attributes(10);
+				values->add_attributes(10);
+				values->add_attributes(10);
 				values->set_talentpoints(3);
 			}
 		}

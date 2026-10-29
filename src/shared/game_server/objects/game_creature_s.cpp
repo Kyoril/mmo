@@ -764,30 +764,28 @@ namespace mmo
 
 		const float eliteMultiplier = m_entry->elitestatmultiplier();
 
-		// Calculate base stats with level scaling
+		// Calculate base attributes with level scaling
 		const auto& base = unitClass->levelbasevalues(level - 1);
-		const uint32 baseStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 baseStrength = static_cast<uint32>(base.strength() * eliteMultiplier);
-		const uint32 baseAgility = static_cast<uint32>(base.agility() * eliteMultiplier);
-		const uint32 baseIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
-		const uint32 baseSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
-		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, baseStamina);
-		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, baseStrength);
-		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, baseAgility);
-		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, baseIntellect);
-		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, baseSpirit);
+		std::array<float, MaxAttributes> attributeTotals{};
+		for (uint8 attribute = 0; attribute < MaxAttributes; ++attribute)
+		{
+			const uint32 baseValue = attribute < base.attributes_size() ? static_cast<uint32>(base.attributes(attribute) * eliteMultiplier) : 0;
+			SetModifierValue(GetUnitModByStat(attribute), unit_mod_type::BaseValue, baseValue);
 
-		// Apply the base stats
-		const float totalStamina = GetCalculatedModifierValue(unit_mods::StatStamina);
-		const float totalStrength = GetCalculatedModifierValue(unit_mods::StatStrength);
-		const float totalAgility = GetCalculatedModifierValue(unit_mods::StatAgility);
-		const float totalIntellect = GetCalculatedModifierValue(unit_mods::StatIntellect);
-		const float totalSpirit = GetCalculatedModifierValue(unit_mods::StatSpirit);
-		Set<uint32>(object_fields::StatStamina, static_cast<uint32>(totalStamina));
-		Set<uint32>(object_fields::StatStrength, static_cast<uint32>(totalStrength));
-		Set<uint32>(object_fields::StatAgility, static_cast<uint32>(totalAgility));
-		Set<uint32>(object_fields::StatIntellect, static_cast<uint32>(totalIntellect));
-		Set<uint32>(object_fields::StatSpirit, static_cast<uint32>(totalSpirit));
+			attributeTotals[attribute] = GetCalculatedModifierValue(GetUnitModByStat(attribute));
+			Set<uint32>(object_fields::Stat + attribute, static_cast<uint32>(attributeTotals[attribute]));
+		}
+
+		// Every point of an attribute above 20 contributes factor to the derived value
+		auto fromAttribute = [&attributeTotals](const uint32 attribute, const float factor) -> uint32
+		{
+			if (attribute >= MaxAttributes)
+			{
+				return 0;
+			}
+
+			return static_cast<uint32>((std::max<int32>(attributeTotals[attribute], 20) - 20) * factor);
+		};
 
 		// Calculate health (base + per level + stamina modifier)
 		uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
@@ -798,24 +796,7 @@ namespace mmo
 		{
 			for (const auto& healthSource : unitClass->healthstatsources())
 			{
-				switch (healthSource.statid())
-				{
-					case 2: // STAMINA
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * healthSource.factor());
-						break;
-					case 0: // STRENGTH
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20U) - 20) * healthSource.factor());
-						break;
-					case 1: // AGILITY
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20U) - 20) * healthSource.factor());
-						break;
-					case 3: // INTELLECT
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20U) - 20) * healthSource.factor());
-						break;
-					case 4: // SPIRIT
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20U) - 20) * healthSource.factor());
-						break;
-				}
+				healthFromStats += fromAttribute(healthSource.statid(), healthSource.factor());
 			}
 		}
 
@@ -831,24 +812,7 @@ namespace mmo
 		{
 			for (const auto& manaSource : unitClass->manastatsources())
 			{
-				switch (manaSource.statid())
-				{
-					case 2: // STAMINA
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * manaSource.factor());
-						break;
-					case 0: // STRENGTH
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * manaSource.factor());
-						break;
-					case 1: // AGILITY
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * manaSource.factor());
-						break;
-					case 3: // INTELLECT
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * manaSource.factor());
-						break;
-					case 4: // SPIRIT
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * manaSource.factor());
-						break;
-				}
+				manaFromStats += fromAttribute(manaSource.statid(), manaSource.factor());
 			}
 		}
 
@@ -864,24 +828,7 @@ namespace mmo
 		{
 			for (const auto& armorSource : unitClass->armorstatsources())
 			{
-				switch (armorSource.statid())
-				{
-					case 2: // STAMINA
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * armorSource.factor());
-						break;
-					case 0: // STRENGTH
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * armorSource.factor());
-						break;
-					case 1: // AGILITY
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * armorSource.factor());
-						break;
-					case 3: // INTELLECT
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * armorSource.factor());
-						break;
-					case 4: // SPIRIT
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * armorSource.factor());
-						break;
-				}
+				armorFromStats += fromAttribute(armorSource.statid(), armorSource.factor());
 			}
 		}
 
@@ -897,24 +844,7 @@ namespace mmo
 			// Add attack power from unit class stat sources
 			for (const auto& attackPowerSource : unitClass->attackpowerstatsources())
 			{
-				switch (attackPowerSource.statid())
-				{
-					case 2: // STAMINA
-						attackPower += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 0: // STRENGTH
-						attackPower += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 1: // AGILITY
-						attackPower += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 3: // INTELLECT
-						attackPower += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 4: // SPIRIT
-						attackPower += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * attackPowerSource.factor());
-						break;
-				}
+				attackPower += fromAttribute(attackPowerSource.statid(), attackPowerSource.factor());
 			}
 		}
 
@@ -960,16 +890,32 @@ namespace mmo
 			Set<uint32>(object_fields::PowerType, gamePowerType);
 		}
 
-		// Rebuilt from scratch on every refresh: the spirit term is conditional, so without
-		// this reset the flat term below would be added again on every call.
-		m_manaRegenPerTick = 0.0f;
-
-		if (unitClass->spiritpermanaregen() != 0.0f)
-		{
-			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / unitClass->spiritpermanaregen());
-		}
+		// Rebuilt from scratch on every refresh, so the flat term below is not added again on every call.
+		m_manaRegenPerTick = SumAttributeFieldRatios(unitClass->manaregensources());
 		m_manaRegenPerTick += unitClass->basemanaregenpertick();
 		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
+	}
+
+	const proto::UnitClassEntry* GameCreatureS::GetStatUnitClass() const
+	{
+		if (!m_entry || !m_entry->usestatbasedsystem() || m_entry->unitclassid() == 0)
+		{
+			return nullptr;
+		}
+
+		return GetProject().unitClasses.getById(m_entry->unitclassid());
+	}
+
+	float GameCreatureS::GetMeleeCritChanceFromAttributes() const
+	{
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		return unitClass ? SumAttributeModifierRatios(unitClass->meleecritsources()) : 0.0f;
+	}
+
+	float GameCreatureS::GetDodgeChanceFromAttributes() const
+	{
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		return unitClass ? SumAttributeModifierRatios(unitClass->dodgesources()) : 0.0f;
 	}
 
 	const String& GameCreatureS::GetName() const

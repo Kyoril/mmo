@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "attribute.h"
 
 namespace io
 {
@@ -362,12 +363,11 @@ namespace mmo
 		{
 			Mana,
 			Health,
-			Agility,
-			Strength,
-			Intellect,
-			Spirit,
-			Stamina,
-			DefenseSkillRating,
+
+			// 2 - 6 were the five hard-coded attributes (Agility, Strength, Intellect, Spirit, Stamina).
+			// Attribute stats now use AttributeStart + attribute id.
+
+			DefenseSkillRating = 7,
 			DodgeRating,
 			ParryRating,
 			BlockRating,
@@ -391,8 +391,24 @@ namespace mmo
 			HitTakenRating,
 			CritTakenRating,
 			HasteRating,
-			ExpertiseRating
+			ExpertiseRating,
+
+			/// First attribute stat: AttributeStart + attribute id increases that attribute
+			/// (attribute ids are below MaxAttributes, see game/attribute.h).
+			AttributeStart = 64
 		};
+
+		/// Gets the item stat type that increases the given attribute.
+		inline uint32 FromAttribute(const uint32 attributeId)
+		{
+			return AttributeStart + attributeId;
+		}
+
+		/// Gets the attribute id an item stat type increases, or -1 if it is no attribute stat.
+		inline int32 ToAttribute(const uint32 statType)
+		{
+			return statType >= AttributeStart && statType < AttributeStart + MaxAttributes ? static_cast<int32>(statType - AttributeStart) : -1;
+		}
 	}
 
 	typedef item_stat::Type ItemStat;
@@ -531,7 +547,12 @@ namespace mmo
 
 		float GetDps() const;
 
+		/// Gets the localization key of a non-attribute stat (e.g. "MANA"), or nullptr for attribute
+		/// stats and unused slots. Attribute stats are named via GetStatAttribute.
 		const char* GetStatType(int32 index) const;
+
+		/// Gets the attribute id the stat at the given index increases, or -1 if it is no attribute stat.
+		int32 GetStatAttribute(int32 index) const;
 
 		int32 GetStatValue(int32 index) const;
 

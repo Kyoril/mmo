@@ -138,7 +138,7 @@ namespace mmo
 	{
 		const int32 stat = GetEffect().miscvaluea();
 
-		if (stat < 0 || stat > 4)
+		if (stat < 0 || stat >= static_cast<int32>(MaxAttributes))
 		{
 			ELOG("AURA_TYPE_MOD_STAT: Invalid stat index " << stat);
 			return;
@@ -155,7 +155,7 @@ namespace mmo
 	{
 		const int32 stat = GetEffect().miscvaluea();
 
-		if (stat < 0 || stat > 4)
+		if (stat < 0 || stat >= static_cast<int32>(MaxAttributes))
 		{
 			ELOG("AURA_TYPE_MOD_STAT_PCT: Invalid stat index " << stat);
 			return;

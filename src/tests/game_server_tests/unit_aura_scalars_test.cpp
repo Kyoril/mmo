@@ -21,7 +21,7 @@ TEST_CASE("ModHealthRegenPercent accumulates and unwinds exactly", "[aura_scalar
 	proto::Project project;
 	auto unit = MakeUnit(project, timers);
 
-	// healthregenpertick is 10 and spiritperhealthregen is unset, so the base is exactly 10.
+	// healthregenpertick is 10 and there are no healthRegenSources, so the base is exactly 10.
 	CHECK(unit->GetEffectiveHealthRegenPerTick() == Approx(10.0f));
 
 	unit->ModifyHealthRegenPercentBonus(50.0f, true);

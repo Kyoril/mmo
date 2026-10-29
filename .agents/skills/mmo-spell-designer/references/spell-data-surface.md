@@ -51,7 +51,7 @@ Most important fields:
 
 Do not author effects by field presence alone. The meaning of `miscvaluea`, `itemtype`, `triggerspell`, `radius`, `amplitude`, and `aura` changes with the selected effect or aura type.
 
-For stat auras, `miscvaluea` uses the spell editor's stat index space, not the protobuf stat enum:
+For stat auras, `miscvaluea` is an attribute id. Attributes are game data (`data/editor/data/attributes.data`, schema `attributes.proto`); the shipped ids are:
 
 - `aura_type::ModStat` and `aura_type::ModStatPct`
 - `0 = Stamina`
@@ -60,7 +60,7 @@ For stat auras, `miscvaluea` uses the spell editor's stat index space, not the p
 - `3 = Intellect`
 - `4 = Spirit`
 
-This mapping comes from `src/mmo_edit/editor_windows/spell_editor_window.cpp` (`s_statNames`) and the server runtime in `GameUnitS::GetUnitModByStat()`. Do not reuse `proto::StatConstants.StatType` here; that enum uses a different ordering (`Strength=0`, `Agility=1`, `Stamina=2`, `Intellect=3`, `Spirit=4`) and will silently produce the wrong aura target stat.
+Read `attributes.data` when in doubt: designers can add, remove and rename attributes. The server routes the id through `GameUnitS::GetUnitModByStat()`; ids at or above `MaxAttributes` (10, `src/shared/game/attribute.h`) are rejected.
 </effect_schema>
 
 <conditional_effects>

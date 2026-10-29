@@ -10,6 +10,7 @@
 
 #include "game_server/spells/aura_container.h"
 #include "game_server/persistent_aura.h"
+#include "game/attribute.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
 #include "game_server/i_player_validator_context.h"
@@ -130,23 +131,14 @@ namespace mmo
 	{
 		enum Type
 		{
-			/// Strength stat value modifier.
-			StatStrength,
+			/// First attribute value modifier. Attribute id i uses AttributeStart + i (see GetUnitModByStat).
+			AttributeStart,
 
-			/// Agility stat value modifier.
-			StatAgility,
-
-			/// Stamina stat value modifier.
-			StatStamina,
-
-			/// Intellect stat value modifier.
-			StatIntellect,
-
-			/// Spirit stat value modifier.
-			StatSpirit,
+			/// One past the last attribute value modifier.
+			AttributeEnd = AttributeStart + MaxAttributes,
 
 			/// Health value modifier.
-			Health,
+			Health = AttributeEnd,
 
 			/// Mana power value modifier.
 			Mana,
@@ -308,10 +300,6 @@ namespace mmo
 	{
 	public:
 		static uint32 DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor);
-
-		static uint32 GetMaxHealthFromStamina(const uint32 stamina);
-
-		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
 	};
 
 	class NetUnitWatcherS
@@ -352,7 +340,9 @@ namespace mmo
 		/// character. The client has to acknowledge before the movement is started.
 		virtual void OnPendingCharge(float speed, uint32 ackId) = 0;
 
-		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
+		/// Called when the player gained a level.
+		/// @param attributeDiffs Base value gained per attribute, indexed by attribute id.
+		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, const std::array<int32, MaxAttributes>& attributeDiffs, int32 talentPoints, int32 attributePoints) = 0;
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
 
@@ -651,6 +641,41 @@ namespace mmo
 
 		float CalculateModifiedValue(UnitMods mod, float baseValue) const;
 
+		/// Sums (calculated attribute modifier value / pointsPer) over attribute ratio sources
+		///	(proto AttributeRatioSource / UnitClassAttributeRatioSource). Sources naming an attribute
+		///	slot out of range or a pointsPer of 0 are ignored.
+		template<typename TSources>
+		float SumAttributeModifierRatios(const TSources& sources) const
+		{
+			float sum = 0.0f;
+			for (const auto& source : sources)
+			{
+				if (source.attribute() < MaxAttributes && source.pointsper() != 0.0f)
+				{
+					sum += GetCalculatedModifierValue(GetUnitModByStat(static_cast<uint8>(source.attribute()))) / source.pointsper();
+				}
+			}
+
+			return sum;
+		}
+
+		/// Sums (replicated attribute value / pointsPer) over attribute ratio sources. Unlike
+		///	SumAttributeModifierRatios this reads the whole-number attribute fields.
+		template<typename TSources>
+		float SumAttributeFieldRatios(const TSources& sources) const
+		{
+			float sum = 0.0f;
+			for (const auto& source : sources)
+			{
+				if (source.attribute() < MaxAttributes && source.pointsper() != 0.0f)
+				{
+					sum += static_cast<float>(Get<uint32>(object_fields::Stat + source.attribute())) / source.pointsper();
+				}
+			}
+
+			return sum;
+		}
+
 		/// Sets the unit modifier value to the given value.
 		/// @param mod The unit modifier to set.
 		/// @param type The type of modifier value to set.
@@ -748,8 +773,8 @@ namespace mmo
 		/// @returns The power type as a PowerType enum.
 		static PowerType GetPowerTypeByUnitMod(UnitMods mod);
 
-		/// Gets the unit modifier associated with a stat.
-		/// @param stat The stat index.
+		/// Gets the unit modifier associated with an attribute.
+		/// @param stat The attribute id (must be smaller than MaxAttributes).
 		/// @returns The unit modifier as a UnitMods enum.
 		static UnitMods GetUnitModByStat(uint8 stat);
 
@@ -1321,7 +1346,7 @@ public:
 		float CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const;
 
 		/// Gets the victim-independent part of the melee critical hit chance: the base chance plus
-		///	the agility contribution. This is what the character sheet shows; CriticalHitChance()
+		///	the attribute contribution. This is what the character sheet shows; CriticalHitChance()
 		///	adds the per-attack terms (level difference, talents, the victim's vulnerability) on top.
 		/// @returns The critical hit chance in percent, not clamped.
 		[[nodiscard]] float GetBaseMeleeCritChance() const;
@@ -1354,6 +1379,15 @@ public:
 
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
 		float DodgeChance() const;
+
+	protected:
+		/// Gets the melee critical hit chance in percent granted by attributes (class data).
+		[[nodiscard]] virtual float GetMeleeCritChanceFromAttributes() const { return 0.0f; }
+
+		/// Gets the dodge chance in percent granted by attributes (class data).
+		[[nodiscard]] virtual float GetDodgeChanceFromAttributes() const { return 0.0f; }
+
+	public:
 
 		/// Returns the parry chance in percent, ranging from 0 to 100.0f. If the unit can't parry at all, this will always return 0.
 		float ParryChance() const;

@@ -309,6 +309,94 @@ namespace mmo
 		/// reach the GameScript instance). Set when the script functions are registered.
 		const proto_client::SkillManager* g_scriptSkills = nullptr;
 
+		/// Attribute definitions (ClientDB attributes) for the attribute script functions.
+		const proto_client::AttributeManager* g_scriptAttributes = nullptr;
+
+		/// Attribute gains of the most recent level up, indexed by attribute id.
+		std::array<int32, MaxAttributes> g_levelUpAttributeGains{};
+
+		/// Gets the defined attributes in display order (ascending attribute id).
+		std::vector<const proto_client::AttributeEntry*> GetSortedAttributes()
+		{
+			std::vector<const proto_client::AttributeEntry*> result;
+			if (g_scriptAttributes == nullptr)
+			{
+				return result;
+			}
+
+			for (const auto& entry : g_scriptAttributes->getTemplates().entry())
+			{
+				if (entry.id() < MaxAttributes)
+				{
+					result.push_back(&entry);
+				}
+			}
+
+			std::sort(result.begin(), result.end(), [](const auto* a, const auto* b) { return a->id() < b->id(); });
+			return result;
+		}
+
+		/// GetNumAttributes() -> number of defined attributes.
+		int32 Script_GetNumAttributes()
+		{
+			return static_cast<int32>(GetSortedAttributes().size());
+		}
+
+		/// GetAttributeInfo(index) -> id, name, description of the attribute at the 0-based display
+		/// index (-1, "", "" if out of range). Name and description are localized.
+		void Script_GetAttributeInfo(const int32 index, int32& outId, std::string& outName, std::string& outDescription)
+		{
+			outId = -1;
+			outName.clear();
+			outDescription.clear();
+
+			const auto attributes = GetSortedAttributes();
+			if (index < 0 || index >= static_cast<int32>(attributes.size()))
+			{
+				return;
+			}
+
+			const auto& attribute = *attributes[index];
+			outId = static_cast<int32>(attribute.id());
+			outName = GetLocalizedString(attribute.name(), attribute.name_loc(), GetClientLocale());
+			outDescription = GetLocalizedString(attribute.description(), attribute.description_loc(), GetClientLocale());
+		}
+
+		/// GetAttributeName(id) -> localized name of the attribute with that id ("" if undefined).
+		std::string Script_GetAttributeName(const int32 attributeId)
+		{
+			if (g_scriptAttributes == nullptr || attributeId < 0)
+			{
+				return {};
+			}
+
+			const auto* attribute = g_scriptAttributes->getById(static_cast<uint32>(attributeId));
+			return attribute ? GetLocalizedString(attribute->name(), attribute->name_loc(), GetClientLocale()) : std::string();
+		}
+
+		/// GetAttributeLevelUpText(id) -> localized level up chat line (with %d) of the attribute ("" if none).
+		std::string Script_GetAttributeLevelUpText(const int32 attributeId)
+		{
+			if (g_scriptAttributes == nullptr || attributeId < 0)
+			{
+				return {};
+			}
+
+			const auto* attribute = g_scriptAttributes->getById(static_cast<uint32>(attributeId));
+			return attribute ? GetLocalizedString(attribute->leveluptext(), attribute->leveluptext_loc(), GetClientLocale()) : std::string();
+		}
+
+		/// GetLevelUpAttributeGain(id) -> amount the attribute increased by with the most recent level up.
+		int32 Script_GetLevelUpAttributeGain(const int32 attributeId)
+		{
+			if (attributeId < 0 || attributeId >= static_cast<int32>(MaxAttributes))
+			{
+				return 0;
+			}
+
+			return g_levelUpAttributeGains[attributeId];
+		}
+
 		/// Spell:GetCreatedItem() -> itemId, count (0, 0 if the spell creates no item).
 		void Script_GetSpellCreatedItem(const proto_client::SpellEntry* spell, int32& outItemId, int32& outCount)
 		{
@@ -578,15 +666,15 @@ namespace mmo
 			out_base = -1;
 			out_modifier = -1;
 
-			if (statId >= 5)
+			if (statId >= MaxAttributes)
 			{
 				return;
 			}
 
 			if (auto unit = Script_GetUnitByName(unitName))
 			{
-				const int32 bonus = unit->Get<int32>(object_fields::PosStatStamina + statId) - unit->Get<int32>(object_fields::NegStatStamina + statId);
-				out_base = unit->Get<int32>(object_fields::StatStamina + statId) - bonus;
+				const int32 bonus = unit->Get<int32>(object_fields::PosStat + statId) - unit->Get<int32>(object_fields::NegStat + statId);
+				out_base = unit->Get<int32>(object_fields::Stat + statId) - bonus;
 				out_modifier = bonus;
 			}
 		}
@@ -1021,6 +1109,7 @@ namespace mmo
 							   .def_readonly("startQuestId", &ItemInfo::startquestid)
 							   .def_readonly("attackSpeed", &ItemInfo::GetAttackSpeed)
 							   .def("GetStatType", &ItemInfo::GetStatType)
+							   .def("GetStatAttribute", &ItemInfo::GetStatAttribute)
 							   .def("GetStatValue", &ItemInfo::GetStatValue)
 							   .def("GetSpellId", &ItemInfo::GetSpellId)
 							   .def("GetSpellTriggerType", &ItemInfo::GetSpellTriggerType)),
@@ -1114,6 +1203,7 @@ namespace mmo
 							   .def("GetSpell", &ItemHandle::GetSpell)
 							   .def("GetSpellTriggerType", &ItemHandle::GetSpellTriggerType)
 							   .def("GetStatType", &ItemHandle::GetStatType)
+							   .def("GetStatAttribute", &ItemHandle::GetStatAttribute)
 								.def("GetBagSlots", &ItemHandle::GetBagSlots)
 							   .def("GetDescription", &ItemHandle::GetDescription)
 							   .def("GetMinDamage", &ItemHandle::GetMinDamage)
@@ -1553,6 +1643,11 @@ namespace mmo
 					   luabind::def("GetMouseoverWorldObjectScreenPosition", &Script_GetMouseoverWorldObjectScreenPosition, luabind::joined<luabind::pure_out_value<1>, luabind::pure_out_value<2>>()),
 					   luabind::def("UnitAttributeCost", &Script_UnitAttributeCost),
 					   luabind::def("UnitStat", &Script_UnitStat, luabind::joined<luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+					   luabind::def("GetNumAttributes", &Script_GetNumAttributes),
+					   luabind::def("GetAttributeInfo", &Script_GetAttributeInfo, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>, luabind::pure_out_value<4>>()),
+					   luabind::def("GetAttributeName", &Script_GetAttributeName),
+					   luabind::def("GetAttributeLevelUpText", &Script_GetAttributeLevelUpText),
+					   luabind::def("GetLevelUpAttributeGain", &Script_GetLevelUpAttributeGain),
 					   luabind::def("UnitArmor", &Script_UnitArmor, luabind::joined<luabind::pure_out_value<2>, luabind::pure_out_value<3>>()),
 					   luabind::def("UnitMoney", &Script_UnitMoney),
 					   luabind::def("UnitDisplayId", &Script_UnitDisplayId),
@@ -2116,6 +2211,7 @@ namespace mmo
 		luabind::globals(m_luaState.get())["realmConnector"] = &m_realmConnector;
 		luabind::globals(m_luaState.get())["gameData"] = &m_project;
 		g_scriptSkills = &m_project.skills;
+		g_scriptAttributes = &m_project.attributes;
 
 		// Functions now registered
 		m_globalFunctionsRegistered = true;
@@ -2730,13 +2826,18 @@ namespace mmo
 
 	void GameScript::AddAttributePoint(uint32 attribute) const
 	{
-		if (attribute >= 5)
+		if (attribute >= MaxAttributes || !m_project.attributes.getById(attribute))
 		{
-			ELOG("AddAttributePoint: Attribute id must be in range of 0 .. 4");
+			ELOG("AddAttributePoint: Unknown attribute id " << attribute);
 			return;
 		}
 
 		m_realmConnector.AddAttributePoint(attribute);
+	}
+
+	void GameScript::SetLevelUpAttributeGains(const std::array<int32, MaxAttributes>& gains)
+	{
+		g_levelUpAttributeGains = gains;
 	}
 
 	const char *GameScript::GetItemSpellTriggerType(const ItemInfo *item, int32 index)

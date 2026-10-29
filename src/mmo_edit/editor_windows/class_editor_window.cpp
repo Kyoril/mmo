@@ -2,6 +2,7 @@
 
 #include "class_editor_window.h"
 #include "editor_imgui_helpers.h"
+#include "attribute_ui.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -17,6 +18,28 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Fills the attribute base values of a class's first level with the editor defaults. The
+		/// numbers are the historic level 1 defaults of the five shipped attributes (ids 0..4); any
+		/// other defined attribute starts at 0.
+		void ApplyDefaultAttributeValues(const proto::AttributeManager& attributes, proto::ClassBaseValues& baseValues)
+		{
+			static constexpr std::array<uint32, 5> s_legacyDefaults = { 19, 17, 25, 22, 23 };
+
+			for (const auto& attribute : attributes.getTemplates().entry())
+			{
+				if (attribute.id() >= MaxAttributes)
+				{
+					continue;
+				}
+
+				const uint32 value = attribute.id() < s_legacyDefaults.size() ? s_legacyDefaults[attribute.id()] : 0;
+				SetAttributeValue(*baseValues.mutable_attributes(), attribute.id(), value);
+			}
+		}
+	}
+
 	static String s_powerTypes[] = {
 		"Mana",
 		"Rage",
@@ -169,67 +192,50 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Base Values", ImGuiTreeNodeFlags_None))
 		{
-			static std::vector<float> s_healthValues;
-			static std::vector<float> s_manaValues;
-			static std::vector<float> s_staminaValues;
-			static std::vector<float> s_strengthValues;
-			static std::vector<float> s_agilityValues;
-			static std::vector<float> s_intellectValues;
-			static std::vector<float> s_spiritValues;
-
-			if (s_staminaValues.size() != currentEntry.levelbasevalues_size())
-			{
-				s_healthValues.resize(currentEntry.levelbasevalues_size());
-				s_manaValues.resize(currentEntry.levelbasevalues_size());
-				s_staminaValues.resize(currentEntry.levelbasevalues_size());
-				s_strengthValues.resize(currentEntry.levelbasevalues_size());
-				s_agilityValues.resize(currentEntry.levelbasevalues_size());
-				s_intellectValues.resize(currentEntry.levelbasevalues_size());
-				s_spiritValues.resize(currentEntry.levelbasevalues_size());
-
-				for (int i = 0; i < currentEntry.levelbasevalues_size(); ++i)
-				{
-					s_staminaValues[i] = currentEntry.levelbasevalues(i).stamina();
-					s_strengthValues[i] = currentEntry.levelbasevalues(i).strength();
-					s_intellectValues[i] = currentEntry.levelbasevalues(i).intellect();
-					s_agilityValues[i] = currentEntry.levelbasevalues(i).agility();
-					s_spiritValues[i] = currentEntry.levelbasevalues(i).spirit();
-					s_healthValues[i] = currentEntry.levelbasevalues(i).health();
-					s_manaValues[i] = currentEntry.levelbasevalues(i).mana();
-				}
-			}
-
 			static bool s_showHealth = true;
 			static bool s_showMana = true;
-			static bool s_showStamina = true;
-			static bool s_showStrength = true;
-			static bool s_showAgility = true;
-			static bool s_showIntellect = true;
-			static bool s_showSpirit = true;
+			static std::array<bool, MaxAttributes> s_showAttribute = [] { std::array<bool, MaxAttributes> shown{}; shown.fill(true); return shown; }();
 
 			struct PlotSeries
 			{
-				const char* label;
-				const std::vector<float>* values;
+				String label;
+				std::vector<float> values;
 				bool* enabled;
 				ImU32 color;
 			};
 
-			std::array<PlotSeries, 7> series = { {
-				{ "Health", &s_healthValues, &s_showHealth, IM_COL32(240, 90, 90, 255) },
-				{ "Mana", &s_manaValues, &s_showMana, IM_COL32(90, 140, 255, 255) },
-				{ "Stamina", &s_staminaValues, &s_showStamina, IM_COL32(90, 210, 120, 255) },
-				{ "Strength", &s_strengthValues, &s_showStrength, IM_COL32(255, 160, 70, 255) },
-				{ "Agility", &s_agilityValues, &s_showAgility, IM_COL32(245, 235, 120, 255) },
-				{ "Intellect", &s_intellectValues, &s_showIntellect, IM_COL32(180, 120, 255, 255) },
-				{ "Spirit", &s_spiritValues, &s_showSpirit, IM_COL32(120, 235, 235, 255) },
-			} };
+			// Rebuilt every frame: cheap, and never shows stale values after edits or entry switches.
+			const int levelCount = currentEntry.levelbasevalues_size();
+			std::vector<PlotSeries> series;
+			series.reserve(2 + m_project.attributes.count());
+			series.push_back({ "Health", std::vector<float>(levelCount), &s_showHealth, IM_COL32(240, 90, 90, 255) });
+			series.push_back({ "Mana", std::vector<float>(levelCount), &s_showMana, IM_COL32(90, 140, 255, 255) });
+			for (int i = 0; i < levelCount; ++i)
+			{
+				series[0].values[i] = static_cast<float>(currentEntry.levelbasevalues(i).health());
+				series[1].values[i] = static_cast<float>(currentEntry.levelbasevalues(i).mana());
+			}
+
+			for (const auto& attribute : m_project.attributes.getTemplates().entry())
+			{
+				if (attribute.id() >= MaxAttributes)
+				{
+					continue;
+				}
+
+				PlotSeries attributeSeries{ attribute.name(), std::vector<float>(levelCount), &s_showAttribute[attribute.id()], GetAttributeColor(attribute.id()) };
+				for (int i = 0; i < levelCount; ++i)
+				{
+					attributeSeries.values[i] = static_cast<float>(GetAttributeValue(currentEntry.levelbasevalues(i).attributes(), attribute.id()));
+				}
+				series.push_back(std::move(attributeSeries));
+			}
 
 			ImGui::TextUnformatted("Base Values Graph");
 			for (size_t i = 0; i < series.size(); ++i)
 			{
 				ImGui::PushID(static_cast<int>(i));
-				ImGui::Checkbox(series[i].label, series[i].enabled);
+				ImGui::Checkbox(series[i].label.c_str(), series[i].enabled);
 				ImGui::PopID();
 				if ((i % 4) != 3 && i + 1 < series.size())
 				{
@@ -250,13 +256,13 @@ namespace mmo
 			int maxPoints = 0;
 			for (const auto& s : series)
 			{
-				if (!*s.enabled || s.values->empty())
+				if (!*s.enabled || s.values.empty())
 				{
 					continue;
 				}
 
-				maxPoints = std::max(maxPoints, static_cast<int>(s.values->size()));
-				for (const float value : *s.values)
+				maxPoints = std::max(maxPoints, static_cast<int>(s.values.size()));
+				for (const float value : s.values)
 				{
 					minValue = std::min(minValue, value);
 					maxValue = std::max(maxValue, value);
@@ -313,17 +319,17 @@ namespace mmo
 
 				for (const auto& s : series)
 				{
-					if (!*s.enabled || s.values->size() < 2)
+					if (!*s.enabled || s.values.size() < 2)
 					{
 						continue;
 					}
 
-					for (size_t i = 1; i < s.values->size(); ++i)
+					for (size_t i = 1; i < s.values.size(); ++i)
 					{
-						const float x0 = origin.x + (static_cast<float>(i - 1) / static_cast<float>(s.values->size() - 1)) * graphWidth;
-						const float x1 = origin.x + (static_cast<float>(i) / static_cast<float>(s.values->size() - 1)) * graphWidth;
-						const float y0 = origin.y + graphHeight - ((s.values->at(i - 1) - minValue) / (maxValue - minValue)) * graphHeight;
-						const float y1 = origin.y + graphHeight - ((s.values->at(i) - minValue) / (maxValue - minValue)) * graphHeight;
+						const float x0 = origin.x + (static_cast<float>(i - 1) / static_cast<float>(s.values.size() - 1)) * graphWidth;
+						const float x1 = origin.x + (static_cast<float>(i) / static_cast<float>(s.values.size() - 1)) * graphWidth;
+						const float y0 = origin.y + graphHeight - ((s.values.at(i - 1) - minValue) / (maxValue - minValue)) * graphHeight;
+						const float y1 = origin.y + graphHeight - ((s.values.at(i) - minValue) / (maxValue - minValue)) * graphHeight;
 						drawList->AddLine(ImVec2(x0, y0), ImVec2(x1, y1), s.color, 2.0f);
 					}
 				}
@@ -349,11 +355,11 @@ namespace mmo
 					ImGui::SameLine();
 					if (*series[i].enabled)
 					{
-						ImGui::TextUnformatted(series[i].label);
+						ImGui::TextUnformatted(series[i].label.c_str());
 					}
 					else
 					{
-						ImGui::TextDisabled("%s", series[i].label);
+						ImGui::TextDisabled("%s", series[i].label.c_str());
 					}
 					ImGui::PopID();
 					if ((i % 4) != 3 && i + 1 < series.size())
@@ -375,34 +381,25 @@ namespace mmo
 				{
 					baseValues->set_health(32);
 					baseValues->set_mana(110);
-					baseValues->set_stamina(19);
-					baseValues->set_strength(17);
-					baseValues->set_agility(25);
-					baseValues->set_intellect(22);
-					baseValues->set_spirit(23);
+					ApplyDefaultAttributeValues(m_project.attributes, *baseValues);
 				}
 				else
 				{
-					baseValues->set_health(currentEntry.levelbasevalues(count - 2).health());
-					baseValues->set_mana(currentEntry.levelbasevalues(count - 2).mana());
-					baseValues->set_stamina(currentEntry.levelbasevalues(count - 2).stamina());
-					baseValues->set_strength(currentEntry.levelbasevalues(count - 2).strength());
-					baseValues->set_agility(currentEntry.levelbasevalues(count - 2).agility());
-					baseValues->set_intellect(currentEntry.levelbasevalues(count - 2).intellect());
-					baseValues->set_spirit(currentEntry.levelbasevalues(count - 2).spirit());
+					// Copy the previous level, including every attribute value
+					baseValues->CopyFrom(currentEntry.levelbasevalues(count - 2));
 				}
 			}
 
-			if (ImGui::BeginTable("classBaseValues", 10, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
+			const auto& attributeEntries = m_project.attributes.getTemplates().entry();
+			if (ImGui::BeginTable("classBaseValues", 5 + attributeEntries.size(), ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
 			{
 				ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_None);
 				ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_None);
-				ImGui::TableSetupColumn("Stamina", ImGuiTableColumnFlags_None);
-				ImGui::TableSetupColumn("Strength", ImGuiTableColumnFlags_None);
-				ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_None);
-				ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_None);
-				ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_None);
+				for (const auto& attribute : attributeEntries)
+				{
+					ImGui::TableSetupColumn(attribute.name().c_str(), ImGuiTableColumnFlags_None);
+				}
 				ImGui::TableSetupColumn("Attribute Points", ImGuiTableColumnFlags_None);
 				ImGui::TableSetupColumn("Talent Points", ImGuiTableColumnFlags_None);
 				ImGui::TableHeadersRow();
@@ -426,25 +423,23 @@ namespace mmo
 					value = currentEntry.mutable_levelbasevalues(index)->mana();
 					if (ImGui::InputInt("##mana", &value)) currentEntry.mutable_levelbasevalues(index)->set_mana(value);
 
-					ImGui::TableNextColumn();
-					value = currentEntry.mutable_levelbasevalues(index)->stamina();
-					if (ImGui::InputInt("##stamina", &value)) currentEntry.mutable_levelbasevalues(index)->set_stamina(value);
+					for (const auto& attribute : attributeEntries)
+					{
+						ImGui::TableNextColumn();
+						if (attribute.id() >= MaxAttributes)
+						{
+							ImGui::TextDisabled("invalid id");
+							continue;
+						}
 
-					ImGui::TableNextColumn();
-					value = currentEntry.mutable_levelbasevalues(index)->strength();
-					if (ImGui::InputInt("##strenght", &value)) currentEntry.mutable_levelbasevalues(index)->set_strength(value);
-
-					ImGui::TableNextColumn();
-					value = currentEntry.mutable_levelbasevalues(index)->agility();
-					if (ImGui::InputInt("##agility", &value)) currentEntry.mutable_levelbasevalues(index)->set_agility(value);
-
-					ImGui::TableNextColumn();
-					value = currentEntry.mutable_levelbasevalues(index)->intellect();
-					if (ImGui::InputInt("##intellect", &value)) currentEntry.mutable_levelbasevalues(index)->set_intellect(value);
-
-					ImGui::TableNextColumn();
-					value = currentEntry.mutable_levelbasevalues(index)->spirit();
-					if (ImGui::InputInt("##spirit", &value)) currentEntry.mutable_levelbasevalues(index)->set_spirit(value);
+						ImGui::PushID(static_cast<int>(attribute.id()));
+						value = static_cast<int>(GetAttributeValue(currentEntry.levelbasevalues(index).attributes(), attribute.id()));
+						if (ImGui::InputInt("##attribute", &value))
+						{
+							SetAttributeValue(*currentEntry.mutable_levelbasevalues(index)->mutable_attributes(), attribute.id(), static_cast<uint32>(std::max(value, 0)));
+						}
+						ImGui::PopID();
+					}
 
 					ImGui::TableNextColumn();
 					value = currentEntry.mutable_levelbasevalues(index)->attributepoints();
@@ -574,13 +569,7 @@ namespace mmo
 			}
 		}
 
-		static String s_statNames[] = {
-			"Stamina",
-			"Strength",
-			"Agility",
-			"Intellect",
-			"Spirit"
-		};
+		const proto::AttributeManager& attributes = m_project.attributes;
 
 		if (const auto section = ScopedEditorSection("Attack Power", ImGuiTreeNodeFlags_None))
 		{
@@ -591,403 +580,39 @@ namespace mmo
 			if (ImGui::InputFloat("Attack Power per Level", &perLevel)) currentEntry.set_attackpowerperlevel(perLevel);
 
 			ImGui::Text("Attack Power Stat Source");
-
-			// Add button
-			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_attackpowerstatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("statSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.attackpowerstatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_attackpowerstatsources(index);
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_attackpowerstatsources()->erase(currentEntry.mutable_attackpowerstatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("attackPowerStatSources", attributes, *currentEntry.mutable_attackpowerstatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Health", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Health Stat Source");
-
-			// Add button
-			if (DrawSuccessButton("Add##addHealthStat", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_healthstatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("healthStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.healthstatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_healthstatsources(index);
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##healthStat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##healthStatFactor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_healthstatsources()->erase(currentEntry.mutable_healthstatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("healthStatSources", attributes, *currentEntry.mutable_healthstatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Mana", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Mana Stat Source");
-
-			// Add button
-			if (DrawSuccessButton("Add##addManaStat", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_manastatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("manaStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.manastatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_manastatsources(index);
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##manaStat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##manaStatFactor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_manastatsources()->erase(currentEntry.mutable_manastatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("manaStatSources", attributes, *currentEntry.mutable_manastatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Armor", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::Text("Armor Stat Source");
-
-			// Add button
-			if (DrawSuccessButton("Add##addArmorStat", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_armorstatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("armorStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.armorstatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_armorstatsources(index);
-
-					static String s_statNames[] = {
-						"Stamina",
-						"Strength",
-						"Agility",
-						"Intellect",
-						"Spirit"
-					};
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_armorstatsources()->erase(currentEntry.mutable_armorstatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("armorStatSources", attributes, *currentEntry.mutable_armorstatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Block Value", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::TextDisabled("Each source adds (statValue * factor) to the shield block value, on top of equipped item block.");
 			ImGui::Text("Block Value Stat Source");
-
-			if (DrawSuccessButton("Add##addBlockValueStat", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_blockvaluestatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("blockValueStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.blockvaluestatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_blockvaluestatsources(index);
-
-					static String s_statNames[] = {
-						"Stamina",
-						"Strength",
-						"Agility",
-						"Intellect",
-						"Spirit"
-					};
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_blockvaluestatsources()->erase(currentEntry.mutable_blockvaluestatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("blockValueStatSources", attributes, *currentEntry.mutable_blockvaluestatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Critical Block Chance", ImGuiTreeNodeFlags_None))
 		{
 			ImGui::TextDisabled("Each source adds (statValue * factor) percent to the critical block chance, on top of the base chance from combat settings.");
 			ImGui::Text("Critical Block Chance Stat Source");
-
-			if (DrawSuccessButton("Add##addCritBlockStat", ImVec2(-1, 0)))
-			{
-				auto* newEntry = currentEntry.add_critblockchancestatsources();
-				newEntry->set_statid(0);
-				newEntry->set_factor(1.0f);
-			}
-
-			if (ImGui::BeginTable("critBlockChanceStatSources", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Stat", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Factor", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.critblockchancestatsources_size(); ++index)
-				{
-					auto* currentSource = currentEntry.mutable_critblockchancestatsources(index);
-
-					static String s_statNames[] = {
-						"Stamina",
-						"Strength",
-						"Agility",
-						"Intellect",
-						"Spirit"
-					};
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					int statId = currentSource->statid();
-					if (ImGui::Combo("##stat", &statId, [](void*, int index, const char** out_text) -> bool
-						{
-							if (index < 0 || index > 4)
-							{
-								*out_text = "";
-								return false;
-							}
-
-							*out_text = s_statNames[index].c_str();
-							return true;
-						}, nullptr, 5))
-					{
-						currentSource->set_statid(statId);
-					}
-
-					ImGui::TableNextColumn();
-
-					float factor = currentSource->factor();
-					if (ImGui::InputFloat("##factor", &factor)) currentSource->set_factor(factor);
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_critblockchancestatsources()->erase(currentEntry.mutable_critblockchancestatsources()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-				ImGui::EndTable();
-			}
+			DrawAttributeFactorSourceList("critBlockChanceStatSources", attributes, *currentEntry.mutable_critblockchancestatsources());
 		}
 
 		if (const auto section = ScopedEditorSection("Regeneration", ImGuiTreeNodeFlags_None))
@@ -995,14 +620,30 @@ namespace mmo
 			float baseManaRegen = currentEntry.basemanaregenpertick();
 			if (ImGui::InputFloat("Mana Regeneration per Tick", &baseManaRegen)) currentEntry.set_basemanaregenpertick(baseManaRegen);
 
-			float spiritPerManaRegen = currentEntry.spiritpermanaregen();
-			if (ImGui::InputFloat("Spirit per mana on tick", &spiritPerManaRegen)) currentEntry.set_spiritpermanaregen(spiritPerManaRegen);
+			ImGui::TextDisabled("Each source adds (attribute / points per 1) mana per tick.");
+			ImGui::Text("Mana Regeneration Sources");
+			DrawAttributeRatioSourceList("manaRegenSources", attributes, *currentEntry.mutable_manaregensources(), 5.0f);
+
+			ImGui::Separator();
 
 			float baseHealthRegen = currentEntry.healthregenpertick();
 			if (ImGui::InputFloat("Health Regeneration per Tick", &baseHealthRegen)) currentEntry.set_healthregenpertick(baseHealthRegen);
 
-			float spiritPerHealthRegen = currentEntry.spiritperhealthregen();
-			if (ImGui::InputFloat("Spirit per health on tick", &spiritPerHealthRegen)) currentEntry.set_spiritperhealthregen(spiritPerHealthRegen);
+			ImGui::TextDisabled("Each source adds (attribute / points per 1) health per tick.");
+			ImGui::Text("Health Regeneration Sources");
+			DrawAttributeRatioSourceList("healthRegenSources", attributes, *currentEntry.mutable_healthregensources(), 5.0f);
+		}
+
+		if (const auto section = ScopedEditorSection("Critical Strike & Dodge", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Each source adds (attribute / points per 1) percent, on top of the base chance.");
+			ImGui::Text("Melee Critical Strike Chance Sources");
+			DrawAttributeRatioSourceList("meleeCritSources", attributes, *currentEntry.mutable_meleecritsources());
+
+			ImGui::Separator();
+
+			ImGui::Text("Dodge Chance Sources");
+			DrawAttributeRatioSourceList("dodgeSources", attributes, *currentEntry.mutable_dodgesources());
 		}
 
 		static const char* s_spellNone = "<None>";
@@ -1343,11 +984,20 @@ namespace mmo
 		auto* baseValues = entry.add_levelbasevalues();
 		baseValues->set_health(32);
 		baseValues->set_mana(110);
-		baseValues->set_stamina(19);
-		baseValues->set_strength(17);
-		baseValues->set_agility(25);
-		baseValues->set_intellect(22);
-		baseValues->set_spirit(23);
+		ApplyDefaultAttributeValues(m_project.attributes, *baseValues);
+
+		// 1% melee crit and dodge per 20 points of the attribute in slot 2 (Agility in the shipped
+		// data), as every class had before these became data. Skipped if that slot is not defined.
+		constexpr uint32 critAndDodgeAttribute = 2;
+		if (m_project.attributes.getById(critAndDodgeAttribute) != nullptr)
+		{
+			auto* crit = entry.add_meleecritsources();
+			crit->set_attribute(critAndDodgeAttribute);
+			crit->set_pointsper(20.0f);
+
+			auto* dodge = entry.add_dodgesources();
+			dodge->set_attribute(critAndDodgeAttribute);
+			dodge->set_pointsper(20.0f);
+		}
 	}
 }
-

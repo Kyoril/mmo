@@ -67,7 +67,7 @@ TEST_CASE("Melee crit chance field tracks the agility the character has", "[char
 	auto unit = MakeUnit(project, timers);
 
 	// 40 additional agility are worth 2% crit on top of the base chance.
-	unit->UpdateModifierValue(unit_mods::StatAgility, unit_mod_type::TotalValue, 40.0f, true);
+	unit->UpdateModifierValue(GameUnitS::GetUnitModByStat(2), unit_mod_type::TotalValue, 40.0f, true);	// Agility
 	CHECK(unit->Get<float>(object_fields::MeleeCritChance) == Approx(7.5f));
 	CHECK(unit->GetBaseMeleeCritChance() == Approx(7.5f));
 }

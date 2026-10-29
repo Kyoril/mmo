@@ -77,9 +77,9 @@ Aura handlers currently support patterns such as:
 </auras>
 
 <stat_aura_indices>
-`AuraEffect::HandleModStat()` and `HandleModStatPct()` interpret `effect.miscvaluea` as a raw stat index and route it through `GameUnitS::GetUnitModByStat()`.
+`AuraEffect::HandleModStat()` and `HandleModStatPct()` interpret `effect.miscvaluea` as an attribute id (game data, `attributes.data`) and route it through `GameUnitS::GetUnitModByStat()`.
 
-Authoritative mapping for spell auras:
+Shipped attribute ids:
 
 - `0 = Stamina`
 - `1 = Strength`
@@ -87,7 +87,7 @@ Authoritative mapping for spell auras:
 - `3 = Intellect`
 - `4 = Spirit`
 
-This is the same order shown in `src/mmo_edit/editor_windows/spell_editor_window.cpp` for the `ModStat` / `ModStatPct` combo box. It is intentionally different from `proto::StatConstants.StatType`, so do not copy enum numbers from `stat_constants.proto` into spell aura `miscvaluea`.
+The spell editor's `ModStat` / `ModStatPct` combo box lists the attributes from the data. Ids must be below `MaxAttributes` (10).
 </stat_aura_indices>
 
 <procs>

@@ -43,11 +43,11 @@ namespace
 				auto* levelValues = cls->add_levelbasevalues();
 				levelValues->set_health(100);
 				levelValues->set_mana(100);
-				levelValues->set_stamina(10);
-				levelValues->set_strength(10);
-				levelValues->set_agility(10);
-				levelValues->set_intellect(10);
-				levelValues->set_spirit(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
 			}
 
 			entry = project.items.add(TestItemId);

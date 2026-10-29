@@ -26,6 +26,12 @@ namespace
 	constexpr uint32 BaseAgility = 27;
 	constexpr uint32 CreatureLevel = 2;
 
+	// Attribute ids of the shipped attribute data
+	constexpr uint32 StaminaId = 0;
+	constexpr uint32 StrengthId = 1;
+	constexpr uint32 AgilityId = 2;
+	constexpr uint32 SpiritId = 4;
+
 	struct StatFixture
 	{
 		asio::io_service io;
@@ -46,21 +52,21 @@ namespace
 				auto* values = unitClass->add_levelbasevalues();
 				values->set_health(220);
 				values->set_mana(0);
-				values->set_stamina(BaseStamina);
-				values->set_strength(BaseStrength);
-				values->set_agility(BaseAgility);
-				values->set_intellect(23);
-				values->set_spirit(23);
+				values->add_attributes(BaseStamina);
+				values->add_attributes(BaseStrength);
+				values->add_attributes(BaseAgility);
+				values->add_attributes(23);
+				values->add_attributes(23);
 			}
 
 			// Armor scales off agility, attack power off strength — the two columns the bug
 			// replaced with stamina.
 			auto* armorSource = unitClass->add_armorstatsources();
-			armorSource->set_statid(proto::StatConstants_StatType_AGILITY);
+			armorSource->set_statid(AgilityId);
 			armorSource->set_factor(2.0f);
 
 			auto* attackPowerSource = unitClass->add_attackpowerstatsources();
-			attackPowerSource->set_statid(proto::StatConstants_StatType_STRENGTH);
+			attackPowerSource->set_statid(StrengthId);
 			attackPowerSource->set_factor(2.0f);
 
 			entry = project.units.add(1);
@@ -90,9 +96,9 @@ TEST_CASE_METHOD(StatFixture, "Stat-based creature reads each stat from its own 
 {
 	const auto creature = MakeCreature();
 
-	CHECK(creature->Get<uint32>(object_fields::StatStamina) == BaseStamina);
-	CHECK(creature->Get<uint32>(object_fields::StatStrength) == BaseStrength);
-	CHECK(creature->Get<uint32>(object_fields::StatAgility) == BaseAgility);
+	CHECK(creature->Get<uint32>(object_fields::Stat + StaminaId) == BaseStamina);
+	CHECK(creature->Get<uint32>(object_fields::Stat + StrengthId) == BaseStrength);
+	CHECK(creature->Get<uint32>(object_fields::Stat + AgilityId) == BaseAgility);
 }
 
 TEST_CASE_METHOD(StatFixture, "Stat-based creature armor and attack power follow their source stat", "[creature_stats]")
@@ -112,7 +118,39 @@ TEST_CASE_METHOD(StatFixture, "Elite multiplier scales each stat column independ
 	entry->set_elitestatmultiplier(2.0f);
 	const auto creature = MakeCreature();
 
-	CHECK(creature->Get<uint32>(object_fields::StatStamina) == BaseStamina * 2);
-	CHECK(creature->Get<uint32>(object_fields::StatStrength) == BaseStrength * 2);
-	CHECK(creature->Get<uint32>(object_fields::StatAgility) == BaseAgility * 2);
+	CHECK(creature->Get<uint32>(object_fields::Stat + StaminaId) == BaseStamina * 2);
+	CHECK(creature->Get<uint32>(object_fields::Stat + StrengthId) == BaseStrength * 2);
+	CHECK(creature->Get<uint32>(object_fields::Stat + AgilityId) == BaseAgility * 2);
+}
+
+TEST_CASE_METHOD(StatFixture, "Stat-based creature mana regeneration, crit and dodge come from unit class attribute sources", "[creature_stats]")
+{
+	auto* unitClass = project.unitClasses.getById(1);
+	unitClass->set_powertype(proto::StatConstants_PowerType_MANA);
+	auto* regenSource = unitClass->add_manaregensources();
+	regenSource->set_attribute(SpiritId);
+	regenSource->set_pointsper(5.0f);
+	auto* critSource = unitClass->add_meleecritsources();
+	critSource->set_attribute(AgilityId);
+	critSource->set_pointsper(20.0f);
+	auto* dodgeSource = unitClass->add_dodgesources();
+	dodgeSource->set_attribute(AgilityId);
+	dodgeSource->set_pointsper(20.0f);
+
+	const auto creature = MakeCreature();
+
+	// Base 5% plus 27 agility / 20
+	CHECK(creature->GetBaseMeleeCritChance() == Approx(5.0f + BaseAgility / 20.0f));
+	CHECK(creature->DodgeChance() == Approx(project.combatSettings.base_dodge_chance() + BaseAgility / 20.0f));
+
+	// 23 spirit / 5 per tick, two second ticks: 2.5 ticks per five seconds of whole points
+	CHECK(creature->GetManaRegenPerFiveSeconds() == Approx(static_cast<float>(static_cast<int32>(23 / 5.0f)) * 2.5f));
+}
+
+TEST_CASE_METHOD(StatFixture, "Stat-based creature without attribute sources gets no attribute crit or dodge", "[creature_stats]")
+{
+	const auto creature = MakeCreature();
+
+	CHECK(creature->GetBaseMeleeCritChance() == Approx(5.0f));
+	CHECK(creature->DodgeChance() == Approx(project.combatSettings.base_dodge_chance()));
 }

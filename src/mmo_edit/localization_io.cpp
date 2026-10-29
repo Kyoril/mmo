@@ -224,6 +224,16 @@ namespace mmo
 			}
 		}
 
+		// Attributes (Stamina, Strength, ...). The id is the attribute slot, so 0 is a valid id here.
+		const auto& attributes = project.attributes.getTemplates();
+		for (int i = 0; i < attributes.entry_size(); ++i)
+		{
+			const auto& e = attributes.entry(i);
+			ExportField(entries, "attribute", e.id(), 0, "name", e.name(), e.name_loc());
+			ExportField(entries, "attribute", e.id(), 0, "description", e.description(), e.description_loc());
+			ExportField(entries, "attribute", e.id(), 0, "levelUpText", e.leveluptext(), e.leveluptext_loc());
+		}
+
 		// Triggers (per-action Say / Yell / Emote text). 'sub' is the 1-based action index.
 		const auto& triggers = project.triggers.getTemplates();
 		for (int i = 0; i < triggers.entry_size(); ++i)
@@ -433,6 +443,15 @@ namespace mmo
 							break;
 						}
 					}
+				}
+			}
+			else if (type == "attribute")
+			{
+				if (auto* e = project.attributes.getById(id))
+				{
+					if (field == "name") { loc = e->mutable_name_loc(); }
+					else if (field == "description") { loc = e->mutable_description_loc(); }
+					else if (field == "levelUpText") { loc = e->mutable_leveluptext_loc(); }
 				}
 			}
 			else if (type == "trigger")

@@ -65,6 +65,7 @@ Session (for scenarios that deliberately provoke a disconnect):
 | `ExpectDisconnect()` | Losing the realm connection stops being a failure. Arm it **before** the disconnect can happen |
 | `IsDisconnected() -> bool` | True once the realm connection has been lost |
 | `LastKickReason() -> string` | `"none"` \| `"logged_in_elsewhere"` \| `"banned"` |
+| `AddAttributePoint(attributeId)` | Spends one attribute point on that attribute (the server rejects unaffordable points and undefined attributes) |
 | `LoginElsewhere([timeoutMs]) -> bool` | Opens a second login-server session on the same account and waits for it to authenticate; default 15s |
 | `Reconnect([timeoutMs]) -> bool` | Logs back in and returns to the world over the **same** connectors; default 30s |
 
@@ -75,6 +76,7 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `GetTradeSkill(skillId)` / `GetTradeSkillMax(skillId)` (own profession skill value / cap, `-1`
 when the skill is not known),
 `GetXp()`, `GetNextLevelXp()` (own character only),
+`GetAttribute(g, attributeId)` (total value of an attribute, ids from `attributes.data`), `GetAvailableAttributePoints()` (own character only),
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`; crafting
 failures report the numeric reason, e.g. `failed:21` = skill too low, `failed:22` = inventory full),
 `LastSwingError()` (`"none" | "out_of_range" | "wrong_facing" | "target_dead" | ...`),

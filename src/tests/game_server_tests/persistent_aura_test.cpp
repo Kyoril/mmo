@@ -33,11 +33,11 @@ namespace
 					auto* lbv = cls->add_levelbasevalues();
 					lbv->set_health(100);
 					lbv->set_mana(100);
-					lbv->set_stamina(10);
-					lbv->set_strength(10);
-					lbv->set_agility(10);
-					lbv->set_intellect(10);
-					lbv->set_spirit(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
 				}
 			}
 		}

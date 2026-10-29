@@ -10,6 +10,7 @@
 
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
+#include "attribute_ui.h"
 #include "file_dialog/file_dialog.h"
 #include "game/aura.h"
 #include "game/item.h"
@@ -214,14 +215,17 @@ namespace mmo
 		"Quiver",
 		"Relic"};
 
+	/// Names of the non-attribute item stat types, indexed by item_stat::Type. Types 2..6 held the
+	/// five hard-coded attributes and are retired (nullptr): attribute stats are
+	/// item_stat::AttributeStart + attribute id and take their name from the project's attributes.
 	static const char *s_statTypeStrings[] = {
 		"Mana",
 		"Health",
-		"Agility",
-		"Strength",
-		"Intellect",
-		"Spirit",
-		"Stamina",
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
+		nullptr,
 		"DefenseSkillRating",
 		"DodgeRating",
 		"ParryRating",
@@ -250,6 +254,28 @@ namespace mmo
 
 	namespace
 	{
+		/// Returns the display label of an item stat type: the attribute name for attribute stats,
+		/// the stat name for other known types, or a placeholder for retired / unknown types.
+		String GetItemStatTypeLabel(const proto::AttributeManager &attributes, const uint32 statType)
+		{
+			if (const int32 attributeId = item_stat::ToAttribute(statType); attributeId >= 0)
+			{
+				return GetAttributeLabel(attributes, static_cast<uint32>(attributeId));
+			}
+
+			if (statType < std::size(s_statTypeStrings))
+			{
+				if (s_statTypeStrings[statType] != nullptr)
+				{
+					return s_statTypeStrings[statType];
+				}
+
+				return "Retired stat type (#" + std::to_string(statType) + ")";
+			}
+
+			return "Unknown stat type (#" + std::to_string(statType) + ")";
+		}
+
 		/// Identifier written into exported files so the importer can reject foreign JSON.
 		constexpr const char *s_itemJsonFormat = "mmo-item";
 		/// Schema version of the exported item JSON. Bump when the layout changes incompatibly.
@@ -1148,11 +1174,11 @@ namespace mmo
 			{
 				if (currentEntry.stats(i).value() > 0)
 				{
-					ImGui::TextColored(ImColor(0.0f, 1.0f, 0.0f, 1.0f), "+%d %s", currentEntry.stats(i).value(), s_statTypeStrings[currentEntry.stats(i).type()]);
+					ImGui::TextColored(ImColor(0.0f, 1.0f, 0.0f, 1.0f), "+%d %s", currentEntry.stats(i).value(), GetItemStatTypeLabel(m_project.attributes, currentEntry.stats(i).type()).c_str());
 				}
 				else if (currentEntry.stats(i).value() < 0)
 				{
-					ImGui::TextColored(ImColor(1.0f, 0.0f, 0.0f, 1.0f), "-%d %s", currentEntry.stats(i).value(), s_statTypeStrings[currentEntry.stats(i).type()]);
+					ImGui::TextColored(ImColor(1.0f, 0.0f, 0.0f, 1.0f), "-%d %s", -currentEntry.stats(i).value(), GetItemStatTypeLabel(m_project.attributes, currentEntry.stats(i).type()).c_str());
 				}
 			}
 
@@ -1250,16 +1276,42 @@ namespace mmo
 
 						ImGui::TableNextColumn();
 
-						int32 statType = stat->type();
-						if (ImGui::BeginCombo("Stat Type", statType < 0 ? "None" : s_statTypeStrings[statType], ImGuiComboFlags_None))
+						const uint32 statType = stat->type();
+						const String statTypeLabel = GetItemStatTypeLabel(m_project.attributes, statType);
+						if (ImGui::BeginCombo("Stat Type", statTypeLabel.c_str(), ImGuiComboFlags_None))
 						{
-							// Remove the stat entry
-							for (int32 j = 0; j < std::size(s_statTypeStrings); ++j)
+							// Attributes first (from project data), then the other stat types
+							for (const auto &attribute : m_project.attributes.getTemplates().entry())
 							{
+								if (attribute.id() >= MaxAttributes)
+								{
+									continue;
+								}
+
+								const uint32 attributeStatType = item_stat::FromAttribute(attribute.id());
+								ImGui::PushID(static_cast<int>(attributeStatType));
+								if (ImGui::Selectable(attribute.name().c_str(), statType == attributeStatType))
+								{
+									stat->set_type(attributeStatType);
+								}
+								ImGui::PopID();
+							}
+
+							ImGui::Separator();
+
+							for (uint32 j = 0; j < std::size(s_statTypeStrings); ++j)
+							{
+								if (s_statTypeStrings[j] == nullptr)
+								{
+									continue;
+								}
+
+								ImGui::PushID(static_cast<int>(j));
 								if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
 								{
 									stat->set_type(j);
 								}
+								ImGui::PopID();
 							}
 
 							ImGui::EndCombo();

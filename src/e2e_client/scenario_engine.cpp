@@ -552,6 +552,27 @@ namespace mmo
 			return unit ? static_cast<int32>(unit->GetMaxHealth()) : -1;
 		}
 
+		int32 luaGetAttribute(const std::string& guid, const uint32 attributeId)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? unit->GetAttribute(attributeId) : -1;
+		}
+
+		int32 luaGetAvailableAttributePoints()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? static_cast<int32>(selfUnit->GetAvailableAttributePoints()) : -1;
+		}
+
+		void luaAddAttributePoint(const uint32 attributeId)
+		{
+			g_runtime->session->GetRealm().AddAttributePoint(attributeId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AddAttributePoint", { { "attribute", attributeId } });
+			}
+		}
+
 		int32 luaGetLevel(const std::string& guid)
 		{
 			const BotUnit* unit = findUnit(guid);
@@ -1696,6 +1717,9 @@ namespace mmo
 				luabind::def_lambda("UnitExists", &luaUnitExists),
 				luabind::def_lambda("GetHealth", &luaGetHealth),
 				luabind::def_lambda("GetMaxHealth", &luaGetMaxHealth),
+				luabind::def_lambda("GetAttribute", &luaGetAttribute),
+				luabind::def_lambda("GetAvailableAttributePoints", &luaGetAvailableAttributePoints),
+				luabind::def_lambda("AddAttributePoint", &luaAddAttributePoint),
 				luabind::def_lambda("GetLevel", &luaGetLevel),
 				luabind::def_lambda("GetPower", &luaGetPower),
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),

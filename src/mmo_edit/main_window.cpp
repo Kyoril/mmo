@@ -971,6 +971,7 @@ namespace mmo
 			"model_data",
 			"races",
 			"classes",
+			"attributes",
 			"factions",
 			"faction_templates",
 			"item_displays",

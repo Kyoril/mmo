@@ -46,7 +46,7 @@ namespace
 		void OnEnvironmentalDamageLog(uint64, uint32, EnvironmentalDamageType) override {}
 		void OnSpeedChangeApplied(MovementType, float, uint32) override {}
 		void OnRootChanged(bool, uint32) override {}
-		void OnLevelUp(uint32, int32, int32, int32, int32, int32, int32, int32, int32, int32) override {}
+		void OnLevelUp(uint32, int32, int32, const std::array<int32, MaxAttributes>&, int32, int32) override {}
 		void OnSpellModChanged(SpellModType, uint8, SpellModOp, int32) override {}
 		void OnProficiencyChanged(uint32, bool) override {}
 		void OnReviveOffer(uint64, uint32, uint32, uint32, const Vector3&, const Radian&) override {}
@@ -79,9 +79,9 @@ namespace
 					{
 						auto* lbv = cls->add_levelbasevalues();
 						lbv->set_health(100); lbv->set_mana(100);
-						lbv->set_stamina(10); lbv->set_strength(10);
-						lbv->set_agility(10); lbv->set_intellect(10);
-						lbv->set_spirit(10);
+						lbv->add_attributes(10); lbv->add_attributes(10);
+						lbv->add_attributes(10); lbv->add_attributes(10);
+						lbv->add_attributes(10);
 					}
 				}
 			}

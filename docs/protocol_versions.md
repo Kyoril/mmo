@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 12 | 2026-10-29 | Data-driven attributes: `CharacterClassData` (inside CharacterData and the world->realm character updates) carries `MaxAttributes` (10) spent-point counts instead of 5, followed by a uint32 `attributeLayout` |
 | 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 9 | 2026-10-13 | Instance reset: realm→world `ResetInstance` request |
@@ -120,6 +121,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 31 | 2026-10-29 | Data-driven attributes: the unit fields `Stat`, `PosStat` and `NegStat` hold `MaxAttributes` (10) values each instead of five named ones, and the player field `AttributePointCost` spans `AttributePointCostFieldCount` (3) uint32 fields instead of a uint64, renumbering every field after them. `LevelUp` carries health, mana, talent and attribute points, then a uint8 count of (uint8 attribute id, int32 gain) pairs instead of five fixed attribute gains |
 | 30 | 2026-10-23 | Vendor buyback: client `BuyBackItem` (vendor guid + buyback slot index, proxied to the world node) and server `BuyBackList` (vendor guid, then per entry the buyback slot index, item, display, stack count, price and durability), sent with `ListInventory` and whenever the buyback list changes |
 | 29 | 2026-10-20 | Second action bar: `MaxActionButtons` grows from 12 to 24, so the server `ActionButtons` payload carries 24 button records instead of 12 and the client `SetActionBarButton` slot range widens to 0..23 |
 | 28 | 2026-10-21 | Character order: `SetCharacterOrder` client opcode, `CharEnum` gains trailing uint64 realm time of day |

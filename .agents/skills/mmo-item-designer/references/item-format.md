@@ -81,11 +81,11 @@ Stat type:
 |---:|---|---:|---|
 | 0 | Mana | 16 | CritSpellRating |
 | 1 | Health | 17 | HitTakenMeleeRating |
-| 2 | Agility | 18 | HitTakenRangedRating |
-| 3 | Strength | 19 | HitTakenSpellRating |
-| 4 | Intellect | 20 | CritTakenMeleeRating |
-| 5 | Spirit | 21 | CritTakenRangedRating |
-| 6 | Stamina | 22 | CritTakenSpellRating |
+| 2-6 | (retired, were attributes) | 18 | HitTakenRangedRating |
+| | | 19 | HitTakenSpellRating |
+| | | 20 | CritTakenMeleeRating |
+| | | 21 | CritTakenRangedRating |
+| | | 22 | CritTakenSpellRating |
 | 7 | DefenseSkillRating | 23 | HasteMeleeRating |
 | 8 | DodgeRating | 24 | HasteRangedRating |
 | 9 | ParryRating | 25 | HasteSpellRating |
@@ -95,6 +95,10 @@ Stat type:
 | 13 | HitSpellRating | 29 | CritTakenRating |
 | 14 | CritMeleeRating | 30 | HasteRating |
 | 15 | CritRangedRating | 31 | ExpertiseRating |
+
+Attribute stats are `64 + attribute id`, with the attribute ids of `data/editor/data/attributes.data`
+(shipped: 0 Stamina, 1 Strength, 2 Agility, 3 Intellect, 4 Spirit). So Stamina is 64, Strength 65,
+Agility 66, Intellect 67 and Spirit 68.
 
 Item flags are a bitmask: bound `1`, conjured `2`, openable `4`, wrapped `8`, wrapper `512`, party loot `2048`, unique equipped `4096`.
 
@@ -109,7 +113,7 @@ Damage:
 Stat:
 
 ```json
-{"type": 3, "value": 2}
+{"type": 65, "value": 2}
 ```
 
 Spell:

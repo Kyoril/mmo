@@ -10,6 +10,7 @@
 #include "asset_picker_widget.h"
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
+#include "attribute_ui.h"
 #include "game/aura.h"
 #include "game/id_mask.h"
 #include "game/item.h"
@@ -279,14 +280,6 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_modifierNames) == spell_mod_op::Count_, "Each spell mod operation must have a string representation!");
-
-	static String s_statNames[] = {
-		"Stamina",
-		"Strength",
-		"Agility",
-		"Intellect",
-		"Spirit"
-	};
 
 	static String s_resistanceNames[] = {
 		"Armor",
@@ -2396,20 +2389,11 @@ namespace mmo
 		case aura_type::ModStat:
 		case aura_type::ModStatPct:
 			{
-				int currentStat = effect.miscvaluea();
-				if (ImGui::Combo("Stat", &currentStat,
-					[](void* data, int idx, const char** out_text)
-					{
-						if (idx < 0 || idx >= IM_ARRAYSIZE(s_statNames))
-						{
-							return false;
-						}
-
-						*out_text = s_statNames[idx].c_str();
-						return true;
-					}, nullptr, IM_ARRAYSIZE(s_statNames)))
+				// The misc value is the attribute id (see attributes.proto)
+				uint32 attributeId = static_cast<uint32>(std::max(effect.miscvaluea(), 0));
+				if (DrawAttributeCombo("Attribute", m_project.attributes, attributeId))
 				{
-					effect.set_miscvaluea(currentStat);
+					effect.set_miscvaluea(static_cast<int32>(attributeId));
 				}
 			}
 			break;

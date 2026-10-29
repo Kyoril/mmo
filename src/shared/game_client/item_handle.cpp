@@ -303,6 +303,16 @@ namespace mmo
 		return info->GetStatType(index);
 	}
 
+	int32 ItemHandle::GetStatAttribute(const int32 index) const
+	{
+		if (!CheckNonNull()) return -1;
+
+		const ItemInfo* info = Get()->GetEntry();
+		if (!info) return -1;
+
+		return info->GetStatAttribute(index);
+	}
+
 	int32 ItemHandle::GetStatValue(const int32 index) const
 	{
 		if (!CheckNonNull()) return 0;

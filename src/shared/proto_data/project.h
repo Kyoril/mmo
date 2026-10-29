@@ -37,6 +37,7 @@
 #include "shared/proto_data/item_sets.pb.h"
 #include "shared/proto_data/races.pb.h"
 #include "shared/proto_data/classes.pb.h"
+#include "shared/proto_data/attributes.pb.h"
 #include "shared/proto_data/unit_classes.pb.h"
 #include "shared/proto_data/levels.pb.h"
 #include "shared/proto_data/factions.pb.h"
@@ -87,6 +88,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Items, mmo::proto::ItemEntry> ItemManager;
 		typedef TemplateManager<mmo::proto::ItemSets, mmo::proto::ItemSetEntry> ItemSetManager;
 		typedef TemplateManager<mmo::proto::Classes, mmo::proto::ClassEntry> ClassManager;
+		typedef TemplateManager<mmo::proto::Attributes, mmo::proto::AttributeEntry> AttributeManager;
 		typedef TemplateManager<mmo::proto::UnitClasses, mmo::proto::UnitClassEntry> UnitClassManager;
 		typedef TemplateManager<mmo::proto::Races, mmo::proto::RaceEntry> RaceManager;
 		typedef TemplateManager<mmo::proto::Levels, mmo::proto::LevelEntry> LevelManager;
@@ -167,6 +169,9 @@ namespace mmo
 			ItemManager items;
 			ItemSetManager itemSets;
 			ClassManager classes;
+
+			/// Primary attributes (Stamina, Strength, ...). Entry ids are attribute slots < MaxAttributes.
+			AttributeManager attributes;
 			UnitClassManager unitClasses;
 			RaceManager races;
 			LevelManager levels;
@@ -319,6 +324,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("items", items));
 				managers.push_back(ManagerEntry("item_sets", itemSets));
 				managers.push_back(ManagerEntry("classes", classes));
+				managers.push_back(ManagerEntry("attributes", attributes));
 				managers.push_back(ManagerEntry("unit_classes", unitClasses));
 				managers.push_back(ManagerEntry("races", races));
 				managers.push_back(ManagerEntry("levels", levels));
@@ -410,6 +416,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_sets", "item_sets", itemSets));
 				managers.push_back(ManagerEntry("unit_classes", "unit_classes", unitClasses));
 				managers.push_back(ManagerEntry("classes", "classes", classes));
+				managers.push_back(ManagerEntry("attributes", "attributes", attributes));
 				managers.push_back(ManagerEntry("races", "races", races));
 				managers.push_back(ManagerEntry("levels", "levels", levels));
 				managers.push_back(ManagerEntry("triggers", "triggers", triggers));

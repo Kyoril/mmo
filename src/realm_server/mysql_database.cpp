@@ -816,8 +816,8 @@ namespace mmo
 					throw mysql::Exception("Could not load character quests");
 				}
 
-				// Load known classes (per-class level, xp and attribute spending).
-				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
+				// Load known classes (per-class level, xp and the attribute layout of their spending).
+				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_layout` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
 				if (classSelect.Success())
 				{
 					mysql::Row classRow(classSelect);
@@ -827,11 +827,7 @@ namespace mmo
 						classRow.GetField(0, classData.classId);
 						classRow.GetField<uint8, uint16>(1, classData.classLevel);
 						classRow.GetField(2, classData.classXp);
-						classRow.GetField(3, classData.attributePointsSpent[0]);
-						classRow.GetField(4, classData.attributePointsSpent[1]);
-						classRow.GetField(5, classData.attributePointsSpent[2]);
-						classRow.GetField(6, classData.attributePointsSpent[3]);
-						classRow.GetField(7, classData.attributePointsSpent[4]);
+						classRow.GetField(3, classData.attributeLayout);
 						result.knownClasses.push_back(std::move(classData));
 
 						classRow = mysql::Row::Next(classSelect);
@@ -841,6 +837,38 @@ namespace mmo
 				{
 					PrintDatabaseError();
 					throw mysql::Exception("Could not load character classes");
+				}
+
+				// Load per-class attribute spending (points bought per attribute id).
+				mysql::Select attributeSelect(m_connection, "SELECT `class`, `attribute`, `points` FROM `character_class_attributes` WHERE `character`=" + std::to_string(characterId));
+				if (attributeSelect.Success())
+				{
+					mysql::Row attributeRow(attributeSelect);
+					while (attributeRow)
+					{
+						uint32 classId = 0, attribute = 0, points = 0;
+						attributeRow.GetField(0, classId);
+						attributeRow.GetField(1, attribute);
+						attributeRow.GetField(2, points);
+
+						const auto classIt = std::find_if(result.knownClasses.begin(), result.knownClasses.end(),
+							[classId](const CharacterClassData& classData) { return classData.classId == classId; });
+						if (classIt != result.knownClasses.end() && attribute < MaxAttributes)
+						{
+							classIt->attributePointsSpent[attribute] = points;
+						}
+						else
+						{
+							WLOG("Ignoring attribute spending of character " << characterId << " for class " << classId << ", attribute " << attribute);
+						}
+
+						attributeRow = mysql::Row::Next(attributeSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character class attributes");
 				}
 
 				// Defensive fallback: ensure the active class always exists (e.g. legacy characters or
@@ -1210,6 +1238,15 @@ namespace mmo
 
 		// Replace the per-class data (level, xp, attribute spending).
 		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_class_attributes` WHERE `character`={0};"
+			, characterId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character class attribute data!");
+		}
+
+		if (!m_connection.Execute(std::format(
 			"DELETE FROM `character_classes` WHERE `character`={0};"
 			, characterId
 		)))
@@ -1220,9 +1257,13 @@ namespace mmo
 
 		if (!knownClasses.empty())
 		{
+			// attr_0 .. attr_4 are legacy columns, still written for attribute ids 0 - 4 so that a rolled
+			// back server build reads current values (see 20261029_1_data_driven_attributes.sql).
 			std::ostringstream strm;
-			strm << "INSERT INTO `character_classes` (`character`, `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4`) VALUES ";
+			strm << "INSERT INTO `character_classes` (`character`, `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4`, `attr_layout`) VALUES ";
+			std::ostringstream attributeStrm;
 			bool isFirstItem = true;
+			bool isFirstAttribute = true;
 			for (const auto& classData : knownClasses)
 			{
 				if (!isFirstItem) strm << ",";
@@ -1231,13 +1272,29 @@ namespace mmo
 				strm << "(" << characterId
 					<< "," << classData.classId
 					<< "," << static_cast<uint32>(classData.classLevel)
-					<< "," << classData.classXp
-					<< "," << classData.attributePointsSpent[0]
-					<< "," << classData.attributePointsSpent[1]
-					<< "," << classData.attributePointsSpent[2]
-					<< "," << classData.attributePointsSpent[3]
-					<< "," << classData.attributePointsSpent[4]
-					<< ")";
+					<< "," << classData.classXp;
+				for (uint32 attribute = 0; attribute < 5; ++attribute)
+				{
+					strm << "," << classData.attributePointsSpent[attribute];
+				}
+				strm << "," << classData.attributeLayout << ")";
+
+				for (uint32 attribute = 0; attribute < MaxAttributes; ++attribute)
+				{
+					if (classData.attributePointsSpent[attribute] == 0)
+					{
+						continue;
+					}
+
+					if (!isFirstAttribute) attributeStrm << ",";
+					else isFirstAttribute = false;
+
+					attributeStrm << "(" << characterId
+						<< "," << classData.classId
+						<< "," << attribute
+						<< "," << classData.attributePointsSpent[attribute]
+						<< ")";
+				}
 			}
 			strm << ";";
 
@@ -1245,6 +1302,15 @@ namespace mmo
 			{
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character class data!");
+			}
+
+			if (!isFirstAttribute)
+			{
+				if (!m_connection.Execute("INSERT INTO `character_class_attributes` (`character`, `class`, `attribute`, `points`) VALUES " + attributeStrm.str() + ";"))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not update character class attribute data!");
+				}
 			}
 		}
 
