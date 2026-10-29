@@ -117,6 +117,26 @@ namespace mmo
 		/// Turns kill rewards off (or back on). Called for every summoned creature.
 		void SetGrantsKillRewards(const bool grants) { m_grantsKillRewards = grants; }
 
+		/// The share of the damage this creature has taken that players dealt themselves, between
+		/// 0 and 1. Damage without an instigator (environment, a caster that is already gone) counts
+		/// for nobody, and a creature that has taken no attributable damage at all counts as fully
+		/// player-killed, so a scripted or GM kill still rewards normally. Units fighting on a
+		/// player's behalf - a summon, an escorted NPC following one - count as the player.
+		[[nodiscard]] float GetPlayerDamageShare() const;
+
+		/// Remembers the unit that summoned this creature, so damage the summon deals is credited
+		/// to whoever brought it into the fight.
+		/// @param owner The summoning unit, or nullptr to forget it.
+		void SetSummonOwner(const std::shared_ptr<GameUnitS>& owner);
+
+		/// @return The unit that summoned this creature, or nullptr if it was not summoned (or the
+		///	        summoner is already gone).
+		[[nodiscard]] std::shared_ptr<GameUnitS> GetSummonOwner() const { return m_summonOwner.lock(); }
+
+		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
+		/// the fight and heals it back up.
+		void ResetDamageContributions();
+
 		void SetHealthPercent(float percent);
 
 		void SetUnitLoot(std::unique_ptr<LootInstance> unitLoot);
@@ -288,6 +308,8 @@ namespace mmo
 		/// @return Pointer to the auto-attack spell entry, or nullptr if not configured.
 		const proto::SpellEntry* GetAutoAttackSpell(WeaponAttack attackType) const override;
 
+		void OnDamageTaken(GameUnitS* instigator, uint32 damage) override;
+
 	private:
 
 		/// Calculates and applies stats using the new stat-based system
@@ -312,6 +334,8 @@ namespace mmo
 		std::set<uint64> m_combatParticipantGuids;
 		CreatureMovement m_movement = creature_movement::None;
 		std::vector<PatrolWaypoint> m_patrolWaypoints;
+		/// Unit that summoned this creature. Empty when it was not summoned by anybody.
+		std::weak_ptr<GameUnitS> m_summonOwner;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
 		/// Whether a follow target is currently assigned (distinguishes "never followed" from
@@ -320,6 +344,11 @@ namespace mmo
 		/// Distance in world units kept to the followed unit.
 		float m_followDistance = 2.5f;
 		LootRecipients m_lootRecipients;
+		/// Damage dealt to this creature by players themselves since the fight began.
+		uint64 m_playerDamageTaken = 0;
+		/// Damage dealt to this creature by non-player units (guards, other creatures) since the
+		/// fight began.
+		uint64 m_npcDamageTaken = 0;
 		bool m_grantsKillRewards = true;
 		bool m_lootableFlagSuppressed = false;
 		float m_healthPercent = 1.0f;

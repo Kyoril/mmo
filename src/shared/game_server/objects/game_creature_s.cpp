@@ -13,6 +13,46 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// How many owner links are followed before giving up. A summon of a summon still belongs
+		/// to the player who started the chain, but the walk must not be able to loop forever.
+		constexpr int MaxOwnerChainDepth = 4;
+
+		/// Whether the given unit fights on a player's behalf: the player itself, a creature a
+		/// player summoned, or a creature escorting / following a player.
+		bool fightsForPlayer(const GameUnitS& unit, const int depth)
+		{
+			if (unit.IsPlayer())
+			{
+				return true;
+			}
+
+			if (depth >= MaxOwnerChainDepth)
+			{
+				return false;
+			}
+
+			const auto* creature = dynamic_cast<const GameCreatureS*>(&unit);
+			if (!creature)
+			{
+				return false;
+			}
+
+			if (const auto owner = creature->GetSummonOwner())
+			{
+				return fightsForPlayer(*owner, depth + 1);
+			}
+
+			if (const auto followed = creature->GetFollowedUnit())
+			{
+				return fightsForPlayer(*followed, depth + 1);
+			}
+
+			return false;
+		}
+	}
+
 	GameCreatureS::GameCreatureS(
 		const proto::Project& project,
 		TimerQueue& timers,
@@ -196,6 +236,51 @@ namespace mmo
 	void GameCreatureS::RemoveLootRecipients()
 	{
 		m_lootRecipients.clear();
+	}
+
+	void GameCreatureS::OnDamageTaken(GameUnitS* instigator, const uint32 damage)
+	{
+		GameUnitS::OnDamageTaken(instigator, damage);
+
+		// Damage nobody is responsible for - falling, a lava pool, a caster that already left the
+		// world - belongs to neither side and must not tip the kill reward balance either way.
+		if (damage == 0 || !instigator)
+		{
+			return;
+		}
+
+		// A player's own units fight for the player: what a summon or an escorted quest NPC takes
+		// off is work the player brought into the fight and is paid for like the player's own.
+		if (fightsForPlayer(*instigator, 0))
+		{
+			m_playerDamageTaken += damage;
+		}
+		else
+		{
+			m_npcDamageTaken += damage;
+		}
+	}
+
+	void GameCreatureS::SetSummonOwner(const std::shared_ptr<GameUnitS>& owner)
+	{
+		m_summonOwner = owner;
+	}
+
+	float GameCreatureS::GetPlayerDamageShare() const
+	{
+		const uint64 attributedDamage = m_playerDamageTaken + m_npcDamageTaken;
+		if (attributedDamage == 0)
+		{
+			return 1.0f;
+		}
+
+		return static_cast<float>(m_playerDamageTaken) / static_cast<float>(attributedDamage);
+	}
+
+	void GameCreatureS::ResetDamageContributions()
+	{
+		m_playerDamageTaken = 0;
+		m_npcDamageTaken = 0;
 	}
 
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const

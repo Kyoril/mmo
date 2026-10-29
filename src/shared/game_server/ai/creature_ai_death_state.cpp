@@ -24,6 +24,11 @@ namespace mmo
 		/// same radius to decide which party members of a tagger are in, so this is what "being at
 		/// the kill" means here.
 		constexpr float KillRewardDistance = 100.0f;
+
+		/// The share of a creature's attributed damage that players have to have dealt themselves for
+		/// the kill to reward them at all. At or below this, the NPCs around did most of the work:
+		/// pulling a creature onto a guard and letting the guard wear it down earns nothing.
+		constexpr float MinPlayerDamageShare = 0.5f;
 	}
 
 	CreatureAIDeathState::CreatureAIDeathState(CreatureAI& ai)
@@ -50,9 +55,14 @@ namespace mmo
 
 		GameTime despawnDelay = constants::OneSecond * 30;
 
+		// Who actually wore this creature down. The killing blow is deliberately not part of it:
+		// landing it is a matter of timing, while the damage split says who fought the creature.
+		const float playerDamageShare = controlled.GetPlayerDamageShare();
+
 		// Summons reward nobody: a boss raising adds on a timer would otherwise be a loot and
-		// experience farm.
-		if (controlled.IsTagged() && controlled.GrantsKillRewards())
+		// experience farm. Neither does a creature the NPCs around killed: pulling a creature onto
+		// a guard and letting the guard do the work is not the player's kill.
+		if (controlled.IsTagged() && controlled.GrantsKillRewards() && playerDamageShare > MinPlayerDamageShare)
 		{
 			uint32 sumLevel = 0;
 
@@ -203,7 +213,11 @@ namespace mmo
 				return static_cast<uint32>(xp);
 			};
 
-			const uint32 xp = maxLevelCharacter ? scaleXpByLevelDiff(baseXp, maxLevelCharacter->GetLevel()) : 0;
+			// NPC support costs experience: the share of the creature's health that guards or other
+			// creatures took off was not the players' work and is not paid for.
+			const uint32 xp = maxLevelCharacter
+				? static_cast<uint32>(static_cast<float>(scaleXpByLevelDiff(baseXp, maxLevelCharacter->GetLevel())) * playerDamageShare)
+				: 0;
 
 			// Class XP mirrors the character XP formula with CLASS levels substituted everywhere:
 			// scaling against the highest eligible class level in the group, the grey cutoff against
@@ -223,7 +237,9 @@ namespace mmo
 				}
 			}
 
-			const uint32 classXp = maxEligibleClassLevel > 0 ? scaleXpByLevelDiff(baseXp, maxEligibleClassLevel) : 0;
+			const uint32 classXp = maxEligibleClassLevel > 0
+				? static_cast<uint32>(static_cast<float>(scaleXpByLevelDiff(baseXp, maxEligibleClassLevel)) * playerDamageShare)
+				: 0;
 
 			// Group xp modifier
 			const float groupModifier = xp::GetGroupXpRate(lootRecipients.size(), false);
@@ -582,6 +598,13 @@ namespace mmo
 
 				controlled.SetUnitLoot(std::move(loot));
 			}
+		}
+		else if (playerDamageShare <= MinPlayerDamageShare)
+		{
+			// The NPCs around wore this creature down, so the corpse does not belong to whoever
+			// pulled it either: the tag is what IsLootRecipient answers from while no loot instance
+			// exists.
+			controlled.RemoveLootRecipients();
 		}
 
 		// Activate despawn timer

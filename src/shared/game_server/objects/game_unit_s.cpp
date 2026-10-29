@@ -1025,6 +1025,7 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::Health, health);
+		OnDamageTaken(instigator, damage);
 		takenDamage(instigator, school, damageType);
 		damageTakenAmount(instigator, damage, school);
 		if (instigator)

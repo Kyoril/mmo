@@ -724,6 +724,10 @@ namespace mmo
 						summon->ClearFieldChanges();
 						summon->SetGrantsKillRewards(false);
 
+						// The summon fights for whoever called it: its damage is the caster's own
+						// work when the kill rewards are handed out.
+						summon->SetSummonOwner(weakOwner.lock());
+
 						GameCreatureS* summonPtr = summon.get();
 						summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)
 							{
