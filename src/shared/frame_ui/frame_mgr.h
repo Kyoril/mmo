@@ -241,6 +241,10 @@ namespace mmo
 		/// A map of mouse-down frames.
 		std::map<MouseButton, FramePtr> m_mouseDownFrames;
 
+		/// Mask of mouse buttons whose press was swallowed by a ui element. Their release is
+		/// swallowed as well, so a click on the ui never acts on the game world behind it.
+		int32 m_consumedPressButtons = 0;
+
 		/// A map of all frames, keyed by their case insensitive name.
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;
 
