@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "math/radian.h"
 #include "math/vector3.h"
+#include "game/attribute.h"
 #include "game/game.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
@@ -25,7 +26,11 @@ namespace mmo
 		uint32 classId = 0;
 		uint8 classLevel = 1;
 		uint32 classXp = 0;
-		std::array<uint32, 5> attributePointsSpent{};
+		/// Attribute points bought per attribute id (not their cost).
+		std::array<uint32, MaxAttributes> attributePointsSpent{};
+		/// Attribute layout (ComputeAttributeLayoutHash) the points above were spent under, or 0 if
+		///	unknown. Spending under a different layout is refunded when the class is applied.
+		uint32 attributeLayout = 0;
 		std::map<uint32, uint8> talentRanks;
 	};
 
@@ -35,7 +40,8 @@ namespace mmo
 			<< io::write<uint32>(data.classId)
 			<< io::write<uint8>(data.classLevel)
 			<< io::write<uint32>(data.classXp)
-			<< io::write_range(data.attributePointsSpent);
+			<< io::write_range(data.attributePointsSpent)
+			<< io::write<uint32>(data.attributeLayout);
 
 		writer << io::write<uint8>(data.talentRanks.size());
 		for (const auto& [talentId, rank] : data.talentRanks)
@@ -52,7 +58,8 @@ namespace mmo
 			>> io::read<uint32>(data.classId)
 			>> io::read<uint8>(data.classLevel)
 			>> io::read<uint32>(data.classXp)
-			>> io::read_range(data.attributePointsSpent)))
+			>> io::read_range(data.attributePointsSpent)
+			>> io::read<uint32>(data.attributeLayout)))
 		{
 			return reader;
 		}

@@ -46,16 +46,6 @@ namespace mmo
 		return result;
 	}
 
-	uint32 UnitStats::GetMaxHealthFromStamina(const uint32 stamina)
-	{
-		return DeriveFromBaseWithFactor(stamina, 20, 10);
-	}
-
-	uint32 UnitStats::GetMaxManaFromIntellect(const uint32 intellect)
-	{
-		return DeriveFromBaseWithFactor(intellect, 20, 15);
-	}
-
 	PendingMovementChange::PendingMovementChange()
 	{
 		counter = 0;
@@ -568,22 +558,8 @@ namespace mmo
 
 	UnitMods GameUnitS::GetUnitModByStat(uint8 stat)
 	{
-		switch (stat)
-		{
-		case 1:
-			return unit_mods::StatStrength;
-		case 2:
-			return unit_mods::StatAgility;
-		case 3:
-			return unit_mods::StatIntellect;
-		case 4:
-			return unit_mods::StatSpirit;
-
-		default:
-			break;
-		}
-
-		return unit_mods::StatStamina;
+		ASSERT(stat < MaxAttributes);
+		return static_cast<UnitMods>(unit_mods::AttributeStart + stat);
 	}
 
 	UnitMods GameUnitS::GetUnitModByPower(PowerType power)
@@ -2584,13 +2560,9 @@ namespace mmo
 
 	float GameUnitS::GetBaseMeleeCritChance() const
 	{
-		// Base crit chance from agility and weapon skill
+		// Base crit chance plus the class's attribute contribution (e.g. 20 agility = 1% crit)
 		float critChance = 5.0f; // Base 5%
-
-		// Add agility contribution - formula approximates classic wow
-		// For most classes: 20 agi = 1% crit
-		const float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
-		critChance += agiContribution;
+		critChance += GetMeleeCritChanceFromAttributes();
 
 		return critChance;
 	}
@@ -2664,9 +2636,8 @@ namespace mmo
 		// Every unit can dodge melee attacks. The base chance is configurable via combat settings.
 		float dodgeChance = GetCombatSettings().base_dodge_chance();
 
-		// Add agility contribution - approximately 20 agility = 1% dodge
-		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
-		dodgeChance += agiContribution;
+		// Add the class's attribute contribution (e.g. 20 agility = 1% dodge)
+		dodgeChance += GetDodgeChanceFromAttributes();
 
 		// Add flat dodge chance bonus from auras (ModDodgeChance), treated as percent.
 		dodgeChance += m_dodgeChanceBonus;

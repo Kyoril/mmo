@@ -4,6 +4,7 @@
 
 #include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
+#include "game_script.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
@@ -3060,7 +3061,7 @@ namespace mmo
 
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AttackPower, 1, *this, &WorldState::OnPlayerStatsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Armor, 1, *this, &WorldState::OnPlayerStatsChanged);
-					m_playerObservers += object->RegisterMirrorHandler(object_fields::StatStamina, 15, *this, &WorldState::OnPlayerStatsChanged);
+					m_playerObservers += object->RegisterMirrorHandler(object_fields::Stat, MaxAttributes * 3, *this, &WorldState::OnPlayerStatsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::BaseAttackTime, 3, *this, &WorldState::OnPlayerStatsChanged);
 					static_assert(object_fields::MinDamage == object_fields::BaseAttackTime + 1, "Order of fields is important for monitored unit mirror handlers");
 					static_assert(object_fields::MaxDamage == object_fields::MinDamage + 1, "Order of fields is important for monitored unit mirror handlers");
@@ -5274,14 +5275,34 @@ namespace mmo
 	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket &packet)
 	{
 		uint32 newLevel;
-		int32 healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints;
-		if (!(packet >> io::read<uint8>(newLevel) >> io::read<int32>(healthDiff) >> io::read<int32>(manaDiff) >> io::read<int32>(staminaDiff) >> io::read<int32>(strengthDiff) >> io::read<int32>(agilityDiff) >> io::read<int32>(intDiff) >> io::read<int32>(spiritDiff) >> io::read<int32>(talentPoints) >> io::read<int32>(attributePoints)))
+		int32 healthDiff, manaDiff, talentPoints, attributePoints;
+		uint8 attributeCount;
+		if (!(packet >> io::read<uint8>(newLevel) >> io::read<int32>(healthDiff) >> io::read<int32>(manaDiff) >> io::read<int32>(talentPoints) >> io::read<int32>(attributePoints) >> io::read<uint8>(attributeCount)))
 		{
 			ELOG("Failed to read levelup packet!");
 			return PacketParseResult::Disconnect;
 		}
 
-		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints);
+		std::array<int32, MaxAttributes> attributeGains{};
+		for (uint8 i = 0; i < attributeCount; ++i)
+		{
+			uint8 attributeId;
+			int32 gain;
+			if (!(packet >> io::read<uint8>(attributeId) >> io::read<int32>(gain)))
+			{
+				ELOG("Failed to read levelup packet!");
+				return PacketParseResult::Disconnect;
+			}
+
+			if (attributeId < MaxAttributes)
+			{
+				attributeGains[attributeId] = gain;
+			}
+		}
+
+		// Attribute gains are read by the UI through GetLevelUpAttributeGain(attributeId)
+		GameScript::SetLevelUpAttributeGains(attributeGains);
+		FrameManager::Get().TriggerLuaEvent("PLAYER_LEVEL_UP", newLevel, healthDiff, manaDiff, talentPoints, attributePoints);
 
 		// The level-up visual is NOT played here. It is data-driven: the server raises
 		// OnPlayerLevelUp on the player, a trigger with the PlayerTrigger flag reacts with a

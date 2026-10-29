@@ -2136,32 +2136,32 @@ namespace mmo
 
 	int32 GameUnitC::GetStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::StatStamina + statId);
+		return Get<int32>(object_fields::Stat + statId);
 	}
 
 	int32 GameUnitC::GetPosStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::PosStatStamina + statId);
+		return Get<int32>(object_fields::PosStat + statId);
 	}
 
 	int32 GameUnitC::GetNegStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::NegStatStamina + statId);
+		return Get<int32>(object_fields::NegStat + statId);
 	}
 
 	float GameUnitC::GetArmorReductionFactor() const

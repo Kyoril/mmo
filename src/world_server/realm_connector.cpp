@@ -740,26 +740,12 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
-		bool pointsReset = false;
+		// Spending made under a different attribute set (or no longer affordable) is refunded entirely;
+		// the player is told once they are in the world.
+		bool attributePointsRefunded = false;
 		if (const CharacterClassData* activeClass = characterData.GetActiveClass())
 		{
-			for (uint32 i = 0; i < 5; ++i)
-			{
-				for (uint32 j = 0; j < activeClass->attributePointsSpent[i]; ++j)
-				{
-					if (!characterObject->AddAttributePoint(i))
-					{
-						WLOG("Points have been reset due to inconsistencies with points spent vs points available!");
-						pointsReset = true;
-						break;
-					}
-				}
-
-				if (pointsReset)
-				{
-					break;
-				}
-			}
+			attributePointsRefunded = !characterObject->ApplyAttributeSpending(*activeClass);
 		}
 
 		// Construct inventory data
@@ -788,6 +774,10 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		player->SetAccountFeatures(std::move(accountFeatures));
 		player->SetLocale(playerLocale);
 		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
+		if (attributePointsRefunded)
+		{
+			player->NotifyAttributePointsRefundedOnSpawn();
+		}
 
 		// A join can arrive for a character that is still registered here. The realm kicks the old
 		// session and admits the new one, and the leave and join packets that result are not

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "attribute.h"
 #include "item.h"
 #include "quest.h"
 
@@ -209,25 +210,16 @@ namespace mmo
 			/// @brief 32 bit object field
 			PowerType,
 
-			StatStamina,
-			StatStrength,
-			StatAgility,
-			StatIntellect,
-			StatSpirit,
+			/// @brief MaxAttributes 32 bit fields: total value of every attribute, indexed by attribute id.
+			Stat,
 
-			PosStatStamina,
-			PosStatStrength,
-			PosStatAgility,
-			PosStatIntellect,
-			PosStatSpirit,
+			/// @brief MaxAttributes 32 bit fields: positive modifiers of every attribute, indexed by attribute id.
+			PosStat = Stat + MaxAttributes,
 
-			NegStatStamina,
-			NegStatStrength,
-			NegStatAgility,
-			NegStatIntellect,
-			NegStatSpirit,
+			/// @brief MaxAttributes 32 bit fields: negative modifiers of every attribute, indexed by attribute id.
+			NegStat = PosStat + MaxAttributes,
 
-			Armor,
+			Armor = NegStat + MaxAttributes,
 
 			PosStatArmor,
 			NegStatArmor,
@@ -323,9 +315,11 @@ namespace mmo
 
 			AvailableAttributePoints = Guild + 2,
 
+			/// @brief AttributePointCostFieldCount 32 bit fields: cost of the next point of every attribute,
+			///	one byte per attribute id (attribute i lives in field i / 4 at bit (i % 4) * 8).
 			AttributePointCost,
 
-			TalentPoints = AttributePointCost + 2,
+			TalentPoints = AttributePointCost + AttributePointCostFieldCount,
 
 			// Visible item fields
 			VISIBLE_ITEM_FIELDS(1, TalentPoints),

@@ -18,6 +18,7 @@
 #include "shared/client_data/proto_client/model_data.pb.h"
 #include "shared/client_data/proto_client/races.pb.h"
 #include "shared/client_data/proto_client/classes.pb.h"
+#include "shared/client_data/proto_client/attributes.pb.h"
 #include "shared/client_data/proto_client/item_display.pb.h"
 #include "shared/client_data/proto_client/object_display.pb.h"
 #include "shared/client_data/proto_client/animations.pb.h"
@@ -43,6 +44,7 @@ namespace mmo
 	{
 		typedef TemplateManager<mmo::proto_client::Races, mmo::proto_client::RaceEntry> RaceManager;
 		typedef TemplateManager<mmo::proto_client::Classes, mmo::proto_client::ClassEntry> ClassManager;
+		typedef TemplateManager<mmo::proto_client::Attributes, mmo::proto_client::AttributeEntry> AttributeManager;
 		typedef TemplateManager<mmo::proto_client::Zones, mmo::proto_client::ZoneEntry> ZoneManager;
 		typedef TemplateManager<mmo::proto_client::Ranges, mmo::proto_client::RangeType> RangeManager;
 		typedef TemplateManager<mmo::proto_client::Spells, mmo::proto_client::SpellEntry> SpellManager;
@@ -91,6 +93,9 @@ namespace mmo
 			SpellCategoryManager spellCategories;
 			RaceManager races;
 			ClassManager classes;
+
+			/// Primary attributes (Stamina, Strength, ...) in display order (ascending id).
+			AttributeManager attributes;
 			ModelDataManager models;
 			FactionManager factions;
 			FactionTemplateManager factionTemplates;
@@ -173,6 +178,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("model_data", models));
 				managers.push_back(ManagerEntry("races", races));
 				managers.push_back(ManagerEntry("classes", classes));
+				managers.push_back(ManagerEntry("attributes", attributes));
 				managers.push_back(ManagerEntry("factions", factions));
 				managers.push_back(ManagerEntry("faction_templates", factionTemplates));
 				managers.push_back(ManagerEntry("zones", zones));
@@ -232,6 +238,7 @@ namespace mmo
 				managers.emplace_back("model_data", "model_data", models);
 				managers.emplace_back("races", "races", races);
 				managers.emplace_back("classes", "classes", classes);
+				managers.emplace_back("attributes", "attributes", attributes);
 				managers.emplace_back("zones", "zones", zones);
 				managers.emplace_back("item_displays", "item_displays", itemDisplays);
 				managers.emplace_back("object_displays", "object_displays", objectDisplays);

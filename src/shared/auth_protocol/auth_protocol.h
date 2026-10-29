@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000B;
+		constexpr uint32 ProtocolVersion = 0x0000000C;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///

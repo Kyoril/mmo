@@ -84,8 +84,9 @@ def validate_document(doc, project_root) -> list[str]:
     for index, stat in enumerate(stats):
         if not isinstance(stat, dict) or not isinstance(stat.get("type"), (int, float)) or not isinstance(stat.get("value"), (int, float)):
             error(errors, f"item.stats[{index}] requires numeric type and value")
-        elif not 0 <= stat["type"] <= 31:
-            error(errors, f"item.stats[{index}].type must be in range 0..31")
+        elif not (0 <= stat["type"] <= 1 or 7 <= stat["type"] <= 31 or 64 <= stat["type"] < 64 + 10):
+            # 2-6 were the hard-coded attributes; attribute stats are 64 + attribute id (attributes.data)
+            error(errors, f"item.stats[{index}].type must be 0..1, 7..31 or an attribute stat 64..73")
 
     spells = validate_array(item, "spells", errors)
     validate_array(item, "sockets", errors)

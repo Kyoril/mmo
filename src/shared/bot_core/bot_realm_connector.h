@@ -761,6 +761,9 @@ namespace mmo
 		/// GAME MASTER only. Increases the player level by the given amount.
 		void CheatLevelUp(uint8 levels);
 
+		/// Spends one attribute point on the attribute with the given id.
+		void AddAttributePoint(uint32 attributeId);
+
 		/// GAME MASTER only. Increases the active class level by the given amount.
 		void CheatClassLevelUp(uint8 levels);
 

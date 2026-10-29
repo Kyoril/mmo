@@ -847,6 +847,7 @@ namespace mmo
 			{
 				activeClass.attributePointsSpent[i] = player.GetAttributePointsByAttribute(i);
 			}
+			activeClass.attributeLayout = player.GetAttributeLayout();
 			for (const auto& [talentId, rank] : player.GetTalents())
 			{
 				activeClass.talentRanks[talentId] = static_cast<uint8>(rank);

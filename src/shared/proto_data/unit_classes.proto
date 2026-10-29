@@ -6,30 +6,40 @@ import "stat_constants.proto";
 message UnitClassBaseValues {
 	required uint32 health = 1;
 	required uint32 mana = 2;
-	required uint32 stamina = 3;
-	required uint32 strength = 4;
-	required uint32 agility = 5;
-	required uint32 intellect = 6;
-	required uint32 spirit = 7;
+	// Fields 3-7 held the five hard-coded attributes before attributes became data.
+	reserved 3 to 7;
+
+	// Base value of every attribute at this level, indexed by attribute id (see attributes.proto).
+	repeated uint32 attributes = 8;
+}
+
+// Adds (attribute value / pointsPer) to a derived value (see AttributeRatioSource in classes.proto).
+message UnitClassAttributeRatioSource {
+	required uint32 attribute = 1;
+	required float pointsPer = 2;
 }
 
 message UnitClassAttackPowerStatSource {
-	required StatConstants.StatType statId = 1;
+	// Attribute id (see attributes.proto). This used to be a StatConstants.StatType in a different order.
+	required uint32 statId = 1;
 	required float factor = 2;
 }
 
 message UnitClassHealthStatSource {
-	required StatConstants.StatType statId = 1;
+	// Attribute id (see attributes.proto). This used to be a StatConstants.StatType in a different order.
+	required uint32 statId = 1;
 	required float factor = 2;
 }
 
 message UnitClassManaStatSource {
-	required StatConstants.StatType statId = 1;
+	// Attribute id (see attributes.proto). This used to be a StatConstants.StatType in a different order.
+	required uint32 statId = 1;
 	required float factor = 2;
 }
 
 message UnitClassArmorStatSource {
-	required StatConstants.StatType statId = 1;
+	// Attribute id (see attributes.proto). This used to be a StatConstants.StatType in a different order.
+	required uint32 statId = 1;
 	required float factor = 2;
 }
 
@@ -50,9 +60,9 @@ message UnitClassEntry {
 	
 	// Regeneration settings
 	optional float baseManaRegenPerTick = 9 [default = 0.0];
-	optional float spiritPerManaRegen = 10 [default = 5.0];
 	optional float healthRegenPerTick = 11 [default = 0.0];
-	optional float spiritPerHealthRegen = 12 [default = 10.0];
+	// Fields 10 and 12 were spiritPerManaRegen / spiritPerHealthRegen, replaced by manaRegenSources.
+	reserved 10, 12;
 	
 	// Armor calculation
 	repeated UnitClassArmorStatSource armorStatSources = 13;
@@ -75,6 +85,15 @@ message UnitClassEntry {
 	// Attack timings
 	optional uint32 baseMeleeAttackTime = 21 [default = 2000];
 	optional uint32 baseRangedAttackTime = 22 [default = 2000];
+
+	// Mana regenerated per tick from attributes: sum of (attribute / pointsPer).
+	repeated UnitClassAttributeRatioSource manaRegenSources = 23;
+
+	// Melee critical strike chance in percent from attributes: sum of (attribute / pointsPer).
+	repeated UnitClassAttributeRatioSource meleeCritSources = 24;
+
+	// Dodge chance in percent from attributes: sum of (attribute / pointsPer).
+	repeated UnitClassAttributeRatioSource dodgeSources = 25;
 }
 
 message UnitClasses {

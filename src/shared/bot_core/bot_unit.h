@@ -363,6 +363,18 @@ namespace mmo
 		/// @brief Gets the unspent talent points (the bot's own player only).
 		uint32 GetTalentPoints() const { return m_talentPoints; }
 
+		/// @brief Sets the unspent attribute points (the bot's own player only).
+		void SetAvailableAttributePoints(uint32 points) { m_availableAttributePoints = points; }
+
+		/// @brief Gets the unspent attribute points (the bot's own player only).
+		uint32 GetAvailableAttributePoints() const { return m_availableAttributePoints; }
+
+		/// @brief Sets the total value of an attribute (attribute id < MaxAttributes).
+		void SetAttribute(uint32 attributeId, int32 value) { if (attributeId < MaxAttributes) { m_attributes[attributeId] = value; } }
+
+		/// @brief Gets the total value of an attribute, 0 for an unknown attribute id.
+		int32 GetAttribute(uint32 attributeId) const { return attributeId < MaxAttributes ? m_attributes[attributeId] : 0; }
+
 		/// @brief Gets the current experience points (players only).
 		uint32 GetXp() const { return m_xp; }
 
@@ -473,6 +485,8 @@ namespace mmo
 		uint32 m_xp = 0;
 		uint32 m_classId = 0;
 		uint32 m_talentPoints = 0;
+		uint32 m_availableAttributePoints = 0;
+		std::array<int32, MaxAttributes> m_attributes{};
 		uint32 m_currentCastSpell = 0;
 		GameTime m_currentCastEndMs = 0;
 		uint32 m_nextLevelXp = 0;

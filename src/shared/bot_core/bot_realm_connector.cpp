@@ -2163,6 +2163,18 @@ namespace mmo
 			{
 				unit.SetTalentPoints(fieldMap.GetFieldValue<uint32>(object_fields::TalentPoints));
 			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::AvailableAttributePoints))
+			{
+				unit.SetAvailableAttributePoints(fieldMap.GetFieldValue<uint32>(object_fields::AvailableAttributePoints));
+			}
+			for (uint32 attribute = 0; attribute < MaxAttributes; ++attribute)
+			{
+				const auto field = static_cast<FieldMap<uint32>::FieldIndexType>(object_fields::Stat + attribute);
+				if (creation || fieldMap.IsFieldMarkedAsChanged(field))
+				{
+					unit.SetAttribute(attribute, fieldMap.GetFieldValue<int32>(field));
+				}
+			}
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Class))
 			{
 				unit.SetClassId(fieldMap.GetFieldValue<uint32>(object_fields::Class));
@@ -3151,6 +3163,15 @@ namespace mmo
 		sendSinglePacket([levels](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatLevelUp);
 			packet << io::write<uint8>(levels);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AddAttributePoint(const uint32 attributeId)
+	{
+		sendSinglePacket([attributeId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AttributePoint);
+			packet << io::write<uint32>(attributeId);
 			packet.Finish();
 			});
 	}

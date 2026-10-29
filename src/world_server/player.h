@@ -317,6 +317,10 @@ namespace mmo
 		/// @param lethalHeight Fall distance in meters at which fall damage becomes lethal.
 		void SetFallDamageConfig(float minHeight, float lethalHeight);
 
+		/// Tells the client that its attribute points were refunded (e.g. because the attribute set
+		///	changed) as soon as the player has spawned. Used for refunds made while logging in.
+		void NotifyAttributePointsRefundedOnSpawn() { m_notifyAttributeRefundOnSpawn = true; }
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -954,8 +958,8 @@ namespace mmo
 		/// @param facing The target facing.
 		void BeginMapTransfer(uint32 mapId, const Vector3& position, const Radian& facing);
 
-		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff,
-			int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) override;
+		void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, const std::array<int32, MaxAttributes>& attributeDiffs,
+			int32 talentPoints, int32 attributePoints) override;
 
 		void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) override;
 
@@ -1067,6 +1071,9 @@ namespace mmo
 		ConditionMgr& m_conditionMgr;
 
 		bool m_spawned{ false };
+
+		/// Send the attribute points reset notification once spawned (see NotifyAttributePointsRefundedOnSpawn).
+		bool m_notifyAttributeRefundOnSpawn{ false };
 
 		std::chrono::steady_clock::time_point m_sessionStartTime;
 

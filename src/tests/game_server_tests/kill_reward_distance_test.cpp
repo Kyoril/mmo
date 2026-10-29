@@ -112,11 +112,11 @@ namespace
 				auto* levelValues = classEntry->add_levelbasevalues();
 				levelValues->set_health(100);
 				levelValues->set_mana(100);
-				levelValues->set_stamina(10);
-				levelValues->set_strength(10);
-				levelValues->set_agility(10);
-				levelValues->set_intellect(10);
-				levelValues->set_spirit(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
 
 				// Far more than one kill grants, so no reward in this suite levels the character
 				// up (which would consume the experience field this suite reads).

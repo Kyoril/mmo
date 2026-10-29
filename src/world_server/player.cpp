@@ -1701,6 +1701,12 @@ namespace mmo
     	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
 
+		if (m_notifyAttributeRefundOnSpawn)
+		{
+			m_notifyAttributeRefundOnSpawn = false;
+			OnAttributePointsReset();
+		}
+
 		// Allow the client to transition into falling state without a jump packet.
 		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
 		m_pendingFallStart = true;
@@ -3517,14 +3523,11 @@ namespace mmo
 			return;
 		}
 
-		if (attributeId >= 5)
+		// AddAttributePoint rejects ids that are no defined attribute and points the character cannot afford
+		if (!m_character->AddAttributePoint(attributeId))
 		{
-			ELOG("Invalid attribute id referenced, failed to add attribute point");
-			return;
+			DLOG("Could not add attribute point to attribute " << attributeId);
 		}
-
-		// TODO: Add attribute point to character
-		m_character->AddAttributePoint(attributeId);
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
@@ -4200,21 +4203,32 @@ namespace mmo
 		m_manager.RemovePlayer(shared_from_this());
 	}
 
-	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)
+	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, const std::array<int32, MaxAttributes>& attributeDiffs, int32 talentPoints, int32 attributePoints)
 	{
-		SendPacket([newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints](game::OutgoingPacket& packet) {
+		// One (attribute id, gain) pair per defined attribute, in attribute id order
+		std::vector<std::pair<uint8, int32>> attributeGains;
+		for (const auto& attribute : m_project.attributes.getTemplates().entry())
+		{
+			if (attribute.id() < MaxAttributes)
+			{
+				attributeGains.emplace_back(static_cast<uint8>(attribute.id()), attributeDiffs[attribute.id()]);
+			}
+		}
+		std::sort(attributeGains.begin(), attributeGains.end());
+
+		SendPacket([newLevel, healthDiff, manaDiff, &attributeGains, talentPoints, attributePoints](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::LevelUp);
 			packet
 				<< io::write<uint8>(newLevel)
 				<< io::write<int32>(healthDiff)
 				<< io::write<int32>(manaDiff)
-				<< io::write<int32>(staminaDiff)
-				<< io::write<int32>(strengthDiff)
-				<< io::write<int32>(agilityDiff)
-				<< io::write<int32>(intDiff)
-				<< io::write<int32>(spiritDiff)
 				<< io::write<int32>(talentPoints)
-				<< io::write<int32>(attributePoints);
+				<< io::write<int32>(attributePoints)
+				<< io::write<uint8>(attributeGains.size());
+			for (const auto& [attributeId, gain] : attributeGains)
+			{
+				packet << io::write<uint8>(attributeId) << io::write<int32>(gain);
+			}
 			packet.Finish();
 			});
 

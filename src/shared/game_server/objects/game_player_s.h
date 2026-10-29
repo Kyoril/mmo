@@ -189,6 +189,16 @@ namespace mmo
 
 		void ResetAttributePoints();
 
+		/// Applies a known class's saved attribute-point spending by replaying point allocations from a
+		///	clean slate. Spending made under a different attribute layout (see GetAttributeLayout), or
+		///	that no longer fits the point budget, is discarded entirely via ResetAttributePoints.
+		/// @returns false if the saved spending was discarded and all points are unspent again.
+		bool ApplyAttributeSpending(const CharacterClassData& classData);
+
+		/// Gets the hash of the currently defined attribute set (see ComputeAttributeLayoutHash). Saved
+		///	attribute spending carries the layout it was made under.
+		[[nodiscard]] uint32 GetAttributeLayout() const;
+
 		void ResetTalents();
 
 		static uint8 CalculateAttributeCost(uint32 pointsSpent);
@@ -483,6 +493,15 @@ namespace mmo
 		/// Adds per-class attribute scaling (critblockchancestatsources) on top of the base chance.
 		float CriticalBlockChance() const override;
 
+	protected:
+		/// Melee crit chance from the active class's meleeCritSources.
+		float GetMeleeCritChanceFromAttributes() const override;
+
+		/// Dodge chance from the active class's dodgeSources.
+		float GetDodgeChanceFromAttributes() const override;
+
+	public:
+
 		void UpdateAttributePoints();
 
 		void UpdateTalentPoints();
@@ -496,7 +515,7 @@ namespace mmo
 
 		uint32 GetAttributePointsByAttribute(const uint32 attribute) const
 		{
-			ASSERT(attribute < 5);
+			ASSERT(attribute < MaxAttributes);
 			return m_attributePointEnhancements[attribute];
 		}
 
@@ -523,9 +542,6 @@ namespace mmo
 
 		/// Grants all of the active class's spells whose required level is met by the character level.
 		void GrantClassSpells();
-
-		/// Applies an attribute-point spending profile by replaying point allocations from a clean slate.
-		void ApplyAttributeSpending(const std::array<uint32, 5>& enhancements);
 
 		/// Writes the live talents and attribute spending back into the active class's known-class entry.
 		void SyncActiveClassData();
@@ -604,8 +620,8 @@ namespace mmo
 		/// are suppressed (a single refresh is sent afterwards instead).
 		bool m_classSwitchInProgress = false;
 		const proto::RaceEntry *m_raceEntry;
-		std::array<uint32, 5> m_attributePointEnhancements;
-		std::array<uint32, 5> m_attributePointsSpent;
+		std::array<uint32, MaxAttributes> m_attributePointEnhancements;
+		std::array<uint32, MaxAttributes> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
 		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;

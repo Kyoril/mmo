@@ -207,11 +207,11 @@ namespace mmo
 		static const char* s_statTypeStrings[] = {
 			"MANA",
 			"HEALTH",
-			"AGILITY",
-			"STRENGTH",
-			"INTELLECT",
-			"SPIRIT",
-			"STAMINA",
+			nullptr,	// 2 - 6: former hard-coded attributes, see item_stat::AttributeStart
+			nullptr,
+			nullptr,
+			nullptr,
+			nullptr,
 			"DEFENSE",
 			"DODGE",
 			"PARRY",
@@ -245,6 +245,16 @@ namespace mmo
 		}
 
 		return s_statTypeStrings[stats[index].type];
+	}
+
+	int32 ItemInfo::GetStatAttribute(const int32 index) const
+	{
+		if (index < 0 || index >= static_cast<int32>(std::size(stats)))
+		{
+			return -1;
+		}
+
+		return item_stat::ToAttribute(stats[index].type);
 	}
 
 	int32 ItemInfo::GetStatValue(int32 index) const

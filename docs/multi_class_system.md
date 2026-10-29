@@ -102,7 +102,8 @@ Per known class, persisted on the realm:
 classId
 classLevel   (uint8, default 1; raised by class XP against ClassEntry.classlevels)
 classXp      (uint32, XP towards the next class level; 0 at the class cap)
-attributePointsSpent[5]
+attributePointsSpent[MaxAttributes]   (points bought per attribute id, see attributes.proto)
+attributeLayout                      (uint32 hash of the attribute ids the points were spent under, 0 = unknown)
 talentRanks  (talentId -> rank, scoped to this class)
 ```
 
@@ -112,7 +113,12 @@ New table `character_classes` (one row per class a character has known), and `ch
 gains a `class` column so talent ranks are scoped per class. `characters.class` keeps meaning the
 active class. The legacy `characters.attr_0..attr_4` columns were copied into the initial class row by
 the first migration and have since been dropped (`20260623_3_drop_legacy_attr_columns.sql`) now that
-per-class attribute spending lives entirely in `character_classes`. `character_actions` gains a
+per-class attribute spending lives entirely in `character_classes`. Since attributes became game
+data (`20261029_1_data_driven_attributes.sql`), the spending is stored per attribute id in
+`character_class_attributes` and `character_classes.attr_layout` records the attribute layout; the
+`attr_0..attr_4` columns of `character_classes` are only still written for rollback compatibility.
+When the attribute set changes (an attribute is added or removed), the world server refunds a class's
+spending the next time it is applied (login or class change) and tells the client. `character_actions` gains a
 `class` column so each known class keeps its own action bar layout.
 
 The realm bootstraps from the `data/realm/updates/*.sql` migrations only (the

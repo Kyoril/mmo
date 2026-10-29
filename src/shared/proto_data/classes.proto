@@ -4,13 +4,14 @@ package mmo.proto;
 message ClassBaseValues {
 	required uint32 health = 1;
 	required uint32 mana = 2;
-	required uint32 stamina = 3;
-	required uint32 strength = 4;
-	required uint32 agility = 5;
-	required uint32 intellect = 6;
-	required uint32 spirit = 7;
+	// Fields 3-7 held the five hard-coded attributes (stamina .. spirit) before attributes became data.
+	reserved 3 to 7;
 	optional uint32 attributePoints = 8;
 	optional uint32 talentPoints = 9;
+
+	// Base value of every attribute at this level, indexed by attribute id (see attributes.proto).
+	// Attributes beyond the end of this list have a base value of 0.
+	repeated uint32 attributes = 10;
 }
 
 message ClassSpell {
@@ -29,6 +30,8 @@ message ClassLevelEntry {
 	optional uint32 talentpoints = 2 [default = 0];
 }
 
+// The stat sources below all read the attribute with the id statId (see attributes.proto) and add
+// (attribute value * factor) to the derived value.
 message AttackPowerStatSource {
 	required uint32 statId = 1;
 	required float factor = 2;
@@ -47,6 +50,15 @@ message ManaStatSource {
 message ArmorStatSource {
 	required uint32 statId = 1;
 	required float factor = 2;
+}
+
+// Adds (attribute value / pointsPer) to a derived value, e.g. 1 point of mana regeneration per
+// 5 Spirit or 1% crit chance per 20 Agility. Division (not a factor) keeps the float results
+// identical to the formulas these sources replaced.
+// NOTE: field numbers are shared with the client subset schema in src/shared/client_data/classes.proto.
+message AttributeRatioSource {
+	required uint32 attribute = 1;
+	required float pointsPer = 2;
 }
 
 // A cosmetic outfit shown on the character creation preview so a freshly created character
@@ -91,14 +103,12 @@ message ClassEntry {
 	optional float attackPowerPerLevel = 9;
 	optional float attackPowerOffset = 10;
 	repeated AttackPowerStatSource attackPowerStatSources = 11;
-	// How much mana is regenerated per tick. If this value is 10, then 10 mana is regenerated every tick (+ spirit).
+	// How much mana is regenerated per tick, on top of manaRegenSources.
 	optional float baseManaRegenPerTick = 12;
-	// How much spirit is converted to 1 mana per tick. If this value is 5, then 10 spirit will regenerate 2 mana per regen tick.
-	optional float spiritPerManaRegen = 13;
-	// How much health is regnerated per tick.
+	// How much health is regnerated per tick, on top of healthRegenSources.
 	optional float healthRegenPerTick = 14;
-	// How much spirit is converted to 1 health per tick.
-	optional float spiritPerHealthRegen = 15;
+	// Fields 13 and 15 were spiritPerManaRegen / spiritPerHealthRegen, replaced by the regen sources below.
+	reserved 13, 15;
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
 	optional bool disabled = 23;
@@ -141,6 +151,18 @@ message ClassEntry {
 
 	// Cosmetic character creation preview outfits (see CharacterOutfit).
 	repeated CharacterOutfit outfits = 28;
+
+	// Health regenerated per tick from attributes: sum of (attribute / pointsPer).
+	repeated AttributeRatioSource healthRegenSources = 29;
+
+	// Mana regenerated per tick from attributes: sum of (attribute / pointsPer).
+	repeated AttributeRatioSource manaRegenSources = 30;
+
+	// Melee critical strike chance in percent from attributes: sum of (attribute / pointsPer).
+	repeated AttributeRatioSource meleeCritSources = 31;
+
+	// Dodge chance in percent from attributes: sum of (attribute / pointsPer).
+	repeated AttributeRatioSource dodgeSources = 32;
 }
 
 message Classes {

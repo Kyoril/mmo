@@ -315,6 +315,15 @@ namespace mmo
 		/// Calculates and applies stats using the new stat-based system
 		void CalculateStatBasedStats();
 
+		/// Gets the unit class of this creature if it uses the stat based system, otherwise nullptr.
+		[[nodiscard]] const proto::UnitClassEntry* GetStatUnitClass() const;
+
+	protected:
+		float GetMeleeCritChanceFromAttributes() const override;
+
+		float GetDodgeChanceFromAttributes() const override;
+
+	private:
 		/// (Re)builds and starts the repeating OnTimer trigger timers from this creature's triggers
 		/// (template triggers plus per-spawn additional triggers). Called when the creature spawns.
 		void StartPeriodicTriggers();
