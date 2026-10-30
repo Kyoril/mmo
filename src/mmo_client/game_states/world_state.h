@@ -34,6 +34,7 @@
 #include "base/id_generator.h"
 #include "world_deserializer.h"
 #include "world_render_settings.h"
+#include "systems/movement_client.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
@@ -115,7 +116,8 @@ namespace mmo
 	class WorldState final
 		: public GameState,
 		  public NetClient,
-		  public IPageLoaderListener
+		  public IPageLoaderListener,
+		  public IMovementClientListener
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -372,8 +374,6 @@ namespace mmo
 		/// as a 3D sound at the given world position.
 		void PlayStealthAlertSound(const String &soundFile, const Vector3 &position);
 
-		PacketParseResult OnMovement(game::IncomingPacket &packet);
-
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket &packet);
@@ -402,8 +402,6 @@ namespace mmo
 		PacketParseResult OnTradeSkillUpdate(game::IncomingPacket &packet);
 
 		PacketParseResult OnClassXpUpdate(game::IncomingPacket &packet);
-
-		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket &packet);
 
@@ -443,12 +441,6 @@ namespace mmo
 		void PlayUnitStateSounds(const GameObjectC& unit, bool wasInCombat, bool wasAlive);
 
 		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
-
-		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket &packet);
-
-		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket &packet);
-
-		PacketParseResult OnMoveTeleport(game::IncomingPacket &packet);
 
 		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
 
@@ -494,17 +486,6 @@ namespace mmo
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
 
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket &packet);
-
-		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
-		PacketParseResult OnMoveStun(game::IncomingPacket &packet);
-		PacketParseResult OnMoveSleep(game::IncomingPacket &packet);
-		PacketParseResult OnMoveFear(game::IncomingPacket &packet);
-		PacketParseResult OnMoveDisorient(game::IncomingPacket &packet);
-
-		/// @brief Handles the MoveCharge packet: the server announces that it is about to move
-		/// the character along a charge path. Stops local movement, suppresses further movement
-		/// packets and acknowledges so the server can start the movement.
-		PacketParseResult OnMoveCharge(game::IncomingPacket &packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
@@ -623,6 +604,12 @@ namespace mmo
 		[[nodiscard]] bool AreChatBubblesEnabled(ChatType chatType) const;
 
 		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
+
+		/// @copydoc IMovementClientListener::OnCreaturePathReceived
+		void OnCreaturePathReceived(uint64 guid, const std::vector<Vector3> &path) override;
+
+		/// @copydoc IMovementClientListener::OnControlledUnitTeleported
+		void OnControlledUnitTeleported(const Vector3 &previousPosition, const Vector3 &newPosition) override;
 
 		PagePosition GetPagePositionFromCamera() const;
 
@@ -833,6 +820,9 @@ namespace mmo
 
 		/// Console variables that configure the world's deferred renderer.
 		WorldRenderSettings m_renderSettings;
+
+		/// Handles the movement packets of all units and the controlled unit's movement states.
+		MovementClient m_movementClient;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;

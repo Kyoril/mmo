@@ -394,6 +394,7 @@ namespace mmo
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
 		, m_friendClient(friendClient)
+		, m_movementClient(realmConnector)
 		, m_discord(discord)
 		, m_talentClient(talentClient)
 		, m_minimap(minimap)
@@ -2110,26 +2111,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartSwim, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopSwim, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartWalk, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopWalk, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
-
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
@@ -2142,8 +2123,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkills, *this, &WorldState::OnTradeSkills);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &WorldState::OnTradeSkillUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
-
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
@@ -2175,25 +2154,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ObjectQueryResult, *this, &WorldState::OnObjectQueryResult);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &WorldState::OnMoveTeleport);
-
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CharacterPointsReset, *this, &WorldState::OnCharacterPointsReset);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InstanceResetResult, *this, &WorldState::OnInstanceResetResult);
@@ -2221,12 +2181,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &WorldState::OnShutdownCountdown);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStun, *this, &WorldState::OnMoveStun);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFear, *this, &WorldState::OnMoveFear);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveDisorient, *this, &WorldState::OnMoveDisorient);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveCharge, *this, &WorldState::OnMoveCharge);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
@@ -2249,6 +2203,7 @@ namespace mmo
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
 		m_tradeClient.Initialize();
+		m_movementClient.Initialize(*m_playerController, *this);
 		if (ClientContext& context = GetClientContext(); context.subsystemClient && context.bugReportClient)
 		{
 			context.subsystemClient->Initialize();
@@ -2352,6 +2307,7 @@ namespace mmo
 #endif
 		Console::UnregisterCommand("shutdown");
 
+		m_movementClient.Shutdown();
 		m_tradeClient.Shutdown();
 		m_inventoryClient.Shutdown();
 		m_talentClient.Shutdown();
@@ -3353,44 +3309,6 @@ namespace mmo
 		}
 	}
 
-	PacketParseResult WorldState::OnMovement(game::IncomingPacket &packet)
-	{
-		uint64 characterGuid;
-		MovementInfo movementInfo;
-		if (!(packet >> io::read<uint64>(characterGuid) >> movementInfo))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		const auto unitPtr = ObjectMgr::Get<GameUnitC>(characterGuid);
-		if (!unitPtr)
-		{
-			WLOG("Received movement packet for unknown unit " << log_hex_digit(characterGuid));
-			return PacketParseResult::Pass;
-		}
-
-		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
-		{
-			// Route all movement to the dead-reckoning renderer.
-			// MoveSetFacing and MoveStopTurn are treated as facing-only updates
-			// (no position extrapolation reset) — the renderer handles this distinction.
-			const uint16 opcode = packet.GetId();
-			const bool facingOnly =
-			    opcode == game::realm_client_packet::MoveSetFacing;
-
-			if (facingOnly)
-			{
-				unitPtr->ApplyRemoteFacing(movementInfo.facing);
-			}
-			else
-			{
-				unitPtr->EnqueueRemoteMovement(movementInfo);
-			}
-		}
-
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnChatMessage(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
@@ -3846,104 +3764,6 @@ namespace mmo
 	// raw floats (3 × float) instead of the old lossy 11/10-bit packed uint32 format.
 	// The packed format silently overflowed for routes longer than ~256 world-units
 	// from the (start+end)/2 midpoint, corrupting every waypoint on long NPC routes.
-
-	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket &packet)
-	{
-		std::vector<Vector3> path;
-
-		uint64 guid;
-		Vector3 startPosition;
-		Vector3 endPosition;
-		GameTime startTime;
-		GameTime endTime;
-		uint32 pathSize;
-		std::optional<Radian> targetRotation;
-		UnitMovementMode movementMode = unit_movement_mode::Run;
-
-		if (!(packet >> io::read_packed_guid(guid) >> io::read<float>(startPosition.x) >> io::read<float>(startPosition.y) >> io::read<float>(startPosition.z) >> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime) >> io::read<uint32>(pathSize) >> io::read<float>(endPosition.x) >> io::read<float>(endPosition.y) >> io::read<float>(endPosition.z)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		uint8 hasTargetRotation;
-		if (!(packet >> io::read<uint8>(hasTargetRotation)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		if (hasTargetRotation)
-		{
-			float rotation;
-			if (!(packet >> io::read<float>(rotation)))
-			{
-				return PacketParseResult::Disconnect;
-			}
-
-			targetRotation = Radian(rotation);
-		}
-
-		uint8 rawMovementMode = unit_movement_mode::Run;
-		if (!(packet >> io::read<uint8>(rawMovementMode)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		if (rawMovementMode < unit_movement_mode::Count_)
-		{
-			movementMode = static_cast<UnitMovementMode>(rawMovementMode);
-		}
-
-		// Find unit by guid
-		const auto unitPtr = ObjectMgr::Get<GameUnitC>(guid);
-		if (!unitPtr)
-		{
-			// We don't know the unit
-			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
-			return PacketParseResult::Pass;
-		}
-
-		path.push_back(startPosition);
-
-		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
-		(void)isPlayer;
-
-		// Read intermediate waypoints written as raw floats.
-		// pathSize = total waypoints not counting startPosition; endPosition is #1.
-		// So there are (pathSize - 1) intermediate points to read.
-		// Previously this used a lossy 11/10-bit packed format relative to the
-		// route midpoint, which overflowed for long multi-waypoint NPC routes.
-		if (pathSize > 1)
-		{
-			for (uint32 i = 1; i < pathSize; ++i)  // pathSize-1 iterations (was pathSize-2, off by one)
-			{
-				Vector3 p;
-				if (!(packet >> io::read<float>(p.x) >> io::read<float>(p.y) >> io::read<float>(p.z)))
-				{
-					return PacketParseResult::Disconnect;
-				}
-
-				path.push_back(p);
-			}
-		}
-
-		path.push_back(endPosition);
-
-		// Check whether we should update the output debug path
-		if (guid == ObjectMgr::GetSelectedObjectGuid())
-		{
-			if (m_debugPathVisualizer)
-			{
-				if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
-				{
-					m_debugPathVisualizer->ShowPath(path);
-				}
-			}
-		}
-
-		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation, movementMode);
-
-		return PacketParseResult::Pass;
-	}
 
 	PacketParseResult WorldState::OnTradeSkills(game::IncomingPacket &packet)
 	{
@@ -4903,173 +4723,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMovementSpeedChanged(game::IncomingPacket &packet)
-	{
-		static MovementType typesByPacket[] = {
-			movement_type::Walk,
-			movement_type::Run,
-			movement_type::Backwards,
-			movement_type::Swim,
-			movement_type::SwimBackwards,
-			movement_type::Turn,
-			movement_type::Flight,
-			movement_type::FlightBackwards};
-
-		uint64 guid;
-		MovementInfo movementInfo;
-		float speed;
-		if (!(packet >> io::read_packed_guid(guid) >> movementInfo >> io::read<float>(speed)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// Find unit
-		std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(guid);
-		if (!unit)
-		{
-			return PacketParseResult::Pass;
-		}
-
-		// Adjust position
-		unit->GetSceneNode()->SetPosition(movementInfo.position);
-
-		MovementType type = movement_type::Run;
-		switch (packet.GetId())
-		{
-		case game::realm_client_packet::MoveSetWalkSpeed:
-			type = movement_type::Walk;
-			break;
-		case game::realm_client_packet::MoveSetRunSpeed:
-			type = movement_type::Run;
-			break;
-		case game::realm_client_packet::MoveSetRunBackSpeed:
-			type = movement_type::Backwards;
-			break;
-		case game::realm_client_packet::MoveSetSwimSpeed:
-			type = movement_type::Swim;
-			break;
-		case game::realm_client_packet::MoveSetSwimBackSpeed:
-			type = movement_type::SwimBackwards;
-			break;
-		case game::realm_client_packet::MoveSetTurnRate:
-			type = movement_type::Turn;
-			break;
-		case game::realm_client_packet::SetFlightSpeed:
-			type = movement_type::Flight;
-			break;
-		case game::realm_client_packet::SetFlightBackSpeed:
-			type = movement_type::FlightBackwards;
-			break;
-		}
-
-		unit->SetSpeed(type, speed);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnForceMovementSpeedChange(game::IncomingPacket &packet)
-	{
-		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
-		if (!unit)
-		{
-			WLOG("No controlled unit found!");
-			return PacketParseResult::Pass;
-		}
-
-		MovementType type = movement_type::Run;
-		switch (packet.GetId())
-		{
-		case game::realm_client_packet::ForceMoveSetWalkSpeed:
-			type = movement_type::Walk;
-			break;
-		case game::realm_client_packet::ForceMoveSetRunSpeed:
-			type = movement_type::Run;
-			break;
-		case game::realm_client_packet::ForceMoveSetRunBackSpeed:
-			type = movement_type::Backwards;
-			break;
-		case game::realm_client_packet::ForceMoveSetSwimSpeed:
-			type = movement_type::Swim;
-			break;
-		case game::realm_client_packet::ForceMoveSetSwimBackSpeed:
-			type = movement_type::SwimBackwards;
-			break;
-		case game::realm_client_packet::ForceMoveSetTurnRate:
-			type = movement_type::Turn;
-			break;
-		case game::realm_client_packet::ForceSetFlightSpeed:
-			type = movement_type::Flight;
-			break;
-		case game::realm_client_packet::ForceSetFlightBackSpeed:
-			type = movement_type::FlightBackwards;
-			break;
-		}
-
-		uint32 ackId;
-		float speed;
-
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
-		{
-			WLOG("Failed to read force movement speed change packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		// Apply speed modifier announce locally and send ack to the server
-		unit->SetSpeed(type, speed);
-		m_realmConnector.SendMovementSpeedAck(type, ackId, speed, unit->GetMovementInfo());
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveTeleport(game::IncomingPacket &packet)
-	{
-		uint64 guid;
-		if (!(packet >> io::read_packed_guid(guid)))
-		{
-			ELOG("Failed to read teleported mover guid!");
-			return PacketParseResult::Disconnect;
-		}
-
-		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
-		if (!unit || unit->GetGuid() != guid)
-		{
-			WLOG("Received teleport for unknown or non-controlled unit!");
-			return PacketParseResult::Pass;
-		}
-
-		uint32 ackId;
-		MovementInfo movementInfo;
-		if (!(packet >> io::read<uint32>(ackId) >> movementInfo))
-		{
-			ELOG("Failed to read move teleport packet");
-			return PacketParseResult::Disconnect;
-		}
-
-		m_playerController->StopAllMovement();
-
-		const Vector3 previousPosition = unit->GetPosition();
-
-		// Teleport player
-		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
-		unit->ApplyMovementInfo(movementInfo);
-
-		// Send ack to the server
-		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
-
-		// A teleport on the same map does not go through TransferPending, so nothing loaded the
-		// world around the destination. Only the pages around the player are streamed in, and the
-		// teleport puts the character into falling state: landing outside that square means
-		// dropping through terrain which is still streaming in. Load the destination behind the
-		// loading screen first, exactly like entering a world does.
-		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
-		{
-			LoadingScreen::Show();
-			WaitForWorldLoading();
-		}
-
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket &packet)
 	{
 		uint32 newLevel;
@@ -5681,182 +5334,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnMoveRoot(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveRoot packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveRootAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveStun(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveStun packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveStunAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveSleep(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveSleep packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveSleepAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveFear(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveFear packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveFearAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveDisorient(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveDisorient packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveDisorientAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveCharge(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		float speed;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
-		{
-			ELOG("Failed to read MoveCharge packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		// Release all held input control bits so no stop packets are generated afterwards,
-		// then hand movement control over to the server: this stops local movement without
-		// sending packets and suppresses all further movement packets until the movement
-		// path finishes (or a timeout hits, in case the path never arrives).
-		m_playerController->StopAllMovement();
-		player->SetServerControlledMovement(true);
-
-		// Acknowledge the charge with the cleaned movement state; the server adopts this
-		// state and only then starts moving the character.
-		m_realmConnector.SendMoveChargeAck(ackId, player->GetMovementInfo(), speed);
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnDebugLineOfSightResult(game::IncomingPacket &packet)
 	{
 		uint8 hasLos = 0;
@@ -6232,6 +5709,35 @@ namespace mmo
 		m_chatBubbleLayer->SetAnchor(anchor_point::Top, anchor_point::Top, nullptr);
 		m_chatBubbleLayer->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr);
 		m_chatBubbleLayer->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
+	}
+
+	void WorldState::OnCreaturePathReceived(const uint64 guid, const std::vector<Vector3> &path)
+	{
+		// Check whether we should update the output debug path
+		if (guid == ObjectMgr::GetSelectedObjectGuid())
+		{
+			if (m_debugPathVisualizer)
+			{
+				if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
+				{
+					m_debugPathVisualizer->ShowPath(path);
+				}
+			}
+		}
+	}
+
+	void WorldState::OnControlledUnitTeleported(const Vector3 &previousPosition, const Vector3 &newPosition)
+	{
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, newPosition))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
 	}
 
 	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable)
