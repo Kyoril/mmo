@@ -77,15 +77,34 @@ Assert(WaitUntil(function() return GetHealth(dummy) < before end, 4000, "candle 
 Log("Guttering Candle dealt " .. (before - GetHealth(dummy)))
 
 -- Grave Strike: the dummy stands in front, so the cone has to find it.
-resetMyCooldowns()
-healDummy()
-before = GetHealth(dummy)
--- Face the dummy explicitly: the cone is evaluated on the facing at cast time, and relying on the
--- cast to turn the player in time missed the cone on a slow CI runner.
-FaceUnit(dummy)
-Sleep(500)
-castAndWait(GRAVE_STRIKE, dummy)
-Assert(WaitUntil(function() return GetHealth(dummy) < before - 60 end, 3000, "cone hits"),
+--
+-- One cast is not enough to tell a hit from a miss: Grave Strike rolls 104-126 damage and a
+-- critical hit (5% by default, x1.5) turns that into 156-189 against the dummy's 152 health, so
+-- every crit is a lethal blow. The dummy's combat script refuses to die and answers a lethal blow
+-- by restoring it to full health (CreatureAI::OnSpawned, TrainingDummyCombatScript::CanDie), which
+-- leaves the health exactly where it started - indistinguishable from a cone that found nobody.
+-- Cast again when the health did not move at all; a cone that really misses fails every attempt.
+local coneHit = false
+for attempt = 1, 4 do
+	resetMyCooldowns()
+	healDummy()
+	before = GetHealth(dummy)
+	-- Face the dummy explicitly: the cone is evaluated on the facing at cast time, and relying on
+	-- the cast to turn the player in time missed the cone on a slow CI runner.
+	FaceUnit(dummy)
+	Sleep(500)
+	castAndWait(GRAVE_STRIKE, dummy)
+	coneHit = WaitUntil(function() return GetHealth(dummy) < before - 60 end, 3000, "cone hits")
+	if coneHit then
+		break
+	end
+
+	Assert(GetHealth(dummy) == before,
+		"Grave Strike hit the dummy for less than its minimum damage (" .. before .. " -> " .. GetHealth(dummy) .. ")")
+	Log("Grave Strike attempt " .. attempt .. " left the dummy at full health, which a critical "
+		.. "kill-and-restore does")
+end
+Assert(coneHit,
 	"Grave Strike should hit the dummy in front of the caster (" .. before .. " -> " .. GetHealth(dummy) .. ")")
 
 -- Silent Place: a lingering zone that pulses damage and a slow every second.
