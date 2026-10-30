@@ -25,7 +25,6 @@
 #include "dungeon_bindings.h"
 #include "game/action_button.h"
 #include "game/mail.h"
-#include "game/bug_report.h"
 #include "realm_subsystem_table.h"
 #include "game_server/character_data.h"
 #include "game/character_view.h"
@@ -34,7 +33,7 @@
 namespace mmo
 {
 	class GuildMgr;
-	class FriendMgr;
+	class RealmModules;
 	class ChannelMgr;
 	class ChatChannel;
 	class TimeOfDayManager;
@@ -42,8 +41,6 @@ namespace mmo
 
 namespace mmo
 {
-	struct FriendData;
-
 	namespace proto
 	{
 		class Project;
@@ -77,7 +74,7 @@ namespace mmo
 			const proto::Project &project,
 			IdGenerator<uint64> &groupIdGenerator,
 			GuildMgr &guildMgr,
-			FriendMgr &friendMgr,
+			RealmModules &modules,
 			ChannelMgr &channelMgr,
 			TimeOfDayManager &timeOfDayManager);
 		/// Disconnects the player if still connected.
@@ -186,31 +183,6 @@ namespace mmo
 		/// Notifies the player that their guild membership has changed.
 		void GuildChange(uint64 guildId);
 
-		// Friend system methods
-		/// Loads the character's friend list from the database and caches it.
-		void LoadFriendList();
-
-		/// Sends a friend invite to another player by name.
-		/// @param targetName The name of the player to invite.
-		void SendFriendInvite(const String &targetName);
-
-		/// Accepts a pending friend invite.
-		void AcceptFriendInvite();
-
-		/// Declines a pending friend invite.
-		void DeclineFriendInvite();
-
-		/// Removes a friend from the friend list.
-		/// @param friendName The name of the friend to remove.
-		void RemoveFriend(const String &friendName);
-
-		/// Sends the complete friend list to the client.
-		void SendFriendListUpdate();
-
-		/// Refreshes this character's level in the friend list of everyone who befriended them and
-		/// sends those lists again, so online friends see the new level right away.
-		void NotifyFriendsOfLevelChange();
-
 		/// Sends the complete mail list to the client.
 		void SendMailList(std::vector<MailInfo> mails);
 
@@ -272,6 +244,10 @@ namespace mmo
 		/// Sends the availability of every subsystem for the player's current world node.
 		void SendFullSubsystemStatus();
 
+		/// Whether a subsystem is available to this player: realm-owned ones by the realm's switch,
+		/// world-owned ones by the status of the world node the player is on (none: unavailable).
+		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const;
+
 		/// Sends a plain system chat message to the client.
 		/// @param message The message text.
 		void SendSystemMessage(const String &message);
@@ -293,9 +269,6 @@ namespace mmo
 		/// Teleports the character next to an online player, into that player's instance.
 		/// @param targetName Name of the online player to follow.
 		void TeleportIntoPlayerInstance(const String &targetName);
-
-		/// Sends the answer to a bug report to the client.
-		void SendBugReportResult(game::BugReportResult result);
 
 		/// Notifies the player that the world node was left.
 		void OnWorldLeft(const std::shared_ptr<World> &world, auth::WorldLeftReason reason);
@@ -454,6 +427,13 @@ namespace mmo
 			return {*this, opCode};
 		}
 
+		/// Registers a packet handler and returns a handle that clears it again when destroyed.
+		[[nodiscard]] PacketHandlerRegistrationHandle RegisterAutoPacketHandler(uint16 opCode, PacketHandler &&handler)
+		{
+			RegisterPacketHandler(opCode, std::move(handler));
+			return {*this, opCode};
+		}
+
 		/// Clears a packet handler so that the opcode is no longer handled.
 		void ClearPacketHandler(uint16 opCode);
 
@@ -532,6 +512,9 @@ namespace mmo
 
 		PacketHandlerHandleContainer m_proxyHandlers;
 
+		/// Packet handlers registered by the realm modules while the character is in the world.
+		PacketHandlerHandleContainer m_moduleHandlers;
+
 		std::mutex m_charViewMutex;
 		std::map<uint64, CharacterView> m_characterViews;
 
@@ -557,10 +540,7 @@ namespace mmo
 
 		uint64 m_guildInviter = 0;
 
-		// Friend system
-		FriendMgr &m_friendMgr;
-		std::vector<FriendData> m_friendCache;
-		uint64 m_pendingFriendInvite = 0;
+		RealmModules &m_modules;
 
 		// Chat channels
 		ChannelMgr &m_channelMgr;
@@ -644,21 +624,10 @@ namespace mmo
 		PacketParseResult OnGuildDecline(game::IncomingPacket &packet);
 		PacketParseResult OnGuildRoster(game::IncomingPacket &packet);
 
-		// Friend packet handlers
-		PacketParseResult OnFriendInvite(game::IncomingPacket &packet);
-		PacketParseResult OnFriendAccept(game::IncomingPacket &packet);
-		PacketParseResult OnFriendDecline(game::IncomingPacket &packet);
-		PacketParseResult OnFriendRemove(game::IncomingPacket &packet);
-		PacketParseResult OnFriendListRequest(game::IncomingPacket &packet);
-
 		// Mail packet handlers
 		PacketParseResult OnMailListRequest(game::IncomingPacket &packet);
 		PacketParseResult OnMailDelete(game::IncomingPacket &packet);
 		PacketParseResult OnMailMarkRead(game::IncomingPacket &packet);
-
-		/// Handles a bug report: checks availability and the rate limit, then forwards it to the
-		/// world node with the account and character identity attached.
-		PacketParseResult OnBugReport(game::IncomingPacket &packet);
 
 		/// Operator-only GM command that schedules or cancels a realm shutdown; available in every build.
 		PacketParseResult OnGmShutdown(game::IncomingPacket &packet);
@@ -688,7 +657,6 @@ namespace mmo
 		// Helper methods for character deletion
 		void HandleCharacterGuildOnDelete(uint64 charGuid);
 		void HandleCharacterGroupOnDelete(uint64 charGuid);
-		void HandleCharacterFriendsOnDelete(uint64 charGuid);
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnCheatTeleportToPlayer(game::IncomingPacket &packet);

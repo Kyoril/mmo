@@ -28,7 +28,7 @@
 #include <cctype>
 
 #include "guild_mgr.h"
-#include "friend_mgr.h"
+#include "modules/realm_module.h"
 #include "chat_channel_mgr.h"
 #include "player_group.h"
 #include "time_of_day_manager.h"
@@ -58,10 +58,10 @@ namespace mmo
 		const proto::Project &project,
 		IdGenerator<uint64> &groupIdGenerator,
 		GuildMgr &guildMgr,
-		FriendMgr &friendMgr,
+		RealmModules &modules,
 		ChannelMgr &channelMgr,
 		TimeOfDayManager &timeOfDayManager)
-		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_friendMgr(friendMgr), m_channelMgr(channelMgr), m_timeOfDayManager(timeOfDayManager)
+		: m_timerQueue(timerQueue), m_manager(playerManager), m_worldManager(worldManager), m_loginConnector(loginConnector), m_database(database), m_project(project), m_groupIdGenerator(groupIdGenerator), m_connection(std::move(connection)), m_address(std::move(address)), m_accountId(0), m_guildMgr(guildMgr), m_modules(modules), m_channelMgr(channelMgr), m_timeOfDayManager(timeOfDayManager)
 	{
 		// Generate random seed for packet header encryption & decryption
 		std::uniform_int_distribution<uint32> dist;
@@ -130,10 +130,10 @@ namespace mmo
 			}
 		}
 
-		// Notify friends that this player is going offline
+		// Let the modules know the character is leaving (friends see it go offline)
 		if (m_characterData)
 		{
-			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
+			m_modules.OnLeftWorld(*this);
 		}
 
 		// Remove the player from any chat channels it is in (in-memory only; persisted
@@ -810,8 +810,8 @@ namespace mmo
 		// Handle group membership before deletion
 		HandleCharacterGroupOnDelete(charGuid);
 
-		// Handle friend relationships before deletion
-		HandleCharacterFriendsOnDelete(charGuid);
+		// Let the modules clean up data that refers to the character (friend lists)
+		m_modules.OnCharacterDeleting(*this, charGuid);
 
 		// Database callback handler
 		std::weak_ptr weakThis{shared_from_this()};
@@ -2170,416 +2170,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	// Friend system implementations
-
-	void Player::LoadFriendList()
-	{
-		if (!m_characterData)
-		{
-			return;
-		}
-
-		m_friendMgr.LoadCharacterFriends(m_characterData->characterId, [this](const std::vector<FriendData> &friends)
-										 {
-				m_friendCache = friends;
-				SendFriendListUpdate(); });
-	}
-
-	void Player::SendFriendInvite(const String &targetName)
-	{
-		if (!m_characterData)
-		{
-			return;
-		}
-
-		const uint64 myGuid = m_characterData->characterId;
-
-		// First check if target is online
-		Player *targetPlayer = m_manager.GetPlayerByCharacterName(targetName);
-
-		if (targetPlayer)
-		{
-			// Online player path - directly add friendship without requiring acceptance
-			const uint64 targetGuid = targetPlayer->GetCharacterGuid();
-
-			// Check if trying to add self
-			if (targetGuid == myGuid)
-			{
-				SendPacket([targetName](game::OutgoingPacket &packet)
-						   {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::CannotAddSelf);
-					packet << io::write_dynamic_range<uint8>(targetName);
-					packet.Finish(); });
-				return;
-			}
-
-			// Check if already friends
-			if (m_friendMgr.AreFriends(myGuid, targetGuid))
-			{
-				SendPacket([targetName](game::OutgoingPacket &packet)
-						   {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::AlreadyFriends);
-					packet << io::write_dynamic_range<uint8>(targetName);
-					packet.Finish(); });
-				return;
-			}
-
-			// Check if sender's friend list is full
-			if (!m_friendMgr.CanAddFriend(myGuid))
-			{
-				SendPacket([targetName](game::OutgoingPacket &packet)
-						   {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::FriendListFull);
-					packet << io::write_dynamic_range<uint8>(targetName);
-					packet.Finish(); });
-				return;
-			}
-
-			// One-sided friendship: directly add the target to sender's list
-			auto addFriendHandler = [this, targetPlayer, targetGuid, targetName, myGuid](bool success)
-			{
-				if (success)
-				{
-					// Reload my friend list from database to update in-memory cache
-					m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-													 {
-						m_friendCache = friends;
-						SendFriendListUpdate(); });
-
-					// Send success result to sender
-					SendPacket([targetName](game::OutgoingPacket &packet)
-							   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::Success);
-						packet << io::write_dynamic_range<uint8>(targetName);
-						packet.Finish(); });
-
-					ILOG("Friendship established (one-sided) with online player " << targetGuid);
-				}
-				else
-				{
-					ELOG("Failed to add online friend to database");
-				}
-			};
-
-			m_database.asyncRequestKeyed(myGuid, std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
-		}
-		else
-		{
-			// Offline player path - lookup in database
-			auto handler = [this, targetName, myGuid](std::optional<DatabaseId> targetGuidOpt)
-			{
-				if (!targetGuidOpt.has_value())
-				{
-					// Character doesn't exist
-					SendPacket([targetName](game::OutgoingPacket &packet)
-							   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::PlayerNotFound);
-						packet << io::write_dynamic_range<uint8>(targetName);
-						packet.Finish(); });
-					return;
-				}
-
-				const uint64 targetGuid = targetGuidOpt.value();
-
-				// Check if trying to add self
-				if (targetGuid == myGuid)
-				{
-					SendPacket([targetName](game::OutgoingPacket &packet)
-							   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::CannotAddSelf);
-						packet << io::write_dynamic_range<uint8>(targetName);
-						packet.Finish(); });
-					return;
-				}
-
-				// Check if already friends
-				if (m_friendMgr.AreFriends(myGuid, targetGuid))
-				{
-					SendPacket([targetName](game::OutgoingPacket &packet)
-							   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::AlreadyFriends);
-						packet << io::write_dynamic_range<uint8>(targetName);
-						packet.Finish(); });
-					return;
-				}
-
-				// Check if sender's friend list is full
-				if (!m_friendMgr.CanAddFriend(myGuid))
-				{
-					SendPacket([targetName](game::OutgoingPacket &packet)
-							   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::FriendListFull);
-						packet << io::write_dynamic_range<uint8>(targetName);
-						packet.Finish(); });
-					return;
-				}
-
-				// One-sided friendship: directly add the target to sender's list
-				auto addFriendHandler = [this, targetGuid, targetName, myGuid](bool success)
-				{
-					if (success)
-					{
-						// Reload my friend list from database to update in-memory cache
-						m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-														 {
-							m_friendCache = friends;
-							SendFriendListUpdate(); });
-
-						// Send success result
-						SendPacket([targetName](game::OutgoingPacket &packet)
-								   {
-							packet.Start(game::realm_client_packet::FriendCommandResult);
-							packet << io::write<uint8>(game::friend_command_result::Success);
-							packet << io::write_dynamic_range<uint8>(targetName);
-							packet.Finish(); });
-
-						ILOG("Friendship established (one-sided) with offline player " << targetGuid);
-					}
-					else
-					{
-						ELOG("Failed to add offline friend to database");
-					}
-				};
-
-				m_database.asyncRequestKeyed(myGuid, std::move(addFriendHandler), &IDatabase::AddFriend, myGuid, targetGuid);
-			};
-
-			m_database.asyncRequest(std::move(handler), &IDatabase::GetCharacterIdByName, targetName);
-		}
-	}
-
-	void Player::AcceptFriendInvite()
-	{
-		if (!m_characterData)
-		{
-			return;
-		}
-
-		if (m_pendingFriendInvite == 0)
-		{
-			WLOG("Player " << m_characterData->name << " tried to accept friend invite but has none pending");
-			return;
-		}
-
-		const uint64 inviterGuid = m_pendingFriendInvite;
-		const uint64 myGuid = m_characterData->characterId;
-
-		// Add friendship to database
-		auto handler = [this, inviterGuid, myGuid](bool success)
-		{
-			if (!success)
-			{
-				ELOG("Failed to add friendship between " << myGuid << " and " << inviterGuid);
-				return;
-			}
-
-			// Reload both players' friend lists
-			m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-											 {
-						m_friendCache = friends;
-						SendFriendListUpdate(); });
-
-			Player *inviterPlayer = m_manager.GetPlayerByCharacterGuid(inviterGuid);
-			if (inviterPlayer)
-			{
-				inviterPlayer->m_friendMgr.LoadCharacterFriends(inviterGuid, [inviterPlayer](const std::vector<FriendData> &friends)
-																{
-							inviterPlayer->m_friendCache = friends;
-							inviterPlayer->SendFriendListUpdate(); });
-
-				// Send success result to inviter
-				const String myName = m_characterData->name;
-				inviterPlayer->SendPacket([myName](game::OutgoingPacket &packet)
-										  {
-							packet.Start(game::realm_client_packet::FriendCommandResult);
-							packet << io::write<uint8>(game::friend_command_result::Success);
-							packet << io::write_dynamic_range<uint8>(myName);
-							packet.Finish(); });
-			}
-
-			ILOG("Friendship established between " << myGuid << " and " << inviterGuid);
-		};
-
-		m_database.asyncRequestKeyed(myGuid, std::move(handler), &IDatabase::AddFriend, myGuid, inviterGuid);
-
-		// Clear pending invite
-		m_pendingFriendInvite = 0;
-	}
-
-	void Player::DeclineFriendInvite()
-	{
-		if (!m_characterData)
-		{
-			return;
-		}
-
-		if (m_pendingFriendInvite == 0)
-		{
-			return;
-		}
-
-		// Notify inviter of decline
-		Player *inviterPlayer = m_manager.GetPlayerByCharacterGuid(m_pendingFriendInvite);
-		if (inviterPlayer)
-		{
-			const String myName = m_characterData->name;
-			inviterPlayer->SendPacket([myName](game::OutgoingPacket &packet)
-									  {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::Success);  // Use Success for decline notification
-					packet << io::write_dynamic_range<uint8>(myName);
-					packet.Finish(); });
-		}
-
-		m_pendingFriendInvite = 0;
-		DLOG("Player " << m_characterData->name << " declined friend invite");
-	}
-
-	void Player::RemoveFriend(const String &friendName)
-	{
-		if (!m_characterData)
-		{
-			return;
-		}
-
-		// Find friend in cache
-		uint64 friendGuid = 0;
-		for (const auto &friendData : m_friendCache)
-		{
-			if (friendData.name == friendName)
-			{
-				friendGuid = friendData.guid;
-				break;
-			}
-		}
-
-		if (friendGuid == 0)
-		{
-			SendPacket([friendName](game::OutgoingPacket &packet)
-					   {
-					packet.Start(game::realm_client_packet::FriendCommandResult);
-					packet << io::write<uint8>(game::friend_command_result::NotFriends);
-					packet << io::write_dynamic_range<uint8>(friendName);
-					packet.Finish(); });
-			return;
-		}
-
-		const uint64 myGuid = m_characterData->characterId;
-
-		// Remove from database
-		auto handler = [this, friendGuid, myGuid, friendName](bool success)
-		{
-			if (!success)
-			{
-				ELOG("Failed to remove friendship between " << myGuid << " and " << friendGuid);
-				return;
-			}
-
-			// Reload both players' friend lists
-			m_friendMgr.LoadCharacterFriends(myGuid, [this](const std::vector<FriendData> &friends)
-											 {
-						m_friendCache = friends;
-						SendFriendListUpdate(); });
-
-			Player *friendPlayer = m_manager.GetPlayerByCharacterGuid(friendGuid);
-			if (friendPlayer)
-			{
-				friendPlayer->m_friendMgr.LoadCharacterFriends(friendGuid, [friendPlayer](const std::vector<FriendData> &friends)
-															   {
-							friendPlayer->m_friendCache = friends;
-							friendPlayer->SendFriendListUpdate(); });
-			}
-
-			// Send success result
-			SendPacket([friendName](game::OutgoingPacket &packet)
-					   {
-						packet.Start(game::realm_client_packet::FriendCommandResult);
-						packet << io::write<uint8>(game::friend_command_result::Success);
-						packet << io::write_dynamic_range<uint8>(friendName);
-						packet.Finish(); });
-
-			ILOG("Friendship removed between " << myGuid << " and " << friendGuid);
-		};
-
-		m_database.asyncRequestKeyed(myGuid, std::move(handler), &IDatabase::RemoveFriend, myGuid, friendGuid);
-	}
-
-	void Player::SendFriendListUpdate()
-	{
-		SendPacket([this](game::OutgoingPacket &packet)
-				   {
-				packet.Start(game::realm_client_packet::FriendListUpdate);
-				packet << io::write<uint16>(static_cast<uint16>(m_friendCache.size()));
-
-				for (const auto& friendData : m_friendCache)
-				{
-					packet << io::write<uint64>(friendData.guid);
-					packet << io::write_dynamic_range<uint8>(friendData.name);
-					packet << io::write<uint32>(friendData.level);
-					packet << io::write<uint32>(friendData.raceId);
-					packet << io::write<uint32>(friendData.classId);
-
-					// Check if friend is online
-					Player* friendPlayer = m_manager.GetPlayerByCharacterGuid(friendData.guid);
-					const bool online = (friendPlayer != nullptr);
-					packet << io::write<uint8>(online ? 1 : 0);
-				}
-
-				packet.Finish(); });
-	}
-
-	// Friend packet handlers
-
-	PacketParseResult Player::OnFriendInvite(game::IncomingPacket &packet)
-	{
-		String targetName;
-		if (!(packet >> io::read_container<uint8>(targetName)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		SendFriendInvite(targetName);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Player::OnFriendAccept(game::IncomingPacket &packet)
-	{
-		AcceptFriendInvite();
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Player::OnFriendDecline(game::IncomingPacket &packet)
-	{
-		DeclineFriendInvite();
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Player::OnFriendRemove(game::IncomingPacket &packet)
-	{
-		String friendName;
-		if (!(packet >> io::read_container<uint8>(friendName)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		RemoveFriend(friendName);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult Player::OnFriendListRequest(game::IncomingPacket &packet)
-	{
-		SendFriendListUpdate();
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult Player::OnMailListRequest(game::IncomingPacket &packet)
 	{
 		std::weak_ptr weakThis{ shared_from_this() };
@@ -3430,30 +3020,9 @@ namespace mmo
 		m_characterData->auras = character.GetDeserializedAuras();
 		m_characterData->cooldowns = character.GetDeserializedCooldowns();
 
-		// Friend lists are database snapshots taken when a player logged in, so a level up only
-		// reaches everyone who befriended this character if their cached entry is refreshed and
-		// their list is sent again.
 		if (previousLevel != m_characterData->level)
 		{
-			NotifyFriendsOfLevelChange();
-		}
-	}
-
-	void Player::NotifyFriendsOfLevelChange()
-	{
-		const std::vector<uint64> changedCharacters = m_friendMgr.UpdateCachedFriendLevel(
-			m_characterData->characterId, m_characterData->level);
-
-		for (const uint64 characterGuid : changedCharacters)
-		{
-			Player* friendOfMine = m_manager.GetPlayerByCharacterGuid(characterGuid);
-			if (!friendOfMine)
-			{
-				continue;
-			}
-
-			friendOfMine->m_friendCache = m_friendMgr.GetCachedFriends(characterGuid);
-			friendOfMine->SendFriendListUpdate();
+			m_modules.OnLevelChanged(*this, previousLevel);
 		}
 	}
 
@@ -3639,8 +3208,9 @@ namespace mmo
 	{
 		ASSERT(!enable || m_proxyHandlers.IsEmpty());
 
-		// First clear potential existing proxy handlers (always)
+		// First clear potential existing proxy and module handlers (always)
 		m_proxyHandlers.Clear();
+		m_moduleHandlers.Clear();
 
 		if (enable)
 		{
@@ -3755,13 +3325,6 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::GuildDecline, *this, &Player::OnGuildDecline);
 			RegisterPacketHandler(game::client_realm_packet::GuildRoster, *this, &Player::OnGuildRoster);
 
-			// Friend packet handlers
-			RegisterPacketHandler(game::client_realm_packet::FriendInvite, *this, &Player::OnFriendInvite);
-			RegisterPacketHandler(game::client_realm_packet::FriendAccept, *this, &Player::OnFriendAccept);
-			RegisterPacketHandler(game::client_realm_packet::FriendDecline, *this, &Player::OnFriendDecline);
-			RegisterPacketHandler(game::client_realm_packet::FriendRemove, *this, &Player::OnFriendRemove);
-			RegisterPacketHandler(game::client_realm_packet::FriendListRequest, *this, &Player::OnFriendListRequest);
-
 			// Mail packet handlers (list/read/delete are realm-side, send/take go to the world node for escrow)
 			RegisterPacketHandler(game::client_realm_packet::MailListRequest, *this, &Player::OnMailListRequest);
 			RegisterPacketHandler(game::client_realm_packet::MailDelete, *this, &Player::OnMailDelete);
@@ -3821,7 +3384,6 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::PartyPing, *this, &Player::OnPartyPing);
 			RegisterPacketHandler(game::client_realm_packet::ChannelJoin, *this, &Player::OnChannelJoin);
 			RegisterPacketHandler(game::client_realm_packet::ChannelLeave, *this, &Player::OnChannelLeave);
-			RegisterPacketHandler(game::client_realm_packet::BugReport, *this, &Player::OnBugReport);
 			RegisterPacketHandler(game::client_realm_packet::GmShutdown, *this, &Player::OnGmShutdown);
 
 #if MMO_WITH_DEV_COMMANDS
@@ -3832,6 +3394,8 @@ namespace mmo
 			RegisterPacketHandler(game::client_realm_packet::CheatSetTimeOfDay, *this, &Player::OnCheatSetTimeOfDay);
 			RegisterPacketHandler(game::client_realm_packet::GuildCreate, *this, &Player::OnGuildCreate);
 #endif
+
+			m_modules.RegisterPacketHandlers(*this, m_moduleHandlers);
 		}
 		else
 		{
@@ -3859,7 +3423,6 @@ namespace mmo
 
 			ClearPacketHandler(game::client_realm_packet::ChannelJoin);
 			ClearPacketHandler(game::client_realm_packet::ChannelLeave);
-			ClearPacketHandler(game::client_realm_packet::BugReport);
 			ClearPacketHandler(game::client_realm_packet::GmShutdown);
 
 #if MMO_WITH_DEV_COMMANDS
@@ -3969,9 +3532,8 @@ namespace mmo
 			}
 		}
 
-		// Load friend list and notify friends of online status
-		LoadFriendList();
-		m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, true);
+		// Modules set up their per-character state (friend list, online notification)
+		m_modules.OnEnteredWorld(*this);
 
 		// Join the character's effective chat channels and send the channel list to the client.
 		LoadAndJoinChatChannels();
@@ -4097,6 +3659,10 @@ namespace mmo
 			// A ghost link lasts until either character logs out.
 			EndGhostLinksToMe();
 			m_ghostTargetGuid = 0;
+			if (m_characterData)
+			{
+				m_modules.OnLeftWorld(*this);
+			}
 			m_characterData.reset();
 			// Clear group and invite state so a fresh EnterWorld starts with no stale membership.
 			m_group.reset();
@@ -4301,10 +3867,10 @@ namespace mmo
 			}
 		}
 
-		// Notify friends this player is offline
+		// The character leaves the world with its node (friends see it go offline)
 		if (m_characterData)
 		{
-			m_friendMgr.NotifyFriendStatusChange(m_characterData->characterId, false);
+			m_modules.OnLeftWorld(*this);
 		}
 
 		// Clear in-world state so the client can re-enter char select
@@ -5667,56 +5233,6 @@ namespace mmo
 		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::CharacterEnterWorld, charGuid, m_accountId);
 	}
 
-	void Player::HandleCharacterFriendsOnDelete(uint64 charGuid)
-	{
-		// Remove the character from all friend lists
-		// First, get all characters who have this character as a friend
-		std::weak_ptr weakThis{shared_from_this()};
-		auto handler = [weakThis, charGuid](const std::vector<uint64> &friendIds)
-		{
-			const auto strongThis = weakThis.lock();
-			if (!strongThis)
-			{
-				return;
-			}
-
-			if (friendIds.empty())
-			{
-				// No one has this character as a friend, nothing to do
-				return;
-			}
-
-			DLOG("Removing character " << charGuid << " from " << friendIds.size() << " friend lists");
-
-			// Remove the friendship from the database for each friend
-			for (const uint64 friendId : friendIds)
-			{
-				strongThis->m_database.asyncRequestKeyed<void>(charGuid, [charGuid, friendId](auto &&database)
-														  { database->RemoveFriend(friendId, charGuid); },
-														  [charGuid, friendId](const bool success)
-														  {
-															  if (!success)
-															  {
-																  ELOG("Failed to remove friendship between " << friendId << " and deleted character " << charGuid);
-															  }
-														  });
-
-				// If the friend is currently online, update their friend list
-				Player *friendPlayer = strongThis->m_manager.GetPlayerByCharacterGuid(friendId);
-				if (friendPlayer)
-				{
-					// Reload the friend's friend list from the database
-					strongThis->m_friendMgr.LoadCharacterFriends(friendId, [friendPlayer](const std::vector<FriendData> &friends)
-																 {
-						friendPlayer->m_friendCache = friends;
-						friendPlayer->SendFriendListUpdate(); });
-				}
-			}
-		};
-
-		// Get all characters who have this character as a friend
-		m_database.asyncRequestKeyed(charGuid, std::move(handler), &IDatabase::GetCharactersWithFriend, charGuid);
-	}
 	void Player::SendSubsystemStatus(const SubsystemStatusList& entries)
 	{
 		if (entries.empty())
@@ -5742,42 +5258,10 @@ namespace mmo
 		SendSubsystemStatus(GetManager().GetSubsystemTable().Compose(world ? &world->GetSubsystemStatus() : nullptr));
 	}
 
-	void Player::SendBugReportResult(const game::BugReportResult result)
+	bool Player::IsSubsystemAvailable(const game::Subsystem subsystem) const
 	{
-		SendPacket([result](game::OutgoingPacket& packet)
-		{
-			packet.Start(game::realm_client_packet::BugReportResult);
-			packet << io::write<uint8>(result);
-			packet.Finish();
-		});
-	}
-
-	PacketParseResult Player::OnBugReport(game::IncomingPacket &packet)
-	{
-		// An unreadable or oversized report costs the report, never the session.
-		game::BugReportPayload payload;
-		if (!(packet >> payload))
-		{
-			const bool tooLarge = packet.GetSize() > game::bug_report_limits::MaxCompressedBytes;
-			WLOG("Player " << m_characterData->name << " sent an unreadable bug report (" << packet.GetSize() << " bytes)");
-			SendBugReportResult(tooLarge ? game::bug_report_result::TooLarge : game::bug_report_result::Invalid);
-			return PacketParseResult::Pass;
-		}
-
 		const auto world = m_world.lock();
-		if (!world || world->GetSubsystemStatus()[game::subsystem::BugReport] != game::subsystem_status::Available)
-		{
-			SendBugReportResult(game::bug_report_result::Disabled);
-			return PacketParseResult::Pass;
-		}
-
-		if (!GetManager().GetBugReportRateLimiter().TryConsume(GetCharacterGuid(), GetAsyncTimeMs()))
-		{
-			SendBugReportResult(game::bug_report_result::RateLimited);
-			return PacketParseResult::Pass;
-		}
-
-		world->SendBugReport(GetCharacterGuid(), GetAccountId(), m_characterData->name, GetManager().GetRealmName(), payload);
-		return PacketParseResult::Pass;
+		return GetManager().GetSubsystemTable().IsAvailable(subsystem, world ? &world->GetSubsystemStatus() : nullptr);
 	}
+
 }

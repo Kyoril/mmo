@@ -133,6 +133,8 @@ namespace mmo
 			m_heardSoundCounts.clear();
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
+			m_lastFriendCommandResult = -1;
+			m_friendListUpdates = 0;
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -144,6 +146,8 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::PlaySoundById, *this, &BotRealmConnector::OnPlaySoundById);
 			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
+			RegisterPacketHandler(game::realm_client_packet::FriendCommandResult, *this, &BotRealmConnector::OnFriendCommandResult);
+			RegisterPacketHandler(game::realm_client_packet::FriendListUpdate, *this, &BotRealmConnector::OnFriendListUpdate);
 		}
 		else
 		{
@@ -829,6 +833,43 @@ namespace mmo
 		sendSinglePacket([&payload](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::BugReport);
 			packet << payload;
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnFriendCommandResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		String playerName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastFriendCommandResult = result;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnFriendListUpdate(game::IncomingPacket& packet)
+	{
+		// Only counted: scenarios check that a list arrived, not what is on it.
+		++m_friendListUpdates;
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::FriendInvite(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::FriendInvite);
+			packet << io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::RequestFriendList()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::FriendListRequest);
 			packet.Finish();
 			});
 	}

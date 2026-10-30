@@ -220,6 +220,8 @@ The bulk of the engine logic lives here as static libraries consumed by all exec
 
 **`NonCopyable`** (`src/shared/base/non_copyable.h`) — Base class for all resource-managing objects.
 
+**`RealmModule`** (`src/realm_server/modules/realm_module.h`) — Realm-side gameplay features (friends, bug reports) live in a module that registers its own client packet handlers and reacts to session hooks, instead of in `Player`. New realm features go here: add a folder-local module, register it in `program.cpp`, and give it a `game::Subsystem` (`src/shared/game/subsystem.h`) so it can be switched off at runtime (`subsystem <NAME> off`, realm `POST /subsystem`). Per-character state belongs in the module, keyed by guid.
+
 **Game object naming convention**: server-side objects end in `_s` (e.g., `GameUnitS`, `GamePlayerS`); client-side end in `_c` (e.g., `GameUnitC`, `GamePlayerC`).
 
 ### Lua Scripting
