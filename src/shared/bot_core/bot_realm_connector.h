@@ -368,6 +368,12 @@ namespace mmo
 		uint32 m_subsystemStatusPackets = 0;
 		std::string m_lastBugReportResult;
 
+		/// Last FriendCommandResult received (game::friend_command_result), or -1 for none.
+		int32 m_lastFriendCommandResult = -1;
+
+		/// Number of FriendListUpdate packets received.
+		uint32 m_friendListUpdates = 0;
+
 		/// Last spell visualization the server told us to play, if any.
 		struct SpellVisual
 		{
@@ -495,6 +501,21 @@ namespace mmo
 
 		/// Files a bug report with the given (uncompressed) client JSON.
 		void SubmitBugReport(const game::BugReportPayload& payload);
+
+		/// Last friend command result (game::friend_command_result), or -1 for none.
+		[[nodiscard]] int32 GetLastFriendCommandResult() const { return m_lastFriendCommandResult; }
+
+		/// Forgets the last friend command result.
+		void ClearLastFriendCommandResult() { m_lastFriendCommandResult = -1; }
+
+		/// Number of friend lists received, so a scenario can wait for the next one.
+		[[nodiscard]] uint32 GetFriendListUpdateCount() const { return m_friendListUpdates; }
+
+		/// Adds a character to the friend list by name.
+		void FriendInvite(const String& name);
+
+		/// Asks the realm for the friend list.
+		void RequestFriendList();
 
 		/// GAME MASTER only. Switches a subsystem realm-wide.
 		void CheatSetSubsystem(game::Subsystem subsystem, bool enabled);
@@ -947,6 +968,10 @@ namespace mmo
 		PacketParseResult OnSubsystemStatus(game::IncomingPacket& packet);
 
 		PacketParseResult OnBugReportResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnFriendCommandResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnFriendListUpdate(game::IncomingPacket& packet);
 
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 
