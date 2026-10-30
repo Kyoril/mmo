@@ -191,16 +191,6 @@ namespace mmo
 			}
 		}
 
-		// === Block ===
-		if (const auto section = ScopedEditorSection("Block", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			uint32 blockValue = settings.default_block_value();
-			if (DrawUint32Setting("Default Block Value", blockValue, defaults.default_block_value()))
-			{
-				settings.set_default_block_value(blockValue);
-			}
-		}
-
 		// === Rage Generation ===
 		if (const auto section = ScopedEditorSection("Rage Generation", ImGuiTreeNodeFlags_DefaultOpen))
 		{

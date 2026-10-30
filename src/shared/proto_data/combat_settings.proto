@@ -33,8 +33,8 @@ message CombatSettings {
 	optional float glancing_reduction_per_skill_diff = 13 [default = 0.6];
 	optional float glancing_max_reduction = 14 [default = 30.0];
 
-	// === Block ===
-	optional uint32 default_block_value = 15 [default = 30];
+	// Field 15 was default_block_value, unused since block value comes from items and class scaling.
+	reserved 15;
 
 	// === Rage Generation ===
 	// Formula: (damage / rage_conversion_value) * rage_damage_factor
@@ -62,8 +62,8 @@ message CombatSettings {
 	optional float base_dodge_chance = 24 [default = 5.0];
 
 	// === Block ===
-	// NOTE: default_block_value (field 15) is no longer used. Block value is now derived from
-	// equipped item block stats plus per-class attribute scaling (see ClassEntry block sources).
+	// Block value comes from equipped item block stats plus per-class attribute scaling (see
+	// ClassEntry block sources).
 
 	// Multiplier applied to the block value when a block critically blocks (e.g. 2.0 = double).
 	optional float critical_block_multiplier = 25 [default = 2.0];
