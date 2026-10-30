@@ -11,6 +11,7 @@ add_subdirectory(world_server)
 
 if (APPLE AND (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR))
 	add_subdirectory(hlsl2msl)
+	add_subdirectory(metal_material_baker)
 endif()
 
 if (MMO_BUILD_CLIENT)

@@ -1536,6 +1536,11 @@ namespace mmo
 			}
 
 			MTLVertexAttributeDescriptor* attributeDescriptor = descriptor.attributes[attribute.attributeIndex];
+			if (std::getenv("MMO_METAL_DEBUG_LAYOUTS"))
+			{
+				ILOG("  attribute " << [attribute.name UTF8String] << " @" << attribute.attributeIndex << " -> "
+					<< (match ? ("stream " + std::to_string(match->stream) + " offset " + std::to_string(match->offset) + " format " + std::to_string(match->format)) : std::string("placeholder")));
+			}
 			if (match && match->format != MTLVertexFormatInvalid)
 			{
 				attributeDescriptor.format = match->format;

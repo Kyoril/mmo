@@ -285,6 +285,7 @@ namespace mmo::msl_cross
 				}
 
 				uint32 nextFallbackLocation = 26;
+				std::vector<std::pair<std::string, uint32>> matrixInputs;
 				if (input.stage == metal_shader_blob::Stage::Vertex)
 				{
 					// Vertex attributes are matched to vertex declarations by name at pipeline creation.
@@ -294,6 +295,12 @@ namespace mmo::msl_cross
 						if (!semantic.empty())
 						{
 							compiler.set_name(resource.id, NormalizedSemantic(semantic));
+
+							const spirv_cross::SPIRType& type = compiler.get_type(resource.type_id);
+							if (type.columns > 1 && type.columns == type.vecsize)
+							{
+								matrixInputs.emplace_back(NormalizedSemantic(semantic), type.columns);
+							}
 						}
 					}
 
@@ -319,6 +326,23 @@ namespace mmo::msl_cross
 				}
 
 				output.source = compiler.compile();
+
+				// A matrix vertex input takes one register per column in D3D (the engine declares them
+				// column_major), but glslang ignores the majorness of inputs and SPIRV-Cross assembles
+				// the matrix from the attributes as columns of the transposed layout. Transpose it back
+				// right after it was assembled.
+				for (const auto& [name, columns] : matrixInputs)
+				{
+					const std::string lastAssignment = name + "[" + std::to_string(columns - 1) + "] = in." + name + "_" + std::to_string(columns - 1) + ";";
+					const size_t position = output.source.find(lastAssignment);
+					if (position == std::string::npos)
+					{
+						output.log += "Unable to find the assembly of matrix input " + name + "\n";
+						return false;
+					}
+
+					output.source.insert(position + lastAssignment.size(), "\n    " + name + " = transpose(" + name + ");");
+				}
 
 				if (input.stage == metal_shader_blob::Stage::Compute)
 				{
