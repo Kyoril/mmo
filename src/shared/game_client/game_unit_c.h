@@ -398,8 +398,17 @@ namespace mmo
 		bool IsHostile() const;
 
 	public:
-		/// @brief Returns the current health of this unit.
-		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
+		/// @brief Returns the current health of this unit. For a unit with regeneration prediction
+		///	(the own player) this extrapolates the last synced value with the replicated rate.
+		uint32 GetHealth() const;
+
+		/// @brief Enables extrapolating health and power between server syncs with the replicated
+		///	regeneration rates (HealthRegen / PowerRegen fields). Only the own player predicts.
+		/// @param enabled Whether to predict.
+		void SetRegenerationPrediction(bool enabled);
+
+		/// @brief Whether health and power are extrapolated between server syncs.
+		[[nodiscard]] bool PredictsRegeneration() const { return m_predictRegeneration; }
 
 		/// @brief Gets the maximum health of this unit.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
@@ -1039,6 +1048,18 @@ namespace mmo
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;
+
+		/// Health and power are extrapolated between server syncs (own player only).
+		bool m_predictRegeneration = false;
+
+		/// Local time at which health, power or a regeneration rate was last received.
+		GameTime m_regenSyncTime = 0;
+
+		/// Re-anchors the prediction whenever a synced value or rate arrives.
+		scoped_connection m_regenSyncConnection;
+
+		/// Extrapolates a synced value by its replicated rate (per five seconds) since the last sync.
+		[[nodiscard]] int64 PredictRegeneration(int64 value, int64 maxValue, float ratePerFiveSeconds) const;
 
 		/// @brief Sound entry player used to play PlaySound animation notifies (injected by the client, may be null).
 		static SoundEntryPlayer* s_soundEntryPlayer;

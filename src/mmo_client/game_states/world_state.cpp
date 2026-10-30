@@ -982,6 +982,37 @@ namespace mmo
 		}
 	}
 
+	void WorldState::UpdatePredictedResources()
+	{
+		const auto player = ObjectMgr::GetActivePlayer();
+		if (!player || !player->PredictsRegeneration())
+		{
+			return;
+		}
+
+		// The predicted values grow between server syncs; tell the UI whenever a whole point
+		// changes, so bars, action button usability and the cast pre-check follow smoothly.
+		const uint32 health = player->GetHealth();
+		if (health != m_predictedHealth)
+		{
+			m_predictedHealth = health;
+			FrameManager::Get().TriggerLuaEvent("PLAYER_HEALTH_CHANGED");
+			UpdateCombatVignette();
+		}
+
+		std::array<int32, power_type::Health> power{};
+		for (int32 type = 0; type < power_type::Health; ++type)
+		{
+			power[type] = player->GetPower(type);
+		}
+
+		if (power != m_predictedPower)
+		{
+			m_predictedPower = power;
+			FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+		}
+	}
+
 	void WorldState::UpdateCombatVignette()
 	{
 		// The vignette is a gameplay option (enabled by default). When disabled, keep it hidden
@@ -1200,6 +1231,8 @@ namespace mmo
 		{
 			m_worldPingVisualizer->Update(deltaSeconds, m_playerController->GetCamera());
 		}
+
+		UpdatePredictedResources();
 
 		{
 			PROFILE_SCOPE("OnIdle::StreamingDispatch");
@@ -3053,6 +3086,9 @@ namespace mmo
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::QuestLogSlot_1, (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize, *this, &WorldState::OnQuestLogChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Mana, 7, *this, &WorldState::OnPlayerPowerChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Health, 2, *this, &WorldState::OnPlayerHealthChanged);
+
+					// Health and power flow continuously between the server's regeneration syncs
+					std::static_pointer_cast<GameUnitC>(object)->SetRegenerationPrediction(true);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::AvailableAttributePoints, 1, *this, &WorldState::OnPlayerAttributePointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::TalentPoints, 1, *this, &WorldState::OnPlayerTalentPointsChanged);
 					m_playerObservers += object->RegisterMirrorHandler(object_fields::Class, 1, *this, &WorldState::OnPlayerClassChanged);

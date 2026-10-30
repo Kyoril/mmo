@@ -1069,6 +1069,10 @@ namespace mmo
 		/// Notifies that mana has been used.
 		void NotifyManaUsed();
 
+		/// @copydoc NotifyManaUsed
+		/// @param now The time mana was spent.
+		void NotifyManaUsed(GameTime now);
+
 		/// Sets the regeneration flags for the unit.
 		/// @param regenerationFlags The regeneration flags to set.
 		void SetRegeneration(uint32 regenerationFlags) { m_regeneration = regenerationFlags; }
@@ -1449,7 +1453,7 @@ public:
 		///	driven by the ModHealthRegenPercent aura.
 		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyHealthRegenPercentBonus(float amount, bool apply) { m_healthRegenPctBonus += apply ? amount : -amount; }
+		void ModifyHealthRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_healthRegenPctBonus += apply ? amount : -amount; }
 
 		/// Adds or removes a percentage bonus to this unit's regeneration of one power type,
 		///	driven by the ModPowerRegenPercent aura.
@@ -1463,6 +1467,7 @@ public:
 				return;
 			}
 
+			SettleRegeneration();
 			m_powerRegenPctBonus[static_cast<uint8>(powerType)] += apply ? amount : -amount;
 		}
 
@@ -1476,7 +1481,7 @@ public:
 		///	flowing while casting, driven by the ModCastingManaRegenPercent aura.
 		///	@param amount The bonus in percentage points (e.g. 10.0f for +10% of normal regeneration).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { m_castingManaRegenPctBonus += apply ? amount : -amount; }
+		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_castingManaRegenPctBonus += apply ? amount : -amount; }
 
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
@@ -1502,30 +1507,14 @@ public:
 		}
 
 		/// Gets the raw mana regenerated per tick while casting (within five seconds after mana
-		///	was spent), before the ModPowerRegenPercent aura modifier.
-		///	It is a share of the whole points normal regeneration restores per tick, so the
-		///	character sheet's casting value is exactly that share of its normal value.
+		///	was spent), before the ModPowerRegenPercent aura modifier: the casting share of the
+		///	normal per-tick regeneration.
 		///	@remark Public for the same testability reason as GetManaRegenPerTick().
 		[[nodiscard]] float GetCastingManaRegenPerTick() const
 		{
-			return std::floor(m_manaRegenPerTick) * GetCastingManaRegenPercent() / 100.0f;
+			return m_manaRegenPerTick * GetCastingManaRegenPercent() / 100.0f;
 		}
 
-		/// Applies the aura percentage modifier for a power type to a per-tick amount.
-		///	@param powerType The power type being regenerated.
-		///	@param amount The unmodified amount for this tick.
-		///	@return The modified amount. Non-positive amounts are returned unchanged: rage
-		///	regenerates by decaying, and scaling that would make a regeneration bonus drain it.
-		[[nodiscard]] int32 GetEffectivePowerRegenPerTick(const PowerType powerType, const int32 amount) const
-		{
-			if (amount <= 0 || static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
-			{
-				return amount;
-			}
-
-			return static_cast<int32>(static_cast<float>(amount)
-				* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f));
-		}
 
 		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
 		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
@@ -1770,21 +1759,70 @@ public:
 		/// why only casts with a cast time go through here.
 		void StopSwingForCast();
 
-		/// Called when the unit regenerates.
+		/// Called by the regeneration sync timer: settles regeneration, which replicates the values.
 		virtual void OnRegeneration();
 
-		/// Regenerates the unit's health.
-		virtual void RegenerateHealth();
+		/// Arms the regeneration sync timer if regeneration is active and some resource is moving,
+		///	or if regenerated values were settled silently and not sent yet.
+		void ScheduleRegenSync() const;
 
-		/// Regenerates the unit's power.
-		/// @param powerType The type of power to regenerate.
-		virtual void RegeneratePower(PowerType powerType);
+		/// Settles regeneration up to now.
+		/// @param replicate Queue an object update for changed values (the sync) or not (every other settle).
+		void SettleRegeneration(GameTime now, bool replicate);
+
+
+		/// Replicates the current regeneration rates (HealthRegen, PowerRegen, ManaRegen fields).
+		void UpdateRegenRateFields();
+
+		/// Checks whether only the casting share of mana regeneration flows at the given time.
+		[[nodiscard]] bool IsInFiveSecondRule(GameTime now) const;
 
 	public:
 		/// Adds power to the unit.
 		/// @param powerType The type of power to add.
 		/// @param amount The amount of power to add.
 		virtual void AddPower(PowerType powerType, int32 amount);
+
+		/// Sets a field value. Hides GameObjectS::Set so that any change of a health or power field
+		///	re-arms the regeneration sync timer, which stops while nothing regenerates.
+		template<class T>
+		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
+		{
+			GameObjectS::Set<T>(index, value, notify);
+			if (index >= object_fields::MaxHealth && index <= object_fields::MaxEnergy)
+			{
+				ScheduleRegenSync();
+			}
+		}
+
+		/// Brings health and power up to date with everything regenerated since the last settle.
+		///	Regeneration is continuous; this has to run before anything reads health or power to
+		///	decide something (spell costs, damage) and before anything changes a regeneration rate.
+		///	Settling is silent: it updates the values without queueing an object update for nearby
+		///	clients. They receive the regenerated values with the next update that is sent anyway,
+		///	at the latest with the regeneration sync (regen_sync_interval_ms).
+		void SettleRegeneration();
+
+		/// @copydoc SettleRegeneration
+		/// @param now The time to settle up to. Times before the last settle are ignored.
+		void SettleRegeneration(GameTime now);
+
+		/// Checks whether settled health or power values are still waiting to be sent.
+		[[nodiscard]] bool HasUnsentRegeneration() const;
+
+		/// Gets the time up to which health and power include their regeneration.
+		[[nodiscard]] GameTime GetRegenSettledAt() const { return m_regenSettledAt; }
+
+		/// Checks whether any health or power value would change by regenerating right now.
+		[[nodiscard]] bool IsRegenerationMoving() const;
+
+		/// Gets the health regenerated per second right now (after auras and combat state).
+		[[nodiscard]] float GetHealthRegenPerSecond() const;
+
+		/// Gets the power regenerated per second right now (after auras and combat state).
+		/// @param powerType The power type.
+		/// @param casting For mana: the rate within the five second rule window instead of the normal one.
+		[[nodiscard]] float GetPowerRegenPerSecond(PowerType powerType, bool casting = false) const;
 
 	protected:
 		/// Called with the outcome of every auto attack swing this unit resolves.
@@ -1943,8 +1981,18 @@ public:
 		/// whenever the victim changes -- the remembered outcome describes a swing against the
 		/// previous one.
 		AttackSwingEvent m_lastAttackSwingEvent = attack_swing_event::Unknown;
-		Countdown m_regenCountdown;
+		mutable Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
+
+		/// Whether regeneration runs (StartRegeneration / StopRegeneration): always for living
+		///	players, only in combat for creatures.
+		mutable bool m_regenActive = false;
+
+		/// Time up to which health and power include their regeneration (see SettleRegeneration).
+		GameTime m_regenSettledAt = 0;
+
+		/// Fraction of a point regenerated but not yet applied: [0] health, [1 + power type] power.
+		std::array<float, 1 + power_type::Count_> m_regenRemainder{};
 
 		std::weak_ptr<GameUnitS> m_victim;
 
@@ -2025,10 +2073,6 @@ public:
 		///	(ModCastingManaRegenPercent).
 		float m_castingManaRegenPctBonus = 0.0f;
 
-		/// Fraction of a mana point left over by casting regeneration ticks. The casting share of
-		///	a small per-tick regeneration is often below one point, and dropping the fraction
-		///	every tick would make the configured percentage meaningless at low levels.
-		float m_castingManaRegenRemainder = 0.0f;
 
 		std::map<uint8, float> m_baseSpeeds;
 

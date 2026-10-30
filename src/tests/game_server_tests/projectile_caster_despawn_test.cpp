@@ -134,6 +134,21 @@ namespace
 			}
 		}
 
+		/// Runs the timer queue in real time until the condition holds or the timeout passes.
+		/// @returns Whether the condition holds.
+		template<typename Condition>
+		bool RunUntil(Condition condition, const std::chrono::milliseconds timeout)
+		{
+			const auto deadline = std::chrono::steady_clock::now() + timeout;
+			while (!condition() && std::chrono::steady_clock::now() < deadline)
+			{
+				io.restart();
+				io.run_for(std::chrono::milliseconds(20));
+			}
+
+			return condition();
+		}
+
 		~ProjectileFixture()
 		{
 			io.stop();
@@ -152,12 +167,11 @@ TEST_CASE_METHOD(ProjectileFixture, "A projectile lands and resolves while its c
 
 	REQUIRE(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
 
-	// In flight: the damage is dealt on impact.
+	// In flight: the damage is dealt on impact, after about four seconds (20 m at 5 m/s). Waiting
+	// for the impact instead of a fixed time keeps a slow machine from failing the test.
 	const uint32 healthBefore = victim->GetHealth();
 
-	RunFor(std::chrono::milliseconds(5000));
-
-	CHECK(victim->GetHealth() < healthBefore);
+	CHECK(RunUntil([&]() { return victim->GetHealth() < healthBefore; }, std::chrono::milliseconds(10000)));
 }
 
 TEST_CASE_METHOD(ProjectileFixture, "A projectile in flight is dropped when its caster leaves the world", "[spell][projectile]")
