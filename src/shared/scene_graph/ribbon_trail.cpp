@@ -382,7 +382,7 @@ namespace mmo
 		// Rebuild GPU buffers if we have a camera
 		if (m_scene && m_segments.size() >= 2)
 		{
-			Camera* camera = m_scene->GetCamera(0);
+			Camera* camera = m_scene->GetCamera(static_cast<uint32>(0));
 			if (camera)
 			{
 				m_renderable->RebuildBuffers(m_segments, *camera, m_parameters);

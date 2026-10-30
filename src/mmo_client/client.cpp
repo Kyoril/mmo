@@ -229,7 +229,18 @@ int main_osx(int argc, char *argv[]);
 int main(int argc, char **argv)
 {
 	// Set working directory
-	std::filesystem::current_path(mmo::GetExecutablePath());
+	std::filesystem::path workingDirectory = mmo::GetExecutablePath();
+#ifdef __APPLE__
+	// Inside an application bundle the executable lives in <name>.app/Contents/MacOS. Run from the
+	// directory containing the bundle instead, where the Data, Config and Logs folders are, like
+	// next to the executable on Windows.
+	if (workingDirectory.filename() == "MacOS" && workingDirectory.parent_path().filename() == "Contents" &&
+		workingDirectory.parent_path().parent_path().extension() == ".app")
+	{
+		workingDirectory = workingDirectory.parent_path().parent_path().parent_path();
+	}
+#endif
+	std::filesystem::current_path(workingDirectory);
 
 	// Write everything log entry to cout on non-windows platforms by default
 	std::mutex logMutex;

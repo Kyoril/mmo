@@ -5,14 +5,10 @@ cmake_minimum_required(VERSION 3.16)
 IF(APPLE)
     INCLUDE_DIRECTORIES ( /System/Library/Frameworks )
     FIND_LIBRARY(COCOA_LIBRARY Cocoa)
+    FIND_LIBRARY(CARBON_LIBRARY Carbon)
     FIND_LIBRARY(METAL_LIBRARY Metal)
-    MARK_AS_ADVANCED (COCOA_LIBRARY)
-    SET(EXTRA_LIBS ${COCOA_LIBRARY} ${METAL_LIBRARY})
-    
-    # these are the OS X Interface Builder Files
-    SET (Client_XIBS
-        MainMenu
-    )
+    MARK_AS_ADVANCED (COCOA_LIBRARY CARBON_LIBRARY)
+    SET(EXTRA_LIBS ${COCOA_LIBRARY} ${CARBON_LIBRARY} ${METAL_LIBRARY})
 ENDIF(APPLE)
 
 if (MMO_WITH_DISCORD_RPC)
@@ -61,7 +57,6 @@ IF(APPLE)
     SET(MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
     SET(MACOSX_BUNDLE_BUNDLE_VERSION "0")
     SET(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2019 - 2022, Kyoril. All rights reserved.")
-    SET(MACOSX_BUNDLE_NSMAIN_NIB_FILE "MainMenu")
     SET(MACOSX_BUNDLE_NSPRINCIPAL_CLASS "NSApplication")
 ENDIF(APPLE)
 
@@ -107,29 +102,9 @@ if(APPLE)
 endif()
 
 IF(APPLE)
-    # Make sure we can find the 'ibtool' program. If we can NOT find it we
-    # skip generation of this project
-    FIND_PROGRAM(IBTOOL ibtool HINTS "/usr/bin" "${OSX_DEVELOPER_ROOT}/usr/bin")
-    IF(${IBTOOL} STREQUAL "IBTOOL-NOTFOUND")
-        MESSAGE(SEND_ERROR "ibtool can not be found and is needed to compile the .xib files. It should have been installed with the Apple developer tools. The default system paths were searched in addition to ${OSX_DEVELOPER_ROOT}/usr/bin")
-    ENDIF()
-
-    # Make sure the 'Resources' Directory is correctly created before we build
-    ADD_CUSTOM_COMMAND (TARGET mmo_client PRE_BUILD COMMAND mkdir -p ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/mmo_client.app/Contents/Resources)
-    ADD_CUSTOM_COMMAND (TARGET mmo_client PRE_BUILD COMMAND mkdir -p ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/mmo_client.app/Contents/Resources)
-
-    # Compile the .xib files using the 'ibtool' program with the destination being the app package
-    FOREACH(xib ${Client_XIBS})
-        MESSAGE(STATUS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/mmo_client.app/Contents/Resources/${xib}.nib")
-        MESSAGE(STATUS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/mmo_client.app/Contents/Resources/${xib}.nib")
-
-        ADD_CUSTOM_COMMAND (TARGET mmo_client POST_BUILD
-            COMMAND ${IBTOOL} --errors --warnings --notices --output-format human-readable-text --compile ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/mmo_client.app/Contents/Resources/${xib}.nib ${CMAKE_CURRENT_SOURCE_DIR}/macos/${xib}.xib
-            COMMENT "Compiling ${CMAKE_CURRENT_SOURCE_DIR}/macos/${xib}.xib")
-        ADD_CUSTOM_COMMAND (TARGET mmo_client POST_BUILD
-            COMMAND ${IBTOOL} --errors --warnings --notices --output-format human-readable-text --compile ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/mmo_client.app/Contents/Resources/${xib}.nib ${CMAKE_CURRENT_SOURCE_DIR}/macos/${xib}.xib
-            COMMENT "Compiling ${CMAKE_CURRENT_SOURCE_DIR}/macos/${xib}.xib")
-    ENDFOREACH()
+    # The Objective-C++ platform layer uses automatic reference counting.
+    file(GLOB osxObjcSources "${CMAKE_CURRENT_SOURCE_DIR}/macos/*.mm")
+    set_source_files_properties(${osxObjcSources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 ENDIF(APPLE)
 
 # Link external dependency libraries

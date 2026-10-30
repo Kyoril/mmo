@@ -9,6 +9,10 @@ add_subdirectory(realm_server)
 add_subdirectory(world_server)
 
 
+if (APPLE AND (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR))
+	add_subdirectory(hlsl2msl)
+endif()
+
 if (MMO_BUILD_CLIENT)
 	add_subdirectory(mmo_client)
 	add_subdirectory(graphics_test)

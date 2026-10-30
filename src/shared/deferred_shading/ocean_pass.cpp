@@ -14,16 +14,26 @@
 #include <cmath>
 
 // --- Shader bytecode seam ---------------------------------------------------------------
-// Mirrors the seam in volumetric_fog_pass.cpp; the deferred path is D3D11-only today.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/CS_OceanSpectrum.h"
-#	include "shaders/CS_OceanEvolve.h"
-#	include "shaders/CS_OceanFft.h"
-#	include "shaders/CS_OceanAssemble.h"
-#	include "shaders/CS_OceanSkyCapture.h"
-#	include "shaders/VS_Ocean.h"
-#	include "shaders/PS_Ocean.h"
+// Mirrors the seam in volumetric_fog_pass.cpp; the Metal build generates the same symbols from the HLSL (hlsl2msl).
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/CS_OceanSpectrum.h"
+#		include "shaders/CS_OceanEvolve.h"
+#		include "shaders/CS_OceanFft.h"
+#		include "shaders/CS_OceanAssemble.h"
+#		include "shaders/CS_OceanSkyCapture.h"
+#		include "shaders/VS_Ocean.h"
+#		include "shaders/PS_Ocean.h"
+#	else
+#		include "CS_OceanSpectrum.metal.h"
+#		include "CS_OceanEvolve.metal.h"
+#		include "CS_OceanFft.metal.h"
+#		include "CS_OceanAssemble.metal.h"
+#		include "CS_OceanSkyCapture.metal.h"
+#		include "VS_Ocean.metal.h"
+#		include "PS_Ocean.metal.h"
+#	endif
 #	define MMO_OCEAN_SHADER(name) g_##name, std::size(g_##name)
 #	define MMO_OCEAN_HAS_SHADERS 1
 #else
