@@ -143,6 +143,11 @@ namespace mmo
 	protected:
 		void HandleFieldMapChanges();
 
+		/// Called with the new field values applied and still marked as changed (WasChanged), before
+		///	any fieldsChanged handler runs. Lets the object update state derived from the fields before
+		///	UI handlers read it.
+		virtual void OnFieldsApplied() {}
+
 	public:
 		[[nodiscard]] const Vector3& GetPosition() const
 		{

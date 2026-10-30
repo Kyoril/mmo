@@ -410,6 +410,12 @@ namespace mmo
 		/// @brief Whether health and power are extrapolated between server syncs.
 		[[nodiscard]] bool PredictsRegeneration() const { return m_predictRegeneration; }
 
+	protected:
+		/// Re-anchors the regeneration prediction when a synced value or rate arrived.
+		void OnFieldsApplied() override;
+
+	public:
+
 		/// @brief Gets the maximum health of this unit.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
 
@@ -1054,9 +1060,6 @@ namespace mmo
 
 		/// Local time at which health, power or a regeneration rate was last received.
 		GameTime m_regenSyncTime = 0;
-
-		/// Re-anchors the prediction whenever a synced value or rate arrives.
-		scoped_connection m_regenSyncConnection;
 
 		/// Extrapolates a synced value by its replicated rate (per five seconds) since the last sync.
 		[[nodiscard]] int64 PredictRegeneration(int64 value, int64 maxValue, float ratePerFiveSeconds) const;
