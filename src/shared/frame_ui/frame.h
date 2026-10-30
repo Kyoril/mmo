@@ -213,6 +213,11 @@ namespace mmo
 		/// Sets the text of this frame.
 		virtual void SetText(std::string text);
 
+		/// Sets the text of this frame, shortened with a trailing ellipsis if it does not fit
+		/// into a single line of the frame's current width. Used by frames whose layout only
+		/// has room for one line, because a text component does not clip to its frame.
+		void SetTruncatedText(const std::string& text);
+
 		/// Determines whether the frame is currently visible.
 		/// @param localOnly If set to true, the parent frame's visibility setting is ignored.
 		/// @returns true, if this frame is currently visible.

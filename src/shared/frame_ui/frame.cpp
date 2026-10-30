@@ -358,6 +358,61 @@ namespace mmo
 		m_needsLayout = true;
 	}
 
+	namespace
+	{
+		/// Removes the last UTF-8 code point from a string (multi-byte aware, so truncation
+		/// never leaves a broken byte sequence behind).
+		void PopUtf8Char(std::string& text)
+		{
+			while (!text.empty())
+			{
+				const auto byte = static_cast<unsigned char>(text.back());
+				text.pop_back();
+
+				// Stop once the removed byte was a lead byte (not a continuation byte).
+				if ((byte & 0xC0) != 0x80)
+				{
+					break;
+				}
+			}
+		}
+	}
+
+	void Frame::SetTruncatedText(const std::string& text)
+	{
+		const FontPtr font = GetFont();
+		const float maxWidth = GetAbsoluteFrameRect().GetWidth();
+		if (!font || maxWidth <= 0.0f)
+		{
+			SetText(text);
+			return;
+		}
+
+		// Measure with the same scale the text component renders (and wraps) with.
+		const float textScale = FrameManager::Get().GetTextScale();
+		if (font->GetTextWidth(text, textScale) <= maxWidth)
+		{
+			SetText(text);
+			return;
+		}
+
+		static const std::string ellipsis = "...";
+
+		std::string truncated = text;
+		while (!truncated.empty() && font->GetTextWidth(truncated + ellipsis, textScale) > maxWidth)
+		{
+			PopUtf8Char(truncated);
+		}
+
+		// Don't leave a gap between the last word and the ellipsis.
+		while (!truncated.empty() && truncated.back() == ' ')
+		{
+			truncated.pop_back();
+		}
+
+		SetText(truncated + ellipsis);
+	}
+
 	bool Frame::IsVisible(bool localOnly) const
 	{
 		// If this is the root frame or we only care for local visibility setting...

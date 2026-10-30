@@ -421,6 +421,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<Frame>("Frame")
 					.def("SetText", &Frame::SetText)
+					.def("SetTruncatedText", &Frame::SetTruncatedText)
 					.def("GetText", &Frame::GetText)
 					.def("Show", &Frame::Show)
 					.def("Hide", &Frame::Hide)

@@ -52,8 +52,7 @@ namespace
 	};
 
 	/// Stands in for the client side of the vendor API. The item names are the ones a merchant of
-	/// the starting zone offers, because the name length is what drives the word wrapping under
-	/// test.
+	/// the starting zone offers, because the name length is what drives the layout under test.
 	const char* g_vendorStubs = R"lua(
 		function Localize(key) return key; end
 		ItemQualityColors = { "FFFFFFFF", "FFFFFFFF", "FF1EFF00", "FF0070DD", "FFA335EE" };
@@ -79,10 +78,24 @@ namespace
 		end
 
 		function GetVendorBuybackItemInfo(index) return nil, nil, 0, 0; end
+
+		-- Lets the test compare what a card shows against the untruncated name.
+		function GetOriginalVendorItemName(index) return items[index].name; end
 	)lua";
+
+	/// Reads a string returned by a Lua expression.
+	std::string EvaluateLuaString(lua_State* state, const std::string& expression)
+	{
+		FrameManager::Get().ExecuteLua("__vendorTestResult = " + expression + ";");
+		lua_getglobal(state, "__vendorTestResult");
+		const char* result = lua_tostring(state, -1);
+		std::string value = result ? result : "";
+		lua_pop(state, 1);
+		return value;
+	}
 }
 
-TEST_CASE("The vendor item name never reaches the price row of its card", "[frame_input][vendor_price]")
+TEST_CASE("A vendor item name is truncated to one line and never reaches the price row", "[frame_input][vendor_price]")
 {
 	// The layout comes from the data/client submodule, which a checkout may not have: skip then.
 	// (Catch 2 has no SKIP; WARN shows up in the output and the case passes without assertions.)
@@ -119,6 +132,7 @@ TEST_CASE("The vendor item name never reaches the price row of its card", "[fram
 	mgr.ExecuteLua("VendorFrame.mode = VENDOR_MODE_STOCK; VendorFrame.page = 1; VendorFrame_UpdateVendorItems();");
 
 	const float textScale = mgr.GetTextScale();
+	bool anyNameTruncated = false;
 
 	for (int i = 1; i <= 8; ++i)
 	{
@@ -133,14 +147,31 @@ TEST_CASE("The vendor item name never reaches the price row of its card", "[fram
 		const Rect nameRect = nameFrame->GetAbsoluteFrameRect();
 		const Rect moneyRect = moneyFrame->GetAbsoluteFrameRect();
 
-		// What TextComponent::RenderTraditional draws: one line per wrapped line, each as tall as
-		// the font, starting at the top of the name frame.
-		const uint32 lines = font->GetLineCount(nameFrame->GetText(), nameRect, textScale);
-		REQUIRE(lines >= 1);
+		const std::string displayed = nameFrame->GetText();
+		const std::string original = EvaluateLuaString(fixture.lua, "GetOriginalVendorItemName(" + std::to_string(i) + ")");
+		REQUIRE_FALSE(original.empty());
 
-		const float nameTextBottom = nameRect.top + font->GetHeight(textScale) * lines;
+		INFO("card " << i << " shows '" << displayed << "' for item '" << original << "'");
 
-		INFO("card " << i << " item '" << nameFrame->GetText() << "' wraps into " << lines << " line(s)");
+		// A name too long for the name column is shortened with a trailing ellipsis, so what is
+		// displayed is either the name itself or one of its prefixes plus "...".
+		if (displayed != original)
+		{
+			anyNameTruncated = true;
+			REQUIRE(displayed.size() >= 3);
+			CHECK(displayed.substr(displayed.size() - 3) == "...");
+			CHECK(original.compare(0, displayed.size() - 3, displayed, 0, displayed.size() - 3) == 0);
+		}
+
+		// The displayed name has to fit one line of the name column: the text component does not
+		// clip to its frame, so a second line would be drawn across the coins of the price row.
+		CHECK(font->GetTextWidth(displayed, textScale) <= nameRect.GetWidth());
+		CHECK(font->GetLineCount(displayed, nameRect, textScale) == 1);
+
+		const float nameTextBottom = nameRect.top + font->GetHeight(textScale);
 		CHECK(nameTextBottom <= moneyRect.top);
 	}
+
+	// The names above include ones that do not fit, so the truncation really was exercised.
+	CHECK(anyNameTruncated);
 }
