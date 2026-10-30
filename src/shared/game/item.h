@@ -364,34 +364,9 @@ namespace mmo
 			Mana,
 			Health,
 
-			// 2 - 6 were the five hard-coded attributes (Agility, Strength, Intellect, Spirit, Stamina).
-			// Attribute stats now use AttributeStart + attribute id.
-
-			DefenseSkillRating = 7,
-			DodgeRating,
-			ParryRating,
-			BlockRating,
-			HitMeleeRating,
-			HitRangedRating,
-			HitSpellRating,
-			CritMeleeRating,
-			CritRangedRating,
-			CritSpellRating,
-			HitTakenMeleeRating,
-			HitTakenRangedRating,
-			HitTakenSpellRating,
-			CritTakenMeleeRating,
-			CritTakenRangedRating,
-			CritTakenSpellRating,
-			HasteMeleeRating,
-			HasteRangedRating,
-			HasteSpellRating,
-			HitRating,
-			CritRating,
-			HitTakenRating,
-			CritTakenRating,
-			HasteRating,
-			ExpertiseRating,
+			// 2 - 6 were the five hard-coded attributes (Agility, Strength, Intellect, Spirit, Stamina),
+			// 7 - 31 were combat ratings the server never applied. All are retired: attribute stats
+			// use AttributeStart + attribute id. Do not reuse these numbers.
 
 			/// First attribute stat: AttributeStart + attribute id increases that attribute
 			/// (attribute ids are below MaxAttributes, see game/attribute.h).

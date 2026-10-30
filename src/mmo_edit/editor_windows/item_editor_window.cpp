@@ -215,42 +215,13 @@ namespace mmo
 		"Quiver",
 		"Relic"};
 
-	/// Names of the non-attribute item stat types, indexed by item_stat::Type. Types 2..6 held the
-	/// five hard-coded attributes and are retired (nullptr): attribute stats are
-	/// item_stat::AttributeStart + attribute id and take their name from the project's attributes.
+	/// Names of the non-attribute item stat types, indexed by item_stat::Type. Every other type below
+	/// item_stat::AttributeStart is retired: 2..6 held the five hard-coded attributes and 7..31 were
+	/// combat ratings the server never applied. Attribute stats are item_stat::AttributeStart +
+	/// attribute id and take their name from the project's attributes.
 	static const char *s_statTypeStrings[] = {
 		"Mana",
-		"Health",
-		nullptr,
-		nullptr,
-		nullptr,
-		nullptr,
-		nullptr,
-		"DefenseSkillRating",
-		"DodgeRating",
-		"ParryRating",
-		"BlockRating",
-		"HitMeleeRating",
-		"HitRangedRating",
-		"HitSpellRating",
-		"CritMeleeRating",
-		"CritRangedRating",
-		"CritSpellRating",
-		"HitTakenMeleeRating",
-		"HitTakenRangedRating",
-		"HitTakenSpellRating",
-		"CritTakenMeleeRating",
-		"CritTakenRangedRating",
-		"CritTakenSpellRating",
-		"HasteMeleeRating",
-		"HasteRangedRating",
-		"HasteSpellRating",
-		"HitRating",
-		"CritRating",
-		"HitTakenRating",
-		"CritTakenRating",
-		"HasteRating",
-		"ExpertiseRating"};
+		"Health"};
 
 	namespace
 	{
@@ -265,11 +236,11 @@ namespace mmo
 
 			if (statType < std::size(s_statTypeStrings))
 			{
-				if (s_statTypeStrings[statType] != nullptr)
-				{
-					return s_statTypeStrings[statType];
-				}
+				return s_statTypeStrings[statType];
+			}
 
+			if (statType < item_stat::AttributeStart)
+			{
 				return "Retired stat type (#" + std::to_string(statType) + ")";
 			}
 
@@ -1301,11 +1272,6 @@ namespace mmo
 
 							for (uint32 j = 0; j < std::size(s_statTypeStrings); ++j)
 							{
-								if (s_statTypeStrings[j] == nullptr)
-								{
-									continue;
-								}
-
 								ImGui::PushID(static_cast<int>(j));
 								if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
 								{

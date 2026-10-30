@@ -204,39 +204,10 @@ namespace mmo
 			return nullptr;
 		}
 
+		// Indexed by item_stat::Type; the retired types 2 - 31 and attribute stats have no key
 		static const char* s_statTypeStrings[] = {
 			"MANA",
-			"HEALTH",
-			nullptr,	// 2 - 6: former hard-coded attributes, see item_stat::AttributeStart
-			nullptr,
-			nullptr,
-			nullptr,
-			nullptr,
-			"DEFENSE",
-			"DODGE",
-			"PARRY",
-			"BLOCK",
-			"HIT_MELEE",
-			"HIT_RANGED",
-			"HIT_SPELL",
-			"CRIT_MELEE",
-			"CRIT_RANGED",
-			"CRIT_SPELL",
-			"HIT_TAKEN_MELEE",
-			"HIT_TAKEN_RANGED",
-			"HIT_TAKEN_SPELL",
-			"CRIT_TAKEN_MELEE",
-			"CRIT_TAKEN_RANGED",
-			"CRIT_TAKEN_SPELL",
-			"HASTE_MELEE",
-			"HASTE_RANGED",
-			"HASTE_SPELL",
-			"HIT",
-			"CRIT",
-			"HIT_TAKEN",
-			"CRIT_TAKEN",
-			"HASTE",
-			"EXPERTISE"
+			"HEALTH"
 		};
 
 		if (stats[index].type >= std::size(s_statTypeStrings))
