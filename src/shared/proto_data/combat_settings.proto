@@ -100,6 +100,22 @@ message CombatSettings {
 	// casting, i.e. during the five seconds after it last spent mana. ModCastingManaRegenPercent
 	// auras (talents, buffs) add percentage points on top; the total is clamped to 0..100.
 	optional float casting_mana_regen_percent = 32 [default = 30.0];
+
+	// === Regeneration timing ===
+	// Regeneration is continuous: the server brings health and power up to date whenever something
+	// depends on them (spell costs, damage, combat changes) and replicates the values every
+	// regen_sync_interval_ms while a resource is changing. Per-tick regeneration values in class
+	// data are amounts per two seconds, independent of this interval.
+	optional uint32 regen_sync_interval_ms = 33 [default = 2000];
+	// How long (in milliseconds) after spending mana only the casting share of mana regeneration
+	// flows (the "five second rule").
+	optional uint32 five_second_rule_ms = 34 [default = 5000];
+	// Energy regenerated per second, before ModPowerRegenPercent auras.
+	optional float energy_regen_per_second = 35 [default = 10.0];
+	// Rage lost per second while out of combat.
+	optional float rage_decay_per_second = 36 [default = 1.5];
+	// Share (in percent) of the normal health regeneration that keeps flowing in combat.
+	optional float in_combat_health_regen_percent = 37 [default = 0.0];
 }
 
 // Wrapper for loading

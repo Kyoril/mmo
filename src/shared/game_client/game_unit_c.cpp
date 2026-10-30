@@ -2121,7 +2121,63 @@ namespace mmo
 			return 0;
 		}
 
-		return Get<int32>(object_fields::Mana + powerType);
+		const int32 power = Get<int32>(object_fields::Mana + powerType);
+		if (!m_predictRegeneration || !IsAlive())
+		{
+			return power;
+		}
+
+		return static_cast<int32>(PredictRegeneration(power, Get<int32>(object_fields::MaxMana + powerType),
+			Get<float>(object_fields::PowerRegen + powerType)));
+	}
+
+	uint32 GameUnitC::GetHealth() const
+	{
+		const uint32 health = Get<uint32>(object_fields::Health);
+		if (!m_predictRegeneration || health == 0)
+		{
+			return health;
+		}
+
+		return static_cast<uint32>(PredictRegeneration(health, Get<uint32>(object_fields::MaxHealth), Get<float>(object_fields::HealthRegen)));
+	}
+
+	void GameUnitC::SetRegenerationPrediction(const bool enabled)
+	{
+		m_predictRegeneration = enabled;
+		m_regenSyncConnection.disconnect();
+		if (!enabled)
+		{
+			return;
+		}
+
+		// Anything that changes the synced value or the rate re-anchors the extrapolation. The
+		// server sends both one network latency late, so the prediction stays behind the server's
+		// exact value rather than ahead of it: a cast the prediction allows is never refused.
+		m_regenSyncTime = GetAsyncTimeMs();
+		m_regenSyncConnection = fieldsChanged.connect([this](uint64, const uint16 fieldIndex, const uint16 fieldCount)
+		{
+			const uint32 first = fieldIndex;
+			const uint32 last = fieldIndex + fieldCount - 1;
+			const bool resources = last >= object_fields::MaxHealth && first <= object_fields::MaxEnergy;
+			const bool rates = last >= object_fields::HealthRegen && first <= object_fields::PowerRegen + power_type::Energy;
+			if (resources || rates)
+			{
+				m_regenSyncTime = GetAsyncTimeMs();
+			}
+		});
+	}
+
+	int64 GameUnitC::PredictRegeneration(const int64 value, const int64 maxValue, const float ratePerFiveSeconds) const
+	{
+		if (ratePerFiveSeconds == 0.0f)
+		{
+			return value;
+		}
+
+		const float seconds = static_cast<float>(GetAsyncTimeMs() - m_regenSyncTime) / 1000.0f;
+		const int64 predicted = value + static_cast<int64>(std::trunc(ratePerFiveSeconds / 5.0f * seconds));
+		return std::clamp<int64>(predicted, 0, std::max<int64>(maxValue, value));
 	}
 
 	int32 GameUnitC::GetMaxPower(const int32 powerType) const

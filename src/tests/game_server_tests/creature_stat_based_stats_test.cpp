@@ -137,14 +137,15 @@ TEST_CASE_METHOD(StatFixture, "Stat-based creature mana regeneration, crit and d
 	dodgeSource->set_attribute(AgilityId);
 	dodgeSource->set_pointsper(20.0f);
 
+	entry->set_regeneration(2);	// regeneration_flags::Power
 	const auto creature = MakeCreature();
 
 	// Base 5% plus 27 agility / 20
 	CHECK(creature->GetBaseMeleeCritChance() == Approx(5.0f + BaseAgility / 20.0f));
 	CHECK(creature->DodgeChance() == Approx(project.combatSettings.base_dodge_chance() + BaseAgility / 20.0f));
 
-	// 23 spirit / 5 per tick, two second ticks: 2.5 ticks per five seconds of whole points
-	CHECK(creature->GetManaRegenPerFiveSeconds() == Approx(static_cast<float>(static_cast<int32>(23 / 5.0f)) * 2.5f));
+	// 23 spirit / 5 per two second tick, regenerated continuously: 2.5 ticks per five seconds
+	CHECK(creature->GetManaRegenPerFiveSeconds() == Approx(23 / 5.0f * 2.5f));
 }
 
 TEST_CASE_METHOD(StatFixture, "Stat-based creature without attribute sources gets no attribute crit or dodge", "[creature_stats]")

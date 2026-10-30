@@ -170,6 +170,9 @@ namespace mmo
 
 	void GameUnitS::RefreshStats()
 	{
+		// Regeneration rates are about to be recomputed: everything regenerated so far was earned
+		// at the old rates.
+		SettleRegeneration();
 	}
 
 	const Vector3 &GameUnitS::GetPosition() const
@@ -950,6 +953,9 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
+		// Health regenerated up to this moment counts before the damage lands
+		SettleRegeneration();
+
 		// Developer/test cheat: absorb everything without touching health, threat or procs.
 		// Placed at the top of Damage() deliberately: this is the single choke point every
 		// damage source funnels through (auto-attacks, periodic auras, spell effects), so one
@@ -1036,6 +1042,8 @@ namespace mmo
 
 	int32 GameUnitS::Heal(uint32 amount, GameUnitS *instigator)
 	{
+		SettleRegeneration();
+
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
 		{
@@ -1149,17 +1157,32 @@ namespace mmo
 
 	void GameUnitS::StartRegeneration() const
 	{
-		if (m_regenCountdown.IsRunning())
+		if (m_regenActive)
 		{
 			return;
 		}
 
-		m_regenCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 2));
+		// Nothing regenerated while inactive: start counting from now
+		auto& self = const_cast<GameUnitS&>(*this);
+		self.m_regenSettledAt = GetAsyncTimeMs();
+		self.m_regenRemainder.fill(0.0f);
+		m_regenActive = true;
+		self.UpdateRegenRateFields();
+		ScheduleRegenSync();
 	}
 
 	void GameUnitS::StopRegeneration() const
 	{
+		if (!m_regenActive)
+		{
+			return;
+		}
+
+		auto& self = const_cast<GameUnitS&>(*this);
+		self.SettleRegeneration();
+		m_regenActive = false;
 		m_regenCountdown.Cancel();
+		self.UpdateRegenRateFields();
 	}
 
 	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer> &&aura)
@@ -1664,7 +1687,20 @@ namespace mmo
 
 	void GameUnitS::NotifyManaUsed()
 	{
-		m_lastManaUse = GetAsyncTimeMs();
+		NotifyManaUsed(GetAsyncTimeMs());
+	}
+
+	void GameUnitS::NotifyManaUsed(const GameTime now)
+	{
+		// The casting rate starts now; everything before was regenerated at the previous rate
+		SettleRegeneration(now);
+		m_lastManaUse = now;
+
+		// Replicate the casting rate and sync again exactly when the window ends, so clients
+		// switch back to the normal rate in time
+		UpdateRegenRateFields();
+		m_regenCountdown.Cancel();
+		ScheduleRegenSync();
 	}
 
 	void GameUnitS::OnParry()
@@ -2575,10 +2611,7 @@ namespace mmo
 
 	float GameUnitS::GetManaRegenPerFiveSeconds() const
 	{
-		// Regeneration ticks every two seconds (see StartRegeneration), so five seconds are
-		// 2.5 ticks. The aura percentage modifier is applied per tick in RegeneratePower().
-		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
-		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
+		return GetPowerRegenPerSecond(power_type::Mana, false) * 5.0f;
 	}
 
 	float GameUnitS::GetCastingManaRegenPercent() const
@@ -2588,11 +2621,7 @@ namespace mmo
 
 	float GameUnitS::GetCastingManaRegenPerFiveSeconds() const
 	{
-		// Same tick math as GetManaRegenPerFiveSeconds, but without truncating to whole points:
-		// RegeneratePower() carries the fraction over, so over time the casting share is exact.
-		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
-		const float powerRegenScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f;
-		return GetCastingManaRegenPerTick() * powerRegenScale * ticksPerFiveSeconds;
+		return GetPowerRegenPerSecond(power_type::Mana, true) * 5.0f;
 	}
 
 	void GameUnitS::UpdateCombatStatFields()
@@ -2601,8 +2630,28 @@ namespace mmo
 		Set<float>(object_fields::SpellHealing, GetCalculatedModifierValue(unit_mods::HealingDone));
 		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
+		UpdateRegenRateFields();
+	}
+
+	void GameUnitS::UpdateRegenRateFields()
+	{
+		// Mana is replicated as its normal and its casting rate: the owning client tracks the five
+		// second rule itself. Health and rage are replicated as the rate right now (combat aware).
 		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
 		Set<float>(object_fields::ManaRegenCasting, GetCastingManaRegenPerFiveSeconds());
+		Set<float>(object_fields::HealthRegen, m_regenActive ? GetHealthRegenPerSecond() * 5.0f : 0.0f);
+
+		const bool casting = IsInFiveSecondRule(GetAsyncTimeMs());
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const float rate = m_regenActive ? GetPowerRegenPerSecond(static_cast<PowerType>(type), casting) : 0.0f;
+			Set<float>(object_fields::PowerRegen + type, rate * 5.0f);
+		}
+	}
+
+	bool GameUnitS::IsInFiveSecondRule(const GameTime now) const
+	{
+		return m_lastManaUse != 0 && now < m_lastManaUse + GetCombatSettings().five_second_rule_ms();
 	}
 
 	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
@@ -3110,6 +3159,26 @@ namespace mmo
 
 	void GameUnitS::SetInCombat(bool inCombat, bool pvp)
 	{
+		// Health and rage regenerate differently in combat
+		if (inCombat != IsInCombat())
+		{
+			SettleRegeneration();
+		}
+
+		struct RegenRatesUpdate
+		{
+			GameUnitS& unit;
+			const bool changed;
+			~RegenRatesUpdate()
+			{
+				if (changed)
+				{
+					unit.UpdateRegenRateFields();
+					unit.ScheduleRegenSync();
+				}
+			}
+		} regenRatesUpdate{ *this, inCombat != IsInCombat() };
+
 		if (inCombat)
 		{
 			// Detect the transition into combat so interrupt auras only fire when actually entering
@@ -3627,93 +3696,195 @@ namespace mmo
 
 	void GameUnitS::OnRegeneration()
 	{
-		if (!IsAlive())
-		{
-			return;
-		}
-
-		if (!IsInCombat())
-		{
-			RegenerateHealth();
-			RegeneratePower(power_type::Rage);
-		}
-
-		RegeneratePower(power_type::Energy);
-		RegeneratePower(power_type::Mana);
-
-		StartRegeneration();
+		// Settling writes the regenerated values (replicating them) and re-arms the timer while
+		// anything still regenerates. The rates may have changed since (five second rule window end).
+		SettleRegeneration();
+		UpdateRegenRateFields();
 	}
 
-	void GameUnitS::RegenerateHealth()
+	namespace
 	{
-		if (!IsAlive())
+		/// Regeneration rates in class data are amounts per regeneration tick of two seconds.
+		constexpr float RegenTickSeconds = 2.0f;
+
+		/// Adds regenerated points to a value, carrying the fraction of a point in remainder.
+		/// @returns The new value.
+		int64 ApplyRegeneration(const int64 value, const int64 maxValue, const float gained, float& remainder)
 		{
-			return;
+			const float total = remainder + gained;
+			const float whole = std::trunc(total);
+			remainder = total - whole;
+
+			int64 result = value + static_cast<int64>(whole);
+			if (result >= maxValue)
+			{
+				result = maxValue;
+				remainder = 0.0f;
+			}
+			else if (result <= 0)
+			{
+				result = 0;
+				remainder = 0.0f;
+			}
+
+			return result;
 		}
-
-		if (!RegeneratesHealth())
-		{
-			return;
-		}
-
-		const uint32 maxHealth = GetMaxHealth();
-		uint32 health = GetHealth();
-
-		health += GetEffectiveHealthRegenPerTick();
-		if (health > maxHealth)
-			health = maxHealth;
-
-		Set<uint32>(object_fields::Health, health);
 	}
 
-	void GameUnitS::RegeneratePower(PowerType powerType)
+	float GameUnitS::GetHealthRegenPerSecond() const
 	{
-		if (!IsAlive())
+		if (!IsAlive() || !RegeneratesHealth())
 		{
-			return;
+			return 0.0f;
 		}
 
-		if (!RegeneratesPower())
+		float rate = GetEffectiveHealthRegenPerTick() / RegenTickSeconds;
+		if (IsInCombat())
 		{
-			return;
+			rate *= GetCombatSettings().in_combat_health_regen_percent() / 100.0f;
+		}
+
+		return std::max(rate, 0.0f);
+	}
+
+	float GameUnitS::GetPowerRegenPerSecond(const PowerType powerType, const bool casting) const
+	{
+		if (!IsAlive() || !RegeneratesPower())
+		{
+			return 0.0f;
 		}
 
 		ASSERT(static_cast<uint8>(powerType) < static_cast<uint8>(power_type::Count_));
+		const float auraScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f;
 
-		int32 amount = 0;
 		switch (powerType)
 		{
-		case power_type::Rage:
-			amount -= 3;
-			break;
-		case power_type::Energy:
-			amount += 20;
-			break;
 		case power_type::Mana:
-			// Within five seconds after spending mana only the casting share of the normal
-			// regeneration flows. The fraction of a point it leaves is carried to the next tick.
-			if (GetAsyncTimeMs() - m_lastManaUse < 5000)
-			{
-				// The aura percentage modifier is applied before the carry here instead of by
-				// GetEffectivePowerRegenPerTick below, which would truncate the whole points again.
-				m_castingManaRegenRemainder += GetCastingManaRegenPerTick()
-					* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f);
-				const float wholePoints = std::floor(m_castingManaRegenRemainder);
-				m_castingManaRegenRemainder -= wholePoints;
-				AddPower(powerType, static_cast<int32>(wholePoints));
-				return;
-			}
+			return std::max((casting ? GetCastingManaRegenPerTick() : m_manaRegenPerTick) * auraScale / RegenTickSeconds, 0.0f);
+		case power_type::Energy:
+			return std::max(GetCombatSettings().energy_regen_per_second() * auraScale, 0.0f);
+		case power_type::Rage:
+			// Rage decays out of combat; regeneration bonuses must not speed up the decay
+			return IsInCombat() ? 0.0f : -GetCombatSettings().rage_decay_per_second();
+		default:
+			return 0.0f;
+		}
+	}
 
-			m_castingManaRegenRemainder = 0.0f;
-			amount += static_cast<int32>(m_manaRegenPerTick);
-			break;
+	void GameUnitS::SettleRegeneration()
+	{
+		SettleRegeneration(GetAsyncTimeMs());
+	}
+
+	void GameUnitS::SettleRegeneration(const GameTime now)
+	{
+		if (now <= m_regenSettledAt)
+		{
+			return;
 		}
 
-		AddPower(powerType, GetEffectivePowerRegenPerTick(powerType, amount));
+		const GameTime from = m_regenSettledAt;
+		m_regenSettledAt = now;
+
+		if (!m_regenActive || !IsAlive())
+		{
+			m_regenRemainder.fill(0.0f);
+			return;
+		}
+
+		const float seconds = static_cast<float>(now - from) / 1000.0f;
+
+		if (const float rate = GetHealthRegenPerSecond(); rate != 0.0f)
+		{
+			const int64 health = ApplyRegeneration(GetHealth(), GetMaxHealth(), rate * seconds, m_regenRemainder[0]);
+			Set<uint32>(object_fields::Health, static_cast<uint32>(health));
+		}
+
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const auto powerType = static_cast<PowerType>(type);
+
+			float gained = GetPowerRegenPerSecond(powerType) * seconds;
+			if (powerType == power_type::Mana)
+			{
+				// Within the five second rule window only the casting rate flows. The window may end
+				// anywhere inside the settled interval.
+				const GameTime windowEnd = m_lastManaUse + GetCombatSettings().five_second_rule_ms();
+				if (m_lastManaUse != 0 && windowEnd > from)
+				{
+					const float castingSeconds = static_cast<float>(std::min(windowEnd, now) - from) / 1000.0f;
+					gained = GetPowerRegenPerSecond(powerType, true) * castingSeconds
+						+ GetPowerRegenPerSecond(powerType, false) * (seconds - castingSeconds);
+				}
+			}
+
+			if (gained == 0.0f && m_regenRemainder[1 + type] == 0.0f)
+			{
+				continue;
+			}
+
+			const int64 power = ApplyRegeneration(Get<int32>(object_fields::Mana + type), Get<uint32>(object_fields::MaxMana + type),
+				gained, m_regenRemainder[1 + type]);
+			Set<int32>(object_fields::Mana + type, static_cast<int32>(power));
+		}
+
+		ScheduleRegenSync();
+	}
+
+	bool GameUnitS::IsRegenerationMoving() const
+	{
+		if (!m_regenActive)
+		{
+			return false;
+		}
+
+		if (GetHealthRegenPerSecond() > 0.0f && GetHealth() < GetMaxHealth())
+		{
+			return true;
+		}
+
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const auto powerType = static_cast<PowerType>(type);
+			const int32 power = Get<int32>(object_fields::Mana + type);
+			const int32 maxPower = Get<int32>(object_fields::MaxMana + type);
+
+			// Mana may only be paused by the five second rule: its normal rate resumes later
+			const float rate = powerType == power_type::Mana
+				? std::max(GetPowerRegenPerSecond(powerType, true), GetPowerRegenPerSecond(powerType, false))
+				: GetPowerRegenPerSecond(powerType);
+			if ((rate > 0.0f && power < maxPower) || (rate < 0.0f && power > 0))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	void GameUnitS::ScheduleRegenSync() const
+	{
+		if (m_regenCountdown.IsRunning() || !IsRegenerationMoving())
+		{
+			return;
+		}
+
+		const GameTime now = GetAsyncTimeMs();
+		GameTime end = now + GetCombatSettings().regen_sync_interval_ms();
+
+		// The mana rate changes when the five second rule window ends: sync then
+		if (IsInFiveSecondRule(now))
+		{
+			end = std::min(end, m_lastManaUse + GetCombatSettings().five_second_rule_ms());
+		}
+
+		m_regenCountdown.SetEnd(end);
 	}
 
 	void GameUnitS::AddPower(PowerType powerType, int32 amount)
 	{
+		SettleRegeneration();
+
 		// Get power and max power
 		int32 power = Get<int32>(object_fields::Mana + static_cast<uint8>(powerType));
 		const int32 maxPower = Get<uint32>(object_fields::MaxMana + static_cast<uint8>(powerType));

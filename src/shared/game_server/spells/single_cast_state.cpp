@@ -854,6 +854,11 @@ namespace mmo
 		const int32 totalCost = m_cast.CalculatePowerCost(m_spell);
 		if (totalCost > 0)
 		{
+			// Regeneration is continuous: count everything regenerated up to this moment, so a
+			// cast the client (which predicts regeneration) allows is not refused for waiting on
+			// the next regeneration sync.
+			m_cast.GetExecuter().SettleRegeneration();
+
 			if (m_spell.powertype() == power_type::Health)
 			{
 				uint32 currentHealth = m_cast.GetExecuter().Get<uint32>(object_fields::Health);

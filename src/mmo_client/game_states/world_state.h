@@ -36,6 +36,7 @@
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
+#include "game/spell.h"
 #include "paging/loaded_page_section.h"
 #include "paging/page_loader_listener.h"
 #include "paging/page_pov_partitioner.h"
@@ -191,6 +192,10 @@ namespace mmo
 		/// Recomputes the low-health combat vignette intensity from the controlled player's current
 		/// health, honoring the CombatVignette gameplay option.
 		void UpdateCombatVignette();
+
+		/// Raises PLAYER_HEALTH_CHANGED / PLAYER_POWER_CHANGED when the own player's predicted
+		///	(regenerating) health or power reaches another whole point between server syncs.
+		void UpdatePredictedResources();
 
 		void OnMoneyChanged(uint64 monitoredGuid);
 
@@ -706,6 +711,10 @@ namespace mmo
 		IAudio &m_audio;
 
 		bool m_combatMode = false;
+
+		/// Last predicted health / power the UI was told about (see UpdatePredictedResources).
+		uint32 m_predictedHealth = 0;
+		std::array<int32, power_type::Health> m_predictedPower{};
 		SceneNode *m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 

@@ -282,7 +282,16 @@ namespace mmo
 			///	within five seconds after mana was spent.
 			ManaRegenCasting,
 
-			UnitFieldCount = ManaRegenCasting + 1,
+			/// @brief float health regenerated every five seconds right now (0 in combat unless
+			///	in_combat_health_regen_percent says otherwise). Clients extrapolate health with it.
+			HealthRegen,
+
+			/// @brief 3 floats (mana, rage, energy): power regenerated every five seconds right now.
+			///	Mana switches to its casting rate within the five second rule window, rage decays
+			///	(negative) out of combat. Clients extrapolate power with these.
+			PowerRegen,
+
+			UnitFieldCount = PowerRegen + 3,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \

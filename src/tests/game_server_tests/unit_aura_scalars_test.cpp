@@ -79,16 +79,17 @@ TEST_CASE("ModPowerRegenPercent scales only the power type it names", "[aura_sca
 
 	unit->ModifyPowerRegenPercentBonus(power_type::Mana, 50.0f, true);
 
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Mana, 20) == 30);
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Energy, 20) == 20);
+	// basemanaregenpertick 20 per two second tick is 10 per second; energy defaults to 10 per second
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Mana) == Approx(15.0f));
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Energy) == Approx(10.0f));
 
 	unit->ModifyPowerRegenPercentBonus(power_type::Mana, 50.0f, false);
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Mana, 20) == 20);
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Mana) == Approx(10.0f));
 }
 
 TEST_CASE("A regeneration bonus never accelerates rage decay", "[aura_scalars]")
 {
-	// Rage regenerates by *decaying* (amount -= 3). Scaling a negative amount would make a
+	// Rage regenerates by *decaying* out of combat. Scaling the decay would make a
 	// "+50% regeneration" buff drain rage half again as fast.
 	asio::io_service io;
 	TimerQueue timers{ io };
@@ -97,9 +98,7 @@ TEST_CASE("A regeneration bonus never accelerates rage decay", "[aura_scalars]")
 
 	unit->ModifyPowerRegenPercentBonus(power_type::Rage, 50.0f, true);
 
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Rage, -3) == -3);
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Rage, 0) == 0);
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Rage, 10) == 15);
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Rage) == Approx(-project.combatSettings.rage_decay_per_second()));
 }
 
 TEST_CASE("ModCritChanceTaken raises every attacker's crit chance against the unit", "[aura_scalars]")
@@ -146,13 +145,13 @@ TEST_CASE("The aura effect handlers drive the cached scalars on apply and misapp
 	manaAura.HandleEffect(true);
 
 	CHECK(unit->GetCritChanceTakenBonus() == Approx(100.0f));
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Mana, 20) == 30);
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Mana) == Approx(15.0f));
 
 	critAura.HandleEffect(false);
 	manaAura.HandleEffect(false);
 
 	CHECK(unit->GetCritChanceTakenBonus() == Approx(0.0f));
-	CHECK(unit->GetEffectivePowerRegenPerTick(power_type::Mana, 20) == 20);
+	CHECK(unit->GetPowerRegenPerSecond(power_type::Mana) == Approx(10.0f));
 }
 
 TEST_CASE("An out-of-range power type on a regen aura is rejected, not written past the array",
@@ -171,11 +170,17 @@ TEST_CASE("An out-of-range power type on a regen aura is rejected, not written p
 	effect.set_miscvaluea(static_cast<int32>(power_type::Count_));
 	AuraEffect aura(container, effect, timers, /*basePoints=*/50);
 
+	std::array<float, power_type::Count_> before{};
+	for (uint8 i = 0; i < static_cast<uint8>(power_type::Count_); ++i)
+	{
+		before[i] = unit->GetPowerRegenPerSecond(static_cast<PowerType>(i));
+	}
+
 	aura.HandleEffect(true);
 
 	// Bad data must be logged and dropped; every power type stays untouched.
 	for (uint8 i = 0; i < static_cast<uint8>(power_type::Count_); ++i)
 	{
-		CHECK(unit->GetEffectivePowerRegenPerTick(static_cast<PowerType>(i), 20) == 20);
+		CHECK(unit->GetPowerRegenPerSecond(static_cast<PowerType>(i)) == Approx(before[i]));
 	}
 }
