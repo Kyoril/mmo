@@ -91,6 +91,24 @@ TEST_CASE("Health does not regenerate in combat and rage decays only out of comb
 	CHECK(unit->Get<int32>(object_fields::Rage) == 97);	// 1.5 per second decay
 }
 
+TEST_CASE("Settling regeneration does not by itself queue an object update", "[regeneration]")
+{
+	// Health and power are settled before every cost check, hit and heal. Doing that must not
+	// make the unit send its values to nearby clients each time: settled values are only marked
+	// as changed and go out with the next update that is sent anyway, at the latest with the sync.
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	auto unit = MakeRegeneratingUnit(project, timers);
+	unit->Set<int32>(object_fields::Mana, 0);
+	unit->ClearFieldChanges();
+	REQUIRE_FALSE(unit->HasUnsentRegeneration());
+
+	unit->SettleRegeneration(unit->GetRegenSettledAt() + 1000);
+	CHECK(unit->Get<int32>(object_fields::Mana) == 10);
+	CHECK(unit->HasUnsentRegeneration());
+}
+
 TEST_CASE("Regeneration stops moving once every resource is full", "[regeneration]")
 {
 	asio::io_service io;

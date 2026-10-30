@@ -1762,8 +1762,14 @@ public:
 		/// Called by the regeneration sync timer: settles regeneration, which replicates the values.
 		virtual void OnRegeneration();
 
-		/// Arms the regeneration sync timer if regeneration is active and some resource is moving.
+		/// Arms the regeneration sync timer if regeneration is active and some resource is moving,
+		///	or if regenerated values were settled silently and not sent yet.
 		void ScheduleRegenSync() const;
+
+		/// Settles regeneration up to now.
+		/// @param replicate Queue an object update for changed values (the sync) or not (every other settle).
+		void SettleRegeneration(GameTime now, bool replicate);
+
 
 		/// Replicates the current regeneration rates (HealthRegen, PowerRegen, ManaRegen fields).
 		void UpdateRegenRateFields();
@@ -1792,11 +1798,17 @@ public:
 		/// Brings health and power up to date with everything regenerated since the last settle.
 		///	Regeneration is continuous; this has to run before anything reads health or power to
 		///	decide something (spell costs, damage) and before anything changes a regeneration rate.
+		///	Settling is silent: it updates the values without queueing an object update for nearby
+		///	clients. They receive the regenerated values with the next update that is sent anyway,
+		///	at the latest with the regeneration sync (regen_sync_interval_ms).
 		void SettleRegeneration();
 
 		/// @copydoc SettleRegeneration
 		/// @param now The time to settle up to. Times before the last settle are ignored.
 		void SettleRegeneration(GameTime now);
+
+		/// Checks whether settled health or power values are still waiting to be sent.
+		[[nodiscard]] bool HasUnsentRegeneration() const;
 
 		/// Gets the time up to which health and power include their regeneration.
 		[[nodiscard]] GameTime GetRegenSettledAt() const { return m_regenSettledAt; }

@@ -3696,10 +3696,37 @@ namespace mmo
 
 	void GameUnitS::OnRegeneration()
 	{
-		// Settling writes the regenerated values (replicating them) and re-arms the timer while
-		// anything still regenerates. The rates may have changed since (five second rule window end).
-		SettleRegeneration();
+		// The sync: the only settle that queues an object update by itself. Values settled silently
+		// since the last update go out with it. The rates may have changed since (five second rule
+		// window end).
+		SettleRegeneration(GetAsyncTimeMs(), true);
 		UpdateRegenRateFields();
+
+		if (HasUnsentRegeneration())
+		{
+			if (WorldInstance* worldInstance = GetWorldInstance())
+			{
+				worldInstance->AddObjectUpdate(*this);
+			}
+		}
+	}
+
+	bool GameUnitS::HasUnsentRegeneration() const
+	{
+		if (!m_fields.IsFieldMarkedAsChanged(object_fields::Health))
+		{
+			for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+			{
+				if (m_fields.IsFieldMarkedAsChanged(object_fields::Mana + type))
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		return true;
 	}
 
 	namespace
@@ -3778,6 +3805,11 @@ namespace mmo
 
 	void GameUnitS::SettleRegeneration(const GameTime now)
 	{
+		SettleRegeneration(now, false);
+	}
+
+	void GameUnitS::SettleRegeneration(const GameTime now, const bool replicate)
+	{
 		if (now <= m_regenSettledAt)
 		{
 			return;
@@ -3797,7 +3829,7 @@ namespace mmo
 		if (const float rate = GetHealthRegenPerSecond(); rate != 0.0f)
 		{
 			const int64 health = ApplyRegeneration(GetHealth(), GetMaxHealth(), rate * seconds, m_regenRemainder[0]);
-			Set<uint32>(object_fields::Health, static_cast<uint32>(health));
+			Set<uint32>(object_fields::Health, static_cast<uint32>(health), replicate);
 		}
 
 		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
@@ -3825,7 +3857,7 @@ namespace mmo
 
 			const int64 power = ApplyRegeneration(Get<int32>(object_fields::Mana + type), Get<uint32>(object_fields::MaxMana + type),
 				gained, m_regenRemainder[1 + type]);
-			Set<int32>(object_fields::Mana + type, static_cast<int32>(power));
+			Set<int32>(object_fields::Mana + type, static_cast<int32>(power), replicate);
 		}
 
 		ScheduleRegenSync();
@@ -3864,7 +3896,7 @@ namespace mmo
 
 	void GameUnitS::ScheduleRegenSync() const
 	{
-		if (m_regenCountdown.IsRunning() || !IsRegenerationMoving())
+		if (m_regenCountdown.IsRunning() || (!IsRegenerationMoving() && !HasUnsentRegeneration()))
 		{
 			return;
 		}
