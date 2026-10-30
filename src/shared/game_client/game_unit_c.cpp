@@ -2145,8 +2145,14 @@ namespace mmo
 	void GameUnitC::SetRegenerationPrediction(const bool enabled)
 	{
 		m_predictRegeneration = enabled;
-		m_regenSyncConnection.disconnect();
-		if (!enabled)
+		m_regenSyncTime = GetAsyncTimeMs();
+	}
+
+	void GameUnitC::OnFieldsApplied()
+	{
+		GameObjectC::OnFieldsApplied();
+
+		if (!m_predictRegeneration)
 		{
 			return;
 		}
@@ -2154,18 +2160,26 @@ namespace mmo
 		// Anything that changes the synced value or the rate re-anchors the extrapolation. The
 		// server sends both one network latency late, so the prediction stays behind the server's
 		// exact value rather than ahead of it: a cast the prediction allows is never refused.
-		m_regenSyncTime = GetAsyncTimeMs();
-		m_regenSyncConnection = fieldsChanged.connect([this](uint64, const uint16 fieldIndex, const uint16 fieldCount)
+		// This has to happen before the fieldsChanged handlers run: they raise the UI events that
+		// read GetHealth / GetPower, and the new value extrapolated from the previous sync's time
+		// would show a whole sync interval of regeneration too much for a frame.
+		for (uint32 field = object_fields::MaxHealth; field <= object_fields::MaxEnergy; ++field)
 		{
-			const uint32 first = fieldIndex;
-			const uint32 last = fieldIndex + fieldCount - 1;
-			const bool resources = last >= object_fields::MaxHealth && first <= object_fields::MaxEnergy;
-			const bool rates = last >= object_fields::HealthRegen && first <= object_fields::PowerRegen + power_type::Energy;
-			if (resources || rates)
+			if (WasChanged(field))
 			{
 				m_regenSyncTime = GetAsyncTimeMs();
+				return;
 			}
-		});
+		}
+
+		for (uint32 field = object_fields::HealthRegen; field <= object_fields::PowerRegen + power_type::Energy; ++field)
+		{
+			if (WasChanged(field))
+			{
+				m_regenSyncTime = GetAsyncTimeMs();
+				return;
+			}
+		}
 	}
 
 	int64 GameUnitC::PredictRegeneration(const int64 value, const int64 maxValue, const float ratePerFiveSeconds) const

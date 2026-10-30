@@ -72,6 +72,8 @@ namespace mmo
 
 	void GameObjectC::HandleFieldMapChanges()
 	{
+		OnFieldsApplied();
+
 		uint32 fieldStartIndex = 0;
 		uint32 fieldCount = 0;
 
