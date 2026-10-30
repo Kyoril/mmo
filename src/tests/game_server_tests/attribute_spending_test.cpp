@@ -201,7 +201,7 @@ TEST_CASE("Item stat types map attribute ids into their own range", "[attributes
 	CHECK(item_stat::FromAttribute(3) == item_stat::AttributeStart + 3);
 	CHECK(item_stat::ToAttribute(item_stat::AttributeStart + 3) == 3);
 	CHECK(item_stat::ToAttribute(item_stat::Mana) == -1);
-	CHECK(item_stat::ToAttribute(item_stat::ExpertiseRating) == -1);
+	CHECK(item_stat::ToAttribute(31) == -1);	// former ExpertiseRating, retired
 
 	// Unused item stat slots carry type 255 (-1 as uint8)
 	CHECK(item_stat::ToAttribute(255) == -1);

@@ -77,24 +77,12 @@ Damage type: inspect `src/shared/game/damage_school.h`; physical is normally `0`
 
 Stat type:
 
-| Value | Name | Value | Name |
-|---:|---|---:|---|
-| 0 | Mana | 16 | CritSpellRating |
-| 1 | Health | 17 | HitTakenMeleeRating |
-| 2-6 | (retired, were attributes) | 18 | HitTakenRangedRating |
-| | | 19 | HitTakenSpellRating |
-| | | 20 | CritTakenMeleeRating |
-| | | 21 | CritTakenRangedRating |
-| | | 22 | CritTakenSpellRating |
-| 7 | DefenseSkillRating | 23 | HasteMeleeRating |
-| 8 | DodgeRating | 24 | HasteRangedRating |
-| 9 | ParryRating | 25 | HasteSpellRating |
-| 10 | BlockRating | 26 | HitRating |
-| 11 | HitMeleeRating | 27 | CritRating |
-| 12 | HitRangedRating | 28 | HitTakenRating |
-| 13 | HitSpellRating | 29 | CritTakenRating |
-| 14 | CritMeleeRating | 30 | HasteRating |
-| 15 | CritRangedRating | 31 | ExpertiseRating |
+| Value | Name |
+|---:|---|
+| 0 | Mana (adds to maximum mana) |
+| 1 | Health (adds to maximum health) |
+| 2-31 | retired: 2-6 were the hard-coded attributes, 7-31 combat ratings the server never applied |
+| 64 + attribute id | that attribute |
 
 Attribute stats are `64 + attribute id`, with the attribute ids of `data/editor/data/attributes.data`
 (shipped: 0 Stamina, 1 Strength, 2 Agility, 3 Intellect, 4 Spirit). So Stamina is 64, Strength 65,
