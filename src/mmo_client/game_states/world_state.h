@@ -35,6 +35,7 @@
 #include "world_deserializer.h"
 #include "world_render_settings.h"
 #include "systems/movement_client.h"
+#include "systems/combat_log_client.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
@@ -117,7 +118,8 @@ namespace mmo
 		: public GameState,
 		  public NetClient,
 		  public IPageLoaderListener,
-		  public IMovementClientListener
+		  public IMovementClientListener,
+		  public ICombatLogListener
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -189,7 +191,7 @@ namespace mmo
 		/// @param attackerGuid GUID of the unit that dealt the damage.
 		/// @param amount Damage amount applied.
 		/// @param isCritical True if the hit was a critical strike.
-		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical);
+		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical) override;
 
 		/// Recomputes the low-health combat vignette intensity from the controlled player's current
 		/// health, honoring the CombatVignette gameplay option.
@@ -425,22 +427,12 @@ namespace mmo
 
 		PacketParseResult OnAttackSwingError(game::IncomingPacket &packet);
 
-		PacketParseResult OnXpLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnSpellDamageLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket &packet);
-
 		/// @brief Plays a unit's aggro or death sound when a field update moved it into combat
 		///	or killed it.
 		/// @param unit The unit or player whose fields were just updated.
 		/// @param wasInCombat Whether the unit carried the combat flag before the update.
 		/// @param wasAlive Whether the unit had health left before the update.
 		void PlayUnitStateSounds(const GameObjectC& unit, bool wasInCombat, bool wasAlive);
-
-		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
 
 		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
 
@@ -452,13 +444,9 @@ namespace mmo
 
 		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 
-		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket &packet);
-
 		PacketParseResult OnActionButtons(game::IncomingPacket &packet);
 
 		PacketParseResult OnQuestGiverStatus(game::IncomingPacket &packet);
-
-		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket &packet);
 
 		PacketParseResult OnTransferPending(game::IncomingPacket &packet);
 
@@ -476,8 +464,6 @@ namespace mmo
 		PacketParseResult OnPartyPing(game::IncomingPacket &packet);
 
 		PacketParseResult OnRandomRollResult(game::IncomingPacket &packet);
-
-		PacketParseResult OnSpellHealLog(game::IncomingPacket &packet);
 
 		PacketParseResult OnItemPushResult(game::IncomingPacket &packet);
 
@@ -591,7 +577,7 @@ namespace mmo
 
 	private:
 		/// Adds a floating world text UI element with a duration to the world.
-		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration, WorldTextAnimation animation = WorldTextAnimation::Normal);
+		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration, WorldTextAnimation animation = WorldTextAnimation::Normal) override;
 
 		/// Adds a speech bubble which follows the speaking unit.
 		void AddChatBubble(ObjectGuid speakerGuid, ChatType chatType, const String& text);
@@ -823,6 +809,9 @@ namespace mmo
 
 		/// Handles the movement packets of all units and the controlled unit's movement states.
 		MovementClient m_movementClient;
+
+		/// Handles the combat log packets and their floating text, sounds and camera shake.
+		CombatLogClient m_combatLogClient;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;
