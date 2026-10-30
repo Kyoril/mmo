@@ -33,6 +33,7 @@
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
+#include "world_render_settings.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
@@ -231,57 +232,8 @@ namespace mmo
 
 		void OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue);
 
-		void OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the ShadowLightStep console variable changed.
-		void OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
-
 		/// @brief Called when the gxUnderwaterGodRays console variable changed.
 		void OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsao console variable changed.
-		void OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoQuality console variable changed.
-		void OnSsaoQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoHalfRes console variable changed.
-		void OnSsaoHalfResChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when any of the gxSsaoRadius / gxSsaoIntensity / gxSsaoThickness
-		///        console variables changed.
-		void OnSsaoParametersChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoDebug console variable changed.
-		void OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadows console variable changed.
-		void OnContactShadowsEnabledChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadowQuality console variable changed.
-		void OnContactShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when any of the gxContactShadowLength / gxContactShadowThickness /
-		///        gxContactShadowIntensity / gxContactShadowFade / gxContactShadowBias console
-		///        variables changed.
-		void OnContactShadowParametersChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadowDebug console variable changed.
-		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when gxAtmosphereQuality, gxVolumetricFogRange or gxAtmosphereDebug changed.
-		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when gxBloomQuality changed.
-		void OnBloomChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
@@ -878,6 +830,9 @@ namespace mmo
 		GuildClient &m_guildClient;
 		FriendClient &m_friendClient;
 		ChannelClient &m_channelClient;
+
+		/// Console variables that configure the world's deferred renderer.
+		WorldRenderSettings m_renderSettings;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;
