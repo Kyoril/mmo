@@ -15,6 +15,7 @@
 
 #include "player.h"
 #include "player_manager.h"
+#include "modules/bug_report_module.h"
 #include "vector_sink.h"
 #include "base/big_number.h"
 #include "base/constants.h"
@@ -1459,7 +1460,7 @@ namespace mmo
 
 		if (Player* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
 		{
-			player->SendBugReportResult(static_cast<game::BugReportResult>(result));
+			SendBugReportResult(*player, static_cast<game::BugReportResult>(result));
 		}
 
 		return PacketParseResult::Pass;

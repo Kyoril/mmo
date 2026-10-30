@@ -316,6 +316,35 @@ namespace mmo
 			return g_runtime->session->GetRealm().GetSubsystemStatusPacketCount();
 		}
 
+		int32 luaLastFriendCommandResult()
+		{
+			return g_runtime->session->GetRealm().GetLastFriendCommandResult();
+		}
+
+		void luaClearLastFriendCommandResult()
+		{
+			g_runtime->session->GetRealm().ClearLastFriendCommandResult();
+		}
+
+		uint32 luaFriendListUpdateCount()
+		{
+			return g_runtime->session->GetRealm().GetFriendListUpdateCount();
+		}
+
+		void luaFriendInvite(const std::string& name)
+		{
+			g_runtime->session->GetRealm().FriendInvite(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("FriendInvite", { { "name", name } });
+			}
+		}
+
+		void luaRequestFriendList()
+		{
+			g_runtime->session->GetRealm().RequestFriendList();
+		}
+
 		std::string luaLastBugReportResult()
 		{
 			return g_runtime->session->GetRealm().GetLastBugReportResult();
@@ -1709,6 +1738,11 @@ namespace mmo
 				luabind::def_lambda("ClearLastBugReportResult", &luaClearLastBugReportResult),
 				luabind::def_lambda("SubmitBugReport", &luaSubmitBugReport),
 				luabind::def_lambda("NewestBugReportFile", &luaNewestBugReportFile),
+				luabind::def_lambda("LastFriendCommandResult", &luaLastFriendCommandResult),
+				luabind::def_lambda("ClearLastFriendCommandResult", &luaClearLastFriendCommandResult),
+				luabind::def_lambda("FriendListUpdateCount", &luaFriendListUpdateCount),
+				luabind::def_lambda("FriendInvite", &luaFriendInvite),
+				luabind::def_lambda("RequestFriendList", &luaRequestFriendList),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 

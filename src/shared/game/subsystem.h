@@ -20,6 +20,9 @@ namespace mmo
 				/// In-game bug reports. Owned by the world node that hosts the player.
 				BugReport = 0,
 
+				/// The friend list. Owned by the realm.
+				Friends = 1,
+
 				Count_
 			};
 		}
@@ -65,6 +68,7 @@ namespace mmo
 		inline constexpr std::array<SubsystemInfo, subsystem::Count_> SubsystemTable =
 		{{
 			{ subsystem::BugReport, "BUG_REPORT", subsystem_owner::World },
+			{ subsystem::Friends, "FRIENDS", subsystem_owner::Realm },
 		}};
 
 		/// Returns the script name of a subsystem ("BUG_REPORT"), or an empty string if unknown.
