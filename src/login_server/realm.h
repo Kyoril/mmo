@@ -132,6 +132,10 @@ namespace mmo
 		Countdown m_pingTimeoutCountdown;
 		scoped_connection m_pingTimeoutConnection;
 
+		/// Whether this realm link has already been torn down. Only ever touched on the
+		/// connection's strand. See Destroy() for why a second teardown is reachable.
+		bool m_destroyed = false;
+
 	private:
 		BigNumber m_sessionKey;
 		BigNumber m_s, m_v;
