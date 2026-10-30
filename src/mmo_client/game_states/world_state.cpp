@@ -180,43 +180,7 @@ namespace mmo
 		static ConsoleVar *s_debugOutputPathVar = nullptr;
 
 		static ConsoleVar *s_renderShadowsVar = nullptr;
-
-		static ConsoleVar *s_depthBiasVar = nullptr;
-		static ConsoleVar *s_slopeDepthBiasVar = nullptr;
-		static ConsoleVar *s_clampDepthBiasVar = nullptr;
-		static ConsoleVar *s_shadowTextureSizeVar = nullptr;
-		static ConsoleVar *s_shadowQualityVar = nullptr;
-		static ConsoleVar *s_shadowTemporalVar = nullptr;
-		static ConsoleVar *s_shadowLightStepVar = nullptr;
-
-		static ConsoleVar *s_ssaoVar = nullptr;
-		static ConsoleVar *s_ssaoQualityVar = nullptr;
-		static ConsoleVar *s_ssaoHalfResVar = nullptr;
-		static ConsoleVar *s_ssaoRadiusVar = nullptr;
-		static ConsoleVar *s_ssaoIntensityVar = nullptr;
-		static ConsoleVar *s_ssaoThicknessVar = nullptr;
-		static ConsoleVar *s_ssaoDebugVar = nullptr;
-
-		static ConsoleVar *s_contactShadowsVar = nullptr;
 		static ConsoleVar *s_underwaterGodRaysVar = nullptr;
-		static ConsoleVar *s_contactShadowQualityVar = nullptr;
-		static ConsoleVar *s_contactShadowLengthVar = nullptr;
-		static ConsoleVar *s_contactShadowThicknessVar = nullptr;
-		static ConsoleVar *s_contactShadowIntensityVar = nullptr;
-		static ConsoleVar *s_contactShadowFadeVar = nullptr;
-		static ConsoleVar *s_contactShadowBiasVar = nullptr;
-		static ConsoleVar *s_contactShadowDebugVar = nullptr;
-		static ConsoleVar *s_atmosphereQualityVar = nullptr;
-		static ConsoleVar *s_volumetricFogRangeVar = nullptr;
-		static ConsoleVar *s_volumetricFogHistoryVar = nullptr;
-		static ConsoleVar *s_atmosphereDebugVar = nullptr;
-		static ConsoleVar *s_bloomQualityVar = nullptr;
-		static ConsoleVar *s_exposureVar = nullptr;
-
-		static ConsoleVar *s_renderScaleVar = nullptr;
-
-		static ConsoleVar *s_depthPrepassVar = nullptr;
-	static ConsoleVar *s_shadowDistanceVar = nullptr;
 
 		static ConsoleVar *s_viewDistanceVar = nullptr;
 
@@ -376,26 +340,6 @@ namespace mmo
 
 			return prefix + keyName;
 		}
-
-		/// Builds the attacker side of the combat sound context from a live unit.
-		CombatSoundAttacker makeCombatAttacker(const GameUnitC& unit, const bool offhand)
-		{
-			CombatSoundAttacker attacker;
-			attacker.weaponSubclass = unit.GetWeaponItemSubclass(offhand);
-			attacker.displayId = unit.Get<uint32>(object_fields::DisplayId);
-			return attacker;
-		}
-
-		/// Builds the victim side of the combat sound context from a live unit.
-		CombatSoundVictim makeCombatVictim(const GameUnitC& unit)
-		{
-			CombatSoundVictim victim;
-			victim.mainHandSubclass = unit.GetWeaponItemSubclass(false);
-			victim.offHandSubclass = unit.GetWeaponItemSubclass(true);
-			victim.chestSubclass = unit.GetChestItemSubclass();
-			victim.displayId = unit.Get<uint32>(object_fields::DisplayId);
-			return victim;
-		}
 	}
 
 	IInputControl *WorldState::s_inputControl = nullptr;
@@ -430,6 +374,8 @@ namespace mmo
 		, m_charSelect(charSelect)
 		, m_guildClient(guildClient)
 		, m_friendClient(friendClient)
+		, m_movementClient(realmConnector)
+		, m_combatLogClient(realmConnector, project, m_combatSoundPlayer)
 		, m_discord(discord)
 		, m_talentClient(talentClient)
 		, m_minimap(minimap)
@@ -2179,26 +2125,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CompressedUpdateObject, *this, &WorldState::OnCompressedUpdateObject);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DestroyObjects, *this, &WorldState::OnDestroyObjects);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartForward, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartBackward, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStop, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeLeft, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartStrafeRight, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopStrafe, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnLeft, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartTurnRight, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopTurn, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveHeartBeat, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveJump, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFallLand, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartSwim, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopSwim, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStartWalk, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStopWalk, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveEnded, *this, &WorldState::OnMovement);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSplineDone, *this, &WorldState::OnMovement);
-
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ChatMessage, *this, &WorldState::OnChatMessage);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NameQueryResult, *this, &WorldState::OnNameQueryResult);
 
@@ -2211,8 +2137,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkills, *this, &WorldState::OnTradeSkills);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TradeSkillUpdate, *this, &WorldState::OnTradeSkillUpdate);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ClassXpUpdate, *this, &WorldState::OnClassXpUpdate);
-
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CreatureMove, *this, &WorldState::OnCreatureMove);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnlearnedSpell, *this, &WorldState::OnSpellLearnedOrUnlearned);
@@ -2228,11 +2152,6 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackStop, *this, &WorldState::OnAttackStop);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackSwingError, *this, &WorldState::OnAttackSwingError);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::XpLog, *this, &WorldState::OnXpLog);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellDamageLog, *this, &WorldState::OnSpellDamageLog);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &WorldState::OnNonSpellDamageLog);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::EnvironmentalDamageLog, *this, &WorldState::OnLogEnvironmentalDamage);
-
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::UnitVisibilityList, *this, &WorldState::OnUnitVisibilityList);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::StealthDetected, *this, &WorldState::OnStealthDetected);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PlaySoundById, *this, &WorldState::OnPlaySoundById);
@@ -2244,34 +2163,13 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemQueryResult, *this, &WorldState::OnItemQueryResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ObjectQueryResult, *this, &WorldState::OnObjectQueryResult);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetWalkSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetRunBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetSwimBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceMoveSetTurnRate, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ForceSetFlightBackSpeed, *this, &WorldState::OnForceMovementSpeedChange);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &WorldState::OnMoveTeleport);
-
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetWalkSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetRunBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetSwimBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSetTurnRate, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightSpeed, *this, &WorldState::OnMovementSpeedChanged);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &WorldState::OnMovementSpeedChanged);
-
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LevelUp, *this, &WorldState::OnLevelUp);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CharacterPointsReset, *this, &WorldState::OnCharacterPointsReset);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::InstanceResetResult, *this, &WorldState::OnInstanceResetResult);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AuraUpdate, *this, &WorldState::OnAuraUpdate);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &WorldState::OnPeriodicAuraLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ActionButtons, *this, &WorldState::OnActionButtons);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::QuestGiverStatus, *this, &WorldState::OnQuestGiverStatus);
 
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellEnergizeLog, *this, &WorldState::OnSpellEnergizeLog);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TransferPending, *this, &WorldState::OnTransferPending);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ItemPushResult, *this, &WorldState::OnItemPushResult);
@@ -2283,19 +2181,10 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::PartyPing, *this, &WorldState::OnPartyPing);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::RandomRollResult, *this, &WorldState::OnRandomRollResult);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &WorldState::OnAttackerStateUpdate);
-
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellHealLog, *this, &WorldState::OnSpellHealLog);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::LogoutResponse, *this, &WorldState::OnLogoutResponse);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MessageOfTheDay, *this, &WorldState::OnMessageOfTheDay);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &WorldState::OnShutdownCountdown);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveRoot, *this, &WorldState::OnMoveRoot);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveStun, *this, &WorldState::OnMoveStun);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveSleep, *this, &WorldState::OnMoveSleep);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveFear, *this, &WorldState::OnMoveFear);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveDisorient, *this, &WorldState::OnMoveDisorient);
-		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::MoveCharge, *this, &WorldState::OnMoveCharge);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &WorldState::OnGameTimeInfo);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SetProficiency, *this, &WorldState::OnSetProficiency);
 
@@ -2318,6 +2207,8 @@ namespace mmo
 		m_talentClient.Initialize();
 		m_inventoryClient.Initialize();
 		m_tradeClient.Initialize();
+		m_movementClient.Initialize(*m_playerController, *this);
+		m_combatLogClient.Initialize(*m_playerController, *this);
 		if (ClientContext& context = GetClientContext(); context.subsystemClient && context.bugReportClient)
 		{
 			context.subsystemClient->Initialize();
@@ -2421,6 +2312,8 @@ namespace mmo
 #endif
 		Console::UnregisterCommand("shutdown");
 
+		m_combatLogClient.Shutdown();
+		m_movementClient.Shutdown();
 		m_tradeClient.Shutdown();
 		m_inventoryClient.Shutdown();
 		m_talentClient.Shutdown();
@@ -2479,124 +2372,10 @@ namespace mmo
 		s_renderShadowsVar = ConsoleVarMgr::RegisterConsoleVar("RenderShadows", "Determines whether or not shadows should be rendered", "1");
 		m_cvarChangedSignals += s_renderShadowsVar->Changed.connect(this, &WorldState::OnRenderShadowsChanged);
 
-		s_depthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowDepthBias", "", "138.6");
-		m_cvarChangedSignals += s_depthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_slopeDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowSlopeBias", "", "0.1");
-		m_cvarChangedSignals += s_slopeDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-		s_clampDepthBiasVar = ConsoleVarMgr::RegisterConsoleVar("ShadowClampBias", "", "0.0");
-		m_cvarChangedSignals += s_clampDepthBiasVar->Changed.connect(this, &WorldState::OnShadowBiasChanged);
-
-		s_shadowTextureSizeVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTextureSize", "Shadow map resolution per cascade: 0 = 512, 1 = 1024, 2 = 2048, 3 = 4096. Higher values sharpen shadows at the cost of GPU memory and shadow-pass fill rate.", "2");
-		m_cvarChangedSignals += s_shadowTextureSizeVar->Changed.connect(this, &WorldState::OnShadowTextureSizeChanged);
-
-		s_shadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("ShadowQuality", "Shadow detail preset: 0 = Low (2 cascades, 4 PCF taps), 1 = Medium (3/8), 2 = High (4/16). Lower values improve performance.", "2");
-		m_cvarChangedSignals += s_shadowQualityVar->Changed.connect(this, &WorldState::OnShadowQualityChanged);
-
-		// Applied together with the shadow quality, which has the renderer lookup and the logging.
-		s_shadowDistanceVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowDistance", "How far sun shadows reach from the camera in metres (50 to 1000). Shorter is faster in forests and sharpens nearby shadows.", "250");
-		m_cvarChangedSignals += s_shadowDistanceVar->Changed.connect([this](ConsoleVar&, const std::string& oldValue) { OnShadowQualityChanged(*s_shadowQualityVar, oldValue); });
-
-		s_shadowTemporalVar = ConsoleVarMgr::RegisterConsoleVar("ShadowTemporal", "Temporal cascade staggering: 1 = distant cascades refresh every few frames (faster), 0 = every cascade every frame.", "1");
-		m_cvarChangedSignals += s_shadowTemporalVar->Changed.connect(this, &WorldState::OnShadowTemporalChanged);
-
-		s_shadowLightStepVar = ConsoleVarMgr::RegisterConsoleVar("ShadowLightStep", "Sun-shadow direction quantization step in degrees. Shadows hold perfectly still until the day/night sun has moved this far, then jump once; prevents distant shadow flicker. 0 = track the sun continuously.", "0.35");
-		m_cvarChangedSignals += s_shadowLightStepVar->Changed.connect(this, &WorldState::OnShadowLightStepChanged);
-
-		// Internal 3D render-scale: the world is rendered at this fraction of the frame size and then
-		// upscaled. 1.0 = native; lower values trade sharpness for a large performance gain on weak
-		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
-		s_renderScaleVar = ConsoleVarMgr::RegisterConsoleVar("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
-
-		s_depthPrepassVar = ConsoleVarMgr::RegisterConsoleVar("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1");
-		m_cvarChangedSignals += s_depthPrepassVar->Changed.connect(this, &WorldState::OnDepthPrepassChanged);
-
-		// Screen-space ambient occlusion (visibility-bitmask / SSILVB occlusion core). All
-		// distances are world units; 1 unit = 1 metre.
-		s_ssaoVar = ConsoleVarMgr::RegisterConsoleVar("gxSsao", "Screen-space ambient occlusion. 1 = on, 0 = off.", "1");
-		m_cvarChangedSignals += s_ssaoVar->Changed.connect(this, &WorldState::OnSsaoEnabledChanged);
-
-		s_ssaoQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoQuality", "SSAO detail preset: 0 = Low (2 slices, 4 steps), 1 = Medium (3/8), 2 = High (4/12). Lower values improve performance.", "2");
-		m_cvarChangedSignals += s_ssaoQualityVar->Changed.connect(this, &WorldState::OnSsaoQualityChanged);
-
-		s_ssaoHalfResVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoHalfRes", "Compute SSAO at half resolution and upscale. 1 = on (faster), 0 = full resolution (sharper).", "1");
-		m_cvarChangedSignals += s_ssaoHalfResVar->Changed.connect(this, &WorldState::OnSsaoHalfResChanged);
-
-		s_ssaoRadiusVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoRadius", "SSAO sampling radius in world units (metres). Larger values need a higher gxSsaoQuality to avoid banding.", "0.75");
-		m_cvarChangedSignals += s_ssaoRadiusVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
-
-		s_ssaoIntensityVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoIntensity", "SSAO strength multiplier. Higher values darken occluded areas more.", "1.0");
-		m_cvarChangedSignals += s_ssaoIntensityVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
-
-		s_ssaoThicknessVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoThickness", "Assumed occluder thickness in world units (metres). Too low leaks light through solid geometry; too high makes thin objects occlude like walls.", "0.25");
-		m_cvarChangedSignals += s_ssaoThicknessVar->Changed.connect(this, &WorldState::OnSsaoParametersChanged);
-
-		s_ssaoDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxSsaoDebug", "Visualize the raw SSAO term instead of the lit scene. 1 = on, 0 = off.", "0");
-		m_cvarChangedSignals += s_ssaoDebugVar->Changed.connect(this, &WorldState::OnSsaoDebugChanged);
-
-		// Screen-space contact shadows, marched inline in the deferred lighting pass. All distances
-		// are world units; 1 unit = 1 metre.
-		s_contactShadowsVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadows", "Screen-space contact shadows for the sun. Adds the short, sharp shadows where objects meet surfaces that shadow maps are too coarse to resolve. 1 = on, 0 = off.", "1");
-		m_cvarChangedSignals += s_contactShadowsVar->Changed.connect(this, &WorldState::OnContactShadowsEnabledChanged);
+		m_renderSettings.Register();
 
 		s_underwaterGodRaysVar = ConsoleVarMgr::RegisterConsoleVar("gxUnderwaterGodRays", "Sun shafts while submerged. The most expensive part of the underwater effect; everything else stays on when this is off. 1 = on, 0 = off.", "1");
 		m_cvarChangedSignals += s_underwaterGodRaysVar->Changed.connect(this, &WorldState::OnUnderwaterGodRaysChanged);
-
-		s_contactShadowQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowQuality", "Contact shadow detail preset: 0 = Low (4 steps), 1 = Medium (8), 2 = High (16). Lower values improve performance.", "1");
-		m_cvarChangedSignals += s_contactShadowQualityVar->Changed.connect(this, &WorldState::OnContactShadowQualityChanged);
-
-		s_contactShadowLengthVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowLength", "Contact shadow ray length in world units (metres). Longer rays catch more distant contacts but cost more and grow noisier at a given gxContactShadowQuality.", "0.3");
-		m_cvarChangedSignals += s_contactShadowLengthVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
-
-		s_contactShadowThicknessVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowThickness", "Assumed occluder thickness in world units (metres). Too low and solid objects stop occluding; too high and distant background geometry shadows the foreground.", "0.2");
-		m_cvarChangedSignals += s_contactShadowThicknessVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
-
-		s_contactShadowIntensityVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowIntensity", "Contact shadow strength, from 0 to 1. 1 = a hit shadows fully.", "1.0");
-		m_cvarChangedSignals += s_contactShadowIntensityVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
-
-		s_contactShadowFadeVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowFade", "Distance in world units (metres) at which contact shadows finish fading out. They are unreliable beyond this because the G-Buffer stores depth at half-float precision.", "35");
-		m_cvarChangedSignals += s_contactShadowFadeVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
-
-		s_contactShadowBiasVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowBias", "Contact shadow normal bias in world units (metres). Raise if surfaces shadow themselves, which shows up as a grey wash or moire under gxContactShadowDebug.", "0.02");
-		m_cvarChangedSignals += s_contactShadowBiasVar->Changed.connect(this, &WorldState::OnContactShadowParametersChanged);
-
-		s_contactShadowDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxContactShadowDebug", "Visualize the raw contact shadow term instead of the lit scene. Healthy is near-white with thin dark bands at contacts. 1 = on, 0 = off.", "0");
-		m_cvarChangedSignals += s_contactShadowDebugVar->Changed.connect(this, &WorldState::OnContactShadowDebugChanged);
-
-		// Height fog, light shafts and bloom quality. The look itself (fog, shafts, exposure, bloom
-		// strength) comes from the zone's environment profile.
-		s_atmosphereQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereQuality", "Volumetric fog quality: 0 = Off (smooth height fog only), 1 = Low (24 px cells, 32 slices), 2 = Medium (16 px, 48), 3 = High (12 px, 64), 4 = Ultra (8 px, 96).", "3");
-		m_cvarChangedSignals += s_atmosphereQualityVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-
-		s_volumetricFogRangeVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogRange", "How many metres in front of the camera the volumetric fog covers (50 to 300, the shadow range). Fog beyond uses a smooth closed-form estimate.", "200");
-		m_cvarChangedSignals += s_volumetricFogRangeVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		s_volumetricFogHistoryVar = ConsoleVarMgr::RegisterConsoleVar("gxVolumetricFogHistory", "How much of the previous frame the volumetric fog keeps (0 to 0.95). Higher values smooth out sampling noise and aliasing; lower values react faster and stay sharper while the camera moves. 0 (default) disables the history: the fog is then a pure function of the camera pose.", "0");
-		m_cvarChangedSignals += s_volumetricFogHistoryVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-		m_cvarChangedSignals += ConsoleVarMgr::RegisterConsoleVar("gxFogSunMode", "Volumetric fog sun filtering: 0 box filter (fixed taps, no history), 1 temporal (one blue-noise jittered tap, clamped history, fog shadow map), 2 temporal with the surface cascades.", "0")->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-
-		s_atmosphereDebugVar = ConsoleVarMgr::RegisterConsoleVar("gxAtmosphereDebug", "Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block.", "0");
-		m_cvarChangedSignals += s_atmosphereDebugVar->Changed.connect(this, &WorldState::OnAtmosphereRenderingChanged);
-
-		s_bloomQualityVar = ConsoleVarMgr::RegisterConsoleVar("gxBloomQuality", "Bloom quality: 0 = Off, 1 = Low (quarter resolution, 4 levels), 2 = High (half resolution, 6 levels).", "2");
-		m_cvarChangedSignals += s_bloomQualityVar->Changed.connect(this, &WorldState::OnBloomChanged);
-
-		s_exposureVar = ConsoleVarMgr::RegisterConsoleVar("gxExposure", "Player brightness: multiplies the zone's environment exposure before tone mapping (0.5 to 2 in Options).", "1.0");
-
-		// Profiling aids: hide whole kinds of objects from the camera view or from the shadow maps to
-		// measure what they cost (compare benchmark runs with and without).
-		ConsoleVar* hideViewTypesVar = ConsoleVarMgr::RegisterConsoleVar("gxDebugHideViewTypes", "Debug: comma separated movable types not rendered in the camera view (Tile, TerrainBatch, FarPage, FoliageChunk, InstancedFoliageChunk, Entity, WorldModelInstance, WorldModelBatch).", "");
-		ConsoleVar* hideShadowTypesVar = ConsoleVarMgr::RegisterConsoleVar("gxDebugHideShadowTypes", "Debug: comma separated movable types not rendered into shadow maps (see gxDebugHideViewTypes).", "");
-		m_cvarChangedSignals += hideViewTypesVar->Changed.connect([](ConsoleVar& var, const std::string&) { RenderDebugFilter::hiddenInView = RenderDebugFilter::Parse(var.GetStringValue()); });
-		m_cvarChangedSignals += hideShadowTypesVar->Changed.connect([](ConsoleVar& var, const std::string&) { RenderDebugFilter::hiddenInShadows = RenderDebugFilter::Parse(var.GetStringValue()); });
-		ConsoleVar* foliageCullingVar = ConsoleVarMgr::RegisterConsoleVar("gxFoliageInstanceCulling", "Cull grass and tree instances individually per render pass instead of drawing whole foliage cells. 1 = on (faster), 0 = off.", "1");
-		m_cvarChangedSignals += foliageCullingVar->Changed.connect([](ConsoleVar& var, const std::string&) { FoliageChunk::SetPerInstanceCullingEnabled(var.GetBoolValue()); });
-		FoliageChunk::SetPerInstanceCullingEnabled(foliageCullingVar->GetBoolValue());
-
-		ConsoleVar* shadowAlphaTestVar = ConsoleVarMgr::RegisterConsoleVar("gxShadowAlphaTest", "Alpha test cut-out materials (leaves, grass) in shadow maps. 0 renders them as solid shapes: much faster in forests, but leaves cast blocky shadows.", "1");
-		m_cvarChangedSignals += shadowAlphaTestVar->Changed.connect([](ConsoleVar& var, const std::string&) { GraphicsDevice::Get().SetAlphaTestedShadows(var.GetBoolValue()); });
-		GraphicsDevice::Get().SetAlphaTestedShadows(shadowAlphaTestVar->GetBoolValue());
-
-		RenderDebugFilter::hiddenInView = RenderDebugFilter::Parse(hideViewTypesVar->GetStringValue());
-		RenderDebugFilter::hiddenInShadows = RenderDebugFilter::Parse(hideShadowTypesVar->GetStringValue());
 
 		// Distance (world units) beyond which authored instanced foliage (trees, bushes, rocks) is
 		// culled. Lower values cut the overdraw from dense forests. Read each frame in OnIdle, so no
@@ -2716,69 +2495,17 @@ namespace mmo
 				m_scene->FreezeRendering(!m_scene->IsRenderingFrozen());
 				ILOG(m_scene->IsRenderingFrozen() ? "Culling is now frozen" : "Culling is no longer frozen"); }, ConsoleCommandCategory::Debug, "Toggles culling.");
 
-		OnShadowTextureSizeChanged(*s_shadowTextureSizeVar, "");
-		OnShadowQualityChanged(*s_shadowQualityVar, "");
-		OnShadowTemporalChanged(*s_shadowTemporalVar, "");
-		OnShadowLightStepChanged(*s_shadowLightStepVar, "");
-		OnDepthPrepassChanged(*s_depthPrepassVar, "");
 		OnRenderShadowsChanged(*s_renderShadowsVar, "");
-		OnShadowBiasChanged(*s_depthBiasVar, "");
 		OnFoliageEnabledChanged(*s_foliageEnabledVar, "");
 		OnFoliageDensityChanged(*s_foliageDensityVar, "");
-		OnSsaoEnabledChanged(*s_ssaoVar, "");
-		OnSsaoQualityChanged(*s_ssaoQualityVar, "");
-		OnSsaoHalfResChanged(*s_ssaoHalfResVar, "");
-		OnSsaoParametersChanged(*s_ssaoRadiusVar, "");
-		OnSsaoDebugChanged(*s_ssaoDebugVar, "");
-		OnContactShadowsEnabledChanged(*s_contactShadowsVar, "");
 		OnUnderwaterGodRaysChanged(*s_underwaterGodRaysVar, "");
-		OnContactShadowQualityChanged(*s_contactShadowQualityVar, "");
-		OnContactShadowParametersChanged(*s_contactShadowLengthVar, "");
-		OnContactShadowDebugChanged(*s_contactShadowDebugVar, "");
-		OnAtmosphereRenderingChanged(*s_atmosphereQualityVar, "");
-		OnBloomChanged(*s_bloomQualityVar, "");
 	}
 
 	void WorldState::RemoveGameplayCommands()
 	{
 		ConsoleVarMgr::UnregisterConsoleVar("DebugTargetPath");
 		ConsoleVarMgr::UnregisterConsoleVar("RenderShadows");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowDepthBias");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowSlopeBias");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowClampBias");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowTextureSize");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxShadowDistance");
-		ConsoleVarMgr::UnregisterConsoleVar("gxShadowAlphaTest");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFoliageInstanceCulling");
-		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideViewTypes");
-		ConsoleVarMgr::UnregisterConsoleVar("gxDebugHideShadowTypes");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowTemporal");
-		ConsoleVarMgr::UnregisterConsoleVar("ShadowLightStep");
-		ConsoleVarMgr::UnregisterConsoleVar("gxRenderScale");
-		ConsoleVarMgr::UnregisterConsoleVar("gxDepthPrepass");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsao");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoHalfRes");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoRadius");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoIntensity");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoThickness");
-		ConsoleVarMgr::UnregisterConsoleVar("gxSsaoDebug");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadows");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowLength");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowThickness");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowIntensity");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowFade");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowBias");
-		ConsoleVarMgr::UnregisterConsoleVar("gxContactShadowDebug");
-		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogRange");
-		ConsoleVarMgr::UnregisterConsoleVar("gxVolumetricFogHistory");
-		ConsoleVarMgr::UnregisterConsoleVar("gxFogSunMode");
-		ConsoleVarMgr::UnregisterConsoleVar("gxAtmosphereDebug");
-		ConsoleVarMgr::UnregisterConsoleVar("gxBloomQuality");
-		ConsoleVarMgr::UnregisterConsoleVar("gxExposure");
+		m_renderSettings.Unregister();
 		ConsoleVarMgr::UnregisterConsoleVar("ViewDistance");
 		ConsoleVarMgr::UnregisterConsoleVar("TerrainFarRadius");
 		ConsoleVarMgr::UnregisterConsoleVar("StreamingBudgetMs");
@@ -3591,44 +3318,6 @@ namespace mmo
 		}
 	}
 
-	PacketParseResult WorldState::OnMovement(game::IncomingPacket &packet)
-	{
-		uint64 characterGuid;
-		MovementInfo movementInfo;
-		if (!(packet >> io::read<uint64>(characterGuid) >> movementInfo))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		const auto unitPtr = ObjectMgr::Get<GameUnitC>(characterGuid);
-		if (!unitPtr)
-		{
-			WLOG("Received movement packet for unknown unit " << log_hex_digit(characterGuid));
-			return PacketParseResult::Pass;
-		}
-
-		if (ObjectMgr::GetActivePlayerGuid() != characterGuid)
-		{
-			// Route all movement to the dead-reckoning renderer.
-			// MoveSetFacing and MoveStopTurn are treated as facing-only updates
-			// (no position extrapolation reset) — the renderer handles this distinction.
-			const uint16 opcode = packet.GetId();
-			const bool facingOnly =
-			    opcode == game::realm_client_packet::MoveSetFacing;
-
-			if (facingOnly)
-			{
-				unitPtr->ApplyRemoteFacing(movementInfo.facing);
-			}
-			else
-			{
-				unitPtr->EnqueueRemoteMovement(movementInfo);
-			}
-		}
-
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnChatMessage(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
@@ -4084,104 +3773,6 @@ namespace mmo
 	// raw floats (3 × float) instead of the old lossy 11/10-bit packed uint32 format.
 	// The packed format silently overflowed for routes longer than ~256 world-units
 	// from the (start+end)/2 midpoint, corrupting every waypoint on long NPC routes.
-
-	PacketParseResult WorldState::OnCreatureMove(game::IncomingPacket &packet)
-	{
-		std::vector<Vector3> path;
-
-		uint64 guid;
-		Vector3 startPosition;
-		Vector3 endPosition;
-		GameTime startTime;
-		GameTime endTime;
-		uint32 pathSize;
-		std::optional<Radian> targetRotation;
-		UnitMovementMode movementMode = unit_movement_mode::Run;
-
-		if (!(packet >> io::read_packed_guid(guid) >> io::read<float>(startPosition.x) >> io::read<float>(startPosition.y) >> io::read<float>(startPosition.z) >> io::read<GameTime>(startTime) >> io::read<GameTime>(endTime) >> io::read<uint32>(pathSize) >> io::read<float>(endPosition.x) >> io::read<float>(endPosition.y) >> io::read<float>(endPosition.z)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		uint8 hasTargetRotation;
-		if (!(packet >> io::read<uint8>(hasTargetRotation)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		if (hasTargetRotation)
-		{
-			float rotation;
-			if (!(packet >> io::read<float>(rotation)))
-			{
-				return PacketParseResult::Disconnect;
-			}
-
-			targetRotation = Radian(rotation);
-		}
-
-		uint8 rawMovementMode = unit_movement_mode::Run;
-		if (!(packet >> io::read<uint8>(rawMovementMode)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		if (rawMovementMode < unit_movement_mode::Count_)
-		{
-			movementMode = static_cast<UnitMovementMode>(rawMovementMode);
-		}
-
-		// Find unit by guid
-		const auto unitPtr = ObjectMgr::Get<GameUnitC>(guid);
-		if (!unitPtr)
-		{
-			// We don't know the unit
-			WLOG("Received movement packet for unknown unit id " << log_hex_digit(guid));
-			return PacketParseResult::Pass;
-		}
-
-		path.push_back(startPosition);
-
-		const bool isPlayer = unitPtr->GetTypeId() == ObjectTypeId::Player;
-		(void)isPlayer;
-
-		// Read intermediate waypoints written as raw floats.
-		// pathSize = total waypoints not counting startPosition; endPosition is #1.
-		// So there are (pathSize - 1) intermediate points to read.
-		// Previously this used a lossy 11/10-bit packed format relative to the
-		// route midpoint, which overflowed for long multi-waypoint NPC routes.
-		if (pathSize > 1)
-		{
-			for (uint32 i = 1; i < pathSize; ++i)  // pathSize-1 iterations (was pathSize-2, off by one)
-			{
-				Vector3 p;
-				if (!(packet >> io::read<float>(p.x) >> io::read<float>(p.y) >> io::read<float>(p.z)))
-				{
-					return PacketParseResult::Disconnect;
-				}
-
-				path.push_back(p);
-			}
-		}
-
-		path.push_back(endPosition);
-
-		// Check whether we should update the output debug path
-		if (guid == ObjectMgr::GetSelectedObjectGuid())
-		{
-			if (m_debugPathVisualizer)
-			{
-				if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
-				{
-					m_debugPathVisualizer->ShowPath(path);
-				}
-			}
-		}
-
-		unitPtr->SetMovementPath(path, endTime - startTime, targetRotation, movementMode);
-
-		return PacketParseResult::Pass;
-	}
 
 	PacketParseResult WorldState::OnTradeSkills(game::IncomingPacket &packet)
 	{
@@ -4739,169 +4330,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnXpLog(game::IncomingPacket &packet)
-	{
-		uint32 xp;
-		if (!(packet >> io::read<uint32>(xp)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// Find unit
-		std::shared_ptr<GamePlayerC> target = ObjectMgr::GetActivePlayer();
-		if (target)
-		{
-			AddWorldTextFrame(target->GetPosition(), std::to_string(xp) + " XP", Color(1.0f, 0.0f, 0.85f, 1.0f), 2.0f);
-		}
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnSpellDamageLog(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid;
-		uint32 amount;
-		SpellSchool school;
-		uint8 flags;
-		uint32 spellId;
-		uint32 blocked;
-
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(school) >> io::read<uint8>(flags) >> io::read<uint32>(blocked)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		String spellName = "Unknown";
-		if (const auto *spell = m_project.spells.getById(spellId))
-		{
-			spellName = GetLocalizedString(spell->name(), spell->name_loc(), GetClientLocale());
-			if (spell->rank() > 0)
-			{
-				spellName += " (Rank " + std::to_string(spell->rank()) + ")";
-			}
-		}
-
-		String damageSchoolNameString;
-		switch (school)
-		{
-		case SpellSchool::Arcane:
-			damageSchoolNameString = "Arcane";
-			break;
-		case spell_school::Fire:
-			damageSchoolNameString = "Fire";
-			break;
-		case spell_school::Frost:
-			damageSchoolNameString = "Frost";
-			break;
-		case spell_school::Holy:
-			damageSchoolNameString = "Holy";
-			break;
-		case spell_school::Nature:
-			damageSchoolNameString = "Nature";
-			break;
-		case spell_school::Shadow:
-			damageSchoolNameString = "Shadow";
-			break;
-		case spell_school::Normal:
-			damageSchoolNameString = "Physical";
-			break;
-		}
-
-		// Find unit
-		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-		if (target)
-		{
-			// If the target was immune to this spell's damage school, show a localized "Immune"
-			// text instead of a damage number.
-			if (flags & damage_flags::Immune)
-			{
-				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
-			}
-			else if (blocked > 0 && amount == 0)
-			{
-				// The block fully absorbed the ability damage.
-				AddWorldTextFrame(target->GetPosition(), Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED"), Color(1.0f, 1.0f, 0.0f, 1.0f), 2.0f);
-			}
-			else if (blocked > 0)
-			{
-				// Partial block: show remaining damage and how much was blocked, e.g. "14 (5 blocked)".
-				const String blockedText = std::to_string(amount) + " (" + std::to_string(blocked) + " " +
-					Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
-				const bool isCritical = (flags & damage_flags::Crit) != 0;
-				AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
-					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
-			}
-			else
-			{
-				const bool isCritical = (flags & damage_flags::Crit) != 0;
-				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
-					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
-			}
-		}
-
-		if (amount > 0)
-		{
-			if (const auto player = ObjectMgr::GetActivePlayer())
-			{
-				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-					ObjectMgr::GetActivePlayerGuid(),
-					player->GetName(),
-					targetGuid,
-					target ? target->GetName() : String(),
-					amount,
-					"SPELL");
-			}
-		}
-
-		TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnNonSpellDamageLog(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid;
-		uint32 amount;
-		DamageFlags flags;
-
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(amount) >> io::read<uint8>(flags)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-		if (target)
-		{
-			const bool isCritical = (flags & damage_flags::Crit) != 0;
-			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color::White, isCritical ? 4.0f : 2.0f,
-				isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
-		}
-
-		if (amount > 0)
-		{
-			if (const auto player = ObjectMgr::GetActivePlayer())
-			{
-				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-					ObjectMgr::GetActivePlayerGuid(),
-					player->GetName(),
-					targetGuid,
-					target ? target->GetName() : String(),
-					amount,
-					"NON_SPELL");
-			}
-		}
-
-		// TODO: Separate packet for this!
-		if (m_playerController && m_playerController->GetControlledUnit())
-		{
-			m_playerController->GetControlledUnit()->NotifyAttackSwingEvent();
-		}
-
-		TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
-
-		return PacketParseResult::Pass;
-	}
-
 	void WorldState::PlayUnitStateSounds(const GameObjectC& unit, const bool wasInCombat, const bool wasAlive)
 	{
 		const uint32 displayId = unit.Get<uint32>(object_fields::DisplayId);
@@ -4920,392 +4348,6 @@ namespace mmo
 		{
 			m_combatSoundPlayer.NotifyCombatState(unit.GetGuid(), displayId, inCombat, unit.GetPosition());
 		}
-	}
-
-	PacketParseResult WorldState::OnAttackerStateUpdate(game::IncomingPacket &packet)
-	{
-		uint64 attackerGuid, attackedGuid;
-		uint32 totalDamage, school, absorbedDamage, resistedDamage, blockedDamage;
-		VictimState victimState;
-		HitInfo hitInfo;
-		if (!(packet >> io::read_packed_guid(attackerGuid) >> io::read_packed_guid(attackedGuid) >> io::read<uint32>(hitInfo) >> io::read<uint32>(victimState) >> io::read<uint32>(totalDamage) >> io::read<uint32>(school) >> io::read<uint32>(absorbedDamage) >> io::read<uint32>(resistedDamage) >> io::read<uint32>(blockedDamage)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		std::shared_ptr<GameUnitC> attacker = ObjectMgr::Get<GameUnitC>(attackerGuid);
-		const bool offhandSwing = (hitInfo & hit_info::LeftSwing) != 0;
-		const bool isCriticalSwing = (hitInfo & hit_info::CriticalHit) != 0;
-		bool attackAnimationStarted = false;
-		CombatSoundAttacker attackerContext;
-		if (attacker)
-		{
-			// LeftSwing marks an off-hand (dual wield) swing so the dedicated off-hand attack
-			// animation is played instead of the main-hand one.
-			attackAnimationStarted = attacker->NotifyAttackSwingEvent(offhandSwing);
-
-			attackerContext = makeCombatAttacker(*attacker, offhandSwing);
-
-			// The swing itself is audible right away; everything that depends on the weapon
-			// connecting is queued on the SwingHit notify further down.
-			m_combatSoundPlayer.PlaySwing(attackerContext, attackerGuid, attacker->GetPosition(), isCriticalSwing);
-		}
-
-		std::shared_ptr<GameUnitC> attacked = ObjectMgr::Get<GameUnitC>(attackedGuid);
-		if (attacked)
-		{
-			attacked->NotifyHitEvent();
-		}
-
-		// Combat audio runs for every swing in range, not only the local player's fights, so
-		// it deliberately sits outside the isActivePlayerInvolved gate below. Out-of-range
-		// sounds are culled by each SoundEntry's max distance.
-		if (attacker && attacked)
-		{
-			CombatSwingOutcome outcome;
-			outcome.crit = isCriticalSwing;
-
-			// victimState is checked before the generic Miss flag: the server sets
-			// hit_info::Miss for dodges and parries too, as a "no damage landed" marker.
-			if ((hitInfo & hit_info::Immune) == 0 && victimState != victim_state::IsImmune)
-			{
-				if (victimState == victim_state::Dodge)
-				{
-					outcome.miss = true;
-				}
-				else if (victimState == victim_state::Parry)
-				{
-					outcome.parry = true;
-				}
-				else if (victimState == victim_state::Blocks)
-				{
-					outcome.block = true;
-					outcome.fullBlock = totalDamage == 0 && (hitInfo & hit_info::Absorb) == 0;
-					outcome.landed = !outcome.fullBlock;
-				}
-				else if (hitInfo & hit_info::Miss)
-				{
-					outcome.miss = true;
-				}
-				else
-				{
-					// A fully absorbed hit deals no damage but still connects.
-					outcome.landed = true;
-				}
-			}
-
-			auto soundCallback = [this,
-				attackerContext,
-				victimContext = makeCombatVictim(*attacked),
-				outcome, attackedGuid, victimPos = attacked->GetPosition()]()
-			{
-				m_combatSoundPlayer.PlayOutcome(attackerContext, victimContext, outcome, attackedGuid, victimPos);
-			};
-
-			if (attackAnimationStarted)
-			{
-				attacker->QueueSwingHitCallback(std::move(soundCallback));
-			}
-			else
-			{
-				soundCallback();
-			}
-		}
-
-		// Build the damage display callback. The floating text and Lua events are deferred to the
-		// attacker's SwingHit animation notify so numbers appear when the weapon visually connects.
-		// If the attacker has no current attack animation (or no SwingHit notify), the callback
-		// fires immediately as a fallback.
-		const bool isActivePlayerInvolved = ObjectMgr::GetActivePlayerGuid() == attackerGuid
-			|| ObjectMgr::GetActivePlayerGuid() == attackedGuid;
-
-		if (attacked && isActivePlayerInvolved)
-		{
-			// Determine display text now (all captured by value into the lambda).
-			String damageText;
-			// Check the specific victim states (dodge/parry/block) before the generic Miss flag:
-			// the server sets hit_info::Miss for dodges and parries too (as a "no damage landed"
-			// marker), so checking Miss first would mask them as "MISSED".
-			if ((hitInfo & hit_info::Immune) || victimState == victim_state::IsImmune)
-			{
-				damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_IMMUNE");
-			}
-			else if (victimState == victim_state::Dodge)
-			{
-				damageText = "DODGED";
-			}
-			else if (victimState == victim_state::Parry)
-			{
-				damageText = "PARRIED";
-			}
-			else if (victimState == victim_state::Blocks)
-			{
-				if (totalDamage == 0)
-				{
-					damageText = Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED");
-				}
-				else
-				{
-					damageText = std::to_string(totalDamage) + " (" + std::to_string(blockedDamage) + " " +
-						Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
-				}
-			}
-			else if (hitInfo & hit_info::Miss)
-			{
-				damageText = "MISSED"; // Localize
-			}
-			else
-			{
-				damageText = std::to_string(totalDamage);
-			}
-
-			const bool isCritical = (hitInfo & hit_info::CriticalHit) != 0;
-			const bool attackerIsPlayer = ObjectMgr::GetActivePlayerGuid() == attackerGuid;
-			const Vector3 targetPos = attacked->GetPosition();
-			const Color textColor = attackerIsPlayer ? Color::White : Color(1.0f, 0.0f, 0.0f);
-
-			auto displayCallback = [this, targetPos, damageText, isCritical, textColor,
-				attackerGuid, attackedGuid, totalDamage,
-				attackerName = attacker ? attacker->GetName() : String(),
-				attackedName = attacked->GetName(),
-				attackerIsPlayer]()
-			{
-				AddWorldTextFrame(targetPos, damageText, textColor,
-					isCritical ? 4.0f : 2.0f, isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
-
-				// Sync the camera shake with the moment the swing visually connects.
-				TriggerCombatCameraShake(attackedGuid, attackerGuid, totalDamage, isCritical);
-
-				if (totalDamage > 0 && attackerIsPlayer)
-				{
-					FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-						attackerGuid,
-						attackerName,
-						attackedGuid,
-						attackedName,
-						totalDamage,
-						"MELEE");
-				}
-			};
-
-			// Only defer to SwingHit notify when a new attack animation was actually started.
-			// If the animation was suppressed (e.g. off-hand while main-hand is fresh) there is
-			// nothing visual to sync to, so fire immediately.
-			if (attacker && attackAnimationStarted)
-			{
-				attacker->QueueSwingHitCallback(std::move(displayCallback));
-			}
-			else
-			{
-				displayCallback();
-			}
-		}
-		else if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
-		{
-			// Attacker is the local player but the attacked unit isn't in the client's range —
-			// still fire the Lua event (no world text since there's no position to attach to).
-			FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-				attackerGuid,
-				attacker->GetName(),
-				attackedGuid,
-				attacked ? attacked->GetName() : String(),
-				totalDamage,
-				"MELEE");
-		}
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnLogEnvironmentalDamage(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid;
-		uint32 amount;
-		uint8 damageType;
-
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read<uint32>(amount) >> io::read<uint8>(damageType)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// Find the target unit to display floating combat text
-		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-		if (target)
-		{
-			// Environmental damage is displayed in red-orange to distinguish from regular damage
-			AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 0.5f, 0.0f, 1.0f), 2.0f);
-		}
-
-		// Environmental damage has no attacker; only the victim (the local player) shakes.
-		TriggerCombatCameraShake(targetGuid, 0, amount, false);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMovementSpeedChanged(game::IncomingPacket &packet)
-	{
-		static MovementType typesByPacket[] = {
-			movement_type::Walk,
-			movement_type::Run,
-			movement_type::Backwards,
-			movement_type::Swim,
-			movement_type::SwimBackwards,
-			movement_type::Turn,
-			movement_type::Flight,
-			movement_type::FlightBackwards};
-
-		uint64 guid;
-		MovementInfo movementInfo;
-		float speed;
-		if (!(packet >> io::read_packed_guid(guid) >> movementInfo >> io::read<float>(speed)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// Find unit
-		std::shared_ptr<GameUnitC> unit = ObjectMgr::Get<GameUnitC>(guid);
-		if (!unit)
-		{
-			return PacketParseResult::Pass;
-		}
-
-		// Adjust position
-		unit->GetSceneNode()->SetPosition(movementInfo.position);
-
-		MovementType type = movement_type::Run;
-		switch (packet.GetId())
-		{
-		case game::realm_client_packet::MoveSetWalkSpeed:
-			type = movement_type::Walk;
-			break;
-		case game::realm_client_packet::MoveSetRunSpeed:
-			type = movement_type::Run;
-			break;
-		case game::realm_client_packet::MoveSetRunBackSpeed:
-			type = movement_type::Backwards;
-			break;
-		case game::realm_client_packet::MoveSetSwimSpeed:
-			type = movement_type::Swim;
-			break;
-		case game::realm_client_packet::MoveSetSwimBackSpeed:
-			type = movement_type::SwimBackwards;
-			break;
-		case game::realm_client_packet::MoveSetTurnRate:
-			type = movement_type::Turn;
-			break;
-		case game::realm_client_packet::SetFlightSpeed:
-			type = movement_type::Flight;
-			break;
-		case game::realm_client_packet::SetFlightBackSpeed:
-			type = movement_type::FlightBackwards;
-			break;
-		}
-
-		unit->SetSpeed(type, speed);
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnForceMovementSpeedChange(game::IncomingPacket &packet)
-	{
-		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
-		if (!unit)
-		{
-			WLOG("No controlled unit found!");
-			return PacketParseResult::Pass;
-		}
-
-		MovementType type = movement_type::Run;
-		switch (packet.GetId())
-		{
-		case game::realm_client_packet::ForceMoveSetWalkSpeed:
-			type = movement_type::Walk;
-			break;
-		case game::realm_client_packet::ForceMoveSetRunSpeed:
-			type = movement_type::Run;
-			break;
-		case game::realm_client_packet::ForceMoveSetRunBackSpeed:
-			type = movement_type::Backwards;
-			break;
-		case game::realm_client_packet::ForceMoveSetSwimSpeed:
-			type = movement_type::Swim;
-			break;
-		case game::realm_client_packet::ForceMoveSetSwimBackSpeed:
-			type = movement_type::SwimBackwards;
-			break;
-		case game::realm_client_packet::ForceMoveSetTurnRate:
-			type = movement_type::Turn;
-			break;
-		case game::realm_client_packet::ForceSetFlightSpeed:
-			type = movement_type::Flight;
-			break;
-		case game::realm_client_packet::ForceSetFlightBackSpeed:
-			type = movement_type::FlightBackwards;
-			break;
-		}
-
-		uint32 ackId;
-		float speed;
-
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
-		{
-			WLOG("Failed to read force movement speed change packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		// Apply speed modifier announce locally and send ack to the server
-		unit->SetSpeed(type, speed);
-		m_realmConnector.SendMovementSpeedAck(type, ackId, speed, unit->GetMovementInfo());
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveTeleport(game::IncomingPacket &packet)
-	{
-		uint64 guid;
-		if (!(packet >> io::read_packed_guid(guid)))
-		{
-			ELOG("Failed to read teleported mover guid!");
-			return PacketParseResult::Disconnect;
-		}
-
-		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
-		if (!unit || unit->GetGuid() != guid)
-		{
-			WLOG("Received teleport for unknown or non-controlled unit!");
-			return PacketParseResult::Pass;
-		}
-
-		uint32 ackId;
-		MovementInfo movementInfo;
-		if (!(packet >> io::read<uint32>(ackId) >> movementInfo))
-		{
-			ELOG("Failed to read move teleport packet");
-			return PacketParseResult::Disconnect;
-		}
-
-		m_playerController->StopAllMovement();
-
-		const Vector3 previousPosition = unit->GetPosition();
-
-		// Teleport player
-		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
-		unit->ApplyMovementInfo(movementInfo);
-
-		// Send ack to the server
-		m_realmConnector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
-
-		// A teleport on the same map does not go through TransferPending, so nothing loaded the
-		// world around the destination. Only the pages around the player are streamed in, and the
-		// teleport puts the character into falling state: landing outside that square means
-		// dropping through terrain which is still streaming in. Load the destination behind the
-		// loading screen first, exactly like entering a world does.
-		if (TeleportNeedsWorldLoad(previousPosition, unit->GetPosition()))
-		{
-			LoadingScreen::Show();
-			WaitForWorldLoading();
-		}
-
-		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult WorldState::OnLevelUp(game::IncomingPacket &packet)
@@ -5431,81 +4473,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnPeriodicAuraLog(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid;
-		uint64 casterGuid;
-		uint32 spellId;
-		uint32 auraType;
-
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(auraType)))
-		{
-			ELOG("Failed to read PeriodicAuraLog packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		// Trigger AuraTick visualization event
-		if (const auto* spell = m_project.spells.getById(spellId))
-		{
-			GameUnitC* casterUnit = nullptr;
-			if (const auto caster = ObjectMgr::Get<GameUnitC>(casterGuid))
-			{
-				casterUnit = caster.get();
-			}
-
-			if (std::shared_ptr<GameUnitC> targetUnit = ObjectMgr::Get<GameUnitC>(targetGuid))
-			{
-				std::vector<GameUnitC*> targets { targetUnit.get() };
-				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::AuraTick, *spell, casterUnit, targets);
-			}
-		}
-
-		if (auraType == aura_type::PeriodicDamage ||
-			auraType == aura_type::PeriodicHeal)
-		{
-			Color color;
-			if (auraType == aura_type::PeriodicHeal)
-			{
-				color = Color(0.0f, 1.0f, 0.0f, 1.0f);
-			}
-			else
-			{
-				color = Color(1.0f, 1.0f, 0.0f, 1.0f);
-			}
-
-			uint32 amount;
-			if (!(packet >> io::read<uint32>(amount)))
-			{
-				ELOG("Failed to read amount from PeriodicAuraLog packet!");
-				return PacketParseResult::Disconnect;
-			}
-
-			if (casterGuid == ObjectMgr::GetActivePlayerGuid() || targetGuid == ObjectMgr::GetActivePlayerGuid())
-			{
-				if (const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid))
-				{
-					AddWorldTextFrame(target->GetPosition(), std::to_string(amount), color, 2.0f);
-				}
-			}
-
-			if (auraType == aura_type::PeriodicDamage && amount > 0 && casterGuid == ObjectMgr::GetActivePlayerGuid())
-			{
-				const std::shared_ptr<GameUnitC> caster = ObjectMgr::Get<GameUnitC>(casterGuid);
-				const std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-
-				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-					casterGuid,
-					caster ? caster->GetName() : String(),
-					targetGuid,
-					target ? target->GetName() : String(),
-					amount,
-					"PERIODIC");
-			}
-		}
-
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnActionButtons(game::IncomingPacket &packet)
 	{
 		// Read packet
@@ -5541,21 +4508,6 @@ namespace mmo
 		{
 			questgiverUnit->SetQuestGiverStatus(status);
 		}
-
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnSpellEnergizeLog(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid, casterGuid;
-		uint32 spellId, powerType, power;
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(powerType) >> io::read<uint32>(power)))
-		{
-			ELOG("Failed to read SpellEnergizeLog packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		// TODO: Combat log event
 
 		return PacketParseResult::Pass;
 	}
@@ -5807,33 +4759,6 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
-	PacketParseResult WorldState::OnSpellHealLog(game::IncomingPacket &packet)
-	{
-		uint64 targetGuid, casterGuid;
-		uint32 amount;
-		bool crit;
-		uint32 spellId;
-
-		if (!(packet >> io::read_packed_guid(targetGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId) >> io::read<uint32>(amount) >> io::read<uint8>(crit)))
-		{
-			return PacketParseResult::Disconnect;
-		}
-
-		// If the target or the caster is our player, we want to display the heal amount
-		if (casterGuid == ObjectMgr::GetActivePlayerGuid() || targetGuid == ObjectMgr::GetActivePlayerGuid())
-		{
-			// Find unit
-			std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
-			if (target)
-			{
-				AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(0.0f, 1.0f, 0.0f, 1.0f), crit ? 4.0f : 2.0f,
-					crit ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
-			}
-		}
-
-		return PacketParseResult::Pass;
-	}
-
 	PacketParseResult WorldState::OnItemPushResult(game::IncomingPacket &packet)
 	{
 		uint64 characterGuid;
@@ -5916,182 +4841,6 @@ namespace mmo
 		}
 
 		FrameManager::Get().TriggerLuaEvent("CHAT_MSG_SYSTEM", message);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveRoot(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveRoot packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveRootAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveStun(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveStun packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveStunAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveSleep(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveSleep packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveSleepAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveFear(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveFear packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveFearAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveDisorient(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		bool applied;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<uint8>(applied)))
-		{
-			ELOG("Failed to read MoveDisorient packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		MovementInfo info = player->GetMovementInfo();
-		if (applied)
-		{
-			info.movementFlags |= movement_flags::Rooted;
-			info.movementFlags &= ~movement_flags::Moving;
-			m_playerController->StopAllMovement();
-		}
-		else
-		{
-			info.movementFlags &= ~movement_flags::Rooted;
-		}
-		player->ApplyMovementInfo(info);
-
-		m_realmConnector.SendMoveDisorientAck(ackId, info);
-		return PacketParseResult::Pass;
-	}
-
-	PacketParseResult WorldState::OnMoveCharge(game::IncomingPacket &packet)
-	{
-		uint32 ackId;
-		float speed;
-		if (!(packet >> io::read<uint32>(ackId) >> io::read<float>(speed)))
-		{
-			ELOG("Failed to read MoveCharge packet!");
-			return PacketParseResult::Disconnect;
-		}
-
-		auto player = ObjectMgr::GetActivePlayer();
-		ASSERT(player);
-
-		// Release all held input control bits so no stop packets are generated afterwards,
-		// then hand movement control over to the server: this stops local movement without
-		// sending packets and suppresses all further movement packets until the movement
-		// path finishes (or a timeout hits, in case the path never arrives).
-		m_playerController->StopAllMovement();
-		player->SetServerControlledMovement(true);
-
-		// Acknowledge the charge with the cleaned movement state; the server adopts this
-		// state and only then starts moving the character.
-		m_realmConnector.SendMoveChargeAck(ackId, player->GetMovementInfo(), speed);
 		return PacketParseResult::Pass;
 	}
 
@@ -6472,6 +5221,35 @@ namespace mmo
 		m_chatBubbleLayer->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 	}
 
+	void WorldState::OnCreaturePathReceived(const uint64 guid, const std::vector<Vector3> &path)
+	{
+		// Check whether we should update the output debug path
+		if (guid == ObjectMgr::GetSelectedObjectGuid())
+		{
+			if (m_debugPathVisualizer)
+			{
+				if (s_debugOutputPathVar && s_debugOutputPathVar->GetBoolValue())
+				{
+					m_debugPathVisualizer->ShowPath(path);
+				}
+			}
+		}
+	}
+
+	void WorldState::OnControlledUnitTeleported(const Vector3 &previousPosition, const Vector3 &newPosition)
+	{
+		// A teleport on the same map does not go through TransferPending, so nothing loaded the
+		// world around the destination. Only the pages around the player are streamed in, and the
+		// teleport puts the character into falling state: landing outside that square means
+		// dropping through terrain which is still streaming in. Load the destination behind the
+		// loading screen first, exactly like entering a world does.
+		if (TeleportNeedsWorldLoad(previousPosition, newPosition))
+		{
+			LoadingScreen::Show();
+			WaitForWorldLoading();
+		}
+	}
+
 	void WorldState::OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable)
 	{
 		const auto &mainPage = page.GetMainPage();
@@ -6695,477 +5473,6 @@ namespace mmo
 		}
 	}
 
-	void WorldState::OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		DLOG("Updating depth bias values");
-		deferred->SetDepthBias(s_depthBiasVar->GetFloatValue(),
-							   s_slopeDepthBiasVar->GetFloatValue(),
-							   s_clampDepthBiasVar->GetFloatValue());
-	}
-
-	void WorldState::OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const uint16 s_shadowTexSizes[] = {
-			512,
-			1024,
-			2048,
-			4096 };
-
-		const uint16 shadowTextureSize = s_shadowTexSizes[Clamp(s_shadowTextureSizeVar->GetIntValue(), 0, 3)];
-		ILOG("Updating shadow texture size to " << shadowTextureSize << "x" << shadowTextureSize);
-		deferred->SetShadowMapSize(shadowTextureSize);
-	}
-
-	void WorldState::OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const int level = Clamp(var.GetIntValue(), 0, 2);
-		ILOG("Updating shadow quality to level " << level);
-		deferred->SetShadowQuality(level);
-
-		if (s_shadowDistanceVar)
-		{
-			deferred->SetShadowDistance(s_shadowDistanceVar->GetFloatValue());
-		}
-	}
-
-	void WorldState::OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("Temporal shadow staggering " << (enabled ? "enabled" : "disabled"));
-		deferred->SetTemporalShadowsEnabled(enabled);
-	}
-
-	void WorldState::OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const float degrees = var.GetFloatValue();
-		ILOG("Shadow light direction step set to " << degrees << " degrees");
-		deferred->SetShadowLightStepDegrees(degrees);
-	}
-
-	void WorldState::OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("Depth pre-pass " << (enabled ? "enabled" : "disabled"));
-		deferred->SetDepthPrepassEnabled(enabled);
-	}
-
-	void WorldState::OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("SSAO " << (enabled ? "enabled" : "disabled"));
-		deferred->SetSsaoEnabled(enabled);
-	}
-
-	void WorldState::OnSsaoQualityChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const int level = Clamp(var.GetIntValue(), 0, 2);
-		ILOG("Updating SSAO quality to level " << level);
-		deferred->SetSsaoQuality(level);
-	}
-
-	void WorldState::OnSsaoHalfResChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("SSAO half resolution " << (enabled ? "enabled" : "disabled"));
-		deferred->SetSsaoHalfResolution(enabled);
-	}
-
-	void WorldState::OnSsaoParametersChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		// One handler for all three scalar parameters: each setter clamps its own value, so
-		// pushing all three on any change is both cheap and idempotent.
-		deferred->SetSsaoRadius(s_ssaoRadiusVar->GetFloatValue());
-		deferred->SetSsaoIntensity(s_ssaoIntensityVar->GetFloatValue());
-		deferred->SetSsaoThickness(s_ssaoThicknessVar->GetFloatValue());
-
-		DLOG("Updated SSAO parameters");
-	}
-
-	void WorldState::OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("SSAO debug visualization " << (enabled ? "enabled" : "disabled"));
-		deferred->SetSsaoDebugVisualization(enabled);
-	}
-
-	void WorldState::OnContactShadowsEnabledChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("Contact shadows " << (enabled ? "enabled" : "disabled"));
-		deferred->SetContactShadowsEnabled(enabled);
-	}
-
-	void WorldState::OnContactShadowQualityChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const int level = Clamp(var.GetIntValue(), 0, 2);
-		ILOG("Updating contact shadow quality to level " << level);
-		deferred->SetContactShadowQuality(level);
-	}
-
-	void WorldState::OnContactShadowParametersChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		// One handler for all five scalar parameters: each setter clamps its own value, so pushing
-		// all five on any change is both cheap and idempotent.
-		deferred->SetContactShadowRayLength(s_contactShadowLengthVar->GetFloatValue());
-		deferred->SetContactShadowThickness(s_contactShadowThicknessVar->GetFloatValue());
-		deferred->SetContactShadowIntensity(s_contactShadowIntensityVar->GetFloatValue());
-		deferred->SetContactShadowFadeDistance(s_contactShadowFadeVar->GetFloatValue());
-		deferred->SetContactShadowNormalBias(s_contactShadowBiasVar->GetFloatValue());
-
-		DLOG("Updated contact shadow parameters");
-	}
-
-	void WorldState::OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		WorldFrame *worldFrame = WorldFrame::GetWorldFrame();
-		if (!worldFrame)
-		{
-			WLOG("World frame not found");
-			return;
-		}
-
-		const WorldRenderer *renderer = reinterpret_cast<const WorldRenderer *>(worldFrame->GetRenderer());
-		if (!renderer)
-		{
-			WLOG("World frame has no renderer");
-			return;
-		}
-
-		DeferredRenderer *deferred = renderer->GetDeferredRenderer();
-		if (!deferred)
-		{
-			WLOG("Deferred renderer not initialized");
-			return;
-		}
-
-		const bool enabled = var.GetIntValue() != 0;
-		ILOG("Contact shadow debug visualization " << (enabled ? "enabled" : "disabled"));
-		deferred->SetContactShadowDebugVisualization(enabled);
-	}
-
-	void WorldState::OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		DeferredRenderer* renderer = GetWorldDeferredRenderer();
-		if (!renderer || !s_atmosphereQualityVar)
-		{
-			return;
-		}
-
-		renderer->SetAtmosphereQuality(s_atmosphereQualityVar->GetIntValue());
-		renderer->SetVolumetricFogRange(s_volumetricFogRangeVar->GetFloatValue());
-		renderer->SetVolumetricFogHistory(s_volumetricFogHistoryVar->GetFloatValue());
-		renderer->SetAtmosphereDebugMode(s_atmosphereDebugVar->GetIntValue());
-		if (ConsoleVar* sunModeVar = ConsoleVarMgr::FindConsoleVar("gxFogSunMode"))
-		{
-			renderer->GetVolumetricFogSettings().SetSunMode(sunModeVar->GetIntValue());
-		}
-	}
-
-	void WorldState::OnBloomChanged(ConsoleVar &var, const std::string &oldValue)
-	{
-		DeferredRenderer* renderer = GetWorldDeferredRenderer();
-		if (!renderer || !s_bloomQualityVar)
-		{
-			return;
-		}
-
-		renderer->SetBloomQuality(s_bloomQualityVar->GetIntValue());
-	}
-
 	void WorldState::ApplyEnvironmentToRenderer()
 	{
 		DeferredRenderer* renderer = GetWorldDeferredRenderer();
@@ -7174,7 +5481,7 @@ namespace mmo
 			return;
 		}
 
-		const float brightness = s_exposureVar ? s_exposureVar->GetFloatValue() : 1.0f;
+		const float brightness = m_renderSettings.GetExposure();
 		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness);
 
 		// Selected fresh every frame (and pushed even when empty) so a map without any fog
