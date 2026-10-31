@@ -12,6 +12,9 @@
 #include "graphics/material.h"
 #include "graphics/material_compiler_hlsl.h"
 #include "graphics_null/shader_compiler_null.h"
+#ifdef MMO_MATERIAL_RUNTIME_COMPILE
+#	include "msl_cross/shader_compiler_metal.h"
+#endif
 #include "log/default_log_levels.h"
 #include "math/radian.h"
 #include "scene_graph/render_operation.h"
@@ -763,35 +766,50 @@ namespace mmo
 	ShaderPtr GraphicsDeviceMetal::CreateShader(const ShaderType type, const void* shaderCode, const size_t shaderCodeSize)
 	{
 		metal_shader_blob::Header header {};
-		std::string_view source;
-		if (!metal_shader_blob::Unpack(shaderCode, shaderCodeSize, header, source))
+		metal_shader_blob::Payload payload {};
+		std::span<const uint8> bytes;
+		if (!metal_shader_blob::Unpack(shaderCode, shaderCodeSize, header, payload, bytes))
 		{
 			static bool s_warned = false;
 			if (!s_warned)
 			{
 				s_warned = true;
-				WLOG("Ignoring shader without Metal code (" << shaderCodeSize << " bytes). Materials need to be baked for Metal (metal_material_baker).");
+				WLOG("Ignoring shader without Metal code (" << shaderCodeSize << " bytes). Materials need Metal shaders (cooked, or compiled by the editor on a Mac).");
 			}
 			return nullptr;
 		}
 
-		const size_t sourceHash = std::hash<std::string_view>()(source);
+		// Source and library payloads never share a key, even if their bytes happened to be equal.
+		const std::string_view payloadBytes(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+		const size_t payloadHash = std::hash<std::string_view>()(payloadBytes) ^ (payload == metal_shader_blob::Payload::Library ? 0x9e3779b97f4a7c15ull : 0ull);
 		id<MTLFunction> function = nil;
-		if (const auto it = m_functionCache.find(sourceHash); it != m_functionCache.end())
+		if (const auto it = m_functionCache.find(payloadHash); it != m_functionCache.end())
 		{
 			function = it->second;
 		}
 		else
 		{
-			MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
-			options.languageVersion = MTLLanguageVersion2_3;
-
 			NSError* error = nil;
-			NSString* sourceString = [[NSString alloc] initWithBytes:source.data() length:source.size() encoding:NSUTF8StringEncoding];
-			id<MTLLibrary> library = [m_device newLibraryWithSource:sourceString options:options error:&error];
+			id<MTLLibrary> library = nil;
+			if (payload == metal_shader_blob::Payload::Library)
+			{
+				// DISPATCH_DATA_DESTRUCTOR_DEFAULT copies the bytes, the material may release its code later.
+				dispatch_data_t data = dispatch_data_create(bytes.data(), bytes.size(), nil, DISPATCH_DATA_DESTRUCTOR_DEFAULT);
+				library = [m_device newLibraryWithData:data error:&error];
+			}
+			else
+			{
+				MTLCompileOptions* options = [[MTLCompileOptions alloc] init];
+				options.languageVersion = MTLLanguageVersion2_3;
+
+				NSString* sourceString = [[NSString alloc] initWithBytes:payloadBytes.data() length:payloadBytes.size() encoding:NSUTF8StringEncoding];
+				library = [m_device newLibraryWithSource:sourceString options:options error:&error];
+			}
+
 			if (!library)
 			{
-				ELOG("Failed to compile Metal shader: " << (error ? [[error localizedDescription] UTF8String] : "unknown error"));
+				ELOG("Failed to " << (payload == metal_shader_blob::Payload::Library ? "load Metal library" : "compile Metal shader") << ": "
+					<< (error ? [[error localizedDescription] UTF8String] : "unknown error"));
 				return nullptr;
 			}
 
@@ -802,7 +820,7 @@ namespace mmo
 				return nullptr;
 			}
 
-			m_functionCache[sourceHash] = function;
+			m_functionCache[payloadHash] = function;
 		}
 
 		return std::make_unique<ShaderMetal>(*this, type, function, header.threadgroupSize);
@@ -852,7 +870,13 @@ namespace mmo
 
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceMetal::CreateShaderCompiler()
 	{
+#ifdef MMO_MATERIAL_RUNTIME_COMPILE
+		// Editors and development clients compile materials to precompiled Metal libraries.
+		return std::make_unique<ShaderCompilerMetal>(ShaderCompilerMetal::Output::Library);
+#else
+		// Release clients never compile shaders; they run on cooked ones.
 		return std::make_unique<ShaderCompilerNull>();
+#endif
 	}
 
 	id<MTLSamplerState> GraphicsDeviceMetal::GetSampler(MTLSamplerDescriptor* descriptor)

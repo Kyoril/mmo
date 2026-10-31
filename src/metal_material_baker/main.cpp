@@ -34,7 +34,7 @@
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
-#include "msl_cross/msl_cross.h"
+#include "msl_cross/shader_compiler_metal.h"
 #include "scene_graph/material_serializer.h"
 
 #include <filesystem>
@@ -42,90 +42,6 @@
 #include <iostream>
 #include <mutex>
 #include <sstream>
-
-namespace mmo
-{
-	/// Compiles the HLSL the material compiler generates to Metal shader blobs.
-	class ShaderCompilerMetal final : public ShaderCompiler
-	{
-	private:
-		/// The generated code defines a scalar select() helper and sometimes passes vectors to it,
-		/// which fxc truncates with a warning but glslang rejects. Declares the truncating overloads
-		/// explicitly, so both compilers produce the same result.
-		static String AddSelectOverloads(const String& source)
-		{
-			static const String selectDefinition = "float select(bool expression, float whenTrue, float whenFalse) {";
-			const size_t position = source.find(selectDefinition);
-			if (position == String::npos)
-			{
-				return source;
-			}
-
-			static const char* types[] = { "float", "float2", "float3", "float4" };
-			std::ostringstream overloads;
-			for (const char* whenTrue : types)
-			{
-				for (const char* whenFalse : types)
-				{
-					if (whenTrue == types[0] && whenFalse == types[0])
-					{
-						continue;
-					}
-
-					overloads << "float select(bool expression, " << whenTrue << " whenTrue, " << whenFalse << " whenFalse) { return expression ? (float)whenTrue : (float)whenFalse; }\n";
-				}
-			}
-
-			String result = source;
-			result.insert(position, overloads.str());
-			return result;
-		}
-
-	public:
-		[[nodiscard]] const String& GetShaderFormat() const override
-		{
-			static const String format(shader_platform::Metal);
-			return format;
-		}
-
-		[[nodiscard]] std::string_view GetPlatform() const override
-		{
-			return shader_platform::Metal;
-		}
-
-		void Compile(const ShaderCompileInput& input, ShaderCompileResult& output) override
-		{
-			msl_cross::CompileInput crossInput;
-			crossInput.source = AddSelectOverloads(input.shaderCode);
-			crossInput.sourceName = "material.hlsl";
-			switch (input.shaderType)
-			{
-			case ShaderType::PixelShader:
-				crossInput.stage = metal_shader_blob::Stage::Pixel;
-				break;
-			case ShaderType::ComputeShader:
-				crossInput.stage = metal_shader_blob::Stage::Compute;
-				break;
-			default:
-				crossInput.stage = metal_shader_blob::Stage::Vertex;
-				break;
-			}
-
-			msl_cross::CompileOutput crossOutput;
-			output.succeeded = msl_cross::CompileHlslToMsl(crossInput, crossOutput);
-			output.code.format = GetShaderFormat();
-			if (output.succeeded)
-			{
-				output.code.data = crossOutput.ToBlob(crossInput.stage);
-			}
-			else
-			{
-				output.code.data.clear();
-				output.errorMessage = crossOutput.log;
-			}
-		}
-	};
-}
 
 namespace
 {
@@ -234,7 +150,7 @@ namespace
 		}
 
 		// Builds into a scratch material and takes over only the Metal shaders, plus build info.
-		ShaderCompilerMetal shaderCompiler;
+		ShaderCompilerMetal shaderCompiler(ShaderCompilerMetal::Output::Source);
 		const MaterialShaderBuildResult buildResult = BuildMaterialShaders(*material, graph, shaderCompiler);
 		if (!buildResult.cookable)
 		{

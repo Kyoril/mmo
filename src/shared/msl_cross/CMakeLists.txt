@@ -14,7 +14,7 @@ add_lib(msl_cross)
 # The HLSL front end of glslang is only declared with this set.
 target_compile_definitions(msl_cross PRIVATE ENABLE_HLSL)
 target_include_directories(msl_cross PRIVATE ${SPIRV_CROSS_INCLUDE_DIR})
-target_link_libraries(msl_cross glslang::glslang glslang::SPIRV glslang::glslang-default-resource-limits
+target_link_libraries(msl_cross graphics log glslang::glslang glslang::SPIRV glslang::glslang-default-resource-limits
 	${SPIRV_CROSS_MSL_LIB} ${SPIRV_CROSS_GLSL_LIB} ${SPIRV_CROSS_CORE_LIB})
 
 set_property(TARGET msl_cross PROPERTY FOLDER "shared")
