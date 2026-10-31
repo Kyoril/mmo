@@ -4,7 +4,7 @@
 
 #ifdef _WIN32
 
-#include "graphics_d3d11/material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 
 using namespace mmo;
 
@@ -20,7 +20,7 @@ namespace
 {
 	struct Operands
 	{
-		MaterialCompilerD3D11 compiler;
+		MaterialCompilerHlsl compiler;
 		ExpressionIndex scalar = compiler.AddExpression("1.0", ExpressionType::Float_1);
 		ExpressionIndex vector = compiler.AddExpression("float4(1,1,1,1)", ExpressionType::Float_4);
 	};

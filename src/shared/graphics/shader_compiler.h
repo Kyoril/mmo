@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string_view>
 #include <vector>
 
 #include "shader_base.h"
@@ -46,6 +47,11 @@ namespace mmo
 	public:
 		/// @brief Gets the shader format that this compiler supports.
 		[[nodiscard]] virtual const String& GetShaderFormat() const = 0;
+
+		/// @brief Gets the shader platform id (a shader_platform::* value) that the code this compiler
+		///        produces is meant for. Compiled variants are stored in a material under this platform,
+		///        regardless of the platform the process itself runs on.
+		[[nodiscard]] virtual std::string_view GetPlatform() const = 0;
 
 		/// @brief Compiles the given shader code input and generates an output result.
 		/// @param input The input parameter.

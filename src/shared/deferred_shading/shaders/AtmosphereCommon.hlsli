@@ -2,7 +2,7 @@
 //
 // View matrices, the camera constant buffer and the height/distance-fog model shared by the deferred
 // lighting and atmosphere shaders. The generated forward material shaders carry a copy of the fog
-// functions (MaterialCompilerD3D11), and deferred_shading/atmosphere_math.h mirrors them in C++ for
+// functions (MaterialCompilerHlsl), and deferred_shading/atmosphere_math.h mirrors them in C++ for
 // the unit tests - change all three together.
 
 #ifndef ATMOSPHERE_COMMON_HLSLI
@@ -19,7 +19,7 @@ cbuffer ViewMatrices : register(b12)
 };
 
 // MUST stay field-for-field in sync with PsCameraConstantBuffer in scene.cpp and the
-// CameraParameters cbuffer emitted by MaterialCompilerD3D11.
+// CameraParameters cbuffer emitted by MaterialCompilerHlsl.
 cbuffer CameraBuffer : register(b1)
 {
     float3 CameraPosition;
@@ -49,7 +49,7 @@ cbuffer CameraBuffer : register(b1)
 
 // Upper bound of the height-fog density exponent. Keeps rays that reach far below the base height
 // from overflowing floating point; fog below the base saturates at e^3 ~= 20x the base density
-// instead of climbing toward opacity. Mirrored in atmosphere_math.h and material_compiler_d3d11.cpp.
+// instead of climbing toward opacity. Mirrored in atmosphere_math.h and material_compiler_hlsl.cpp.
 static const float FOG_MAX_DENSITY_EXPONENT = 3.0f;
 
 // Extinction coefficient at world height y.

@@ -11,7 +11,7 @@
 #include "texture_array_d3d11.h"
 #include "structured_buffer_d3d11.h"
 #include "index_buffer_d3d11.h"
-#include "material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "pixel_shader_d3d11.h"
 #include "rasterizer_state_hash.h"
 #include "render_texture_d3d11.h"
@@ -1396,7 +1396,7 @@ namespace mmo
 
 	std::unique_ptr<MaterialCompiler> GraphicsDeviceD3D11::CreateMaterialCompiler()
 	{
-		return std::make_unique<MaterialCompilerD3D11>();
+		return std::make_unique<MaterialCompilerHlsl>();
 	}
 
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceD3D11::CreateShaderCompiler()

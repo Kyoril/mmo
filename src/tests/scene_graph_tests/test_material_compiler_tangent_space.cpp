@@ -6,7 +6,7 @@
 
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
-#include "graphics_d3d11/material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "graphics_d3d11/shader_compiler_d3d11.h"
 
 using namespace mmo;
@@ -23,7 +23,7 @@ namespace
 {
 	/// Compiles one generated pixel shader variant with fxc.
 	/// @return The compiler's error text, or an empty string on success.
-	String CompilePixelVariant(const MaterialCompilerD3D11& compiler, const PixelShaderType type)
+	String CompilePixelVariant(const MaterialCompilerHlsl& compiler, const PixelShaderType type)
 	{
 		ShaderCompilerD3D11 shaderCompiler;
 
@@ -38,7 +38,7 @@ namespace
 	}
 
 	/// Builds a material whose only interesting content is a tangent-to-world transform.
-	void CompileTangentTransformMaterial(MaterialCompilerD3D11& compiler, const bool lit)
+	void CompileTangentTransformMaterial(MaterialCompilerHlsl& compiler, const bool lit)
 	{
 		compiler.SetLit(lit);
 
@@ -54,7 +54,7 @@ namespace
 
 TEST_CASE("Tangent space transform compiles in every lit pixel variant", "[material_compiler]")
 {
-	MaterialCompilerD3D11 compiler;
+	MaterialCompilerHlsl compiler;
 	CompileTangentTransformMaterial(compiler, true);
 
 	CHECK(CompilePixelVariant(compiler, PixelShaderType::Forward) == "");
@@ -66,7 +66,7 @@ TEST_CASE("Tangent space transform compiles in every lit pixel variant", "[mater
 TEST_CASE("Tangent space transform compiles in every unlit pixel variant", "[material_compiler]")
 {
 	// Unlit variants carry no per-pixel basis either, so the same reference must still compile.
-	MaterialCompilerD3D11 compiler;
+	MaterialCompilerHlsl compiler;
 	CompileTangentTransformMaterial(compiler, false);
 
 	CHECK(CompilePixelVariant(compiler, PixelShaderType::Forward) == "");

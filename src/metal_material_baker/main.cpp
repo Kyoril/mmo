@@ -29,7 +29,7 @@
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
 #include "graphics/shader_platform.h"
-#include "graphics_d3d11/material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "log/default_log.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
@@ -85,6 +85,11 @@ namespace mmo
 		{
 			static const String format(shader_platform::Metal);
 			return format;
+		}
+
+		[[nodiscard]] std::string_view GetPlatform() const override
+		{
+			return shader_platform::Metal;
 		}
 
 		void Compile(const ShaderCompileInput& input, ShaderCompileResult& output) override
@@ -236,7 +241,7 @@ namespace
 		}
 
 		// Compile into a scratch material: only its Metal shaders are taken over.
-		MaterialCompilerD3D11 materialCompiler;
+		MaterialCompilerHlsl materialCompiler;
 		graph.Compile(materialCompiler);
 
 		const auto compiledMaterial = std::make_shared<Material>(assetPath);

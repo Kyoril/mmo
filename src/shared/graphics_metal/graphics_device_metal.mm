@@ -10,7 +10,7 @@
 #include "base/profiler.h"
 #include "graphics/global_shader_parameters.h"
 #include "graphics/material.h"
-#include "graphics_null/material_compiler_null.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "graphics_null/shader_compiler_null.h"
 #include "log/default_log_levels.h"
 #include "math/radian.h"
@@ -847,7 +847,7 @@ namespace mmo
 
 	std::unique_ptr<MaterialCompiler> GraphicsDeviceMetal::CreateMaterialCompiler()
 	{
-		return std::make_unique<MaterialCompilerNull>();
+		return std::make_unique<MaterialCompilerHlsl>();
 	}
 
 	std::unique_ptr<ShaderCompiler> GraphicsDeviceMetal::CreateShaderCompiler()

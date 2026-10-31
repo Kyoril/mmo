@@ -1,6 +1,6 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 
 #include <algorithm>
 #include <cmath>
@@ -104,12 +104,12 @@ namespace mmo
 		}
 	}
 
-	void MaterialCompilerD3D11::AddGlobalFunction(const std::string_view name, const std::string_view code)
+	void MaterialCompilerHlsl::AddGlobalFunction(const std::string_view name, const std::string_view code)
 	{
 		m_globalFunctions.emplace(name, code);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddExpression(const std::string_view code, ExpressionType type)
+	ExpressionIndex MaterialCompilerHlsl::AddExpression(const std::string_view code, ExpressionType type)
 	{
 		if (type == ExpressionType::Unknown)
 		{
@@ -145,12 +145,12 @@ namespace mmo
 		return id;
 	}
 	
-	void MaterialCompilerD3D11::NotifyTextureCoordinateIndex(const uint32 textureCoordinateIndex)
+	void MaterialCompilerHlsl::NotifyTextureCoordinateIndex(const uint32 textureCoordinateIndex)
 	{
 		m_numTexCoordinates = std::max(textureCoordinateIndex + 1, m_numTexCoordinates);
 	}
 	
-	ExpressionIndex MaterialCompilerD3D11::AddTextureCoordinate(const int32 coordinateIndex)
+	ExpressionIndex MaterialCompilerHlsl::AddTextureCoordinate(const int32 coordinateIndex)
 	{
 		if (coordinateIndex >= 8)
 		{
@@ -166,7 +166,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates, bool srgb, SamplerType type)
+	ExpressionIndex MaterialCompilerHlsl::AddTextureSample(std::string_view texture, const ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		if (texture.empty())
 		{
@@ -231,7 +231,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddMultiply(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddMultiply(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -255,7 +255,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), std::max(firstType, secondType));
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddAddition(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddAddition(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -278,7 +278,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), targetType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddSubtract(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddSubtract(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -301,7 +301,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), targetType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddLerp(const ExpressionIndex first, const ExpressionIndex second, const ExpressionIndex alpha)
+	ExpressionIndex MaterialCompilerHlsl::AddLerp(const ExpressionIndex first, const ExpressionIndex second, const ExpressionIndex alpha)
 	{
 		if (first == IndexNone)
 		{
@@ -330,7 +330,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), targetType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddDot(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddDot(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -351,7 +351,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 		
-	ExpressionIndex MaterialCompilerD3D11::AddClamp(const ExpressionIndex value, const ExpressionIndex min, const ExpressionIndex max)
+	ExpressionIndex MaterialCompilerHlsl::AddClamp(const ExpressionIndex value, const ExpressionIndex min, const ExpressionIndex max)
 	{
 		if (value == IndexNone)
 		{
@@ -380,7 +380,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddMax(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddMax(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -405,7 +405,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), std::max(firstType, secondType));
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddMin(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddMin(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -430,7 +430,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), std::max(firstType, secondType));
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddOneMinus(const ExpressionIndex input)
+	ExpressionIndex MaterialCompilerHlsl::AddOneMinus(const ExpressionIndex input)
 	{
 		if (input == IndexNone)
 		{
@@ -447,7 +447,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddPower(const ExpressionIndex base, const ExpressionIndex exponent)
+	ExpressionIndex MaterialCompilerHlsl::AddPower(const ExpressionIndex base, const ExpressionIndex exponent)
 	{
 		if (base == IndexNone)
 		{
@@ -470,7 +470,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddWorldPosition()
+	ExpressionIndex MaterialCompilerHlsl::AddWorldPosition()
 	{
 		std::ostringstream outputStream;
 		outputStream << "input.worldPos.xyz";
@@ -479,7 +479,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddCameraPosition()
+	ExpressionIndex MaterialCompilerHlsl::AddCameraPosition()
 	{
 		std::ostringstream outputStream;
 		outputStream << "cameraPos";
@@ -488,7 +488,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddCameraVector()
+	ExpressionIndex MaterialCompilerHlsl::AddCameraVector()
 	{
 		std::ostringstream outputStream;
 		outputStream << "V";
@@ -497,7 +497,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddMask(const ExpressionIndex input, const bool r, const bool g, const bool b, const bool a)
+	ExpressionIndex MaterialCompilerHlsl::AddMask(const ExpressionIndex input, const bool r, const bool g, const bool b, const bool a)
 	{
 		if (input == IndexNone)
 		{
@@ -551,7 +551,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), type);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddVertexNormal()
+	ExpressionIndex MaterialCompilerHlsl::AddVertexNormal()
 	{
 		std::ostringstream outputStream;
 		outputStream << "N";
@@ -560,7 +560,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddDivide(const ExpressionIndex first, const ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddDivide(const ExpressionIndex first, const ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -583,7 +583,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddAbs(const ExpressionIndex input)
+	ExpressionIndex MaterialCompilerHlsl::AddAbs(const ExpressionIndex input)
 	{
 		if (input == IndexNone)
 		{
@@ -600,7 +600,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddNormalize(const ExpressionIndex input)
+	ExpressionIndex MaterialCompilerHlsl::AddNormalize(const ExpressionIndex input)
 	{
 		if (input == IndexNone)
 		{
@@ -622,7 +622,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddVertexColor()
+	ExpressionIndex MaterialCompilerHlsl::AddVertexColor()
 	{
 		std::ostringstream outputStream;
 		outputStream << "input.color";
@@ -631,7 +631,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddAppend(ExpressionIndex first, ExpressionIndex second)
+	ExpressionIndex MaterialCompilerHlsl::AddAppend(ExpressionIndex first, ExpressionIndex second)
 	{
 		if (first == IndexNone)
 		{
@@ -679,7 +679,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), outputType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTransform(const ExpressionIndex input, Space sourceSpace, Space targetSpace)
+	ExpressionIndex MaterialCompilerHlsl::AddTransform(const ExpressionIndex input, Space sourceSpace, Space targetSpace)
 	{
 		if (input == IndexNone)
 		{
@@ -758,12 +758,12 @@ namespace mmo
 		return AddExpression(result, outputType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTime()
+	ExpressionIndex MaterialCompilerHlsl::AddTime()
 	{
 		return AddExpression("time", ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation)
+	ExpressionIndex MaterialCompilerHlsl::AddRotator(ExpressionIndex coordinates, ExpressionIndex center, ExpressionIndex rotation)
 	{
 		if (coordinates == IndexNone)
 		{
@@ -793,7 +793,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_2);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal)
+	ExpressionIndex MaterialCompilerHlsl::AddFresnel(ExpressionIndex exponent, ExpressionIndex baseReflectFraction, ExpressionIndex normal)
 	{
 		if (exponent == IndexNone)
 		{
@@ -825,23 +825,23 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddPixelDepth()
+	ExpressionIndex MaterialCompilerHlsl::AddPixelDepth()
 	{
 		return AddExpression("length(input.viewPos.xyz)", ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddSceneDepth()
+	ExpressionIndex MaterialCompilerHlsl::AddSceneDepth()
 	{
 		m_needsSceneDepth = true;
 		return AddExpression("sceneDepthTex.Load(int3((int2)input.pos.xy, 0)).a", ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddScreenPosition()
+	ExpressionIndex MaterialCompilerHlsl::AddScreenPosition()
 	{
 		return AddExpression("float2(input.pos.xy)", ExpressionType::Float_2);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddSaturate(const ExpressionIndex input)
+	ExpressionIndex MaterialCompilerHlsl::AddSaturate(const ExpressionIndex input)
 	{
 		if (input == IndexNone)
 		{
@@ -858,7 +858,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), valueType);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddSceneColor(const ExpressionIndex screenOffset)
+	ExpressionIndex MaterialCompilerHlsl::AddSceneColor(const ExpressionIndex screenOffset)
 	{
 		m_needsSceneColor = true;
 
@@ -878,7 +878,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_3);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddScreenSpaceReflection(const ExpressionIndex worldNormal,
+	ExpressionIndex MaterialCompilerHlsl::AddScreenSpaceReflection(const ExpressionIndex worldNormal,
 		const ExpressionIndex maxDistance, const ExpressionIndex stepCount)
 	{
 		m_needsScreenSpaceReflection = true;
@@ -926,7 +926,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	void MaterialCompilerD3D11::GeneratePixelShaderCode(PixelShaderType type)
+	void MaterialCompilerHlsl::GeneratePixelShaderCode(PixelShaderType type)
 	{
 		m_pixelShaderStream.str("");
 		m_pixelShaderStream.clear();
@@ -1936,7 +1936,7 @@ namespace mmo
 #endif
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type)
+	ExpressionIndex MaterialCompilerHlsl::AddTextureParameterSample(std::string_view name, std::string_view texture, ExpressionIndex coordinates, bool srgb, SamplerType type)
 	{
 		// Ensure parameter exists
 		uint32 paramIndex = 0;
@@ -1999,7 +1999,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddScalarParameterExpression(std::string_view name, float defaultValue)
+	ExpressionIndex MaterialCompilerHlsl::AddScalarParameterExpression(std::string_view name, float defaultValue)
 	{
 		// Ensure parameter exists
 		if (const auto it = std::find_if(m_floatParameters.begin(), m_floatParameters.end(), [&name](const auto& param) { return param.name == name; }); it == m_floatParameters.end())
@@ -2021,7 +2021,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue)
+	ExpressionIndex MaterialCompilerHlsl::AddVectorParameterExpression(std::string_view name, const Vector4& defaultValue)
 	{
 		// Ensure parameter exists
 		if (const auto it = std::find_if(m_vectorParameters.begin(), m_vectorParameters.end(), [&name](const auto& param) { return param.name == name; }); it == m_vectorParameters.end())
@@ -2043,7 +2043,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddGlobalScalarParameterExpression(std::string_view name)
+	ExpressionIndex MaterialCompilerHlsl::AddGlobalScalarParameterExpression(std::string_view name)
 	{
 		if (name.empty())
 		{
@@ -2063,7 +2063,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_1);
 	}
 
-	ExpressionIndex MaterialCompilerD3D11::AddGlobalVectorParameterExpression(std::string_view name)
+	ExpressionIndex MaterialCompilerHlsl::AddGlobalVectorParameterExpression(std::string_view name)
 	{
 		if (name.empty())
 		{
@@ -2083,7 +2083,7 @@ namespace mmo
 		return AddExpression(outputStream.str(), ExpressionType::Float_4);
 	}
 
-	void MaterialCompilerD3D11::GenerateVertexShaderCode(VertexShaderType type)
+	void MaterialCompilerHlsl::GenerateVertexShaderCode(VertexShaderType type)
 	{
 		std::ostringstream vertexShaderStream;
 		m_vertexShaderCode.clear();

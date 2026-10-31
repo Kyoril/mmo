@@ -65,6 +65,8 @@ namespace mmo
 		material.SetDepthTestEnabled(m_depthTest);
 		material.SetTwoSided(m_twoSided);
 
+		const std::string_view platform = shaderCompiler.GetPlatform();
+
 		for (uint32 i = 0; i < 6; ++i)
 		{
 			m_vertexShaderCode.clear();
@@ -89,7 +91,13 @@ namespace mmo
 				DLOG("Successfully compiled vertex shader. Size: " << vertexOutput.code.data.size());
 			}
 
-			material.SetVertexShaderCode(static_cast<VertexShaderType>(i), { vertexOutput.code.data });
+			// A failed variant is stored as empty, so a stale one from an earlier compile cannot survive.
+			if (!vertexOutput.succeeded)
+			{
+				vertexOutput.code.data.clear();
+			}
+
+			material.SetVertexShaderCode(platform, static_cast<VertexShaderType>(i), { vertexOutput.code.data });
 		}
 		
 		// Generate forward rendering pixel shader
@@ -108,9 +116,14 @@ namespace mmo
 		else
 		{
 			DLOG("Successfully compiled forward pixel shader. Size: " << pixelOutput.code.data.size());
-			// Add shader code to the material
-			material.SetPixelShaderCode(PixelShaderType::Forward, {pixelOutput.code.data });
 		}
+
+		// A failed variant is stored as empty.
+		if (!pixelOutput.succeeded)
+		{
+			pixelOutput.code.data.clear();
+		}
+		material.SetPixelShaderCode(platform, PixelShaderType::Forward, { pixelOutput.code.data });
 
 		// Generate GBuffer pixel shader
 		GeneratePixelShaderCode(PixelShaderType::GBuffer);
@@ -126,9 +139,14 @@ namespace mmo
 		else
 		{
 			DLOG("Successfully compiled GBuffer pixel shader. Size: " << pixelOutput.code.data.size());
-			// Add shader code to the material
-			material.SetPixelShaderCode(PixelShaderType::GBuffer, {pixelOutput.code.data });
 		}
+
+		// A failed variant is stored as empty.
+		if (!pixelOutput.succeeded)
+		{
+			pixelOutput.code.data.clear();
+		}
+		material.SetPixelShaderCode(platform, PixelShaderType::GBuffer, { pixelOutput.code.data });
 
 		// Generate Shadowmap pixel shader
 		GeneratePixelShaderCode(PixelShaderType::ShadowMap);
@@ -144,9 +162,14 @@ namespace mmo
 		else
 		{
 			DLOG("Successfully compiled ShadowMap pixel shader. Size: " << pixelOutput.code.data.size());
-			// Add shader code to the material
-			material.SetPixelShaderCode(PixelShaderType::ShadowMap, { pixelOutput.code.data });
 		}
+
+		// A failed variant is stored as empty.
+		if (!pixelOutput.succeeded)
+		{
+			pixelOutput.code.data.clear();
+		}
+		material.SetPixelShaderCode(platform, PixelShaderType::ShadowMap, { pixelOutput.code.data });
 
 		// Generate UI pixel shader
 		GeneratePixelShaderCode(PixelShaderType::UI);
@@ -162,9 +185,14 @@ namespace mmo
 		else
 		{
 			DLOG("Successfully compiled UI pixel shader. Size: " << pixelOutput.code.data.size());
-			// Add shader code to the material
-			material.SetPixelShaderCode(PixelShaderType::UI, { pixelOutput.code.data });
 		}
+
+		// A failed variant is stored as empty.
+		if (!pixelOutput.succeeded)
+		{
+			pixelOutput.code.data.clear();
+		}
+		material.SetPixelShaderCode(platform, PixelShaderType::UI, { pixelOutput.code.data });
 
 		// Set material textures
 		material.ClearTextures();

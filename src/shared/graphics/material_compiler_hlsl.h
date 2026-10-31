@@ -6,16 +6,16 @@
 
 namespace mmo
 {
-	/// @brief Implementation of the material compiler for D3D11. This compiler generates HLSL code
+	/// @brief Implementation of the material compiler for HLSL. This compiler generates HLSL code
 	///		   for shader model 5.0.
-	class MaterialCompilerD3D11 final : public MaterialCompiler
+	class MaterialCompilerHlsl final : public MaterialCompiler
 	{
 	public:
-		/// @brief Creates a new instance of the MaterialCompilerD3D11 class and initialize it.
-		MaterialCompilerD3D11() = default;
+		/// @brief Creates a new instance of the MaterialCompilerHlsl class and initialize it.
+		MaterialCompilerHlsl() = default;
 
 		/// @brief Default destructor.
-		~MaterialCompilerD3D11() override = default;
+		~MaterialCompilerHlsl() override = default;
 
 	public:
 		/// @copydoc MaterialCompiler::AddGlobalFunction
