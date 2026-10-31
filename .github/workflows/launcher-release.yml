@@ -2,8 +2,11 @@ name: Launcher Release
 
 # The launcher has its own release cycle (docs/versioning.md): pushing a launcher-vX.Y.Z tag
 # builds it and publishes a release the deployer ships with the next nightly patch, plus
-# AlestiaOnline-Setup.exe for the website (docs/deployment.md). Nightly builds never change the
-# launcher players run, so launchers only update themselves on purpose.
+# AlestiaOnline-Setup.exe and AlestiaOnline.dmg for the website (docs/deployment.md). Nightly
+# builds never change the launcher players run, so launchers only update themselves on purpose.
+#
+# Both platforms build and smoke-test first; the release is created only once both passed, so
+# the website's latest/download links never point at a release missing one of the installers.
 
 on:
   push:
@@ -18,7 +21,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  windows:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
@@ -94,18 +97,140 @@ jobs:
         shell: pwsh
         run: deploy/installer/smoke_test.ps1 -Setup dist/AlestiaOnline-Setup.exe -Launcher bin/Release/Launcher.exe -AllUsers
 
+      - name: Upload Windows release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-windows
+          path: |
+            dist/Launcher.exe
+            dist/launcher-release.json
+            dist/launcher-symbols.zip
+            dist/AlestiaOnline-Setup.exe
+          if-no-files-found: error
+
+  macos:
+    # Pinned rather than macos-latest: the launcher runs on the macOS version it was built on
+    # and newer, and Homebrew's OpenSSL is built for the runner's version.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Check the tag
+        id: version
+        run: |
+          tag="${{ github.ref_name }}"
+          [[ "$tag" =~ ^launcher-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "$tag is not launcher-vX.Y.Z"; exit 1; }
+          version="${BASH_REMATCH[1]}"
+          built="$(python3 tools/release/version.py --launcher)"
+          [ "$built" = "$version" ] || { echo "the build would report $built, the tag says $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      # Configure needs MySQL even for the launcher alone.
+      - name: Install dependencies
+        run: brew install openssl@3 mysql-client
+
+      - name: Configure CMake
+        run: |
+          mysql="$(brew --prefix mysql-client)"
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DMMO_BUILD_CLIENT=OFF \
+            -DMMO_BUILD_LAUNCHER=ON \
+            -DMMO_BUILD_TESTS=OFF \
+            -DMMO_BUILD_BOTS=OFF \
+            -DMMO_OPENSSL_STATIC=ON \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+            -DMYSQL_INCLUDE_DIR="$mysql/include/mysql" \
+            -DMYSQL_LIBRARY="$mysql/lib/libmysqlclient.dylib"
+
+      - name: Build launcher
+        run: cmake --build build --parallel 4 -t launcher
+
+      # Signing and notarization switch on once the repository has these secrets
+      # (deploy/installer/README.md); until then the DMG is unsigned.
+      - name: Import signing certificate
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE_P12" ]; then
+            echo "No signing certificate configured; building an unsigned DMG."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
+          [ -n "$identity" ] || { echo "the certificate holds no Developer ID Application identity"; exit 1; }
+          echo "MACOS_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          if [ -n "$MACOS_NOTARY_KEY" ]; then
+            echo "$MACOS_NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+            xcrun notarytool store-credentials alestia-notary --key "$RUNNER_TEMP/notary.p8" \
+              --key-id "$MACOS_NOTARY_KEY_ID" --issuer "$MACOS_NOTARY_ISSUER" --keychain "$keychain"
+            rm "$RUNNER_TEMP/notary.p8"
+            echo "MACOS_NOTARY_PROFILE=alestia-notary" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build DMG
+        run: deploy/installer/macos/build_dmg.sh --version "${{ steps.version.outputs.version }}" --launcher bin/Launcher.app --out-dir dist
+
+      - name: Smoke-test DMG
+        run: deploy/installer/macos/smoke_test_dmg.sh --dmg dist/AlestiaOnline.dmg --version "${{ steps.version.outputs.version }}" --launcher bin/Launcher.app
+
+      - name: Upload macOS release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-macos
+          path: dist/AlestiaOnline.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      # Full history and tags for the release notes.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${{ github.ref_name }}"
+          version="${tag#launcher-v}"
           previous=$(git describe --tags --abbrev=0 --match "launcher-v[0-9]*" "${tag}^" 2>/dev/null || true)
           range="${previous:+$previous..}$tag"
           {
-            echo "## Launcher ${{ steps.version.outputs.version }}"
+            echo "## Launcher $version"
             echo
             git log --no-merges --format='- %s' "$range" -- src/launcher | sed -E 's/^- [a-z]+(\([^)]*\))?!?: /- /' | head -50
           } > notes.md
-          gh release create "$tag" --target "${{ github.sha }}" --title "Launcher ${{ steps.version.outputs.version }}" \
-            --notes-file notes.md dist/Launcher.exe dist/launcher-release.json dist/launcher-symbols.zip dist/AlestiaOnline-Setup.exe
+          gh release create "$tag" --target "${{ github.sha }}" --title "Launcher $version" \
+            --notes-file notes.md dist/Launcher.exe dist/launcher-release.json dist/launcher-symbols.zip \
+            dist/AlestiaOnline-Setup.exe dist/AlestiaOnline.dmg

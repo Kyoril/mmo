@@ -57,3 +57,63 @@ registered (HKCU, or HKLM with `-AllUsers`), so uninstall that install before ru
   (HKCU and HKLM). The wizard prevents this: `UsePreviousPrivileges` (default yes) reuses the
   scope of the existing install and skips the scope question.
 - CI builds and smoke-tests the setup for every `launcher-v*` tag (`.github/workflows/launcher-release.yml`).
+
+# macOS disk image
+
+`macos/build_dmg.sh` builds `AlestiaOnline.dmg`. Like the setup it installs only the launcher:
+the image holds an `Alestia Online` folder with `Launcher.app` and a link to Applications. The
+player drags the folder to Applications, opens it and starts the launcher, which downloads the
+game into that folder (the client looks for its Data, Config and Logs next to `mmo_client.app`
+the same way). Uninstalling is dragging the folder to the Trash.
+
+The folder, not the bare app, is what gets dragged, because the launcher installs the game next
+to itself. A bare `Launcher.app` in Applications would fill `/Applications` with game files.
+
+## Build locally
+
+macOS with Xcode's command line tools, Python 3 and a built launcher bundle:
+
+```bash
+dmg=$(deploy/installer/macos/build_dmg.sh --version 1.0.1 --launcher bin/Launcher.app)
+deploy/installer/macos/smoke_test_dmg.sh --dmg "$dmg" --version 1.0.1 --launcher bin/Launcher.app
+```
+
+`--version` must match the bundle's `CFBundleShortVersionString`, which comes from the newest
+`launcher-v` tag. The DMG lands in `dist/` unless `--out-dir` says otherwise. `dmgbuild` (pinned
+in the script) writes the Finder window layout without Finder, so CI needs no GUI session. The
+window art is rendered at build time by `macos/make_background.swift` from the launcher's splash
+and display font; its icon positions must match `macos/dmg_settings.py`.
+
+The smoke test verifies and mounts the image, checks its layout and version, and starts the
+launcher from the read-only image and from a copied install folder (`--render-preview`).
+
+## Gatekeeper
+
+Until the DMG is signed and notarized, macOS 15 refuses to open the launcher the first time:
+the player opens it once, then confirms under System Settings > Privacy & Security >
+"Open Anyway". Because the app arrives inside a folder, macOS then runs it from a randomized
+read-only copy ("App Translocation"). The launcher detects that, clears the quarantine flag of
+its real copy and restarts from there, so the game is installed into the folder in Applications.
+Started straight from the mounted image (or any folder it cannot write to), the launcher asks
+the player to drag the folder to Applications first.
+
+Signing switches on in CI once these repository secrets exist; nothing else changes:
+
+| Secret | Content |
+|---|---|
+| `MACOS_CERTIFICATE_P12` | base64 of the exported "Developer ID Application" certificate with its key |
+| `MACOS_CERTIFICATE_PASSWORD` | password of that .p12 |
+| `MACOS_NOTARY_KEY` | App Store Connect API key (.p8 contents) for notarization |
+| `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER` | that key's id and issuer id |
+
+Locally, `MACOS_SIGN_IDENTITY` (and `MACOS_NOTARY_PROFILE`, a `notarytool store-credentials`
+profile) turn on the same steps in `build_dmg.sh`.
+
+## Rules (macOS)
+
+- The DMG is arm64 only and needs the macOS version of the build runner (`macos-15`) or newer.
+- Keep the bundle name `Launcher.app`: launcher self-update finds itself in the patch manifest by
+  its path inside the install folder.
+- The game patch has no macOS client yet (`deploy/patch/source.txt` ships the client under
+  `WINDOWS` only), so until it does, a Mac install downloads the game data but cannot start the
+  game.

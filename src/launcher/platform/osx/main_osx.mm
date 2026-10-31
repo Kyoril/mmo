@@ -26,6 +26,10 @@
 #include <string>
 #include <thread>
 
+#include <vector>
+
+#include <dlfcn.h>
+#include <sys/xattr.h>
 #include <unistd.h>
 
 #import <Cocoa/Cocoa.h>
@@ -75,14 +79,156 @@ namespace
 		}
 	}
 
-	/// Shows an alert before the application has a window.
-	void ShowFatalError(NSString* message)
+	/// Finishes the application's launch so an alert can be shown before [NSApp run].
+	///
+	/// Without it the alert's modal loop runs but its window never reaches the screen.
+	/// Only the early exit paths call this; they never reach [NSApp run], which finishes
+	/// the launch on its own.
+	void FinishLaunchingForAlert()
 	{
+		static bool s_launched = false;
+		if (!s_launched)
+		{
+			s_launched = true;
+			[NSApp finishLaunching];
+		}
+		[NSApp activateIgnoringOtherApps:YES];
+	}
+
+	/// Shows an alert before the application has a window.
+	void ShowFatalError(NSString* message, NSString* title = @"Error")
+	{
+		FinishLaunchingForAlert();
+
 		NSAlert* alert = [[NSAlert alloc] init];
-		alert.messageText = @"Error";
+		alert.messageText = title;
 		alert.informativeText = message;
 		alert.alertStyle = NSAlertStyleCritical;
 		[alert runModal];
+	}
+
+	/// Returns the bundle's real location if Gatekeeper translocated it, else nil.
+	///
+	/// A quarantined app that was not moved on its own by Finder (the DMG holds a whole
+	/// game folder, so it never is) runs from a random read-only copy, and the game
+	/// would be installed into that copy. The SecTranslocate functions are exported by
+	/// Security.framework but not declared in the SDK, hence the lookup by name.
+	NSURL* GetTranslocationOrigin(NSURL* bundle)
+	{
+		using IsTranslocatedFn = Boolean (*)(CFURLRef, bool*, CFErrorRef*);
+		using CreateOriginalPathFn = CFURLRef (*)(CFURLRef, CFErrorRef*);
+
+		void* security = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+		const auto isTranslocated = security ? reinterpret_cast<IsTranslocatedFn>(dlsym(security, "SecTranslocateIsTranslocatedURL")) : nullptr;
+		const auto createOriginalPath = security ? reinterpret_cast<CreateOriginalPathFn>(dlsym(security, "SecTranslocateCreateOriginalPathForURL")) : nullptr;
+
+		bool translocated = false;
+		if (isTranslocated)
+		{
+			isTranslocated((__bridge CFURLRef)bundle, &translocated, nullptr);
+		}
+		else
+		{
+			translocated = [[bundle path] containsString:@"/AppTranslocation/"];
+		}
+
+		if (!translocated || !createOriginalPath)
+		{
+			return translocated ? [NSURL fileURLWithPath:@"/"] : nil;
+		}
+
+		return (__bridge_transfer NSURL*)createOriginalPath((__bridge CFURLRef)bundle, nullptr);
+	}
+
+	/// Removes the quarantine flag from everything in `bundle`.
+	///
+	/// The player already confirmed the first start in Gatekeeper's dialog; without the
+	/// flag the bundle is no longer translocated. Files the launcher downloads later are
+	/// never quarantined, because the launcher does not opt into quarantining.
+	void RemoveQuarantine(NSURL* bundle)
+	{
+		const std::filesystem::path root([bundle fileSystemRepresentation]);
+		removexattr(root.c_str(), "com.apple.quarantine", XATTR_NOFOLLOW);
+
+		std::error_code error;
+		for (auto it = std::filesystem::recursive_directory_iterator(root, error); !error && it != std::filesystem::recursive_directory_iterator(); it.increment(error))
+		{
+			removexattr(it->path().c_str(), "com.apple.quarantine", XATTR_NOFOLLOW);
+		}
+	}
+
+	/// Starts the bundle at `url` with the same arguments and waits until it runs.
+	bool Relaunch(NSURL* url, const std::vector<char*>& arguments)
+	{
+		NSMutableArray<NSString*>* forwarded = [NSMutableArray array];
+		for (size_t i = 1; i < arguments.size(); ++i)
+		{
+			[forwarded addObject:[NSString stringWithUTF8String:arguments[i]]];
+		}
+
+		NSWorkspaceOpenConfiguration* configuration = [NSWorkspaceOpenConfiguration configuration];
+		configuration.arguments = forwarded;
+		configuration.createsNewApplicationInstance = YES;
+
+		dispatch_semaphore_t done = dispatch_semaphore_create(0);
+		__block bool started = false;
+		[[NSWorkspace sharedWorkspace] openApplicationAtURL:url
+											  configuration:configuration
+										  completionHandler:^(NSRunningApplication* application, NSError* error) {
+											  started = application != nil;
+											  if (error)
+											  {
+												  NSLog(@"Relaunch failed: %@", error);
+											  }
+											  dispatch_semaphore_signal(done);
+										  }];
+		dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
+		return started;
+	}
+
+	enum class InstallLocation
+	{
+		Usable,
+		Relaunched,
+		Unusable
+	};
+
+	/// Makes sure the game can be installed next to the bundle, as the setup's folder
+	/// checks do on Windows.
+	InstallLocation CheckInstallLocation(const std::vector<char*>& arguments)
+	{
+		NSURL* bundle = [[NSBundle mainBundle] bundleURL];
+
+		if (NSURL* origin = GetTranslocationOrigin(bundle))
+		{
+			if ([[origin path] isEqualToString:@"/"])
+			{
+				ShowFatalError(@"macOS started Alestia Online from a temporary location. Move the Alestia Online folder to Applications and start the launcher from there.",
+					@"Alestia Online cannot start from here");
+				return InstallLocation::Unusable;
+			}
+
+			RemoveQuarantine(origin);
+			if (Relaunch(origin, arguments))
+			{
+				return InstallLocation::Relaunched;
+			}
+
+			ShowFatalError(@"macOS started Alestia Online from a temporary location and it could not restart from its real one. Start the launcher again from the Alestia Online folder in Applications.",
+				@"Alestia Online cannot start from here");
+			return InstallLocation::Unusable;
+		}
+
+		// The game is downloaded next to the bundle. On the mounted disk image, or any
+		// folder the player cannot write to, that cannot work.
+		if (access([[[bundle URLByDeletingLastPathComponent] path] fileSystemRepresentation], W_OK) != 0)
+		{
+			ShowFatalError(@"Drag the Alestia Online folder to Applications, then start the launcher from there. The game is downloaded into that folder.",
+				@"Install Alestia Online first");
+			return InstallLocation::Unusable;
+		}
+
+		return InstallLocation::Usable;
 	}
 }
 
@@ -142,7 +288,7 @@ int main(int argc, char* argv[])
 			if (results.count("version"))
 			{
 				// Reports the version and exits; it must not fall through into a full run.
-				[NSApp activateIgnoringOtherApps:YES];
+				FinishLaunchingForAlert();
 				mmo::ShowLauncherVersionInfo();
 				return 0;
 			}
@@ -159,6 +305,19 @@ int main(int argc, char* argv[])
 		if (!renderPreviewDirectory.empty())
 		{
 			return mmo::RenderLauncherPreviews(renderPreviewDirectory) ? 0 : 1;
+		}
+
+		@autoreleasepool
+		{
+			switch (CheckInstallLocation(arguments))
+			{
+			case InstallLocation::Usable:
+				break;
+			case InstallLocation::Relaunched:
+				return 0;
+			case InstallLocation::Unusable:
+				return 1;
+			}
 		}
 
 		// Installation and updates are relative to the bundle, not the shell's cwd.
