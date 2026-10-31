@@ -2152,6 +2152,9 @@ namespace mmo
 			}
 
 			[m_renderEncoder setFrontFacingWinding:MTLWindingClockwise];
+			// The D3D11 rasterizer state leaves DepthClipEnable off, so nothing is clipped against the
+			// near and far planes there (the minimap draws at z = 0, in front of its near plane).
+			[m_renderEncoder setDepthClipMode:MTLDepthClipModeClamp];
 			[m_renderEncoder setTriangleFillMode:m_fillMode == FillMode::Wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
 			[m_renderEncoder setDepthBias:m_depthBias slopeScale:m_slopeScaledDepthBias clamp:m_depthBiasClamp];
 			[m_renderEncoder setStencilReferenceValue:m_stencilRef];
