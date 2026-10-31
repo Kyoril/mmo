@@ -1,12 +1,12 @@
 #pragma once
 #include <unordered_map>
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 
 #include "shared/audio/audio.h"
 
-#include <fmod/inc/fmod.hpp>
-#include <fmod/inc/fmod_errors.h>
+#include <fmod.hpp>
+#include <fmod_errors.h>
 
 #include <deque>
 #include <vector>
@@ -198,10 +198,10 @@ namespace mmo
 
 		void PlaySoundInternal(SoundIndex sound, ChannelIndex *channelIndex, float priority, SoundCategory category, const Vector3* position, float minDistance, float maxDistance);
 
-		static FMOD_RESULT F_CALLBACK FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata);
-		static FMOD_RESULT F_CALLBACK FMODFileCloseCallback(void *handle, void *userdata);
-		static FMOD_RESULT F_CALLBACK FMODFileReadCallback(void *handle, void *buffer, unsigned int sizebytes, unsigned int *bytesread, void *userdata);
-		static FMOD_RESULT F_CALLBACK FMODFileSeekCallback(void *handle, unsigned int pos, void *userdata);
+		static FMOD_RESULT F_CALL FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata);
+		static FMOD_RESULT F_CALL FMODFileCloseCallback(void *handle, void *userdata);
+		static FMOD_RESULT F_CALL FMODFileReadCallback(void *handle, void *buffer, unsigned int sizebytes, unsigned int *bytesread, void *userdata);
+		static FMOD_RESULT F_CALL FMODFileSeekCallback(void *handle, unsigned int pos, void *userdata);
 
 	private:
 		ChannelIndex FindAvailableChannel(float priority);

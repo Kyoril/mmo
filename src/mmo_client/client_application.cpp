@@ -51,7 +51,7 @@
 
 #include <filesystem>
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 #include "fmod_audio/fmod_audio.h"
 #else
 #include "null_audio/null_audio.h"
@@ -167,7 +167,7 @@ namespace mmo
 		context.runtime = std::make_unique<ClientRuntime>();
 		context.runtime->Initialize();
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 		context.audio = std::make_unique<FMODAudio>();
 #else
 		context.audio = std::make_unique<NullAudio>();
