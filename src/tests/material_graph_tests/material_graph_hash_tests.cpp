@@ -4,11 +4,16 @@
 
 #include <array>
 #include <filesystem>
+#include <atomic>
 #include <map>
+#include <chrono>
 
 #include "assets/asset_registry.h"
 #include "base/chunk_writer.h"
+#include "binary_io/memory_source.h"
+#include "binary_io/reader.h"
 #include "binary_io/stream_sink.h"
+#include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "material_graph/material_graph.h"
 #include "material_graph/material_graph_hash.h"
@@ -76,7 +81,7 @@ namespace
 
 		FunctionFixture()
 		{
-			root = std::filesystem::temp_directory_path() / "mmo_material_graph_hash_test";
+			root = std::filesystem::temp_directory_path() / ("mmo_material_graph_hash_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 			std::filesystem::remove_all(root);
 			std::filesystem::create_directories(root / "Functions");
 			AssetRegistry::Initialize(root, {});
@@ -177,24 +182,63 @@ TEST_CASE("generator version bump makes build info stale", "[hash]")
 	CHECK_FALSE(IsShaderBuildCurrent(info, "D3D11", info.graphHash, {}));
 }
 
+TEST_CASE("legacy function without stored hash is hashed on the fly", "[hash]")
+{
+	FunctionFixture fixture;
+	fixture.WriteFunction("Functions/NoHash.hmf", nullptr, [](MaterialGraph& g) { BuildConstGraph(g, 1.0f); });
+
+	MaterialGraph expected;
+	BuildConstGraph(expected, 1.0f);
+
+	MaterialGraph graph;
+	AddFunctionNode(graph, "Functions/NoHash.hmf");
+
+	std::vector<FunctionHash> out;
+	REQUIRE(CollectFunctionHashes(graph, out));
+	REQUIRE(out.size() == 1);
+	CHECK(out[0].hash == ComputeGraphHash(expected));
+}
+
+TEST_CASE("graph hash is stable across a serialize and deserialize round trip", "[hash]")
+{
+	FunctionFixture fixture;
+	const SHA1Hash stored = MakeHash(0x5);
+	fixture.WriteFunction("Functions/F.hmf", &stored, [](MaterialGraph& g) { BuildConstGraph(g, 3.0f); });
+
+	MaterialGraph graph;
+	BuildConstGraph(graph, 1.0f);
+	AddFunctionNode(graph, "Functions/F.hmf");
+	AddFunctionNode(graph, "Functions/F.hmf");
+	const SHA1Hash before = ComputeGraphHash(graph);
+
+	std::vector<char> buffer;
+	{
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		graph.Serialize(writer);
+	}
+
+	// Skip the chunk header (magic and size), like the owner of the file does
+	constexpr size_t chunkHeaderSize = 8;
+	REQUIRE(buffer.size() > chunkHeaderSize);
+	io::MemorySource source{ buffer.data() + chunkHeaderSize, buffer.data() + buffer.size() };
+	io::Reader reader{ source };
+
+	MaterialGraph loaded;
+	ExecutableMaterialGraphLoadContext context;
+	loaded.Deserialize(reader, context);
+	REQUIRE(context.PerformAfterLoadActions());
+	REQUIRE(loaded.GetNodes().size() == 3);
+
+	CHECK(ComputeGraphHash(loaded) == before);
+}
+
 TEST_CASE("hash with missing function", "[hash]")
 {
 	FunctionFixture fixture;
 
 	MaterialGraph graph;
 	AddFunctionNode(graph, "Functions/Missing.hmf");
-
-	std::vector<FunctionHash> out;
-	CHECK_FALSE(CollectFunctionHashes(graph, out));
-}
-
-TEST_CASE("function without stored hash fails", "[hash]")
-{
-	FunctionFixture fixture;
-	fixture.WriteFunction("Functions/NoHash.hmf", nullptr, [](MaterialGraph& g) { BuildConstGraph(g, 1.0f); });
-
-	MaterialGraph graph;
-	AddFunctionNode(graph, "Functions/NoHash.hmf");
 
 	std::vector<FunctionHash> out;
 	CHECK_FALSE(CollectFunctionHashes(graph, out));

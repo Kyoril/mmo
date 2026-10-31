@@ -29,7 +29,7 @@ namespace mmo
 		/// @param path Asset path of the function.
 		/// @param hash Receives the stored hash.
 		/// @param graph If not null, receives the function's graph.
-		/// @return false if the file is missing, unreadable, or has no stored hash.
+		/// @return false if the file is missing or unreadable. Without a stored hash it is computed from the graph.
 		bool ReadFunctionFile(const String& path, SHA1Hash& hash, MaterialGraph* graph)
 		{
 			const auto file = AssetRegistry::OpenFile(path);
@@ -74,8 +74,14 @@ namespace mmo
 
 			if (!hasHash)
 			{
-				WLOG("Material function file " << path << " has no stored hash, save it in the editor to add one");
-				return false;
+				// Legacy file saved before hashes were stored: hash what saving would have recorded
+				if (!graph)
+				{
+					return false;
+				}
+
+				DLOG("Material function file " << path << " has no stored hash, computing it");
+				hash = ComputeGraphHash(*graph);
 			}
 
 			return true;

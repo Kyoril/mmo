@@ -56,7 +56,8 @@ namespace mmo
 		{
 			writer
 				<< io::write<uint32>(m_nodes.size())
-				<< io::write<uint32>(m_idGenerator.GetCurrentId())
+				// The id counter drifts when a graph is loaded, so it is not part of the content hash
+				<< io::write<uint32>(m_layoutFree ? 0 : m_idGenerator.GetCurrentId())
 				<< io::write<uint32>(m_rootNode ? m_rootNode->GetId() : 0xffffffff);
 			
 			for (const auto& node : m_nodes)
