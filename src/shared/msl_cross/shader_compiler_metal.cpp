@@ -100,7 +100,6 @@ namespace mmo
 			}
 
 			const auto sourcePath = directory / "shader.metal";
-			const auto airPath = directory / "shader.air";
 			const auto libraryPath = directory / "shader.metallib";
 			const auto logPath = directory / "log.txt";
 			{
@@ -108,10 +107,11 @@ namespace mmo
 				file << source;
 			}
 
-			const String compile = "xcrun -sdk macosx metal -std=macos-metal2.3 -mmacosx-version-min=11.0 -c "
-				+ Quote(sourcePath) + " -o " + Quote(airPath) + " >" + Quote(logPath) + " 2>&1";
-			const String link = "xcrun -sdk macosx metallib " + Quote(airPath) + " -o " + Quote(libraryPath)
-				+ " >" + Quote(logPath) + " 2>&1";
+			// The tools run inside the temporary directory on relative file names, so the directory (which
+			// holds the process id) never ends up in the library and cooked bytes only depend on the source.
+			const String inDirectory = "cd " + Quote(directory) + " && ";
+			const String compile = inDirectory + "xcrun -sdk macosx metal -std=macos-metal2.3 -mmacosx-version-min=11.0 -c shader.metal -o shader.air >log.txt 2>&1";
+			const String link = inDirectory + "xcrun -sdk macosx metallib shader.air -o shader.metallib >log.txt 2>&1";
 
 			bool succeeded = std::system(compile.c_str()) == 0 && std::system(link.c_str()) == 0;
 			if (succeeded)
@@ -134,6 +134,11 @@ namespace mmo
 	ShaderCompilerMetal::ShaderCompilerMetal(const Output output)
 		: m_output(output)
 	{
+	}
+
+	bool ShaderCompilerMetal::IsLibraryToolchainAvailable()
+	{
+		return IsMetalToolchainAvailable();
 	}
 
 	const String& ShaderCompilerMetal::GetShaderFormat() const

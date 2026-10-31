@@ -483,7 +483,7 @@ namespace mmo
 		void SetLayerBlendSharpnessParam(String name) { m_layerBlendSharpnessParam = std::move(name); }
 
 	private:
-		void ReportMissingShader(uint32 bit, std::string_view variant);
+		void ReportMissingShader(uint32 bit, std::string_view variant, bool hasCode);
 
 	private:
 		String m_name;

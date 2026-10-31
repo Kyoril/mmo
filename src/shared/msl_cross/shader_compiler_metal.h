@@ -28,6 +28,10 @@ namespace mmo
 		/// @param output What the produced blobs carry.
 		explicit ShaderCompilerMetal(Output output);
 
+		/// @brief Checks whether the Metal compiler of the Xcode toolchain (xcrun metal, metallib) can be run,
+		///        i.e. whether Output::Library produces libraries rather than falling back to source.
+		[[nodiscard]] static bool IsLibraryToolchainAvailable();
+
 	public:
 		[[nodiscard]] const String& GetShaderFormat() const override;
 

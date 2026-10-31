@@ -170,8 +170,11 @@ namespace
 		{
 			AssetRegistry::Initialize(data, {});
 			GraphicsDevice::CreateNull(GraphicsDeviceDesc());
-			GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
+			globalsLoaded = GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
 		}
+
+		/// Without the global parameters every material using one fails to compile: an error, not a warning.
+		bool globalsLoaded { false };
 
 		~CookEnvironment()
 		{
@@ -189,6 +192,11 @@ namespace
 		}
 
 		const CookEnvironment environment(options.data);
+		if (!environment.globalsLoaded)
+		{
+			ELOG("Unable to load " << GlobalShaderParametersAssetPath << " from the data directory; shaders can't be cooked without it");
+			return 1;
+		}
 
 		CookReport report;
 		bool succeeded = true;
@@ -202,6 +210,14 @@ namespace
 				return 1;
 			}
 
+#if defined(__APPLE__) && defined(MMO_COOK_WITH_METAL)
+			// Releases must carry precompiled libraries; a silent fallback to source would hide a broken toolchain.
+			if (options.platform == shader_platform::Metal && !ShaderCompilerMetal::IsLibraryToolchainAvailable())
+			{
+				ELOG("The Metal compiler of the Xcode toolchain (xcrun metal, metallib) is not available");
+				return 1;
+			}
+#endif
 			succeeded = CookShaders(options.data, *compiler, options.out, report);
 		}
 		else if (options.command == "assemble")

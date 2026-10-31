@@ -31,16 +31,18 @@ namespace mmo
 	void Material::ReportMissingVertexShader(const VertexShaderType type)
 	{
 		const auto index = static_cast<uint32>(type);
-		ReportMissingShader(1u << index, index < std::size(VertexShaderVariantNames) ? VertexShaderVariantNames[index] : "unknown vertex");
+		ReportMissingShader(1u << index, index < std::size(VertexShaderVariantNames) ? VertexShaderVariantNames[index] : "unknown vertex",
+			index < std::size(m_vertexShaderCode) && !m_vertexShaderCode[index].empty());
 	}
 
 	void Material::ReportMissingPixelShader(const PixelShaderType type)
 	{
 		const auto index = static_cast<uint32>(type);
-		ReportMissingShader(1u << (8 + index), index < std::size(PixelShaderVariantNames) ? PixelShaderVariantNames[index] : "unknown pixel");
+		ReportMissingShader(1u << (8 + index), index < std::size(PixelShaderVariantNames) ? PixelShaderVariantNames[index] : "unknown pixel",
+			index < std::size(m_pixelShaderCode) && !m_pixelShaderCode[index].empty());
 	}
 
-	void Material::ReportMissingShader(const uint32 bit, const std::string_view variant)
+	void Material::ReportMissingShader(const uint32 bit, const std::string_view variant, const bool hasCode)
 	{
 		if ((m_reportedMissingShaders & bit) != 0)
 		{
@@ -48,6 +50,14 @@ namespace mmo
 		}
 
 		m_reportedMissingShaders |= bit;
+		if (hasCode)
+		{
+			// The data is there but the device could not create the shader: not broken game data, so
+			// the missing shader handler (release clients abort there) is not the right reaction.
+			ELOG("Material " << m_name << ": the device rejected its " << variant << " shader; nothing is drawn with it");
+			return;
+		}
+
 		if (s_missingShaderHandler)
 		{
 			s_missingShaderHandler(m_name, variant);
