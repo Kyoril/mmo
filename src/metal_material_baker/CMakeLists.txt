@@ -14,7 +14,6 @@ set(bakerImguiSources
 	"${PROJECT_SOURCE_DIR}/deps/imgui-node-editor/imgui_node_editor_api.cpp")
 add_executable(metal_material_baker
 	main.cpp
-	${PROJECT_SOURCE_DIR}/src/shared/graphics_d3d11/material_compiler_d3d11.cpp
 	${editorMaterialDir}/material_graph.cpp
 	${editorMaterialDir}/material_node.cpp
 	${editorMaterialDir}/material_function.cpp
