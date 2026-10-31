@@ -42,6 +42,11 @@ if (MMO_BUILD_TOOLS)
 	endif()
 endif()
 
+# The client CI jobs build mmo_cook next to the client to cook their platform's shaders.
+if (MMO_BUILD_TOOLS OR MMO_BUILD_CLIENT)
+	add_subdirectory(mmo_cook)
+endif()
+
 if (MMO_BUILD_TESTS)
 	add_subdirectory(tests)
 endif()

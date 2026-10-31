@@ -16,7 +16,7 @@ add_subdirectory(game_common)
 # None of these needs a graphics device -- xml_handler is attribute parsing and a SAX
 # handler chain, tex is container header IO. They are built for test builds too, so their
 # suites keep working on the headless server build.
-if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TESTS)
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
 	add_subdirectory(xml_handler)
 	add_subdirectory(tex)
 	add_subdirectory(tex_v1_0)
@@ -76,4 +76,9 @@ if (MMO_BUILD_BOTS)
 endif()
 if (MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS)
 	add_subdirectory(nav_build)
+endif()
+
+# Content cooking for releases (content_cook) builds on the material graph, see above.
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
+	add_subdirectory(content_cook)
 endif()
