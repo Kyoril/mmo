@@ -153,6 +153,8 @@ namespace mmo
 	public:
 		StructuredBufferMetal(GraphicsDeviceMetal& device, size_t elementSize, size_t elementCount, const void* initialData);
 
+		~StructuredBufferMetal() override;
+
 	public:
 		void BindToStage(ShaderType type, uint32 slot) override;
 

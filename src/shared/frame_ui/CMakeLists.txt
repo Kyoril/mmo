@@ -13,5 +13,10 @@ target_link_libraries(frame_ui
 	lua
 	luabind)
 
+if (APPLE)
+	set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/clipboard_mac.mm PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+	target_link_libraries(frame_ui "-framework AppKit")
+endif()
+
 # Add library to a solution folder for better organization
 set_property(TARGET frame_ui PROPERTY FOLDER "shared")

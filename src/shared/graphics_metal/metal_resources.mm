@@ -259,9 +259,14 @@ namespace mmo
 	{
 	}
 
+	StructuredBufferMetal::~StructuredBufferMetal()
+	{
+		m_device.ForgetStageBuffer(&m_buffer);
+	}
+
 	void StructuredBufferMetal::BindToStage(const ShaderType type, const uint32 slot)
 	{
-		m_device.BindStageBuffer(type, metal_bindings::StructuredBufferBase + slot, m_buffer.Use(), 0);
+		m_device.BindStageBuffer(type, metal_bindings::StructuredBufferBase + slot, &m_buffer);
 	}
 
 	void StructuredBufferMetal::Update(const void* data, const size_t elementCount)

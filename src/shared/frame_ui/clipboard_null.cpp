@@ -4,7 +4,7 @@
 
 #include "base/macros.h"
 
-#if !PLATFORM_WINDOWS
+#if !PLATFORM_WINDOWS && !PLATFORM_APPLE
 
 
 namespace mmo

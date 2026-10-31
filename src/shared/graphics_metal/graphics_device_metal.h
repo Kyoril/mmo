@@ -22,6 +22,7 @@ namespace mmo
 	class VertexBufferMetal;
 	class IndexBufferMetal;
 	class RenderWindowMetal;
+	class RenamedMetalBuffer;
 
 	/// @brief Converts an engine pixel format to the Metal format used for render targets of it.
 	MTLPixelFormat ToMetalRenderTargetFormat(PixelFormat format);
@@ -248,8 +249,11 @@ namespace mmo
 
 		void ForgetConstantBuffer(const ConstantBufferMetal* buffer);
 
-		/// @brief Binds a raw Metal buffer at a buffer index of a stage (structured buffers).
-		void BindStageBuffer(ShaderType stage, uint32 index, id<MTLBuffer> buffer, NSUInteger offset);
+		/// @brief Binds a buffer at a buffer index of a stage (structured buffers). The instance the
+		///        buffer holds its contents in is looked up at draw time, as updates rename it.
+		void BindStageBuffer(ShaderType stage, uint32 index, RenamedMetalBuffer* buffer);
+
+		void ForgetStageBuffer(const RenamedMetalBuffer* buffer);
 
 		/// @brief Binds a texture to a texture index of a stage. Applies the current sampler to the
 		///        sampler slot of the same number when applySampler is set, like D3D11 BindTexture.
@@ -293,8 +297,7 @@ namespace mmo
 			id<MTLSamplerState> samplers[metal_bindings::MaxSamplers] = {};
 			ConstantBufferMetal* constantBuffers[metal_bindings::MaxConstantBuffers] = {};
 			uint64 constantBufferVersions[metal_bindings::MaxConstantBuffers] = {};
-			id<MTLBuffer> buffers[MaxBufferSlots] = {};
-			NSUInteger bufferOffsets[MaxBufferSlots] = {};
+			RenamedMetalBuffer* buffers[MaxBufferSlots] = {};
 			uint32 dirtyTextures = 0;
 			uint32 dirtySamplers = 0;
 			uint32 dirtyConstantBuffers = 0;

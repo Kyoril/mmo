@@ -992,7 +992,7 @@ namespace mmo
 		}
 	}
 
-	void GraphicsDeviceMetal::BindStageBuffer(const ShaderType stage, const uint32 index, id<MTLBuffer> buffer, const NSUInteger offset)
+	void GraphicsDeviceMetal::BindStageBuffer(const ShaderType stage, const uint32 index, RenamedMetalBuffer* buffer)
 	{
 		if (index >= MaxBufferSlots)
 		{
@@ -1001,8 +1001,21 @@ namespace mmo
 
 		StageBindings& bindings = GetStage(stage);
 		bindings.buffers[index] = buffer;
-		bindings.bufferOffsets[index] = offset;
 		bindings.dirtyBuffers |= 1u << index;
+	}
+
+	void GraphicsDeviceMetal::ForgetStageBuffer(const RenamedMetalBuffer* buffer)
+	{
+		for (auto& stage : m_stages)
+		{
+			for (uint32 i = 0; i < MaxBufferSlots; ++i)
+			{
+				if (stage.buffers[i] == buffer)
+				{
+					stage.buffers[i] = nullptr;
+				}
+			}
+		}
 	}
 
 	void GraphicsDeviceMetal::BindStageTexture(const ShaderType stage, const uint32 index, id<MTLTexture> texture)
@@ -1852,20 +1865,21 @@ namespace mmo
 		}
 		bindings.dirtyConstantBuffers = 0;
 
+		// Structured buffers are set for every draw: an update in between renames them.
 		for (uint32 index = metal_bindings::MaxConstantBuffers; index < MaxBufferSlots; ++index)
 		{
-			if ((bindings.dirtyBuffers & (1u << index)) == 0 || !bindings.buffers[index])
+			if (!bindings.buffers[index])
 			{
 				continue;
 			}
 
 			if (vertex)
 			{
-				[m_renderEncoder setVertexBuffer:bindings.buffers[index] offset:bindings.bufferOffsets[index] atIndex:index];
+				[m_renderEncoder setVertexBuffer:bindings.buffers[index]->Use() offset:0 atIndex:index];
 			}
 			else
 			{
-				[m_renderEncoder setFragmentBuffer:bindings.buffers[index] offset:bindings.bufferOffsets[index] atIndex:index];
+				[m_renderEncoder setFragmentBuffer:bindings.buffers[index]->Use() offset:0 atIndex:index];
 			}
 		}
 		bindings.dirtyBuffers = 0;
@@ -1921,7 +1935,7 @@ namespace mmo
 					continue;
 				}
 
-				const bool bound = index < metal_bindings::MaxConstantBuffers ? bindings.constantBuffers[index] != nullptr : bindings.buffers[index] != nil;
+				const bool bound = index < metal_bindings::MaxConstantBuffers ? bindings.constantBuffers[index] != nullptr : bindings.buffers[index] != nullptr;
 				if (bound)
 				{
 					continue;
@@ -2432,7 +2446,7 @@ namespace mmo
 		{
 			if (bindings.buffers[index])
 			{
-				[m_computeEncoder setBuffer:bindings.buffers[index] offset:bindings.bufferOffsets[index] atIndex:index];
+				[m_computeEncoder setBuffer:bindings.buffers[index]->Use() offset:0 atIndex:index];
 			}
 			else if (entry.usedBuffers & (1u << index))
 			{

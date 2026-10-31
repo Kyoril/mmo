@@ -587,6 +587,7 @@ namespace mmo
 		m_minimap.SetPrefetchHandler(nullptr);
 		GameUnitC::SetModelFilePrefetcher(nullptr);
 		m_work.reset();
+		m_dispatcherWork.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
@@ -1852,6 +1853,11 @@ namespace mmo
 
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
+
+		// Same for the dispatcher (see GlueScene::m_dispatcherWork): outside of Windows, asio stops an
+		// io_service the first time a poll finds it empty, and a stopped one runs no handlers until it
+		// is reset, which left WaitForWorldLoading spinning on a page whose finalization never ran.
+		m_dispatcherWork = std::make_unique<asio::io_service::work>(m_dispatcher);
 
 		// Setup background loading thread
 		auto &workQueue = m_workQueue;
