@@ -2,6 +2,7 @@
 """Turns a nightly GitHub release into releases/<sha>/ on the patch root."""
 
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -23,6 +24,9 @@ LAUNCHER_BINARY = "Launcher.exe"
 LAUNCHER_MANIFEST = "launcher-release.json"
 # The macOS app bundle; releases published before it existed do not carry it.
 MACOS_CLIENT_ASSET = "client-macos.zip"
+# Cooked client content (material shaders for every platform) laid over the data checkout.
+OVERLAY_ASSET = "client-overlay.zip"
+OVERLAY_MANIFEST = "overlay.json"
 
 
 class StageError(Exception):
@@ -93,8 +97,12 @@ class Stager:
 		macos_zip = None
 		if MACOS_CLIENT_ASSET in manifest["assets"]:
 			macos_zip = self._download_verified(release, manifest, MACOS_CLIENT_ASSET)
+		overlay_zip = None
+		if OVERLAY_ASSET in manifest["assets"]:
+			overlay_zip = self._download_verified(release, manifest, OVERLAY_ASSET)
 
 		self._checkout_data(manifest["data_client_commit"])
+		cook_warnings = self._apply_overlay(overlay_zip) if overlay_zip is not None else []
 
 		if self.patch_source.exists():
 			shutil.rmtree(self.patch_source)
@@ -121,7 +129,7 @@ class Stager:
 			shutil.rmtree(final)
 		os.replace(tmp, final)
 		log.info("staged %s into %s (launcher %s)", commit, final, launcher_version or "from the nightly")
-		return dict(manifest, launcher_version=launcher_version)
+		return dict(manifest, launcher_version=launcher_version, cook_warnings=cook_warnings)
 
 	def _download_verified(self, release, manifest, name):
 		"""Downloads asset `name` and checks it against release.json; returns its path."""
@@ -144,6 +152,46 @@ class Stager:
 				raise StageError("{} must hold only mmo_client.app, not {}".format(MACOS_CLIENT_ASSET, ", ".join(top_level)))
 			archive.extractall(self.patch_source)
 		return top_level
+
+	def _apply_overlay(self, zip_path):
+		"""Lays client-overlay.zip over the data checkout; returns the cook warnings it carries.
+
+		Every file except overlay.json replaces its counterpart, then each path in overlay.json's
+		"delete" list is removed. The next _checkout_data resets the checkout. Raises StageError.
+		"""
+		root = self.data_checkout.resolve()
+
+		def inside(relative):
+			target = (root / relative).resolve()
+			if target != root and root not in target.parents:
+				raise StageError("{} names a path outside the data checkout: {}".format(OVERLAY_ASSET, relative))
+			return target
+
+		with zipfile.ZipFile(zip_path) as archive:
+			names = archive.namelist()
+			if OVERLAY_MANIFEST not in names:
+				raise StageError("{} contains no {}".format(OVERLAY_ASSET, OVERLAY_MANIFEST))
+			try:
+				overlay = json.loads(archive.read(OVERLAY_MANIFEST).decode("utf-8"))
+			except ValueError as error:
+				raise StageError("{} is not valid JSON: {}".format(OVERLAY_MANIFEST, error))
+			if overlay.get("schema") != 1:
+				raise StageError("unsupported {} schema {}".format(OVERLAY_MANIFEST, overlay.get("schema")))
+			files = [name for name in names if name != OVERLAY_MANIFEST and not name.endswith("/")]
+			deletions = [inside(path) for path in overlay.get("delete") or []]
+			for name in files:
+				target = inside(name)
+				target.parent.mkdir(parents=True, exist_ok=True)
+				with archive.open(name) as source, open(target, "wb") as sink:
+					shutil.copyfileobj(source, sink)
+		for target in deletions:
+			if target.is_dir():
+				shutil.rmtree(target)
+			elif target.exists():
+				target.unlink()
+		warnings = list(overlay.get("warnings") or [])
+		log.info("applied %s: %d files, %d deletions, %d cook warnings", OVERLAY_ASSET, len(files), len(deletions), len(warnings))
+		return warnings
 
 	def _pin_launcher(self):
 		"""Replaces the nightly's Launcher.exe with the newest launcher release; returns its version.

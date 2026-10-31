@@ -108,11 +108,18 @@ MACOS_CLIENT = {
 }
 
 
+def make_overlay(files, delete=(), warnings=(), schema=1):
+	"""Returns the entries of a client-overlay.zip: the cooked files plus overlay.json."""
+	manifest = {"schema": schema, "delete": list(delete), "warnings": list(warnings)}
+	return dict(files, **{"overlay.json": json.dumps(manifest).encode("utf-8")})
+
+
 def make_release_assets(commit, data_commit, binaries=None, source_txt=SOURCE_TXT, changes=None, sha_override=None,
-		macos=None, macos_sha_override=None):
+		macos=None, macos_sha_override=None, overlay=None, overlay_sha_override=None):
 	"""Returns {asset name: bytes} for a release: client-bin.zip and a matching release.json.
 
 	macos: {zip entry: bytes} of a client-macos.zip to add (MACOS_CLIENT is a valid one).
+	overlay: {zip entry: bytes} of a client-overlay.zip to add (see make_overlay).
 	"""
 	binaries = binaries if binaries is not None else {"mmo_client.exe": b"client", "Launcher.exe": b"launcher"}
 	files = dict(binaries)
@@ -136,6 +143,11 @@ def make_release_assets(commit, data_commit, binaries=None, source_txt=SOURCE_TX
 		manifest["assets"]["client-macos.zip"] = {
 			"sha256": macos_sha_override or hashlib.sha256(macos_bytes).hexdigest(), "size": len(macos_bytes)}
 		assets["client-macos.zip"] = macos_bytes
+	if overlay is not None:
+		overlay_bytes = _zip(overlay)
+		manifest["assets"]["client-overlay.zip"] = {
+			"sha256": overlay_sha_override or hashlib.sha256(overlay_bytes).hexdigest(), "size": len(overlay_bytes)}
+		assets["client-overlay.zip"] = overlay_bytes
 	assets["release.json"] = json.dumps(manifest).encode("utf-8")
 	return assets
 

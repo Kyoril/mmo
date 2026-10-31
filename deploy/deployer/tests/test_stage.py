@@ -13,7 +13,7 @@ from mmo_deployer.patchdir import PatchDir
 from mmo_deployer.stage import COMPILER_TIMEOUT_S, GIT_TIMEOUT_S, StageError, Stager, select_release
 from mmo_deployer.state import State
 
-from .fakes import CAN_SYMLINK, MACOS_CLIENT, FakeGitHub, make_config, make_git_repo, make_launcher_assets, make_release_assets
+from .fakes import CAN_SYMLINK, MACOS_CLIENT, FakeGitHub, make_config, make_git_repo, make_launcher_assets, make_overlay, make_release_assets
 
 FAKE_COMPILER = [sys.executable, os.path.join(os.path.dirname(__file__), "fake_update_compiler.py")]
 COMMIT = "c" * 40
@@ -195,6 +195,53 @@ class StagerTests(unittest.TestCase):
 		self.stager.stage(self._release())
 		self.assertFalse((self.stager.patch_source / "mmo_client.app").exists())
 		self.assertTrue(self.patchdir.has_release(COMMIT))
+
+	def _data_with_overlay_targets(self):
+		root = Path(self.tmp.name)
+		self.data_commit = make_git_repo(root / "mmo-data-2", {"Models/a.hmat": "repo shaders", "Worlds/x.wobj": "entity"})
+		self.cfg = make_config(root, data_repo_url=str(root / "mmo-data-2"))
+		self.stager = Stager(self.cfg, self.github, self.patchdir, FAKE_COMPILER)
+
+	def test_overlay_replaces_and_deletes_files(self):
+		self._data_with_overlay_targets()
+		self.stager.stage(self._release(overlay=make_overlay({"Models/a.hmat": b"cooked shaders"}, delete=["Worlds/x.wobj"])))
+		self.assertEqual((self.stager.data_checkout / "Models" / "a.hmat").read_bytes(), b"cooked shaders")
+		self.assertFalse((self.stager.data_checkout / "Worlds" / "x.wobj").exists())
+		self.assertFalse((self.stager.data_checkout / "overlay.json").exists())
+
+	def test_overlay_path_outside_checkout_is_refused(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(overlay=make_overlay({}, delete=["../../etc/passwd"])))
+		self.assertIn("outside", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_overlay_entry_outside_checkout_is_refused(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(overlay=make_overlay({"../escape.txt": b"x"})))
+		self.assertIn("outside", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_overlay_unknown_schema_is_refused(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(overlay=make_overlay({}, schema=2)))
+		self.assertIn("schema", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_overlay_checksum_mismatch(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(overlay=make_overlay({}), overlay_sha_override="0" * 64))
+		self.assertIn("client-overlay.zip checksum", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_release_without_overlay_stages(self):
+		manifest = self.stager.stage(self._release())
+		self.assertEqual(manifest["cook_warnings"], [])
+		self.assertTrue(self.patchdir.has_release(COMMIT))
+
+	def test_cook_warnings_reach_the_staged_manifest(self):
+		warnings = [{"asset": "Models/b.hmat", "message": "VS3 failed"}]
+		manifest = self.stager.stage(self._release(overlay=make_overlay({}, warnings=warnings)))
+		self.assertEqual(manifest["cook_warnings"], warnings)
 
 	def _recording_run(self, timeout_on=None):
 		calls = []
