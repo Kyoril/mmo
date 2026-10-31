@@ -2601,7 +2601,7 @@ namespace mmo
 
 		// Ensure terrain is properly reloaded
 		PagePosition worldSize(64, 64);
-		const auto pagePos = PagePosition(static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32, static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32);
+		const auto pagePos = PagePosition(static_cast<uint32>(GetTerrainPageIndex(position.x)), static_cast<uint32>(GetTerrainPageIndex(position.z)));
 		ForEachPageInSquare(
 			worldSize, pagePos, 1, [this](const PagePosition &page)
 			{
@@ -5357,10 +5357,7 @@ namespace mmo
 		ASSERT(m_playerController);
 
 		const auto &camPos = m_playerController->GetCamera().GetDerivedPosition();
-		return PagePosition(static_cast<uint32>(
-								floor(camPos.x / terrain::constants::PageSize)) +
-								32,
-							static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+		return PagePosition(static_cast<uint32>(GetTerrainPageIndex(camPos.x)), static_cast<uint32>(GetTerrainPageIndex(camPos.z)));
 	}
 
 	void WorldState::CreateFarTerrain()

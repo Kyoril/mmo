@@ -23,7 +23,7 @@
 #include "game_states/game_state_mgr.h"
 #include "ui/model_renderer.h"
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 #include "fmod_audio/fmod_audio.h"
 #else
 #include "null_audio/null_audio.h"

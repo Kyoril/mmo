@@ -13,6 +13,7 @@
 #include "math/vector3.h"
 #include "paging/page.h"
 #include "terrain/terrain.h"
+#include "game_client/world_streaming_utils.h"
 #include "game_common/world_entity_loader.h"
 
 namespace mmo
@@ -99,9 +100,7 @@ namespace mmo
 
 		static PagePosition GetPagePosition(const Vector3& pos)
 		{
-			return PagePosition(static_cast<uint32>(
-				floor(pos.x / terrain::constants::PageSize)) + 32,
-				static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+			return PagePosition(static_cast<uint32>(GetTerrainPageIndex(pos.x)), static_cast<uint32>(GetTerrainPageIndex(pos.z)));
 		}
 
 		void InternalLoadPageEntity(uint16 pageIndex, const String& filename);

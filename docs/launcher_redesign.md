@@ -62,7 +62,20 @@ Updates and game launch now resolve relative to the launcher executable's direct
 
 Download pause, bandwidth limits, launch-at-login registration and installation relocation from the concept images are not exposed as nonfunctional controls. Actual network transfer-rate/ETA reporting is also not added: the current progress callbacks measure processed, uncompressed file data rather than network bytes. The existing honest file/byte totals remain in the update dock.
 
-The native macOS Cocoa launcher is unchanged; the redesign uses the portable rendering core through the Windows host.
+Both platforms run the same portable view through a thin host in `src/launcher/platform/`:
+
+| | Windows (`platform/win32`) | macOS (`platform/osx`) |
+|---|---|---|
+| Window | Layered popup, `UpdateLayeredWindow` | Borderless transparent `NSWindow`, frame handed to a layer as a `CGImage` |
+| Assets | RCDATA in `launcher.rc` | Files in `Launcher.app/Contents/Resources`, resolved via `resource_names.h` |
+| Game directory | Folder of `Launcher.exe` | Folder containing `Launcher.app` (same as `mmo_client.app` uses) |
+| Starts | `mmo_client.exe -uptodate` | `mmo_client.app` via `NSWorkspace`, `-uptodate` |
+| Settings | `launcher.ini` next to the game | same file, same format |
+| Log | `Documents/MMORPG/Logs/Launcher.log` | `~/Library/Logs/MMORPG/Launcher.log` |
+| Content cache | `%LOCALAPPDATA%/AlestiaOnline/Launcher/content` | `~/Library/Caches/AlestiaOnline/Launcher/content` |
+
+Both accept the same command line options. `--render-preview <dir>` renders every page to BMP
+files and exercises the hit tests without a window, on either platform.
 
 ## Controls
 

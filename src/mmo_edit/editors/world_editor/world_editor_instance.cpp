@@ -1149,8 +1149,8 @@ namespace mmo
 			// Determine page of entity based on position
 			const auto pos = ent->GetSceneNode().GetDerivedPosition();
 			const auto pagePos = PagePosition(
-				static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
-				static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+				static_cast<uint32>(static_cast<int32>(floor(pos.x / terrain::constants::PageSize)) + 32),
+				static_cast<uint32>(static_cast<int32>(floor(pos.z / terrain::constants::PageSize)) + 32));
 
 			// Ensure old ref file is deleted
 			if (const auto refPos = ent->GetReferencePagePosition())
@@ -1464,8 +1464,8 @@ namespace mmo
 			{
 				const Vector3 pos = entity.GetSceneNode().GetDerivedPosition();
 				const auto pagePos = PagePosition(
-					static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
-					static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+					static_cast<uint32>(static_cast<int32>(floor(pos.x / terrain::constants::PageSize)) + 32),
+					static_cast<uint32>(static_cast<int32>(floor(pos.z / terrain::constants::PageSize)) + 32));
 
 				// Ensure we delete the previous reference page pos
 				if (entity.GetReferencePagePosition() && *entity.GetReferencePagePosition() != pagePos)
@@ -1494,8 +1494,8 @@ namespace mmo
 		const auto &camPos = m_camera->GetDerivedPosition();
 
 		const auto pagePos = PagePosition(
-			static_cast<uint32>(floor(camPos.x / terrain::constants::PageSize)) + 32,
-			static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+			static_cast<uint32>(static_cast<int32>(floor(camPos.x / terrain::constants::PageSize)) + 32),
+			static_cast<uint32>(static_cast<int32>(floor(camPos.z / terrain::constants::PageSize)) + 32));
 
 		return pagePos;
 	}

@@ -56,8 +56,9 @@ Every top-level entry of `source.txt` is downloaded into the player's install fo
 also be listed in `[UninstallDelete]` of `deploy/installer/setup.iss`
 (`tools/tests/test_installer_uninstall_list.py` enforces this).
 
-The website's client download links to the setup of the newest launcher release:
-`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe`. That URL
+The website's client downloads link to the installers of the newest launcher release:
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe` (Windows) and
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline.dmg` (macOS). That URL
 resolves to the newest non-prerelease, so every release other than `launcher-v*` must stay a
 prerelease (the nightly workflow publishes with `--prerelease`).
 
@@ -154,7 +155,7 @@ Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never upda
 ## 7. CI notes
 
 - The Linux gate runs on the runner's preinstalled MySQL (root/root). The CI run proving the pipeline has not happened yet; if Linux E2E fails, move the gate job to `windows-latest` and start MySQL 8.0 (root/root) with `shogo82148/actions-setup-mysql`.
-- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall) before publishing.
+- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall). In parallel a `macos-15` job builds the macOS launcher and `AlestiaOnline.dmg` and smoke-tests it (deploy/installer/README.md). The release is published only once both passed. The DMG's launcher is signed ad-hoc until the `MACOS_*` signing secrets exist.
 - `docker.yml` builds develop images only after "Linux Servers" passes.
 - `win-release.yml` (master) is unchanged.
 - The `client-macos` job builds the Apple Silicon client on `macos-15`: arm64 only, macOS 11 minimum (the first M1 release; the Metal 2.3 shaders need it too), OpenSSL built statically for that target and cached. It fails when the binary links anything outside `/System` and `/usr/lib` (a player has no Homebrew), then strips it, signs the bundle ad hoc and publishes `client-macos.zip` plus `symbols-macos.zip` (dSYM). The stager unpacks `client-macos.zip` next to the Windows binaries, and `source.txt` ships `mmo_client.app` to launchers with the `OSX` condition; the updater marks `Contents/MacOS/*` executable. Files the launcher downloads carry no quarantine flag, so the ad hoc signature is enough; only a downloaded launcher needs a Developer ID to open without a Gatekeeper prompt.

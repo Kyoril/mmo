@@ -44,6 +44,44 @@ mark_as_advanced(LIB_EAY_DEBUG LIB_EAY_RELEASE SSL_EAY_DEBUG SSL_EAY_RELEASE OPE
 include_directories(${OPENSSL_INCLUDE_DIR})
 link_directories(${OPENSSL_LIBRARY_DIR})
 
+# ===============================================================================
+# FMOD
+# ===============================================================================
+
+# Windows uses the SDK checked in under deps/fmod. On macOS the FMOD Engine SDK has to be
+# downloaded from fmod.com; point MMO_FMOD_MACOS_DIR at the extracted "FMOD Programmers API"
+# folder (or a folder with inc/ and lib/). Without it the client falls back to null audio.
+set(MMO_FMOD_INCLUDE_DIR "")
+set(MMO_FMOD_LIBRARY "")
+set(MMO_FMOD_RUNTIME_LIBRARY "")
+if (WIN32)
+	set(MMO_FMOD_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fmod/inc")
+	set(MMO_FMOD_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/deps/fmod/lib/x64/fmod_vc.lib")
+	set(MMO_FMOD_RUNTIME_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/deps/fmod/lib/x64/fmod.dll")
+elseif (APPLE)
+	set(MMO_FMOD_MACOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/fmod/macos" CACHE PATH "FMOD Engine SDK for macOS (FMOD Programmers API folder)")
+	find_path(MMO_FMOD_MACOS_INCLUDE_DIR fmod.hpp
+		PATHS "${MMO_FMOD_MACOS_DIR}/api/core/inc" "${MMO_FMOD_MACOS_DIR}/inc"
+		NO_DEFAULT_PATH)
+	find_library(MMO_FMOD_MACOS_LIBRARY NAMES fmod
+		PATHS "${MMO_FMOD_MACOS_DIR}/api/core/lib" "${MMO_FMOD_MACOS_DIR}/lib"
+		NO_DEFAULT_PATH)
+	mark_as_advanced(MMO_FMOD_MACOS_INCLUDE_DIR MMO_FMOD_MACOS_LIBRARY)
+	if (MMO_FMOD_MACOS_INCLUDE_DIR AND MMO_FMOD_MACOS_LIBRARY)
+		set(MMO_FMOD_INCLUDE_DIR "${MMO_FMOD_MACOS_INCLUDE_DIR}")
+		set(MMO_FMOD_LIBRARY "${MMO_FMOD_MACOS_LIBRARY}")
+		set(MMO_FMOD_RUNTIME_LIBRARY "${MMO_FMOD_MACOS_LIBRARY}")
+		message(STATUS "FMOD: ${MMO_FMOD_LIBRARY}")
+	else()
+		message(STATUS "FMOD: macOS SDK not found in ${MMO_FMOD_MACOS_DIR}, client and editor use null audio")
+	endif()
+endif()
+if (MMO_FMOD_LIBRARY AND EXISTS "${MMO_FMOD_LIBRARY}")
+	set(MMO_HAS_FMOD ON)
+else()
+	set(MMO_HAS_FMOD OFF)
+endif()
+
 # Runtime DLLs that need to be deployed next to executables on Windows.
 set(MMO_WINDOWS_RUNTIME_DLLS "")
 # Config-dependent runtime DLLs (contain generator expressions for multi-config builds).

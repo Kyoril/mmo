@@ -70,8 +70,8 @@ namespace mmo
 
 	uint16 FoliageEditMode::PageIndexFromPosition(const Vector3& position)
 	{
-		const auto px = static_cast<uint32>(std::floor(position.x / terrain::constants::PageSize)) + 32;
-		const auto py = static_cast<uint32>(std::floor(position.z / terrain::constants::PageSize)) + 32;
+		const auto px = static_cast<uint32>(static_cast<int32>(std::floor(position.x / terrain::constants::PageSize)) + 32);
+		const auto py = static_cast<uint32>(static_cast<int32>(std::floor(position.z / terrain::constants::PageSize)) + 32);
 		return static_cast<uint16>((px << 8) | py);
 	}
 

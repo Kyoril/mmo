@@ -78,8 +78,8 @@ namespace mmo
             const auto &mapEntity = m_mapEntities.emplace_back(std::make_unique<MapEntity>(m_scene, node, *entity, objectId));
             mapEntity->SetReferencePagePosition(
                 PagePosition(
-                    static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
-                    static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
+                    static_cast<uint32>(static_cast<int32>(floor(position.x / terrain::constants::PageSize)) + 32),
+                    static_cast<uint32>(static_cast<int32>(floor(position.z / terrain::constants::PageSize)) + 32)));
             entity->SetUserObject(m_mapEntities.back().get());
 
             // Update scene outline when a new entity is created
@@ -142,8 +142,8 @@ namespace mmo
         mapEntity->SetAssetName(assetName);
         mapEntity->SetReferencePagePosition(
             PagePosition(
-                static_cast<uint32>(floor(position.x / terrain::constants::PageSize)) + 32,
-                static_cast<uint32>(floor(position.z / terrain::constants::PageSize)) + 32));
+                static_cast<uint32>(static_cast<int32>(floor(position.x / terrain::constants::PageSize)) + 32),
+                static_cast<uint32>(static_cast<int32>(floor(position.z / terrain::constants::PageSize)) + 32)));
         rawInstance->SetUserObject(m_mapEntities.back().get());
 
         // Store ownership of the world model instance
