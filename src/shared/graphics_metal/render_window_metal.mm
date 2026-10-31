@@ -178,7 +178,7 @@ namespace mmo
 
 		if (fullScreen)
 		{
-			[m_window setLevel:NSMainMenuWindowLevel + 1];
+			[m_window setLevel:NSNormalWindowLevel];
 			[NSApp setPresentationOptions:NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar];
 		}
 		else
@@ -355,7 +355,7 @@ namespace mmo
 		if (fullscreenWindow)
 		{
 			[m_window setStyleMask:NSWindowStyleMaskBorderless];
-			[m_window setLevel:NSMainMenuWindowLevel + 1];
+			[m_window setLevel:NSNormalWindowLevel];
 			[m_window setFrame:screen.frame display:YES];
 			[NSApp setPresentationOptions:NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar];
 		}
