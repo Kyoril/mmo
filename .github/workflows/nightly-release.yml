@@ -156,7 +156,7 @@ jobs:
           sha=$(git rev-parse HEAD:data/client)
           rm -rf data/client
           git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
-          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
           git -C data/client checkout --quiet "$sha"
 
       - name: vcpkg build
@@ -251,7 +251,7 @@ jobs:
           sha=$(git rev-parse HEAD:data/client)
           rm -rf data/client
           git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
-          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
           git -C data/client checkout --quiet "$sha"
 
       # Build tools only (hlsl2msl, configure checks); nothing from Homebrew may be linked into the
@@ -363,7 +363,7 @@ jobs:
           sha=$(git rev-parse HEAD:data/client)
           rm -rf data/client
           git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
-          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
           git -C data/client checkout --quiet "$sha"
 
       - name: Install toolchain

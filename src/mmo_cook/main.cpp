@@ -16,6 +16,8 @@
 #include "content_cook/cook_report.h"
 #include "content_cook/material_assembly.h"
 #include "content_cook/shader_cook.h"
+#include "graphics/global_shader_parameters.h"
+#include "graphics/graphics_device.h"
 #include "graphics/shader_compiler.h"
 #include "graphics/shader_platform.h"
 #include "log/default_log.h"
@@ -159,6 +161,25 @@ namespace
 		return !error;
 	}
 
+	/// What cooking needs around it: material functions are read through the asset registry, texture
+	/// nodes look up their textures while a graph compiles, which needs a (null) device, and generated
+	/// shaders declare the project wide global parameters they reference.
+	struct CookEnvironment
+	{
+		explicit CookEnvironment(const std::filesystem::path& data)
+		{
+			AssetRegistry::Initialize(data, {});
+			GraphicsDevice::CreateNull(GraphicsDeviceDesc());
+			GlobalShaderParameters::Get().LoadFromAsset(GlobalShaderParametersAssetPath);
+		}
+
+		~CookEnvironment()
+		{
+			GraphicsDevice::Destroy();
+			AssetRegistry::Destroy();
+		}
+	};
+
 	int Run(const Options& options)
 	{
 		if (!std::filesystem::is_directory(options.data))
@@ -167,8 +188,7 @@ namespace
 			return 1;
 		}
 
-		// Material functions are read through the asset registry.
-		AssetRegistry::Initialize(options.data, {});
+		const CookEnvironment environment(options.data);
 
 		CookReport report;
 		bool succeeded = true;
@@ -179,7 +199,6 @@ namespace
 			if (!compiler)
 			{
 				ELOG("This build of mmo_cook can't compile shaders for platform " << options.platform);
-				AssetRegistry::Destroy();
 				return 1;
 			}
 
@@ -195,7 +214,6 @@ namespace
 			if (!compiler)
 			{
 				ELOG("This build of mmo_cook can't compile shaders for this platform");
-				AssetRegistry::Destroy();
 				return 1;
 			}
 
@@ -211,8 +229,6 @@ namespace
 			std::filesystem::remove_all(packs, error);
 			std::filesystem::remove(options.out / "overlay.json", error);
 		}
-
-		AssetRegistry::Destroy();
 
 		ILOG("Cook finished with " << report.GetSortedWarnings().size() << " warning(s)");
 		if (options.github)
