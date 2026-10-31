@@ -300,6 +300,12 @@ namespace mmo
 		m_layer.drawableSize = CGSizeMake(m_width, m_height);
 		CreateDepthBuffer();
 
+		// Root UI frames size themselves from the current viewport, and observers may lay them out
+		// before the next frame activates this window again, so the viewport has to match already.
+		float minZ, maxZ;
+		m_device.GetViewport(nullptr, nullptr, nullptr, nullptr, &minZ, &maxZ);
+		m_device.SetViewport(0, 0, m_width, m_height, minZ, maxZ);
+
 		Resized(m_width, m_height);
 	}
 

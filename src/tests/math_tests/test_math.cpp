@@ -60,6 +60,22 @@ TEST_CASE("MatrixInverseWorksWithTranslate", "[math]")
 	CHECK(b.IsNearlyEqual(expected));
 }
 
+TEST_CASE("MatrixInverseWorksWithLargeViewportOrthographic", "[math]")
+{
+	// UI projection of a 2560x1600 viewport: determinant ~1e-8, below FLT_EPSILON but invertible
+	const float w = 2560.0f, h = 1600.0f, d = 100.0f;
+	const Matrix4 a = {
+		2.0f / w, 0, 0, -1.0f,
+		0, -2.0f / h, 0, 1.0f,
+		0, 0, 1.0f / d, 0,
+		0, 0, 0, 1
+	};
+	const Matrix4 b = a.Inverse();
+
+	const Matrix4 identity = a * b;
+	CHECK(identity.IsNearlyEqual(Matrix4::Identity));
+}
+
 TEST_CASE("MatrixInverseAffineWorksAsExpected", "[math]")
 {
 	const Matrix4 a = Matrix4::Identity;

@@ -13,12 +13,15 @@
 #include "log/default_log_levels.h"
 
 #ifdef _WIN32
-#include "fmod_audio/fmod_audio.h"
 #include "base/win_utility.h"
 #include <crtdbg.h>
 #include <fstream>
 #include <sstream>
 #include <mutex>
+#endif
+
+#ifdef MMO_WITH_FMOD
+#include "fmod_audio/fmod_audio.h"
 #else
 #include "null_audio/null_audio.h"
 #endif
@@ -239,7 +242,7 @@ int main(int argc, char* arg[])
 	AddDefaultPreviewProviders(previewProviderManager, mainWindow);
 
 	// Create FMOD audio system for sound preview in editor
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 	auto editorAudio = std::make_unique<mmo::FMODAudio>();
 #else
 	auto editorAudio = std::make_unique<mmo::NullAudio>();

@@ -96,7 +96,9 @@ namespace mmo
 		const float t30 = -(v3 * m10 - v1 * m11 + v0 * m12);
 
 		const float det = (t00 * m00 + t10 * m01 + t20 * m02 + t30 * m03);
-		ASSERT(!FloatEqual(det, 0.0f));	//Matrix4::Inverse: Matrix is singular and cannot be inverted.
+		// Exact zero check: an absolute epsilon rejects valid matrices with tiny determinants, such as
+		// the UI orthographic projection of a large viewport (det = 4 / (w * h * depth)).
+		ASSERT(det != 0.0f);	//Matrix4::Inverse: Matrix is singular and cannot be inverted.
 
 		const float invDet = 1.0f / det;
 

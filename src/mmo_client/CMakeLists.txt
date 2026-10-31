@@ -86,8 +86,17 @@ target_link_libraries(mmo_client
     terrain
     deferred_shading)
 
-if (WIN32)
+if (TARGET fmod_audio)
 	target_link_libraries(mmo_client fmod_audio)
+	if (APPLE)
+		# Ship libfmod.dylib inside the bundle; its install name is @rpath/libfmod.dylib
+		set_target_properties(mmo_client PROPERTIES BUILD_RPATH "@executable_path/../Frameworks" INSTALL_RPATH "@executable_path/../Frameworks")
+		add_custom_command(TARGET mmo_client POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:mmo_client>/Frameworks"
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different "${MMO_FMOD_RUNTIME_LIBRARY}" "$<TARGET_BUNDLE_CONTENT_DIR:mmo_client>/Frameworks/"
+			COMMENT "Copying FMOD dylib into the client bundle"
+		)
+	endif()
 else()
 	target_link_libraries(mmo_client null_audio)
 endif()

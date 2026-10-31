@@ -1,7 +1,8 @@
 # macOS Client (Metal)
 
 The client builds and runs natively on macOS (Apple Silicon tested) with a Metal render backend.
-Audio uses the null audio system (FMOD is Windows-only in this tree).
+Audio uses FMOD when the macOS FMOD SDK is present (see [Audio](#audio-fmod)), otherwise the null
+audio system.
 
 ## Prerequisites
 
@@ -26,6 +27,23 @@ containing the `.app` as its working directory, so the data goes next to it:
 ln -sfn ../data/client bin/Data
 open bin/mmo_client.app
 ```
+
+## Audio (FMOD)
+
+The FMOD Engine SDK for macOS is not in the repository (only the Windows libraries are). Download
+"FMOD Engine" for macOS from <https://www.fmod.com/download> (free account required) and copy the
+`FMOD Programmers API` folder from the disk image to `deps/fmod/macos`, or point CMake at it:
+
+```bash
+cmake -S . -B build_mac -DMMO_FMOD_MACOS_DIR="/path/to/FMOD Programmers API"
+```
+
+CMake looks for `api/core/inc/fmod.hpp` and `api/core/lib/libfmod.dylib` (or `inc/` and `lib/`)
+there; the configure log prints `FMOD: ...` with the result. The macOS build uses the SDK's own
+headers, so the version does not have to match the Windows SDK (2.00.08); 2.03.15 is tested.
+`libfmod.dylib` is copied into
+`mmo_client.app/Contents/Frameworks` on every build. Without the SDK the client logs
+`Using NULL audio system`.
 
 ## Shaders
 
@@ -112,7 +130,6 @@ It creates the GM account `E2EGM` / `E2EGMPASS`. Create a character in the clien
 
 ## Known gaps
 
-- No audio (FMOD).
 - Occlusion queries and GPU timers are not implemented (the terrain falls back to no occlusion
   culling).
 - No Retina-resolution rendering.
