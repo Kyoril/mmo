@@ -45,6 +45,10 @@ namespace mmo
 			/// normal, UV scale and height blending) plus the name of the material's height
 			/// blend hardness parameter. Names only, no values.
 			Version_0_8 = 0x0800,
+
+			/// Version 0.9: adds an optional SBLD chunk recording per-platform shader build info
+			/// (graph hash, generator and backend versions, material function hashes).
+			Version_0_9 = 0x0900,
 		};
 	}
 
@@ -120,6 +124,9 @@ namespace mmo
 
 		/// @brief Reads the v0.8 terrain layer parameter binding chunk (MBND).
 		bool ReadMaterialLayerBindingChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
+
+		/// @brief Reads the v0.9 shader build info chunk (SBLD).
+		bool ReadMaterialBuildInfoChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize);
 
 	private:
 		Material& m_material;

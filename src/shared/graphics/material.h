@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <map>
 
@@ -10,8 +11,11 @@
 #include "graphics/shader_base.h"
 #include "graphics/texture.h"
 #include "graphics/shader_types.h"
+#include "graphics/shader_build_info.h"
 
+#include <optional>
 #include <span>
+#include <string_view>
 #include <memory>
 
 #include "constant_buffer.h"
@@ -308,6 +312,29 @@ namespace mmo
 		/// @brief Returns all per-platform pixel shader bytecodes (used by the serializer).
 		[[nodiscard]] const std::map<std::string, std::array<std::vector<uint8>, 4>>& GetAllPixelShaderCodes() const { return m_allPixelShaderCodes; }
 
+		/// @brief Stores what a platform's shaders were built from. The function list is sorted by path.
+		void SetShaderBuildInfo(std::string_view platform, ShaderBuildInfo info)
+		{
+			std::sort(info.functions.begin(), info.functions.end(), [](const FunctionHash& a, const FunctionHash& b) { return a.path < b.path; });
+			m_shaderBuildInfo[std::string(platform)] = std::move(info);
+		}
+
+		/// @brief Gets the build info of a platform's shaders, or nullptr if none is recorded.
+		[[nodiscard]] const ShaderBuildInfo* GetShaderBuildInfo(std::string_view platform) const
+		{
+			const auto it = m_shaderBuildInfo.find(std::string(platform));
+			return it != m_shaderBuildInfo.end() ? &it->second : nullptr;
+		}
+
+		/// @brief Gets all recorded per-platform shader build infos (used by the serializer).
+		[[nodiscard]] const std::map<std::string, ShaderBuildInfo>& GetAllShaderBuildInfo() const { return m_shaderBuildInfo; }
+
+		/// @brief Sets the hash of the material graph this material was last compiled from.
+		void SetGraphHash(const SHA1Hash& hash) { m_graphHash = hash; }
+
+		/// @brief Gets the hash of the material graph, if recorded.
+		[[nodiscard]] std::optional<SHA1Hash> GetGraphHash() const { return m_graphHash; }
+
 		[[nodiscard]] bool IsDepthTestEnabled() const override { return m_depthTest; }
 		
 		void SetDepthTestEnabled(const bool enable) override { m_depthTest = enable; }
@@ -457,6 +484,9 @@ namespace mmo
 		// runtime mirror of the current-platform entry in these maps.
 		std::map<std::string, std::array<std::vector<uint8>, 6>> m_allVertexShaderCodes;
 		std::map<std::string, std::array<std::vector<uint8>, 4>> m_allPixelShaderCodes;
+		/// Per-platform record of what the shaders were built from (v0.9+).
+		std::map<std::string, ShaderBuildInfo> m_shaderBuildInfo;
+		std::optional<SHA1Hash> m_graphHash;
 		bool m_depthWrite { true };
 		bool m_depthTest { true };
 
