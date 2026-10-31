@@ -95,6 +95,21 @@ mapping of each new pipeline; `MTL_DEBUG_LAYER=1` enables Apple's API validation
 - Mouse capture (camera turning) freezes the cursor and reports a virtual cursor position fed
   from raw mouse deltas.
 
+## Playing against a local server stack
+
+The servers build on macOS too. `tools/macos/local_stack.sh` starts login, realm and world servers
+with a private throwaway MySQL on port 3307 (no system MySQL needed; requires `brew install mysql`):
+
+```bash
+cmake --build build_mac -t login_server realm_server world_server e2e_client -j8
+tools/macos/local_stack.sh up
+bin/mmo_client.app/Contents/MacOS/mmo_client -exec tools/macos/local_login.cfg
+tools/macos/local_stack.sh down
+```
+
+It creates the GM account `E2EGM` / `E2EGMPASS`. Create a character in the client, or headless with
+`e2e_client` (configure with `-DMMO_BUILD_BOTS=ON`; see `e2e/README.md`).
+
 ## Known gaps
 
 - No audio (FMOD).
