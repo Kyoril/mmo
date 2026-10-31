@@ -1,7 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "node_registry.h"
-#include "editors/material_editor/material_node.h"
+#include "material_graph/material_node.h"
 
 #include <algorithm>
 

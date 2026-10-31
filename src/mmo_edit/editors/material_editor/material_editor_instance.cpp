@@ -10,8 +10,8 @@
 
 #include "node_editor/item_builder.h"
 #include "node_editor/item_deleter.h"
-#include "editors/material_editor/material_graph.h"
-#include "editors/material_editor/material_node.h"
+#include "material_graph/material_graph.h"
+#include "material_graph/material_node.h"
 #include "node_editor/node_header_renderer.h"
 #include "node_editor/node_layout.h"
 #include "node_editor/node_pin_icons.h"
@@ -617,6 +617,7 @@ namespace mmo
 
 		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
 		m_graph = std::make_unique<MaterialGraph>();
+		m_graph->SetLayoutStore(&m_layoutStore);
 
 		std::shared_ptr<NodeRegistry> registry = m_graph->GetNodeRegistry();
 		ASSERT(registry);

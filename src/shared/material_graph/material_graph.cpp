@@ -32,6 +32,7 @@ namespace mmo
 	MaterialGraph::MaterialGraph(MaterialGraph&& other)
 		: m_nodeRegistry(std::move(other.m_nodeRegistry))
 		, m_idGenerator(std::move(other.m_idGenerator))
+		, m_layoutStore(other.m_layoutStore)
 		, m_nodes(std::move(other.m_nodes))
 		, m_pins(std::move(other.m_pins))
 		, m_rootNode(other.m_rootNode)
@@ -154,6 +155,7 @@ namespace mmo
 
 	    m_nodeRegistry = std::move(other.m_nodeRegistry);
 	    m_idGenerator = std::move(other.m_idGenerator);
+	    m_layoutStore = other.m_layoutStore;
 	    m_nodes = std::move(other.m_nodes);
 	    m_pins = std::move(other.m_pins);
 		m_rootNode = other.m_rootNode;

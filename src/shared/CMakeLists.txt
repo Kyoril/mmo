@@ -22,9 +22,16 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TESTS)
 	add_subdirectory(tex_v1_0)
 endif()
 
-if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+# The material graph and the material compiler it targets have no device dependency, so they are
+# built for test builds as well, which keeps their suite running on the headless server build. The
+# cooking tool builds them without a client.
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
 	add_subdirectory(graphics)
 	add_subdirectory(graphics_null)
+	add_subdirectory(material_graph)
+endif()
+
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	if (WIN32)
 		add_subdirectory(graphics_d3d11)
 	elseif(APPLE)

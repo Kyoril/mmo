@@ -80,6 +80,7 @@ target_link_libraries(mmo_edit
 	hpak_v1_0 
 	tex_v1_0 
 	assets
+	material_graph
 	scene_graph
 	frame_ui
 	paging

@@ -20,8 +20,8 @@
 #include "scene_graph/material_serializer.h"
 #include "graphics/shader_compiler.h"
 #include "scene_graph/material_instance_serializer.h"
-#include "editors/material_editor/material_graph.h"
-#include "editors/material_editor/material_node.h"
+#include "material_graph/material_graph.h"
+#include "material_graph/material_node.h"
 #include "base/chunk_writer.h"
 #include "preview_providers/preview_provider_manager.h"
 

@@ -4,9 +4,10 @@
 
 #include <functional>
 
-#include "node_editor/node_registry.h"
+#include "material_graph/node_registry.h"
 
 #include "base/id_generator.h"
+#include "material_graph/node_layout_store.h"
 
 #include <memory>
 
@@ -215,9 +216,18 @@ namespace mmo
 
 	    bool IsRootNode(uint32 nodeId) const;
 
+		/// @brief Sets where node positions and sizes are read from when saving and written to when loading.
+		///        Without a store, nodes are saved with an empty layout and loaded layouts are dropped.
+		/// @param store The layout store, which has to outlive the graph or be reset to nullptr. Not owned.
+		void SetLayoutStore(INodeLayoutStore* store) { m_layoutStore = store; }
+
+		/// @brief Gets the layout store, if any.
+		[[nodiscard]] INodeLayoutStore* GetLayoutStore() const { return m_layoutStore; }
+
     private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
+	    INodeLayoutStore* m_layoutStore { nullptr };
 	    std::vector<GraphNode*> m_nodes;
 	    std::vector<Pin*> m_pins;
 		GraphNode* m_rootNode { nullptr };
