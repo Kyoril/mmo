@@ -1,9 +1,9 @@
 
 IF(APPLE)
-    INCLUDE_DIRECTORIES ( /System/Library/Frameworks )
     FIND_LIBRARY(COCOA_LIBRARY Cocoa)
-    MARK_AS_ADVANCED (COCOA_LIBRARY)
-    SET(EXTRA_LIBS ${COCOA_LIBRARY})
+    FIND_LIBRARY(QUARTZCORE_LIBRARY QuartzCore)
+    MARK_AS_ADVANCED (COCOA_LIBRARY QUARTZCORE_LIBRARY)
+    SET(EXTRA_LIBS ${COCOA_LIBRARY} ${QUARTZCORE_LIBRARY})
 ENDIF(APPLE)
 
 # Source files are listed explicitly rather than globbed: a glob does not re-run
@@ -42,12 +42,14 @@ set(codeFiles
     launcher_view.cpp
     update_worker.h
     update_worker.cpp
+
+    # Offscreen page renderer behind --render-preview, and the debug asset check
+    launcher_preview.h
+    launcher_preview.cpp
 )
 
 IF(WIN32)
     LIST(APPEND codeFiles
-        platform/win32/launcher_preview.h
-        platform/win32/launcher_preview.cpp
         platform/win32/main_win32.cpp
         platform/win32/launcher_window.h
         platform/win32/launcher_window.cpp
@@ -55,9 +57,10 @@ IF(WIN32)
     )
 ENDIF(WIN32)
 
-# Everything embedded into the executable by launcher.rc. Neither CMake nor MSBuild
-# parses .rc includes, so without an explicit OBJECT_DEPENDS below, editing an asset
-# would not relink and the stale copy would silently keep shipping.
+# Everything embedded into the executable by launcher.rc on Windows, and copied into
+# the bundle's Resources directory on macOS. Neither CMake nor MSBuild parses .rc
+# includes, so without an explicit OBJECT_DEPENDS below, editing an asset would not
+# relink and the stale copy would silently keep shipping.
 set(launcherAssets
     ${CMAKE_CURRENT_SOURCE_DIR}/res/news_development.png
     ${CMAKE_CURRENT_SOURCE_DIR}/res/news_world.png
@@ -80,79 +83,38 @@ set(launcherAssets
 )
 
 IF(APPLE)
-    # macOS still runs the original Cocoa nib UI; see platform/osx/main_osx_shim.cpp.
     LIST(APPEND codeFiles
-        platform/osx/main_osx_shim.cpp
-        osx/AppDelegate.h
-        osx/AppDelegate.mm
-        osx/main_osx.mm
-        osx/Logo_OSX.png
+        platform/osx/launcher_osx.h
+        platform/osx/launcher_window.h
+        platform/osx/launcher_window.mm
+        platform/osx/main_osx.mm
+        platform/osx/resource_data_osx.mm
     )
+    set_source_files_properties(
+        platform/osx/launcher_window.mm
+        platform/osx/main_osx.mm
+        platform/osx/resource_data_osx.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
-    # these are the OS X Interface Builder Files
-    SET (Launcher_XIBS
-        MainMenu
-    )
+    # The assets ship as plain files in Launcher.app/Contents/Resources, where
+    # resource_data_osx.mm looks them up through the table in resource_names.h.
+    set_source_files_properties(${launcherAssets} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 ENDIF(APPLE)
 
-
 IF(APPLE)
-add_executable(launcher MACOSX_BUNDLE ${codeFiles})
-ELSE()
-add_executable(launcher WIN32 launcher.rc ${codeFiles})
-set_source_files_properties(launcher.rc PROPERTIES OBJECT_DEPENDS "${launcherAssets}")
-source_group("res" FILES ${launcherAssets})
-ENDIF()
-mmo_deploy_runtime_dependencies(launcher)
-
-IF(APPLE)
-    SET_SOURCE_FILES_PROPERTIES(
-        osx/Logo_OSX.png
-        PROPERTIES
-        MACOSX_PACKAGE_LOCATION Resources
-    )
-ENDIF(APPLE)
-
-
-IF(APPLE)
+    add_executable(launcher MACOSX_BUNDLE ${codeFiles} ${launcherAssets})
     SET_TARGET_PROPERTIES(launcher PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info-CMake.plist")
-    SET(MACOSX_BUNDLE_INFO_STRING "")
-    SET(MACOSX_BUNDLE_ICON_FILE "")
-    SET(MACOSX_BUNDLE_GUI_IDENTIFIER "net.mmo-dev.${CMAKE_PROJECT_NAME}")
-    SET(MACOSX_BUNDLE_LONG_VERSION_STRING "1.0")
-    SET(MACOSX_BUNDLE_BUNDLE_NAME "${CMAKE_PROJECT_NAME}")
-    SET(MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0")
-    SET(MACOSX_BUNDLE_BUNDLE_VERSION "0")
+    SET(MACOSX_BUNDLE_GUI_IDENTIFIER "net.mmo-dev.launcher")
+    SET(MACOSX_BUNDLE_BUNDLE_NAME "Launcher")
+    SET(MACOSX_BUNDLE_SHORT_VERSION_STRING "${MMO_LAUNCHER_VERSION_MAJOR}.${MMO_LAUNCHER_VERSION_MINOR}.${MMO_LAUNCHER_VERSION_PATCH}")
+    SET(MACOSX_BUNDLE_BUNDLE_VERSION "${MMO_LAUNCHER_VERSION_MAJOR}.${MMO_LAUNCHER_VERSION_MINOR}.${MMO_LAUNCHER_VERSION_PATCH}")
     SET(MACOSX_BUNDLE_COPYRIGHT "Copyright © 2019 - 2025, Kyoril. All rights reserved.")
-    SET(MACOSX_BUNDLE_NSMAIN_NIB_FILE "MainMenu")
-    SET(MACOSX_BUNDLE_NSPRINCIPAL_CLASS "NSApplication")
-ENDIF(APPLE)
-
-IF(APPLE)
-    # Make sure we can find the 'ibtool' program. If we can NOT find it we
-    # skip generation of this project
-    FIND_PROGRAM(IBTOOL ibtool HINTS "/usr/bin" "${OSX_DEVELOPER_ROOT}/usr/bin")
-    IF(${IBTOOL} STREQUAL "IBTOOL-NOTFOUND")
-        MESSAGE(SEND_ERROR "ibtool can not be found and is needed to compile the .xib files. It should have been installed with the Apple developer tools. The default system paths were searched in addition to ${OSX_DEVELOPER_ROOT}/usr/bin")
-    ENDIF()
-
-    # Make sure the 'Resources' Directory is correctly created before we build
-    ADD_CUSTOM_COMMAND (TARGET launcher PRE_BUILD COMMAND mkdir -p ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/Launcher.app/Contents/Resources)
-    ADD_CUSTOM_COMMAND (TARGET launcher PRE_BUILD COMMAND mkdir -p ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/Launcher.app/Contents/Resources)
-
-    # Compile the .xib files using the 'ibtool' program with the destination being the app package
-    FOREACH(xib ${Launcher_XIBS})
-        MESSAGE(STATUS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/Launcher.app/Contents/Resources/${xib}.nib")
-        MESSAGE(STATUS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/Launcher.app/Contents/Resources/${xib}.nib")
-
-        ADD_CUSTOM_COMMAND (TARGET launcher POST_BUILD
-            COMMAND ${IBTOOL} --errors --warnings --notices --output-format human-readable-text --compile ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/Launcher.app/Contents/Resources/${xib}.nib ${CMAKE_CURRENT_SOURCE_DIR}/${xib}.xib
-            COMMENT "Compiling ${CMAKE_CURRENT_SOURCE_DIR}/${xib}.xib")
-        ADD_CUSTOM_COMMAND (TARGET launcher POST_BUILD
-            COMMAND ${IBTOOL} --errors --warnings --notices --output-format human-readable-text --compile ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/Launcher.app/Contents/Resources/${xib}.nib ${CMAKE_CURRENT_SOURCE_DIR}/${xib}.xib
-            COMMENT "Compiling ${CMAKE_CURRENT_SOURCE_DIR}/${xib}.xib")
-    ENDFOREACH()
-ENDIF(APPLE)
+ELSE()
+    add_executable(launcher WIN32 launcher.rc ${codeFiles})
+    set_source_files_properties(launcher.rc PROPERTIES OBJECT_DEPENDS "${launcherAssets}")
+ENDIF()
+source_group("res" FILES ${launcherAssets})
+mmo_deploy_runtime_dependencies(launcher)
 
 
 # Sources in platform/ subdirectories include the launcher's own portable headers by

@@ -30,6 +30,10 @@
 
 #ifdef _WIN32
 #	include <Windows.h>
+#elif defined(__APPLE__)
+#	include <mach-o/dyld.h>
+#	include <climits>
+#	include <cstdlib>
 #endif
 
 namespace mmo
@@ -43,6 +47,17 @@ namespace mmo
 			std::array<char, MAX_PATH> buffer = { {} };
 			GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
 			return buffer.data();
+#elif defined(__APPLE__)
+			// Inside the bundle this is Launcher.app/Contents/MacOS/Launcher. It is resolved
+			// so that the manifest's path compares equivalent even when started via a symlink.
+			std::array<char, PATH_MAX> buffer = { {} };
+			uint32_t size = static_cast<uint32_t>(buffer.size());
+			if (_NSGetExecutablePath(buffer.data(), &size) != 0)
+			{
+				return {};
+			}
+			std::array<char, PATH_MAX> resolved = { {} };
+			return realpath(buffer.data(), resolved.data()) ? resolved.data() : buffer.data();
 #else
 			return {};
 #endif
