@@ -47,11 +47,18 @@ mkdir -p "$folder"
 ditto "$launcher" "$folder/Launcher.app"
 xattr -cr "$folder"
 
+# The linker signs only the executable, so the bundle's resources are not sealed. A
+# downloaded (quarantined) app with that signature is reported as "damaged" with no way
+# to open it; an ad-hoc signature over the whole bundle gets the normal "unidentified
+# developer" prompt instead, which players can confirm under Privacy & Security.
 if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
 	echo "Signing Launcher.app as $MACOS_SIGN_IDENTITY" >&2
 	codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$folder/Launcher.app" >&2
-	codesign --verify --strict --verbose=2 "$folder/Launcher.app" >&2
+else
+	echo "Signing Launcher.app ad-hoc (no MACOS_SIGN_IDENTITY)" >&2
+	codesign --force --sign - "$folder/Launcher.app" >&2
 fi
+codesign --verify --strict --verbose=2 "$folder/Launcher.app" >&2
 
 # Background from the launcher's own art, 1x and 2x in one HiDPI tiff.
 swift "$here/make_background.swift" "$repo/src/launcher/res" "$work/background.png" 1 >&2

@@ -155,6 +155,6 @@ Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never upda
 ## 7. CI notes
 
 - The Linux gate runs on the runner's preinstalled MySQL (root/root). The CI run proving the pipeline has not happened yet; if Linux E2E fails, move the gate job to `windows-latest` and start MySQL 8.0 (root/root) with `shogo82148/actions-setup-mysql`.
-- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall). In parallel a `macos-15` job builds the macOS launcher and `AlestiaOnline.dmg` and smoke-tests it (deploy/installer/README.md). The release is published only once both passed. The DMG is unsigned until the `MACOS_*` signing secrets exist.
+- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall). In parallel a `macos-15` job builds the macOS launcher and `AlestiaOnline.dmg` and smoke-tests it (deploy/installer/README.md). The release is published only once both passed. The DMG's launcher is signed ad-hoc until the `MACOS_*` signing secrets exist.
 - `docker.yml` builds develop images only after "Linux Servers" passes.
 - `win-release.yml` (master) is unchanged.
