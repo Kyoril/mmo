@@ -110,6 +110,20 @@ namespace mmo
             return true;
         });
 
+        // Content hash stored when the function was saved (see ComputeGraphHash)
+        chunkReader.AddChunkHandler(*ChunkMagic({'F', 'H', 'S', 'H'}), false, [&materialFunction](io::Reader& reader, uint32, uint32) -> bool
+        {
+            SHA1Hash hash{};
+            if (!(reader >> io::read_range(hash)))
+            {
+                ELOG("Failed to read material function content hash");
+                return false;
+            }
+
+            materialFunction->SetContentHash(hash);
+            return true;
+        });
+
         // Read the chunks
         success = chunkReader.Read(reader);
         if (!success)

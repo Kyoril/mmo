@@ -6,7 +6,9 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <optional>
 
+#include "base/sha1.h"
 #include "base/typedefs.h"
 #include "graphics/material.h"
 #include "graphics/material_compiler.h"
@@ -73,6 +75,12 @@ namespace mmo
         /// @brief Gets the material graph data.
         [[nodiscard]] const std::vector<uint8>& GetGraphData() const { return m_graphData; }
 
+        /// @brief Sets the content hash stored in the function file (see ComputeGraphHash).
+        void SetContentHash(const SHA1Hash& hash) { m_contentHash = hash; }
+
+        /// @brief Gets the stored content hash, if the function file had one.
+        [[nodiscard]] const std::optional<SHA1Hash>& GetContentHash() const { return m_contentHash; }
+
         /// @brief Compiles this material function with the given compiler
         /// @param compiler The compiler to use
         /// @return Expression index of the function output
@@ -83,6 +91,7 @@ namespace mmo
         std::vector<MaterialFunctionParam> m_inputParams;
         std::vector<MaterialFunctionParam> m_outputParams;
         std::vector<uint8> m_graphData;
+        std::optional<SHA1Hash> m_contentHash;
     };
 
     typedef std::shared_ptr<MaterialFunction> MaterialFunctionPtr;

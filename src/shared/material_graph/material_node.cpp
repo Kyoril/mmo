@@ -327,29 +327,33 @@ namespace mmo
 		writer
 			<< io::write<uint32>(m_id);
 
-		// The node bounds are read live from the layout store (the node editor) rather than from any saved
-		// snapshot: a snapshot is not updated when the user drags a node around or when a node is created at
-		// runtime, which made nodes jump to strange positions after reloading a material.
-		float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
-		if (const INodeLayoutStore* layoutStore = m_material ? m_material->GetLayoutStore() : nullptr)
+		// Layout-free serialization (content hashing) leaves the bounds out entirely.
+		if (!(m_material && m_material->IsLayoutFreeSerialization()))
 		{
-			// The store reports no bounds when the node was never displayed. We keep (0, 0) then.
-			if (!layoutStore->GetNodeBounds(m_id, posX, posY, sizeX, sizeY))
+			// The node bounds are read live from the layout store (the node editor) rather than from any saved
+			// snapshot: a snapshot is not updated when the user drags a node around or when a node is created at
+			// runtime, which made nodes jump to strange positions after reloading a material.
+			float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
+			if (const INodeLayoutStore* layoutStore = m_material ? m_material->GetLayoutStore() : nullptr)
 			{
-				posX = posY = sizeX = sizeY = 0.0f;
-				WLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
+				// The store reports no bounds when the node was never displayed. We keep (0, 0) then.
+				if (!layoutStore->GetNodeBounds(m_id, posX, posY, sizeX, sizeY))
+				{
+					posX = posY = sizeX = sizeY = 0.0f;
+					DLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
+				}
 			}
-		}
-		else
-		{
-			WLOG("No layout store given, node state won't be saved");
-		}
+			else
+			{
+				DLOG("No layout store given, node state won't be saved");
+			}
 
-		writer
-			<< io::write<float>(posX)
-			<< io::write<float>(posY)
-			<< io::write<float>(sizeX)
-			<< io::write<float>(sizeY);
+			writer
+				<< io::write<float>(posX)
+				<< io::write<float>(posY)
+				<< io::write<float>(sizeX)
+				<< io::write<float>(sizeY);
+		}
 
 		writer
 			<< io::write<uint8>(GetInputPins().size());

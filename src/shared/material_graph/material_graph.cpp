@@ -71,6 +71,15 @@ namespace mmo
 		return writer;
 	}
 
+	io::Writer& MaterialGraph::SerializeLayoutFree(io::Writer& writer) const
+	{
+		const bool previous = m_layoutFree;
+		m_layoutFree = true;
+		Serialize(writer);
+		m_layoutFree = previous;
+		return writer;
+	}
+
 	io::Reader& MaterialGraph::Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context)
 	{
 		Clear(true);

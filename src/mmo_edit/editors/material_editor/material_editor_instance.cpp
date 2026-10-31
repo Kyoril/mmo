@@ -11,6 +11,7 @@
 #include "node_editor/item_builder.h"
 #include "node_editor/item_deleter.h"
 #include "material_graph/material_graph.h"
+#include "material_graph/material_graph_hash.h"
 #include "material_graph/material_node.h"
 #include "node_editor/node_header_renderer.h"
 #include "node_editor/node_layout.h"
@@ -835,6 +836,14 @@ namespace mmo
 					writer << io::write_dynamic_range<uint8>(name) << static_cast<uint8>(inputNode->GetParameterType());
 				}
 				inputChunk.Finish();
+			}
+
+			{
+				// Content hash of the graph without layout, so shaders built from this function can tell when it changed
+				const SHA1Hash graphHash = ComputeGraphHash(*m_graph);
+				ChunkWriter hashChunk{ ChunkMagic({ 'F', 'H', 'S', 'H' }), writer };
+				writer << io::write_range(graphHash);
+				hashChunk.Finish();
 			}
 
 			{

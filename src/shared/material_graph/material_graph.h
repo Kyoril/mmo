@@ -99,6 +99,14 @@ namespace mmo
 	public:
 		io::Writer& Serialize(io::Writer& writer) const;
 
+		/// @brief Serializes the graph like Serialize does, but without node positions and sizes, so that the
+		///        output only changes when the graph's content does. Used for content hashing. Silent, as there
+		///        is no layout to complain about.
+		io::Writer& SerializeLayoutFree(io::Writer& writer) const;
+
+		/// @brief Whether nodes currently leave their layout out when serialized.
+		[[nodiscard]] bool IsLayoutFreeSerialization() const { return m_layoutFree; }
+
 		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context);
 
 	public:
@@ -228,6 +236,7 @@ namespace mmo
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
 	    INodeLayoutStore* m_layoutStore { nullptr };
+	    mutable bool m_layoutFree { false };
 	    std::vector<GraphNode*> m_nodes;
 	    std::vector<Pin*> m_pins;
 		GraphNode* m_rootNode { nullptr };
