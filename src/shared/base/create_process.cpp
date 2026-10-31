@@ -4,10 +4,14 @@
 
 #if defined(__unix__) || defined(__APPLE__)
 #	include <spawn.h>
+#	include <unistd.h>
 #	include <sys/stat.h>
 #	include <cstring>
 #	include <iostream>
 #	include <exception>
+
+// Not reliably declared by unistd.h (glibc wants _GNU_SOURCE, Darwin never does).
+extern char** environ;
 #elif defined _WIN32
 #	include <Windows.h>
 #endif
@@ -21,7 +25,7 @@ namespace mmo
 	    std::string executable,
 	    std::vector<std::string> arguments)
 	{
-#ifdef __unix__
+#if defined(__unix__) || defined(__APPLE__)
 		std::vector<char *> convertedArguments;
 		convertedArguments.push_back(&executable.front());
 		for (size_t i = 0; i < arguments.size(); ++i)
@@ -30,18 +34,17 @@ namespace mmo
 		}
 		convertedArguments.push_back(nullptr);
 
-		posix_spawn_file_actions_t fileActions;
-		std::memset(&fileActions, 0, sizeof(fileActions));
-
 		pid_t processId;
 
+		// The child inherits the environment: without HOME and friends a GUI process
+		// cannot locate the user's folders.
 		const int result = posix_spawn(
 		                       &processId,
 		                       executable.c_str(),
-		                       &fileActions,
+		                       nullptr,
 		                       nullptr,
 		                       convertedArguments.data(),
-		                       nullptr);
+		                       environ);
 		if (result == 0)
 		{
 			std::cerr << "Launched updater with process id " << processId << '\n';
@@ -88,7 +91,7 @@ namespace mmo
 
 	void makeExecutable(const std::string &file)
 	{
-#ifdef __unix__
+#if defined(__unix__) || defined(__APPLE__)
 		struct stat s;
 		int result = stat(file.c_str(), &s);
 		if (result == 0)

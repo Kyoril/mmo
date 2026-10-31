@@ -81,7 +81,14 @@ namespace mmo::updating
 				}
 
 				std::vector<std::string> arguments(argv, argv + argc);
+#ifdef _WIN32
+				// CreateProcess takes a single command line, so the path is quoted into it.
 				arguments.push_back("--remove-previous \"" + executableCopy.string() + "\"");
+#else
+				// posix_spawn passes argv verbatim; quotes would become part of the path.
+				arguments.push_back("--remove-previous");
+				arguments.push_back(executableCopy.string());
+#endif
 				mmo::createProcess(applicationPath.string(), arguments);
 			};
 

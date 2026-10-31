@@ -32,11 +32,6 @@
 #include <ShlObj.h>
 #include <Windows.h>
 
-#ifndef NDEBUG
-#	include "bitmap.h"
-#	include "text_renderer.h"
-#endif
-
 namespace
 {
 	const std::string DefaultUpdateSourceUrl = "https://patch.mmo-dev.net";
@@ -86,42 +81,6 @@ namespace
 		}
 	}
 
-#ifndef NDEBUG
-	/// Verifies that every embedded asset can be found and decoded.
-	///
-	/// Runs on startup in debug builds so that a mismatch between resource.h,
-	/// launcher.rc and the CMake asset list surfaces immediately rather than as a
-	/// blank rectangle somewhere in the UI much later.
-	void VerifyEmbeddedAssets()
-	{
-		constexpr std::array<uint32, 16> images = {
-			IDR_PNG_SPLASH,		   IDR_PNG_PANEL_BOTTOM,	IDR_PNG_BORDER_FRAME,	IDR_PNG_BUTTON_UP,		  IDR_PNG_BUTTON_OVER,
-			IDR_PNG_BUTTON_DOWN,   IDR_PNG_BUTTON_DISABLED, IDR_PNG_PROGRESS_TRACK, IDR_PNG_PROGRESS_FILL,	  IDR_PNG_ICON_CLOSE,
-			IDR_PNG_ICON_MINIMIZE, IDR_PNG_CONTENT_TEXTURE, IDR_PNG_HERO_FRAME,		IDR_PNG_NEWS_DEVELOPMENT, IDR_PNG_NEWS_WORLD, IDR_PNG_BORDER_REFINED};
-
-		for (const uint32 id : images)
-		{
-			const mmo::ResourceBlob blob = mmo::LoadResourceBlob(id);
-			ASSERT(blob.IsValid() && "An embedded image resource is missing");
-
-			mmo::Bitmap bitmap;
-			VERIFY(mmo::Bitmap::DecodePng(blob, bitmap) && "An embedded image failed to decode");
-			ASSERT(bitmap.IsValid());
-		}
-
-		for (const uint32 id : { IDR_TTF_DISPLAY, IDR_TTF_BODY })
-		{
-			const mmo::ResourceBlob blob = mmo::LoadResourceBlob(id);
-			ASSERT(blob.IsValid() && "An embedded font resource is missing");
-
-			mmo::FontFace face;
-			VERIFY(face.Initialize(blob, 16) && "An embedded font failed to load");
-			ASSERT(face.GetGlyph('A') != nullptr && "An embedded font produced no glyph");
-		}
-
-		DLOG("Embedded assets verified (" << images.size() << " images, 2 fonts)");
-	}
-#endif
 }
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR commandLine, int showCommand)
@@ -214,7 +173,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previousInstance, LPSTR command
 		}
 
 #ifndef NDEBUG
-		VerifyEmbeddedAssets();
+		mmo::VerifyEmbeddedAssets();
 #endif
 
 		mmo::LauncherModel model;
