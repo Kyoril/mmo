@@ -21,6 +21,8 @@ GIT_OPTIONS = ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=300"]
 
 LAUNCHER_BINARY = "Launcher.exe"
 LAUNCHER_MANIFEST = "launcher-release.json"
+# The macOS app bundle; releases published before it existed do not carry it.
+MACOS_CLIENT_ASSET = "client-macos.zip"
 
 
 class StageError(Exception):
@@ -87,10 +89,10 @@ class Stager:
 		if not gate or not gate.get("passed"):
 			raise StageError("release.json carries no green gate report")
 
-		zip_path = self.downloads / "client-bin.zip"
-		self.github.download_asset(release, "client-bin.zip", str(zip_path))
-		if sha256_file(zip_path) != manifest["assets"]["client-bin.zip"]["sha256"]:
-			raise StageError("client-bin.zip checksum mismatch")
+		zip_path = self._download_verified(release, manifest, "client-bin.zip")
+		macos_zip = None
+		if MACOS_CLIENT_ASSET in manifest["assets"]:
+			macos_zip = self._download_verified(release, manifest, MACOS_CLIENT_ASSET)
 
 		self._checkout_data(manifest["data_client_commit"])
 
@@ -102,6 +104,8 @@ class Stager:
 			binaries = [name for name in archive.namelist() if name != "source.txt"]
 		if not (self.patch_source / "source.txt").is_file():
 			raise StageError("client-bin.zip contains no source.txt")
+		if macos_zip is not None:
+			binaries += self._extract_macos_client(macos_zip)
 		launcher_version = self._pin_launcher()
 
 		if tmp.exists():
@@ -118,6 +122,28 @@ class Stager:
 		os.replace(tmp, final)
 		log.info("staged %s into %s (launcher %s)", commit, final, launcher_version or "from the nightly")
 		return dict(manifest, launcher_version=launcher_version)
+
+	def _download_verified(self, release, manifest, name):
+		"""Downloads asset `name` and checks it against release.json; returns its path."""
+		path = self.downloads / name
+		self.github.download_asset(release, name, str(path))
+		if sha256_file(path) != manifest["assets"][name]["sha256"]:
+			raise StageError("{} checksum mismatch".format(name))
+		return path
+
+	def _extract_macos_client(self, zip_path):
+		"""Unpacks client-macos.zip next to the Windows binaries; returns its top-level names.
+
+		It holds only mmo_client.app. File modes are not kept: the patch format has none, the
+		updater marks the bundle's executables itself. Raises StageError.
+		"""
+		with zipfile.ZipFile(zip_path) as archive:
+			names = archive.namelist()
+			top_level = sorted({name.split("/", 1)[0] for name in names})
+			if top_level != ["mmo_client.app"]:
+				raise StageError("{} must hold only mmo_client.app, not {}".format(MACOS_CLIENT_ASSET, ", ".join(top_level)))
+			archive.extractall(self.patch_source)
+		return top_level
 
 	def _pin_launcher(self):
 		"""Replaces the nightly's Launcher.exe with the newest launcher release; returns its version.

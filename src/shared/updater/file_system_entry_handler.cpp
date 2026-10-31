@@ -12,6 +12,32 @@
 
 namespace mmo::updating
 {
+	namespace
+	{
+		/// macOS app bundles keep their executables in Contents/MacOS. The patch format carries no
+		/// file modes, so a downloaded bundle would not start without marking them here.
+		void MarkBundleExecutable(const std::string& destination)
+		{
+#ifndef _WIN32
+			if (destination.find(".app/Contents/MacOS/") == std::string::npos)
+			{
+				return;
+			}
+
+			using std::filesystem::perms;
+			std::error_code error;
+			std::filesystem::permissions(destination, perms::owner_exec | perms::group_exec | perms::others_exec,
+				std::filesystem::perm_options::add, error);
+			if (error)
+			{
+				throw std::runtime_error("Could not mark " + destination + " executable: " + error.message());
+			}
+#else
+			(void)destination;
+#endif
+		}
+	}
+
 	PreparedUpdate FileSystemEntryHandler::handleDirectory(
 	    const PrepareParameters &parameters,
 	    const UpdateListProperties &listProperties,
@@ -130,6 +156,8 @@ namespace mmo::updating
 					originalSize,
 				    doZLibUncompress
 				);
+				sinkFile.close();
+				MarkBundleExecutable(destination);
 
 				//TODO: Copy step-wise
 				return false;

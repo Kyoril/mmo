@@ -93,16 +93,32 @@ def make_git_repo(path, files):
 	return git(path, "rev-parse", "HEAD")
 
 
-def make_release_assets(commit, data_commit, binaries=None, source_txt=SOURCE_TXT, changes=None, sha_override=None):
-	"""Returns {asset name: bytes} for a release: client-bin.zip and a matching release.json."""
-	binaries = binaries if binaries is not None else {"mmo_client.exe": b"client", "Launcher.exe": b"launcher"}
+def _zip(files):
 	buffer = io.BytesIO()
 	with zipfile.ZipFile(buffer, "w") as archive:
-		if source_txt is not None:
-			archive.writestr("source.txt", source_txt)
-		for name, data in binaries.items():
+		for name, data in files.items():
 			archive.writestr(name, data)
-	zip_bytes = buffer.getvalue()
+	return buffer.getvalue()
+
+
+MACOS_CLIENT = {
+	"mmo_client.app/": b"",
+	"mmo_client.app/Contents/Info.plist": b"plist",
+	"mmo_client.app/Contents/MacOS/mmo_client": b"mac client",
+}
+
+
+def make_release_assets(commit, data_commit, binaries=None, source_txt=SOURCE_TXT, changes=None, sha_override=None,
+		macos=None, macos_sha_override=None):
+	"""Returns {asset name: bytes} for a release: client-bin.zip and a matching release.json.
+
+	macos: {zip entry: bytes} of a client-macos.zip to add (MACOS_CLIENT is a valid one).
+	"""
+	binaries = binaries if binaries is not None else {"mmo_client.exe": b"client", "Launcher.exe": b"launcher"}
+	files = dict(binaries)
+	if source_txt is not None:
+		files = dict({"source.txt": source_txt}, **files)
+	zip_bytes = _zip(files)
 	manifest = {
 		"schema": 1,
 		"commit": commit,
@@ -114,7 +130,14 @@ def make_release_assets(commit, data_commit, binaries=None, source_txt=SOURCE_TX
 		"gate": {"passed": True, "steps": []},
 		"changes": changes if changes is not None else ["fix(loot): roll on the right table"],
 	}
-	return {"client-bin.zip": zip_bytes, "release.json": json.dumps(manifest).encode("utf-8")}
+	assets = {"client-bin.zip": zip_bytes}
+	if macos is not None:
+		macos_bytes = _zip(macos)
+		manifest["assets"]["client-macos.zip"] = {
+			"sha256": macos_sha_override or hashlib.sha256(macos_bytes).hexdigest(), "size": len(macos_bytes)}
+		assets["client-macos.zip"] = macos_bytes
+	assets["release.json"] = json.dumps(manifest).encode("utf-8")
+	return assets
 
 
 class FakeGitHub:

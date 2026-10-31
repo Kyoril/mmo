@@ -13,7 +13,7 @@ from mmo_deployer.patchdir import PatchDir
 from mmo_deployer.stage import COMPILER_TIMEOUT_S, GIT_TIMEOUT_S, StageError, Stager, select_release
 from mmo_deployer.state import State
 
-from .fakes import CAN_SYMLINK, FakeGitHub, make_config, make_git_repo, make_launcher_assets, make_release_assets
+from .fakes import CAN_SYMLINK, MACOS_CLIENT, FakeGitHub, make_config, make_git_repo, make_launcher_assets, make_release_assets
 
 FAKE_COMPILER = [sys.executable, os.path.join(os.path.dirname(__file__), "fake_update_compiler.py")]
 COMMIT = "c" * 40
@@ -164,6 +164,37 @@ class StagerTests(unittest.TestCase):
 		with self.assertRaises(StageError):
 			self.stager.stage(self._release(source_txt=None))
 		self._assert_nothing_left()
+
+	def test_macos_client_is_unpacked_next_to_the_windows_binaries(self):
+		self.stager.stage(self._release(macos=MACOS_CLIENT))
+		binary = self.stager.patch_source / "mmo_client.app" / "Contents" / "MacOS" / "mmo_client"
+		self.assertEqual(binary.read_bytes(), b"mac client")
+		listing = (self.patchdir.release_path(COMMIT) / "list.txt").read_text(encoding="utf-8")
+		self.assertIn('"mmo_client.app"', listing)
+
+	def test_list_missing_the_macos_client(self):
+		with mock.patch.dict(os.environ, {"FAKE_COMPILER_OMIT": "mmo_client.app"}):
+			with self.assertRaises(StageError) as ctx:
+				self.stager.stage(self._release(macos=MACOS_CLIENT))
+		self.assertIn("mmo_client.app", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_macos_client_checksum_mismatch(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(macos=MACOS_CLIENT, macos_sha_override="0" * 64))
+		self.assertIn("client-macos.zip checksum", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_macos_zip_with_other_entries_is_refused(self):
+		with self.assertRaises(StageError) as ctx:
+			self.stager.stage(self._release(macos=dict(MACOS_CLIENT, **{"mmo_client.exe": b"overwrite"})))
+		self.assertIn("only mmo_client.app", str(ctx.exception))
+		self._assert_nothing_left()
+
+	def test_release_without_macos_client_still_stages(self):
+		self.stager.stage(self._release())
+		self.assertFalse((self.stager.patch_source / "mmo_client.app").exists())
+		self.assertTrue(self.patchdir.has_release(COMMIT))
 
 	def _recording_run(self, timeout_on=None):
 		calls = []

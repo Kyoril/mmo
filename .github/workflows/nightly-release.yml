@@ -200,6 +200,108 @@ jobs:
             client-bin.zip
             symbols.zip
 
+  # The macOS client for Apple Silicon (M1 and later): an arm64-only app bundle for macOS 11, the
+  # first release on M1 and the oldest that runs the Metal 2.3 shaders. Players get it from the
+  # patcher as Data's sibling mmo_client.app (deploy/patch/source.txt, condition OSX).
+  client-macos:
+    needs: [check, gate]
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      OPENSSL_VERSION: "3.5.4"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Check the build version
+        run: |
+          expected="${{ needs.check.outputs.version }}"
+          actual=$(python3 tools/release/version.py)
+          if [ "$actual" != "$expected" ]; then echo "::error::client build would be $actual, release is $expected"; exit 1; fi
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      # Build tools only (hlsl2msl, configure checks); nothing from Homebrew may be linked into the
+      # client, the check after the build enforces it. mysql-client satisfies the configure step.
+      - name: Install build tools
+        run: brew install ninja glslang spirv-cross mysql-client
+
+      # Homebrew's OpenSSL targets the runner's macOS; a static build for 11.0 keeps the client
+      # runnable on every M1 release.
+      - name: Cache OpenSSL
+        id: openssl-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/openssl-arm64
+          key: openssl-${{ env.OPENSSL_VERSION }}-arm64-macos${{ env.MACOSX_DEPLOYMENT_TARGET }}
+
+      - name: Build OpenSSL
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+          tar xzf openssl.tar.gz
+          cd "openssl-${OPENSSL_VERSION}"
+          ./Configure darwin64-arm64-cc no-shared no-tests no-docs "--prefix=$HOME/openssl-arm64" "-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}"
+          make -j"$(sysctl -n hw.ncpu)"
+          make install_sw
+
+      - name: Configure CMake
+        run: |
+          mysql="$(brew --prefix mysql-client)"
+          cmake -S . -B build_mac -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DMMO_BUILD_CLIENT=ON \
+            -DMMO_BUILD_LAUNCHER=OFF \
+            -DMMO_BUILD_TESTS=OFF \
+            -DMMO_BUILD_BOTS=OFF \
+            -DMMO_WITH_DEV_COMMANDS=ON \
+            -DMMO_OPENSSL_STATIC=ON \
+            -DOPENSSL_ROOT_DIR="$HOME/openssl-arm64" \
+            -DMYSQL_INCLUDE_DIR="$mysql/include/mysql" \
+            -DMYSQL_LIBRARY="$mysql/lib/libmysqlclient.dylib"
+
+      - name: Build client
+        run: cmake --build build_mac -t mmo_client -j"$(sysctl -n hw.ncpu)"
+
+      # A player's Mac has nothing but the system: no Homebrew, no Intel slice needed, no newer OS.
+      - name: Check the binary
+        run: |
+          binary=bin/mmo_client.app/Contents/MacOS/mmo_client
+          lipo -archs "$binary"
+          test "$(lipo -archs "$binary")" = "arm64" || { echo "::error::mmo_client is not arm64 only"; exit 1; }
+          minos=$(otool -l "$binary" | awk '/LC_BUILD_VERSION/{found=1} found && $1=="minos"{print $2; exit}')
+          echo "minos $minos"
+          test "$minos" = "$MACOSX_DEPLOYMENT_TARGET" || { echo "::error::mmo_client needs macOS $minos"; exit 1; }
+          foreign=$(otool -L "$binary" | tail -n +2 | awk '{print $1}' | grep -v -E '^(/System/Library/|/usr/lib/)' || true)
+          if [ -n "$foreign" ]; then echo "::error::mmo_client links libraries a player does not have: $foreign"; exit 1; fi
+
+      # Debug info goes into the dSYM (symbols zip), the shipped binary is stripped. Apple Silicon
+      # refuses unsigned code, so the bundle is signed ad hoc after stripping. The patcher downloads
+      # it without a quarantine flag, so Gatekeeper does not ask for a Developer ID.
+      - name: Package
+        run: |
+          cd bin
+          dsymutil mmo_client.app/Contents/MacOS/mmo_client -o mmo_client.app.dSYM
+          strip -S mmo_client.app/Contents/MacOS/mmo_client
+          codesign --force --sign - --timestamp=none mmo_client.app
+          codesign --verify --strict mmo_client.app
+          zip -r -X -y ../client-macos.zip mmo_client.app
+          zip -r -X ../symbols-macos.zip mmo_client.app.dSYM
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-macos
+          path: |
+            client-macos.zip
+            symbols-macos.zip
+
   images:
     needs: [check, gate]
     uses: ./.github/workflows/docker-build.yml
@@ -209,7 +311,7 @@ jobs:
     secrets: inherit
 
   publish:
-    needs: [check, gate, client, images]
+    needs: [check, gate, client, client-macos, images]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -227,6 +329,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: client-bin
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-macos
           path: dist
 
       - uses: actions/download-artifact@v4
@@ -276,6 +383,7 @@ jobs:
         run: |
           python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
+            --asset client-macos.zip=dist/client-macos.zip --asset symbols-macos.zip=dist/symbols-macos.zip \
             --gate-report gate/last_report.json --version "$VERSION" --patch-notes dist/patch_notes.json \
             --out dist/release.json
 
@@ -287,4 +395,5 @@ jobs:
           # A forced re-release of the same commit has the same version.
           if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
           gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
-            dist/client-bin.zip dist/symbols.zip dist/server-symbols.zip dist/release.json
+            dist/client-bin.zip dist/symbols.zip dist/client-macos.zip dist/symbols-macos.zip \
+            dist/server-symbols.zip dist/release.json
