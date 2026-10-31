@@ -252,10 +252,15 @@ namespace
 			DumpGeneratedCode(assetPath, dumpCompiler);
 		}
 
-		if (!buildResult.failedVariants.empty() || material->GetVertexShaderCode(shader_platform::Metal, VertexShaderType::Default).empty())
+		if (!buildResult.failedVariants.empty())
 		{
-			ELOG(assetPath << ": Metal shader compilation failed");
-			return BakeResult::Failed;
+			// Failures are per variant: they stay empty while the other variants ship.
+			std::string names;
+			for (const auto& variant : buildResult.failedVariants)
+			{
+				names += (names.empty() ? "" : ", ") + variant;
+			}
+			WLOG(assetPath << ": Metal shader variants failed to compile and are left empty: " << names);
 		}
 
 		std::vector<char> output;

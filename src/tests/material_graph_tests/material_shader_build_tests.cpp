@@ -121,6 +121,9 @@ TEST_CASE("failed variant stays empty", "[shader_build]")
 	BuildRootedGraph(graph);
 
 	Material material("test");
+	// Stale bytes in the failing slot must be cleared, never kept
+	auto stale = Bytes("stale");
+	material.SetVertexShaderCode("METAL", static_cast<VertexShaderType>(1), stale);
 	// The second compile call is the second vertex variant
 	FakeShaderCompiler compiler("METAL", 1);
 	const MaterialShaderBuildResult result = BuildMaterialShaders(material, graph, compiler);
