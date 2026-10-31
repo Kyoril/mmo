@@ -4,7 +4,6 @@
 
 #include <array>
 #include <filesystem>
-#include <atomic>
 #include <map>
 #include <chrono>
 
@@ -229,6 +228,39 @@ TEST_CASE("graph hash is stable across a serialize and deserialize round trip", 
 	loaded.Deserialize(reader, context);
 	REQUIRE(context.PerformAfterLoadActions());
 	REQUIRE(loaded.GetNodes().size() == 3);
+
+	CHECK(ComputeGraphHash(loaded) == before);
+}
+
+TEST_CASE("graph hash ignores output link history for fan-out", "[hash]")
+{
+	MaterialGraph graph;
+	GraphNode* constant = BuildConstGraph(graph, 1.0f);
+	GraphNode* add = graph.CreateNode<AddNode>();
+	REQUIRE(add != nullptr);
+	REQUIRE(add->GetInputPins().size() >= 2);
+
+	// Later input first, so the output remembers the first input last
+	REQUIRE(add->GetInputPins()[1]->LinkTo(*constant->GetOutputPins()[0]));
+	REQUIRE(add->GetInputPins()[0]->LinkTo(*constant->GetOutputPins()[0]));
+	const SHA1Hash before = ComputeGraphHash(graph);
+
+	std::vector<char> buffer;
+	{
+		io::VectorSink sink{ buffer };
+		io::Writer writer{ sink };
+		graph.Serialize(writer);
+	}
+
+	constexpr size_t chunkHeaderSize = 8;
+	io::MemorySource source{ buffer.data() + chunkHeaderSize, buffer.data() + buffer.size() };
+	io::Reader reader{ source };
+
+	MaterialGraph loaded;
+	ExecutableMaterialGraphLoadContext context;
+	loaded.Deserialize(reader, context);
+	REQUIRE(context.PerformAfterLoadActions());
+	REQUIRE(loaded.GetNodes().size() == 2);
 
 	CHECK(ComputeGraphHash(loaded) == before);
 }

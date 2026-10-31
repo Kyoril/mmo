@@ -62,7 +62,8 @@ namespace mmo
 	{
 		writer
 			<< io::write<uint32>(m_id)
-			<< io::write<uint32>(m_link ? m_link->GetId() : 0);
+			// An output only remembers the last input linked to it, so for hashing only the inputs describe connectivity
+			<< io::write<uint32>(m_link && !(!IsInput() && m_node && m_node->GetMaterial()->IsLayoutFreeSerialization()) ? m_link->GetId() : 0);
 
 		return writer;
 	}
