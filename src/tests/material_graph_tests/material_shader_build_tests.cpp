@@ -14,7 +14,6 @@
 #include "material_graph/material_graph_hash.h"
 #include "material_graph/material_node.h"
 #include "material_graph/material_shader_build.h"
-#include "scene_graph/material_serializer.h"
 
 using namespace mmo;
 
@@ -192,9 +191,10 @@ TEST_CASE("graph chunk is found in a material file and loads", "[shader_build]")
 	{
 		io::VectorSink sink(file);
 		io::Writer writer(sink);
-		Material material("test");
-		MaterialSerializer serializer;
-		serializer.Export(material, writer);
+		// Stand-in for the material's own chunks, which are skipped
+		ChunkWriter other(ChunkMagic({ 'M', 'A', 'T', 'X' }), writer);
+		writer << io::write<uint32>(42);
+		other.Finish();
 		// Serialize writes the GRPH chunk itself
 		graph.Serialize(writer);
 	}
