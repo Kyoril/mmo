@@ -67,7 +67,7 @@ namespace mmo
 			sorted.emplace_back(skill->name(), info);
 		}
 
-		std::stable_sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+		std::stable_sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return (a.first) < (b.first); });
 
 		std::vector<ProfessionInfo> result;
 		result.reserve(sorted.size());

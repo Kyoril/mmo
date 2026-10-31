@@ -754,6 +754,8 @@ namespace mmo
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
+		/// Keeps m_dispatcher from stopping when a poll finds it empty (see OnEnter).
+		std::unique_ptr<asio::io_service::work> m_dispatcherWork;
 		std::thread m_backgroundLoader;
 
 		/// Bumped by OnLeave() whenever the world (and its Terrain/Page objects) is torn down.

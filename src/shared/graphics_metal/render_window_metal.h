@@ -1,52 +1,79 @@
-// Copyright (C) 2019 - 2022, Robin Klimonow. All rights reserved.
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #pragma once
 
 #include "graphics/render_window.h"
-#include "render_target_metal.h"
+#include "graphics_device_metal.h"
 
-#include "Metal/Metal.hpp"
-#include "AppKit/AppKit.hpp"
-#include "MetalKit/MetalKit.hpp"
+@class NSWindow;
+@class MMOMetalView;
+@class MMOWindowDelegate;
 
 namespace mmo
 {
-	class GraphicsDeviceMetal;
-
-	/// A D3D11 implementation of the render window class. Used for rendering contents in a native WinApi window.
-	/// Will support using an external window handle instead of the internal one.
+	/// @brief A Cocoa window whose content view is backed by a CAMetalLayer.
+	/// @remarks Sizes are in points: the layer renders at one pixel per point and the window server
+	///          scales it on Retina screens, so the engine's pixel based UI keeps its size.
 	class RenderWindowMetal final
 		: public RenderWindow
-		, public RenderTargetMetal
-        , public MTK::ViewDelegate
 	{
 	public:
-        RenderWindowMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height, bool fullScreen);
-        ~RenderWindowMetal();
-        
-        virtual void drawInMTKView( MTK::View* pView ) override;
-        
-	public:
-		// ~Begin RenderTarget
-		virtual void Activate() final override;
-		virtual void Clear(ClearFlags flags) final override;
-		virtual void Resize(uint16 width, uint16 height) final override;
-		virtual void Update() final override;
-		// ~End RenderTarget
+		RenderWindowMetal(GraphicsDeviceMetal& device, std::string name, uint16 width, uint16 height, bool fullScreen);
 
-		// ~Begin RenderWindow
-		virtual void SetTitle(const std::string& title) final override;
-		// ~End RenderWindow
-        
-    public:
-        void NotifyClosed();
-        
-    private:
-        void DestroyNativeWindow();
-        
-    private:
-        NS::Window* m_window;
-        MTK::View* m_mtkView;
-        id m_delegate;
+		~RenderWindowMetal() override;
+
+	public:
+		// ~ Begin RenderTarget
+		void Activate() override;
+
+		void ApplyPendingResize() override;
+
+		void Clear(ClearFlags flags) override;
+
+		void Resize(uint16 width, uint16 height) override;
+
+		/// Presents the frame.
+		void Update() override;
+		// ~ End RenderTarget
+
+		// ~ Begin RenderWindow
+		void SetTitle(const std::string& title) override;
+
+		void Hide() override;
+
+		void SetDisplayMode(bool fullscreenWindow, uint32 monitorIndex, uint16 width, uint16 height) override;
+
+		[[nodiscard]] bool HasFocus() const override;
+		// ~ End RenderWindow
+
+	public:
+		/// Applies the device's vertical sync setting to the layer.
+		void ApplyVSync();
+
+		/// Called by the window delegate when the content view changed its size.
+		void OnContentResized();
+
+		/// Called by the window delegate when the user wants to close the window.
+		void OnCloseRequested();
+
+		[[nodiscard]] NSWindow* GetNativeWindow() const { return m_window; }
+
+	private:
+		id<MTLTexture> AcquireBackBuffer();
+
+		void CreateDepthBuffer();
+
+	private:
+		GraphicsDeviceMetal& m_device;
+		NSWindow* m_window = nil;
+		MMOMetalView* m_view = nil;
+		MMOWindowDelegate* m_delegate = nil;
+		CAMetalLayer* m_layer = nil;
+		id<CAMetalDrawable> m_drawable = nil;
+		id<MTLTexture> m_depthTexture = nil;
+		bool m_resizePending = false;
+		uint16 m_pendingWidth = 0;
+		uint16 m_pendingHeight = 0;
+		bool m_fullScreen = false;
 	};
 }

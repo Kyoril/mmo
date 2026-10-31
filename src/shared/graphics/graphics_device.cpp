@@ -5,7 +5,7 @@
 #	include "graphics_d3d11/graphics_device_d3d11.h"
 #endif
 #ifdef __APPLE__
-#    include "graphics_metal/graphics_device_metal.h"
+#    include "graphics_metal/graphics_device_metal_factory.h"
 #endif
 
 #include <memory>
@@ -59,7 +59,7 @@ namespace mmo
         assert(!s_currentDevice);
 
         // Allocate a new graphics device object
-        s_currentDevice = std::make_unique<GraphicsDeviceMetal>();
+        s_currentDevice = CreateGraphicsDeviceMetal();
         s_currentDevice->Create(desc);
 
         return *s_currentDevice;

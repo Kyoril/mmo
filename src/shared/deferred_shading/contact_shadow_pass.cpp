@@ -5,14 +5,17 @@
 #include "scene_graph/camera.h"
 
 // --- Shader bytecode seam ---------------------------------------------------------------
-// The only backend-bound fact in this file: which compiled blob to hand CreateShader. The
-// deferred path is D3D11-only today (there are no .metal shaders in the tree and
-// ShaderCompilerMetal is a stub), so only the D3D_SM5 blob exists. When a Metal deferred
-// path appears, this seam gains a branch and nothing below it changes.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/PS_ContactShadows.h"
-#	include "shaders/PS_ContactShadowBlur.h"
+// The only backend-bound fact in this file: which compiled blob to hand CreateShader. D3D11
+// gets fxc's DXBC, Metal the blob hlsl2msl generates from the same HLSL under the same symbol.
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/PS_ContactShadows.h"
+#		include "shaders/PS_ContactShadowBlur.h"
+#	else
+#		include "PS_ContactShadows.metal.h"
+#		include "PS_ContactShadowBlur.metal.h"
+#	endif
 #	define MMO_CONTACT_SHADOW_PS_BYTECODE g_PS_ContactShadows
 #	define MMO_CONTACT_SHADOW_PS_SIZE std::size(g_PS_ContactShadows)
 #	define MMO_CONTACT_SHADOW_BLUR_PS_BYTECODE g_PS_ContactShadowBlur
