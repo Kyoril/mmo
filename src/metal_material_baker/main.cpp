@@ -24,6 +24,7 @@
 #include "binary_io/writer.h"
 #include "material_graph/material_graph.h"
 #include "material_graph/material_node.h"
+#include "material_graph/material_shader_build.h"
 #include "graphics/global_shader_parameters.h"
 #include "graphics/graphics_device.h"
 #include "graphics/material.h"
@@ -226,57 +227,35 @@ namespace
 		}
 
 		MaterialGraph graph;
-		graph.GetNodeRegistry()->RegisterNodeType(MaterialNode::GetStaticTypeInfo());
-		graph.CreateNode<MaterialNode>(true);
-
-		ExecutableMaterialGraphLoadContext context;
+		if (!LoadMaterialGraph({ reinterpret_cast<const uint8*>(graphChunk.data()), graphChunk.size() }, graph))
 		{
-			io::MemorySource source(graphChunk.data(), graphChunk.data() + graphChunk.size());
-			io::Reader reader(source);
-			if (!graph.Deserialize(reader, context) || !context.PerformAfterLoadActions())
-			{
-				ELOG(assetPath << ": unable to read the material graph");
-				return BakeResult::Failed;
-			}
-		}
-
-		// Compile into a scratch material: only its Metal shaders are taken over.
-		MaterialCompilerHlsl materialCompiler;
-		graph.Compile(materialCompiler);
-
-		const auto compiledMaterial = std::make_shared<Material>(assetPath);
-		Material& compiled = *compiledMaterial;
-		ShaderCompilerMetal shaderCompiler;
-		materialCompiler.Compile(compiled, shaderCompiler);
-		DumpGeneratedCode(assetPath, materialCompiler);
-
-		if (compiled.GetVertexShaderCode(shader_platform::Metal, VertexShaderType::Default).empty())
-		{
-			ELOG(assetPath << ": Metal shader compilation failed");
+			ELOG(assetPath << ": unable to read the material graph");
 			return BakeResult::Failed;
 		}
 
-		// Texture slots are assigned by the compiler, so the Metal shaders only fit the stored
-		// texture list if the graph still produces the same one.
-		if (compiled.GetTextureFiles() != material->GetTextureFiles())
+		// Builds into a scratch material and takes over only the Metal shaders, plus build info.
+		ShaderCompilerMetal shaderCompiler;
+		const MaterialShaderBuildResult buildResult = BuildMaterialShaders(*material, graph, shaderCompiler);
+		if (!buildResult.cookable)
 		{
-			WLOG(assetPath << ": the graph produces a different texture list than the file stores; the material may need to be resaved in the editor");
+			ELOG(assetPath << ": the graph can't be built (no root, missing material function or a different texture list than the file stores; the material may need to be resaved in the editor)");
+			return BakeResult::Failed;
 		}
 
-		for (uint32 i = 0; i < VertexShaderTypeCount; ++i)
+		if (!s_dumpDirectory.empty())
 		{
-			const auto type = static_cast<VertexShaderType>(i);
-			const auto code = compiled.GetVertexShaderCode(shader_platform::Metal, type);
-			std::vector<uint8> copy(code.begin(), code.end());
-			material->SetVertexShaderCode(shader_platform::Metal, type, copy);
+			// The generated HLSL is not exposed by the build; generate it once more for inspection.
+			MaterialCompilerHlsl dumpCompiler;
+			graph.Compile(dumpCompiler);
+			Material dumpMaterial(assetPath);
+			dumpCompiler.Compile(dumpMaterial, shaderCompiler);
+			DumpGeneratedCode(assetPath, dumpCompiler);
 		}
 
-		for (uint32 i = 0; i < PixelShaderTypeCount; ++i)
+		if (!buildResult.failedVariants.empty() || material->GetVertexShaderCode(shader_platform::Metal, VertexShaderType::Default).empty())
 		{
-			const auto type = static_cast<PixelShaderType>(i);
-			const auto code = compiled.GetPixelShaderCode(shader_platform::Metal, type);
-			std::vector<uint8> copy(code.begin(), code.end());
-			material->SetPixelShaderCode(shader_platform::Metal, type, copy);
+			ELOG(assetPath << ": Metal shader compilation failed");
+			return BakeResult::Failed;
 		}
 
 		std::vector<char> output;

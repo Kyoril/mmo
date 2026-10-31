@@ -224,6 +224,9 @@ namespace mmo
 
 	    bool IsRootNode(uint32 nodeId) const;
 
+		/// @brief Determines whether the graph has a root (material output) node.
+		[[nodiscard]] bool HasRootNode() const { return m_rootNode != nullptr; }
+
 		/// @brief Sets where node positions and sizes are read from when saving and written to when loading.
 		///        Without a store, nodes are saved with an empty layout and loaded layouts are dropped.
 		/// @param store The layout store, which has to outlive the graph or be reset to nullptr. Not owned.
