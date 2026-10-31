@@ -85,7 +85,8 @@ window art is rendered at build time by `macos/make_background.swift` from the l
 and display font; its icon positions must match `macos/dmg_settings.py`.
 
 The smoke test verifies and mounts the image, checks its layout and version, and starts the
-launcher from the read-only image and from a copied install folder (`--render-preview`).
+launcher from the read-only image and from a copied install folder (`--render-preview`). It
+also verifies the bundle's code signature.
 
 ## Gatekeeper
 
@@ -96,6 +97,11 @@ read-only copy ("App Translocation"). The launcher detects that, clears the quar
 its real copy and restarts from there, so the game is installed into the folder in Applications.
 Started straight from the mounted image (or any folder it cannot write to), the launcher asks
 the player to drag the folder to Applications first.
+
+Without a signing identity `build_dmg.sh` signs the bundle ad-hoc. That is required: the linker
+signs only the executable, and a downloaded app whose signature does not seal its resources is
+reported as "damaged" with no "Open Anyway". `codesign --verify --strict` on the bundle must pass
+before any DMG ships.
 
 Signing switches on in CI once these repository secrets exist; nothing else changes:
 

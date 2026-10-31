@@ -4,7 +4,7 @@
 # Checks a built AlestiaOnline.dmg without a GUI session:
 #   - the image verifies and mounts,
 #   - it holds "Alestia Online/Launcher.app", an Applications link and the Finder layout,
-#   - the launcher reports the expected version and matches the given build,
+#   - the launcher reports the expected version, matches the given build and is validly signed,
 #   - the launcher starts from the read-only image and from a copied install folder and
 #     renders every page from its bundled art (--render-preview).
 #
@@ -55,9 +55,12 @@ ls "$mount"/.background* > /dev/null 2>&1 || fail "the window background is miss
 built="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist")"
 [ "$built" = "$version" ] || fail "the launcher reports $built, expected $version"
 
+# A broken bundle signature makes a downloaded launcher "damaged" and unopenable.
+codesign --verify --strict "$app" || fail "the launcher's code signature is broken"
+
 if [ -n "$launcher" ]; then
-	cmp -s "$app/Contents/MacOS/Launcher" "$launcher/Contents/MacOS/Launcher" || \
-		[ -n "${MACOS_SIGN_IDENTITY:-}" ] || fail "the DMG's launcher differs from $launcher"
+	# Signing rewrites the executable, so compare the Info.plist instead of the binary.
+	cmp -s "$app/Contents/Info.plist" "$launcher/Contents/Info.plist" || fail "the DMG's launcher differs from $launcher"
 fi
 
 for res in splash.png font_display.ttf font_body.ttf; do
@@ -77,8 +80,6 @@ ditto "$mount/Alestia Online" "$work/Applications/Alestia Online"
 	> "$work/preview-install.log" 2>&1 || { cat "$work/preview-install.log" >&2; fail "the installed launcher failed to render"; }
 [ "$(ls "$work/preview-install" | wc -l)" -ge 30 ] || fail "too few preview pages from the install"
 
-if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
-	codesign --verify --strict "$work/Applications/Alestia Online/Launcher.app" || fail "the installed launcher's signature is broken"
-fi
+codesign --verify --strict "$work/Applications/Alestia Online/Launcher.app" || fail "the installed launcher's signature is broken"
 
 echo "AlestiaOnline.dmg OK ($version)" >&2
