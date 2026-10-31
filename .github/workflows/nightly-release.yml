@@ -32,7 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'push' && github.ref || 'develop' }}
+          # Scheduled runs release develop. A manual run releases the branch it was started on; only
+          # develop publishes as nightly-, any other branch as test-nightly-, which the deployer ignores.
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
           fetch-depth: 0
 
       - id: pick
@@ -41,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           commit=$(git rev-parse HEAD)
-          if [ "${{ github.event_name }}" = "push" ]; then prefix="test-nightly-"; else prefix="nightly-"; fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.ref }}" = "refs/heads/develop" ]; then prefix="nightly-"; else prefix="test-nightly-"; fi
           latest=$(gh release list --limit 100 --json tagName,createdAt \
             --jq "[.[] | select(.tagName | startswith(\"$prefix\"))] | sort_by(.createdAt) | last | .tagName // empty")
           previous=""
@@ -147,6 +149,16 @@ jobs:
       - name: Init code submodules (not the data repos)
         run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
 
+      # Only the material files of data/client are needed to cook shaders, not its ~8 GB.
+      - name: Material files of data/client
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client checkout --quiet "$sha"
+
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v6
         with:
@@ -176,6 +188,7 @@ jobs:
             '-DMMO_BUILD_TOOLS=ON' `
             '-DMMO_BUILD_TESTS=OFF' `
             '-DMMO_WITH_DEV_COMMANDS=ON' `
+            '-DMMO_MATERIAL_RUNTIME_COMPILE=OFF' `
             '-DMMO_OPENSSL_STATIC=ON' `
             '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
             '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
@@ -184,8 +197,16 @@ jobs:
 
       # This launcher build is only the fallback until a launcher-v* release exists: the deployer
       # swaps in the newest launcher release (.github/workflows/launcher-release.yml).
-      - name: Build client, launcher, crash reporter
-        run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error
+      - name: Build client, launcher, crash reporter, cook
+        run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error mmo_cook
+
+      - name: Cook D3D11 material shaders
+        run: bin/Release/mmo_cook shaders --data data/client --platform D3D11 --out shaders-d3d11 --github
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shaders-d3d11
+          path: shaders-d3d11
 
       - name: Package
         shell: pwsh
@@ -225,6 +246,14 @@ jobs:
       - name: Init code submodules (not the data repos)
         run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
 
+      - name: Material files of data/client
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client checkout --quiet "$sha"
+
       # Build tools only (hlsl2msl, configure checks); nothing from Homebrew may be linked into the
       # client, the check after the build enforces it. mysql-client satisfies the configure step.
       - name: Install build tools
@@ -262,13 +291,23 @@ jobs:
             -DMMO_BUILD_TESTS=OFF \
             -DMMO_BUILD_BOTS=OFF \
             -DMMO_WITH_DEV_COMMANDS=ON \
+            -DMMO_MATERIAL_RUNTIME_COMPILE=OFF \
             -DMMO_OPENSSL_STATIC=ON \
             -DOPENSSL_ROOT_DIR="$HOME/openssl-arm64" \
             -DMYSQL_INCLUDE_DIR="$mysql/include/mysql" \
             -DMYSQL_LIBRARY="$mysql/lib/libmysqlclient.dylib"
 
-      - name: Build client
-        run: cmake --build build_mac -t mmo_client -j"$(sysctl -n hw.ncpu)"
+      - name: Build client and cook
+        run: cmake --build build_mac -t mmo_client mmo_cook -j"$(sysctl -n hw.ncpu)"
+
+      # Precompiled Metal libraries (xcrun metal, part of the runner's Xcode).
+      - name: Cook Metal material shaders
+        run: bin/mmo_cook shaders --data data/client --platform METAL --out shaders-metal --github
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shaders-metal
+          path: shaders-metal
 
       # A player's Mac has nothing but the system: no Homebrew, no Intel slice needed, no newer OS.
       - name: Check the binary
@@ -302,6 +341,64 @@ jobs:
             client-macos.zip
             symbols-macos.zip
 
+  # Merges both platforms' shaders into the materials. The deployer lays the overlay over the data
+  # checkout before it compiles the patch (deploy/deployer/mmo_deployer/stage.py).
+  cook:
+    needs: [check, client, client-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      - name: Material files of data/client
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf'
+          git -C data/client checkout --quiet "$sha"
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-13 g++-13 ninja-build libmysqlclient-dev uuid-dev
+
+      - name: Build mmo_cook
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_BUILD_TOOLS=ON -DMMO_BUILD_TESTS=OFF
+          cmake --build build --config Release -t mmo_cook
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shaders-d3d11
+          path: shaders-d3d11
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shaders-metal
+          path: shaders-metal
+
+      - name: Assemble the client overlay
+        run: |
+          cook=$(find bin -type f -name mmo_cook | head -n 1)
+          "$cook" assemble --data data/client --packs shaders-d3d11 shaders-metal --out overlay --github
+          (cd overlay && zip -r -X -q ../client-overlay.zip .)
+          echo "overlay: $(find overlay -name '*.hmat' | wc -l) materials"
+          ls -la client-overlay.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-overlay
+          path: client-overlay.zip
+
   images:
     needs: [check, gate]
     uses: ./.github/workflows/docker-build.yml
@@ -311,7 +408,7 @@ jobs:
     secrets: inherit
 
   publish:
-    needs: [check, gate, client, client-macos, images]
+    needs: [check, gate, client, client-macos, cook, images]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -334,6 +431,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: client-macos
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-overlay
           path: dist
 
       - uses: actions/download-artifact@v4
@@ -384,6 +486,7 @@ jobs:
           python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
             --asset client-macos.zip=dist/client-macos.zip --asset symbols-macos.zip=dist/symbols-macos.zip \
+            --asset client-overlay.zip=dist/client-overlay.zip \
             --gate-report gate/last_report.json --version "$VERSION" --patch-notes dist/patch_notes.json \
             --out dist/release.json
 
@@ -396,4 +499,4 @@ jobs:
           if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
           gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
             dist/client-bin.zip dist/symbols.zip dist/client-macos.zip dist/symbols-macos.zip \
-            dist/server-symbols.zip dist/release.json
+            dist/client-overlay.zip dist/server-symbols.zip dist/release.json
