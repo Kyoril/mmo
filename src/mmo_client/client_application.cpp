@@ -11,6 +11,7 @@
 #include "client_ui_runtime.h"
 #include "client_data/project.h"
 #include "console/console.h"
+#include "console/console_var.h"
 #include "cursor.h"
 #include "data/client_cache.h"
 #include "discord.h"
@@ -18,6 +19,7 @@
 #include "game/game_time_component.h"
 #include "game_script.h"
 #include "game_states/game_state_mgr.h"
+#include "material_shader_resolver.h"
 #include "game_states/login_state.h"
 #include "game_states/world_state.h"
 #include "log/default_log_levels.h"
@@ -152,6 +154,12 @@ namespace mmo
 		if (!Console::Initialize(ClientConfigFilePath))
 		{
 			return false;
+		}
+
+		// Console::Initialize validated the data path, so it is usable here.
+		if (const ConsoleVar* dataPath = ConsoleVarMgr::FindConsoleVar("dataPath"))
+		{
+			InstallMaterialShaderResolver(std::filesystem::absolute(dataPath->GetStringValue(), error));
 		}
 
 		PerfCapture::Initialize();
@@ -449,6 +457,7 @@ namespace mmo
 		PerfCapture::Destroy();
 		Console::Destroy();
 		EventLoop::Destroy();
+		UninstallMaterialShaderResolver();
 		AssetRegistry::Destroy();
 
 		// Stop the worker pool after all systems that might still hold parallel work are gone.

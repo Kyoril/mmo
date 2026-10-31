@@ -20,6 +20,7 @@ mark_as_advanced(MMO_UNITY_FILES_PER_UNIT)
 # Whether developer commands will be available for the servers (things like create item for players, which you don't want
 # on a public server to avoid GM power abuse, but which you might need on development servers to test certain things quickly).
 option(MMO_WITH_DEV_COMMANDS "If checked, developer commands will be available." OFF)
+option(MMO_MATERIAL_RUNTIME_COMPILE "Clients compile missing or stale material shaders at load time (development builds)." ON)
 
 if (WIN32)
 	option(MMO_BUILD_CLIENT "If checked, will try to build the client." ON)
@@ -81,6 +82,10 @@ set(MMO_SRP6_g "07" CACHE STRING "Hex representation of a prime number for srp6a
 if(MMO_WITH_DEV_COMMANDS)
 	add_definitions("-DMMO_WITH_DEV_COMMANDS")
 endif(MMO_WITH_DEV_COMMANDS)
+
+if(MMO_MATERIAL_RUNTIME_COMPILE)
+	add_definitions("-DMMO_MATERIAL_RUNTIME_COMPILE")
+endif()
 
 if (MMO_WITH_RELEASE_ASSERTS)
 	add_definitions("-DMMO_ALWAYS_ASSERT")

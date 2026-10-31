@@ -13,6 +13,7 @@
 #include "graphics/shader_types.h"
 #include "graphics/shader_build_info.h"
 
+#include <functional>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -288,6 +289,24 @@ namespace mmo
 
 		void SetPixelShaderCode(PixelShaderType shaderType, std::span<uint8> code);
 
+		/// @brief Called when a material is drawn with a shader variant it has no shader for.
+		using MissingShaderHandler = std::function<void(const String& materialName, std::string_view variant)>;
+
+		/// @brief Installs the handler for missing shader variants (release clients abort there). Without
+		///        one, a missing variant is logged once per material and variant and nothing is drawn.
+		/// @param handler The handler, or nullptr to remove it.
+		static void SetMissingShaderHandler(MissingShaderHandler handler);
+
+		/// @brief Reports that a vertex shader variant was needed for drawing but is missing. Fires the
+		///        missing shader handler once per variant.
+		/// @param type The missing variant.
+		void ReportMissingVertexShader(VertexShaderType type);
+
+		/// @brief Reports that a pixel shader variant was needed for drawing but is missing. Fires the
+		///        missing shader handler once per variant.
+		/// @param type The missing variant.
+		void ReportMissingPixelShader(PixelShaderType type);
+
 		/// @brief Sets vertex shader bytecode for a specific platform.
 		/// If the platform matches the current runtime platform the flat runtime
 		/// array is also updated so Update() picks up the new bytecode immediately.
@@ -464,7 +483,12 @@ namespace mmo
 		void SetLayerBlendSharpnessParam(String name) { m_layerBlendSharpnessParam = std::move(name); }
 
 	private:
+		void ReportMissingShader(uint32 bit, std::string_view variant);
+
+	private:
 		String m_name;
+		/// Bits of the shader variants already reported missing (vertex 0-5, pixel 8-11).
+		uint32 m_reportedMissingShaders { 0 };
 		bool m_twoSided { false };
 		bool m_castShadow { true };
 		bool m_receiveShadows { true };

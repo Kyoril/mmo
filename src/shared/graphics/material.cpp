@@ -10,9 +10,51 @@
 
 namespace mmo
 {
+	namespace
+	{
+		Material::MissingShaderHandler s_missingShaderHandler;
+
+		constexpr std::string_view VertexShaderVariantNames[] = { "Default vertex", "SkinnedLow vertex", "SkinnedMedium vertex", "SkinnedHigh vertex", "UI vertex", "Instanced vertex" };
+		constexpr std::string_view PixelShaderVariantNames[] = { "Forward pixel", "GBuffer pixel", "ShadowMap pixel", "UI pixel" };
+	}
+
 	Material::Material(const std::string_view name)
 		: m_name(name)
 	{
+	}
+
+	void Material::SetMissingShaderHandler(MissingShaderHandler handler)
+	{
+		s_missingShaderHandler = std::move(handler);
+	}
+
+	void Material::ReportMissingVertexShader(const VertexShaderType type)
+	{
+		const auto index = static_cast<uint32>(type);
+		ReportMissingShader(1u << index, index < std::size(VertexShaderVariantNames) ? VertexShaderVariantNames[index] : "unknown vertex");
+	}
+
+	void Material::ReportMissingPixelShader(const PixelShaderType type)
+	{
+		const auto index = static_cast<uint32>(type);
+		ReportMissingShader(1u << (8 + index), index < std::size(PixelShaderVariantNames) ? PixelShaderVariantNames[index] : "unknown pixel");
+	}
+
+	void Material::ReportMissingShader(const uint32 bit, const std::string_view variant)
+	{
+		if ((m_reportedMissingShaders & bit) != 0)
+		{
+			return;
+		}
+
+		m_reportedMissingShaders |= bit;
+		if (s_missingShaderHandler)
+		{
+			s_missingShaderHandler(m_name, variant);
+			return;
+		}
+
+		WLOG("Material " << m_name << " has no " << variant << " shader for this platform; nothing is drawn with it");
 	}
 
 	void Material::ClearTextures()
@@ -414,14 +456,32 @@ namespace mmo
 		{
 		case MaterialDomain::UserInterface:
 			pixelShaderType = PixelShaderType::UI;	// Force UI pixel shader type for UI domain
-			ASSERT(m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]);
-			if (m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]) m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]->Set();
-			ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
-			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			if (m_vertexShader[static_cast<uint32>(VertexShaderType::UI)])
+			{
+				m_vertexShader[static_cast<uint32>(VertexShaderType::UI)]->Set();
+			}
+			else
+			{
+				ReportMissingVertexShader(VertexShaderType::UI);
+			}
+			if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)])
+			{
+				m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+			}
+			else
+			{
+				ReportMissingPixelShader(pixelShaderType);
+			}
 			break;
 		default:
-			ASSERT(m_vertexShader[0]);
-			if (m_vertexShader[0]) m_vertexShader[0]->Set();
+			if (m_vertexShader[0])
+			{
+				m_vertexShader[0]->Set();
+			}
+			else
+			{
+				ReportMissingVertexShader(VertexShaderType::Default);
+			}
 
 			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
 			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader
@@ -434,8 +494,14 @@ namespace mmo
 			}
 			else
 			{
-				ASSERT(m_pixelShader[static_cast<uint32_t>(pixelShaderType)]);
-				if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)]) m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+				if (m_pixelShader[static_cast<uint32_t>(pixelShaderType)])
+				{
+					m_pixelShader[static_cast<uint32_t>(pixelShaderType)]->Set();
+				}
+				else
+				{
+					ReportMissingPixelShader(pixelShaderType);
+				}
 			}
 			break;
 		}

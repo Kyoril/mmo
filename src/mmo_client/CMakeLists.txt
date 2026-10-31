@@ -84,7 +84,8 @@ target_link_libraries(mmo_client
     client_data
     paging
     terrain
-    deferred_shading)
+    deferred_shading
+    material_graph)
 
 if (WIN32)
 	target_link_libraries(mmo_client fmod_audio)
