@@ -3,9 +3,11 @@
 #pragma once
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "base/typedefs.h"
+#include "graphics/shader_build_info.h"
 
 namespace mmo
 {
@@ -33,6 +35,22 @@ namespace mmo
 	/// @param compiler The shader compiler of the platform to build for.
 	/// @return The result. cookable is false and the material untouched if the build was not possible.
 	MaterialShaderBuildResult BuildMaterialShaders(Material& material, const MaterialGraph& graph, ShaderCompiler& compiler);
+
+	/// @brief Records that a platform's shaders of a material were just compiled from a graph: stores the
+	///        platform's shader build info and the material's graph hash. For callers that compiled the
+	///        shaders themselves.
+	/// @param material The material whose shaders were compiled.
+	/// @param graph The graph they were compiled from.
+	/// @param platform The shader platform that was compiled.
+	/// @param functions The graph's material function hashes, as collected by CollectFunctionHashes.
+	void RecordShaderBuildInfo(Material& material, const MaterialGraph& graph, std::string_view platform, std::vector<FunctionHash> functions);
+
+	/// @brief Checks whether a material's stored shaders of a platform still match its graph.
+	/// @param material The material.
+	/// @param graph The material's graph.
+	/// @param platform The shader platform to check.
+	/// @return false if no build info is stored for the platform, a function is missing or anything changed.
+	bool IsMaterialShaderBuildCurrent(const Material& material, const MaterialGraph& graph, std::string_view platform);
 
 	/// @brief Finds the GRPH chunk in the bytes of a .hmat file without loading the material.
 	/// @param hmatBytes The file content.

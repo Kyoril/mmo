@@ -81,6 +81,14 @@ namespace mmo
 			material.SetPixelShaderCode(platform, type, copy);
 		}
 
+		RecordShaderBuildInfo(material, graph, platform, std::move(functions));
+
+		result.cookable = true;
+		return result;
+	}
+
+	void RecordShaderBuildInfo(Material& material, const MaterialGraph& graph, const std::string_view platform, std::vector<FunctionHash> functions)
+	{
 		const SHA1Hash graphHash = ComputeGraphHash(graph);
 
 		ShaderBuildInfo info;
@@ -90,9 +98,23 @@ namespace mmo
 		info.functions = std::move(functions);
 		material.SetShaderBuildInfo(platform, std::move(info));
 		material.SetGraphHash(graphHash);
+	}
 
-		result.cookable = true;
-		return result;
+	bool IsMaterialShaderBuildCurrent(const Material& material, const MaterialGraph& graph, const std::string_view platform)
+	{
+		const ShaderBuildInfo* info = material.GetShaderBuildInfo(platform);
+		if (!info)
+		{
+			return false;
+		}
+
+		std::vector<FunctionHash> functions;
+		if (!CollectFunctionHashes(graph, functions))
+		{
+			return false;
+		}
+
+		return IsShaderBuildCurrent(*info, platform, ComputeGraphHash(graph), functions);
 	}
 
 	bool ReadMaterialGraphChunk(const std::span<const uint8> hmatBytes, std::vector<uint8>& outGraphChunk)

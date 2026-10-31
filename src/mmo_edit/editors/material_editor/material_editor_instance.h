@@ -157,5 +157,7 @@ namespace mmo
 		std::array<String, 4> m_pixelShaderCode;
 		int m_selectedShaderIndex { 0 };
 		bool m_shaderCodeCaptured { false };
+		/// Set when the stored shaders of the current platform were stale on open and got rebuilt in memory.
+		bool m_shadersRebuiltOnOpen { false };
 	};
 }

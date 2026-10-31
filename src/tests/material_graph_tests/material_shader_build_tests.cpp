@@ -216,3 +216,65 @@ TEST_CASE("graph chunk is found in a material file and loads", "[shader_build]")
 	std::vector<uint8> none;
 	CHECK_FALSE(ReadMaterialGraphChunk(std::span<const uint8>(reinterpret_cast<const uint8*>(noGraph.data()), noGraph.size()), none));
 }
+
+TEST_CASE("rebuilding an unchanged material is byte-identical", "[shader_build]")
+{
+	MaterialGraph graph;
+	BuildRootedGraph(graph);
+
+	Material first("test");
+	FakeShaderCompiler firstCompiler("D3D11");
+	REQUIRE(BuildMaterialShaders(first, graph, firstCompiler).cookable);
+
+	Material second("test");
+	FakeShaderCompiler secondCompiler("D3D11");
+	REQUIRE(BuildMaterialShaders(second, graph, secondCompiler).cookable);
+	// A second build on top of the first must not change anything either
+	FakeShaderCompiler thirdCompiler("D3D11");
+	REQUIRE(BuildMaterialShaders(second, graph, thirdCompiler).cookable);
+
+	for (int i = 0; i < 6; ++i)
+	{
+		const auto a = first.GetVertexShaderCode("D3D11", static_cast<VertexShaderType>(i));
+		const auto b = second.GetVertexShaderCode("D3D11", static_cast<VertexShaderType>(i));
+		CHECK(std::vector<uint8>(a.begin(), a.end()) == std::vector<uint8>(b.begin(), b.end()));
+	}
+	for (int i = 0; i < 4; ++i)
+	{
+		const auto a = first.GetPixelShaderCode("D3D11", static_cast<PixelShaderType>(i));
+		const auto b = second.GetPixelShaderCode("D3D11", static_cast<PixelShaderType>(i));
+		CHECK(std::vector<uint8>(a.begin(), a.end()) == std::vector<uint8>(b.begin(), b.end()));
+	}
+
+	const ShaderBuildInfo* a = first.GetShaderBuildInfo("D3D11");
+	const ShaderBuildInfo* b = second.GetShaderBuildInfo("D3D11");
+	REQUIRE(a != nullptr);
+	REQUIRE(b != nullptr);
+	CHECK(a->graphHash == b->graphHash);
+	CHECK(a->generatorVersion == b->generatorVersion);
+	CHECK(a->backendVersion == b->backendVersion);
+	CHECK(a->functions.size() == b->functions.size());
+	CHECK(first.GetGraphHash() == second.GetGraphHash());
+}
+
+TEST_CASE("material build is current only until the graph changes", "[shader_build]")
+{
+	MaterialGraph graph;
+	BuildRootedGraph(graph);
+
+	Material material("test");
+	CHECK_FALSE(IsMaterialShaderBuildCurrent(material, graph, "D3D11"));
+
+	FakeShaderCompiler compiler("D3D11");
+	REQUIRE(BuildMaterialShaders(material, graph, compiler).cookable);
+	CHECK(IsMaterialShaderBuildCurrent(material, graph, "D3D11"));
+	// Only the built platform is current
+	CHECK_FALSE(IsMaterialShaderBuildCurrent(material, graph, "METAL"));
+
+	REQUIRE(graph.CreateNode<ConstFloatNode>() != nullptr);
+	CHECK_FALSE(IsMaterialShaderBuildCurrent(material, graph, "D3D11"));
+
+	// Recording the build after compiling elsewhere makes it current again
+	RecordShaderBuildInfo(material, graph, "D3D11", {});
+	CHECK(IsMaterialShaderBuildCurrent(material, graph, "D3D11"));
+}
