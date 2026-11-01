@@ -672,6 +672,117 @@ TEST_CASE("CollectTerrainOps gathers Terrain pins in op order", "[graph_terrain_
 	CHECK(ops[2].itemIndex == 2);
 }
 
+TEST_CASE("Stack order sorts across nodes before the node id", "[graph_terrain_compose]")
+{
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };
+	const PathSpline line = Line(0.0f, -100.0f, 0.0f, 100.0f, 10.0f);
+
+	const auto build = [&](const int32 sectionStack, const int32 carveStack)
+	{
+		Graph graph;
+		NodeInstance n2; n2.id = 2; n2.type = "Carve";
+		NodeInstance n5; n5.id = 5; n5.type = "Section";
+		graph.nodes = { n2, n5 };
+
+		EvalResult result;
+		result.ok = true;
+		DataItem section;
+		section.kind = ItemKind::Terrain;
+		section.op.type = TerrainOpType::SectionPath;
+		section.op.asset = "Sections/TestRoad.hsec";
+		section.op.order = 5;
+		section.op.stackOrder = sectionStack;
+		section.spline = line;
+		section.sourceId = 9;
+		DataItem carve;
+		carve.kind = ItemKind::Terrain;
+		carve.op.type = TerrainOpType::Carve;
+		carve.op.order = 2;
+		carve.op.stackOrder = carveStack;
+		carve.op.params = { { "width", 4.0f }, { "depth", 1.5f }, { "bank", 3.0f } };
+		carve.spline = line;
+		carve.sourceId = 9;
+		result.nodes[5].output.pins["Terrain"] = { section };
+		result.nodes[2].output.pins["Terrain"] = { carve };
+
+		const std::vector<TerrainOpInput> ops = CollectTerrainOps(graph, result);
+		PreparedTerrain t;
+		PrepareOk(t, ops, kBigRegion, 10.0f, Provider(assets));
+		return Written(t.Evaluate(0.0f, 30.0f, 0.0f, {}), 0.0f);
+	};
+
+	// All at 0: node order, the carve (node 2) first and the absolute section (node 5) overwrites it.
+	CHECK(build(0, 0) == Approx(9.5f).margin(1e-3f));
+	// Node 5 at -1 is stacked before node 2, so the carve lowers the height of the section.
+	CHECK(build(-1, 0) == Approx(8.0f).margin(1e-3f));
+	// Equal values keep node order.
+	CHECK(build(-1, -1) == Approx(9.5f).margin(1e-3f));
+	CHECK(build(2, 2) == Approx(9.5f).margin(1e-3f));
+}
+
+TEST_CASE("Stack order ties fall back to the node id, then the item index", "[graph_terrain_compose]")
+{
+	Graph graph;
+	NodeInstance n1; n1.id = 1; n1.type = "A";
+	NodeInstance n2; n2.id = 2; n2.type = "B";
+	graph.nodes = { n1, n2 };
+
+	EvalResult result;
+	result.ok = true;
+	DataItem a;
+	a.kind = ItemKind::Terrain;
+	a.op.type = TerrainOpType::Carve;
+	a.op.order = 2;
+	a.op.stackOrder = 4;
+	a.sourceId = 11;
+	DataItem b = a;
+	b.op.type = TerrainOpType::Raise;
+	b.sourceId = 12;
+	DataItem c = a;
+	c.op.type = TerrainOpType::Noise;
+	c.op.order = 1;
+	DataItem d = a;
+	d.op.type = TerrainOpType::Paint;
+	d.op.order = 1;
+	d.op.stackOrder = 5;
+	result.nodes[2].output.pins["Terrain"] = { a, b };
+	result.nodes[1].output.pins["Terrain"] = { d, c };
+
+	const std::vector<TerrainOpInput> ops = CollectTerrainOps(graph, result);
+	REQUIRE(ops.size() == 4);
+	CHECK(ops[0].op.type == TerrainOpType::Noise);
+	CHECK(ops[1].op.type == TerrainOpType::Carve);
+	CHECK(ops[2].op.type == TerrainOpType::Raise);
+	CHECK(ops[3].op.type == TerrainOpType::Paint);
+}
+
+TEST_CASE("Stack order changes neither the placement keys nor their positions", "[graph_terrain_compose]")
+{
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };
+	TerrainOpInput op = MakeOp(TerrainOpType::SectionPath, Line(0.0f, 0.0f, 0.0f, 80.0f, 0.0f), 4);
+	op.op.asset = "Sections/TestRoad.hsec";
+	TerrainOpInput stacked = op;
+	stacked.op.stackOrder = -7;
+
+	PreparedTerrain one;
+	PrepareOk(one, { op }, kBigRegion, 10.0f, Provider(assets));
+	std::vector<Placement> first;
+	one.BuildPlacements(Flat0, first);
+	REQUIRE(first.size() == 4);
+
+	PreparedTerrain two;
+	PrepareOk(two, { stacked }, kBigRegion, 10.0f, Provider(assets));
+	std::vector<Placement> second;
+	two.BuildPlacements(Flat0, second);
+	REQUIRE(second.size() == first.size());
+	for (size_t i = 0; i < first.size(); ++i)
+	{
+		CHECK(second[i].key == first[i].key);
+		CHECK(second[i].position.x == first[i].position.x);
+		CHECK(second[i].position.z == first[i].position.z);
+	}
+}
+
 TEST_CASE("Section node output prepares with default and overridden params", "[graph_terrain_compose][graph_nodes_section]")
 {
 	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };

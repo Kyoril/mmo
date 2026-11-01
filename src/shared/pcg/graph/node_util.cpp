@@ -39,6 +39,30 @@ namespace mmo::pcg::graph
 		return std::isfinite(value) ? value : fallback;
 	}
 
+	int32 ResolveStackOrder(NodeOutput& out, const DataItem& source, const AttributeSet& settings)
+	{
+		float value = SettingFloat(settings, "stackOrder", 0.0f);
+		const auto it = source.attributes.find("stackOrder");
+		if (it != source.attributes.end())
+		{
+			float fromItem = 0.0f;
+			if (!std::holds_alternative<bool>(it->second) && ToNumber(it->second, fromItem))
+			{
+				value = fromItem;
+			}
+			else
+			{
+				WarnOnce(out, "ignored the item attribute 'stackOrder': it is not a number");
+			}
+		}
+		return static_cast<int32>(std::lround(std::min(1000.0f, std::max(-1000.0f, value))));
+	}
+
+	SettingDef StackOrderSetting()
+	{
+		return SettingDef{ "stackOrder", static_cast<int64>(0), -1000.0f, 1000.0f, {}, "Lower values are stacked first; equal values keep node order" };
+	}
+
 	bool SettingBool(const AttributeSet& settings, const String& name, const bool fallback)
 	{
 		const auto it = settings.find(name);

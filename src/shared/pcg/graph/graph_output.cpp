@@ -56,6 +56,10 @@ namespace mmo::pcg::graph
 				op["type"] = TerrainOpTypeName(item.op.type);
 				op["asset"] = item.op.asset;
 				op["order"] = item.op.order;
+				if (item.op.stackOrder != 0)
+				{
+					op["stackOrder"] = item.op.stackOrder;
+				}
 				Json params = Json::object();
 				for (const auto& [name, value] : item.op.params)
 				{

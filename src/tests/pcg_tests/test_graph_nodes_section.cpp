@@ -283,3 +283,23 @@ TEST_CASE("A cached re-evaluation keeps the op order", "[graph_nodes_section]")
 	REQUIRE(second.nodes.at(7).output.pins.at("Terrain").size() == 1);
 	CHECK(second.nodes.at(7).output.pins.at("Terrain")[0].op.order == 7);
 }
+
+TEST_CASE("Section nodes carry the stackOrder setting, overridable per item", "[graph_nodes_section]")
+{
+	for (const char* type : { "LaySectionAlongSpline", "LaySectionAlongLoop" })
+	{
+		const NodeTypeDef* def = NodeRegistry::Default().Find(type);
+		REQUIRE(def != nullptr);
+		CHECK(std::any_of(def->settings.begin(), def->settings.end(), [](const SettingDef& s) { return s.name == "stackOrder"; }));
+	}
+
+	DataItem spline = RoadSpline();
+	CHECK(Lay("LaySectionAlongSpline", {}, spline).pins.at("Terrain")[0].op.stackOrder == 0);
+	CHECK(Lay("LaySectionAlongSpline", { { "stackOrder", int64(-1) } }, spline).pins.at("Terrain")[0].op.stackOrder == -1);
+	spline.attributes["stackOrder"] = int64(5);
+	CHECK(Lay("LaySectionAlongSpline", { { "stackOrder", int64(-1) } }, spline).pins.at("Terrain")[0].op.stackOrder == 5);
+
+	DataItem area = MakeSquare(0, 0, 30);
+	area.attributes["section"] = String("Editor/Pcg/Sections/Cliff.hsec");
+	CHECK(Lay("LaySectionAlongLoop", { { "stackOrder", int64(7) } }, area).pins.at("Terrain")[0].op.stackOrder == 7);
+}

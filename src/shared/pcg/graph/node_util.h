@@ -26,6 +26,13 @@ namespace mmo::pcg::graph
 	/// @brief Gets a Bool setting, or the fallback if it is missing or of another type.
 	bool SettingBool(const AttributeSet& settings, const String& name, bool fallback);
 
+	/// @brief The `stackOrder` of a terrain item: the item attribute of that name if it is numeric, else the setting
+	///        (default 0), rounded and clamped to -1000..1000. A non-numeric attribute is ignored with a warning.
+	int32 ResolveStackOrder(NodeOutput& out, const DataItem& source, const AttributeSet& settings);
+
+	/// @brief The setting every node that emits Terrain items has (Int, 0, range -1000..1000).
+	SettingDef StackOrderSetting();
+
 	/// @brief Gets a String setting, or the fallback if it is missing or of another type.
 	String SettingString(const AttributeSet& settings, const String& name, const String& fallback);
 

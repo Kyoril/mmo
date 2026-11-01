@@ -159,6 +159,7 @@ namespace mmo::pcg::graph
 				item.spline.closed = loop ? true : source.spline.closed;
 				item.pointIds = source.pointIds;
 				item.op.type = TerrainOpType::SectionPath;
+				item.op.stackOrder = ResolveStackOrder(out, source, settings);
 
 				String section = sectionSetting;
 				if (!sectionAttribute.empty())
@@ -256,6 +257,7 @@ namespace mmo::pcg::graph
 				}
 				def.settings.push_back(std::move(setting));
 			}
+			def.settings.push_back(StackOrderSetting());
 
 			def.contextDeps = context_dep::None;
 			def.execute = [loop](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)

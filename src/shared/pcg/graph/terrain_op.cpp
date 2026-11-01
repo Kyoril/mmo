@@ -13,6 +13,11 @@ namespace mmo::pcg::graph
 		h.Str(op.asset);
 		h.Attributes(op.params);
 		h.U64(op.order);
+		if (op.stackOrder != 0)
+		{
+			// Only when set, so ops of graphs that never use it keep their hash.
+			h.U64(static_cast<uint64>(static_cast<int64>(op.stackOrder)));
+		}
 	}
 
 	bool SectionParamText(const AttributeValue& value, String& out)

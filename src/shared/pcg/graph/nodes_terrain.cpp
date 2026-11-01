@@ -151,6 +151,7 @@ namespace mmo::pcg::graph
 				item.spline = source.spline;
 				item.pointIds = source.pointIds;
 				item.op.type = opType;
+				item.op.stackOrder = ResolveStackOrder(out, source, settings);
 
 				for (const NumberParam& param : def.numbers)
 				{
@@ -233,6 +234,7 @@ namespace mmo::pcg::graph
 			{
 				def.settings.push_back(SettingDef{ param.name, param.defaultValue, 0, 0, {}, param.description });
 			}
+			def.settings.push_back(StackOrderSetting());
 			if (opType == TerrainOpType::WaterArea)
 			{
 				SettingDef material{ "material", String(), 0, 0, {}, "Water material (.hmat); empty = the terrain's default" };

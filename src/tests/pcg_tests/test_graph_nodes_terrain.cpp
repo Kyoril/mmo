@@ -401,3 +401,30 @@ TEST_CASE("Paint node output composes to the looked-up layer", "[graph_nodes_ter
 	CHECK(on.splat[2] == 255);
 	CHECK(terrain.Evaluate(0.0f, 20.0f, 0.0f, layers).splatWeight == 0.0f);
 }
+
+TEST_CASE("Terrain nodes carry the stackOrder setting, overridable per item", "[graph_nodes_terrain]")
+{
+	const NodeTypeDef* noiseDef = NodeRegistry::Default().Find("TerrainNoise");
+	REQUIRE(noiseDef != nullptr);
+	const auto setting = std::find_if(noiseDef->settings.begin(), noiseDef->settings.end(), [](const SettingDef& s) { return s.name == "stackOrder"; });
+	REQUIRE(setting != noiseDef->settings.end());
+	CHECK(std::get<int64>(setting->defaultValue) == 0);
+	CHECK(setting->min == -1000.0f);
+	CHECK(setting->max == 1000.0f);
+
+	CHECK(Run("TerrainNoise", {}, MakeSquare(0, 0, 50)).pins.at("Terrain")[0].op.stackOrder == 0);
+
+	DataItem area = MakeSquare(0, 0, 50);
+	CHECK(Run("TerrainNoise", { { "stackOrder", int64(-4) } }, area).pins.at("Terrain")[0].op.stackOrder == -4);
+	CHECK(Run("PaintSplat", { { "stackOrder", int64(6) }, { "texture", String("T.htex") } }, area).pins.at("Terrain")[0].op.stackOrder == 6);
+	CHECK(Run("WaterArea", { { "stackOrder", int64(2) } }, area).pins.at("Terrain")[0].op.stackOrder == 2);
+	CHECK(Run("CarveAlongSpline", { { "stackOrder", int64(3) } }, Line(0, 0, 40, 0)).pins.at("Terrain")[0].op.stackOrder == 3);
+	CHECK(Run("RaiseAlongSpline", { { "stackOrder", int64(-9) } }, Line(0, 0, 40, 0)).pins.at("Terrain")[0].op.stackOrder == -9);
+
+	// The item attribute wins.
+	area.attributes["stackOrder"] = int64(8);
+	CHECK(Run("TerrainNoise", { { "stackOrder", int64(-4) } }, area).pins.at("Terrain")[0].op.stackOrder == 8);
+	// Out of range values are clamped.
+	area.attributes["stackOrder"] = int64(100000);
+	CHECK(Run("TerrainNoise", {}, area).pins.at("Terrain")[0].op.stackOrder == 1000);
+}

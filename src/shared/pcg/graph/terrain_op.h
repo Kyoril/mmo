@@ -33,6 +33,10 @@ namespace mmo::pcg::graph
 
 		/// @brief Producing node id (set by the node), composition order.
 		uint32 order = 0;
+
+		/// @brief Composition order across nodes (lower is stacked first); ties fall back to `order` (node id), then the
+		///        item index. Never part of a placement key.
+		int32 stackOrder = 0;
 	};
 
 	/// @brief Feeds every field of an op into a hasher.

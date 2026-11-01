@@ -82,7 +82,7 @@ namespace mmo::pcg::graph
 	};
 
 	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
-	///        sorted by (op.order, node id, item index). Items of other kinds on that pin are ignored.
+	///        sorted by (op.stackOrder, op.order, node id, item index). Items of other kinds on that pin are ignored.
 	std::vector<TerrainOpInput> CollectTerrainOps(const Graph& graph, const EvalResult& result);
 
 	/// @brief Terrain ops prepared on the base terrain and composed into one terrain target.

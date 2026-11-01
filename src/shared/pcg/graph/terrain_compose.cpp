@@ -156,7 +156,7 @@ namespace mmo::pcg::graph
 			nodeIds.insert(node.id);
 		}
 
-		std::vector<std::tuple<uint32, uint32, size_t, TerrainOpInput>> gathered;
+		std::vector<std::tuple<int32, uint32, uint32, size_t, TerrainOpInput>> gathered;
 		for (const auto& [id, nodeResult] : result.nodes)
 		{
 			if (nodeIds.count(id) == 0)
@@ -182,20 +182,20 @@ namespace mmo::pcg::graph
 				in.points = item.points;
 				in.sourceId = item.sourceId;
 				in.itemIndex = static_cast<uint32>(i);
-				gathered.emplace_back(item.op.order, id, i, std::move(in));
+				gathered.emplace_back(item.op.stackOrder, item.op.order, id, i, std::move(in));
 			}
 		}
 
 		std::stable_sort(gathered.begin(), gathered.end(), [](const auto& a, const auto& b)
 		{
-			return std::tie(std::get<0>(a), std::get<1>(a), std::get<2>(a)) < std::tie(std::get<0>(b), std::get<1>(b), std::get<2>(b));
+			return std::tie(std::get<0>(a), std::get<1>(a), std::get<2>(a), std::get<3>(a)) < std::tie(std::get<0>(b), std::get<1>(b), std::get<2>(b), std::get<3>(b));
 		});
 
 		std::vector<TerrainOpInput> out;
 		out.reserve(gathered.size());
 		for (auto& g : gathered)
 		{
-			out.push_back(std::move(std::get<3>(g)));
+			out.push_back(std::move(std::get<4>(g)));
 		}
 		return out;
 	}

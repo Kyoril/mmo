@@ -94,6 +94,14 @@ TEST_CASE("Terrain item hash covers every op field, param, order and point id", 
 		item.op.order = 8;
 		CHECK(HashOf(item) != base);
 	}
+	SECTION("stack order")
+	{
+		DataItem item = MakeTerrainItem();
+		item.op.stackOrder = -1;
+		CHECK(HashOf(item) != base);
+		item.op.stackOrder = 1;
+		CHECK(HashOf(item) != base);
+	}
 	SECTION("point id")
 	{
 		DataItem item = MakeTerrainItem();
@@ -191,4 +199,52 @@ TEST_CASE("The eval dump names the Terrain kind and lists the op", "[graph_terra
 	CHECK(item->at("pointIds") == jsonutil::Json::array({ 1, 2, 3 }));
 	REQUIRE(item->at("op").contains("order"));
 	CHECK(item->at("op").at("order") == 1);
+}
+
+TEST_CASE("The eval dump writes the stack order only when it is not 0", "[graph_terrain_op]")
+{
+	for (const int32 stackOrder : { 0, -3, 12 })
+	{
+		NodeRegistry registry = NodeRegistry::Default();
+		{
+			NodeTypeDef def;
+			def.type = "Test.Terrain";
+			def.category = "Test";
+			def.title = "Terrain";
+			def.outputs.push_back(PinDef{ "Out", { ItemKind::Terrain } });
+			def.execute = [stackOrder](const EvalContext&, const uint64, const AttributeSet&, const std::map<String, Collection>&)
+			{
+				NodeOutput out;
+				DataItem item = MakeTerrainItem();
+				item.op.stackOrder = stackOrder;
+				out.pins["Out"].push_back(item);
+				return out;
+			};
+			registry.Register(def);
+		}
+
+		Graph g;
+		NodeInstance n;
+		n.id = 1;
+		n.type = "Test.Terrain";
+		g.nodes.push_back(n);
+		g.nextNodeId = 2;
+
+		const EvalResult result = Evaluate(g, registry, EvalContext{}, nullptr);
+		REQUIRE(result.ok);
+		const String dump = WriteEvalDump(g, result, false);
+		if (stackOrder == 0)
+		{
+			CHECK(dump.find("stackOrder") == String::npos);
+		}
+		else
+		{
+			const jsonutil::Json json = jsonutil::Json::parse(dump, nullptr, false);
+			REQUIRE_FALSE(json.is_discarded());
+			const jsonutil::Json* item = FindObjectWithKey(json, "op");
+			REQUIRE(item != nullptr);
+			REQUIRE(item->at("op").contains("stackOrder"));
+			CHECK(item->at("op").at("stackOrder") == stackOrder);
+		}
+	}
 }
