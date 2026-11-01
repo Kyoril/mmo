@@ -2,6 +2,7 @@
 #include "party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
 #include "game_client/game_unit_c.h"
+#include "game_client/object_mgr.h"
 
 namespace mmo
 {
@@ -161,14 +162,20 @@ namespace mmo
 
 	bool PartyUnitHandle::IsFriendly() const
 	{
-		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
-		return true;
+		// Party members are friendly unless the owner-aware reaction check of a member in sight says it
+		// is hostile (out of sight, dueling, mind control and so on are not known here).
+		return !IsHostile();
 	}
 
 	bool PartyUnitHandle::IsHostile() const
 	{
-		// TODO: We assume party members are always friendly right now but this must not be true later on (dueling, mind control and so on!)
-		return false;
+		const auto unit = GetRealUnit();
+		if (!unit || unit->GetGuid() == ObjectMgr::GetActivePlayerGuid())
+		{
+			return false;
+		}
+
+		return unit->IsHostile();
 	}
 
 	std::shared_ptr<GameUnitC> PartyUnitHandle::GetRealUnit() const

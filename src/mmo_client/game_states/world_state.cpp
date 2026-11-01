@@ -89,6 +89,7 @@
 #include "systems/cast_error_voice.h"
 #include "systems/unit_gossip_voice.h"
 #include "systems/party_info.h"
+#include "systems/pet_info.h"
 #include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
@@ -2220,6 +2221,10 @@ namespace mmo
 			context.subsystemClient->Initialize();
 			context.bugReportClient->Initialize();
 		}
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->Initialize();
+		}
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
 								 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -2336,6 +2341,10 @@ namespace mmo
 		{
 			context.bugReportClient->Shutdown();
 			context.subsystemClient->Shutdown();
+		}
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->Shutdown();
 		}
 
 		m_worldPacketHandlers.Clear();
@@ -2790,6 +2799,15 @@ namespace mmo
 					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC &>(*object));
 				}
 
+				// Pet state: the persistent pet coming into sight, temporary pets, persistent pet names.
+				if (object->IsUnit())
+				{
+					if (PetInfo* petInfo = GetClientContext().petInfo.get())
+					{
+						petInfo->OnUnitSpawned(object->AsUnit());
+					}
+				}
+
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
@@ -3030,6 +3048,10 @@ namespace mmo
 			}
 
 			m_partyInfo.OnPlayerDespawned(id);
+			if (PetInfo* petInfo = GetClientContext().petInfo.get())
+			{
+				petInfo->OnUnitDespawned(id);
+			}
 
 			if (m_playerController->GetControlledUnit() &&
 				m_playerController->GetControlledUnit()->GetGuid() == id)
@@ -3956,6 +3978,11 @@ namespace mmo
 			}
 		}
 
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnSpellCooldown(casterId, spellId, cooldownMs);
+		}
+
 		if (m_playerController->GetControlledUnit())
 		{
 			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
@@ -4051,6 +4078,11 @@ namespace mmo
 				}
 				SpellVisualizationService::Get().Apply(SpellVisualizationService::Event::Impact, *spell, nullptr, targets);
 			}
+		}
+
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnSpellCooldown(casterId, spellId, cooldownMs);
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
@@ -4169,6 +4201,18 @@ namespace mmo
 				// this unit had no cast bar running (e.g. instant cast validation failure).
 				casterUnit->NotifyCastFailed(spellId);
 			}
+		}
+
+		// A failed cast of one of the player's pets is shown as a pet error, never as the player's own.
+		if (PetInfo* petInfo = GetClientContext().petInfo.get(); petInfo && casterId != ObjectMgr::GetActivePlayerGuid())
+		{
+			const char *petErrorMessage = result < std::size(s_spellCastResultStrings) ? s_spellCastResultStrings[result] : s_unknown;
+			if (spell && std::strcmp(petErrorMessage, "SPELL_CAST_FAILED_NO_POWER") == 0)
+			{
+				petErrorMessage = GetNoPowerErrorKey(spell->powertype());
+			}
+
+			petInfo->OnSpellFailure(casterId, spellId, result, petErrorMessage);
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())

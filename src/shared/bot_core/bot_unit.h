@@ -199,6 +199,10 @@ namespace mmo
 		/// @return The target GUID, or 0 if no target.
 		uint64 GetTargetGuid() const { return m_targetGuid; }
 
+		/// @brief Gets the guid of the unit's owner (object_fields::Owner).
+		/// @return The owner GUID, or 0 if the unit has no owner.
+		uint64 GetOwnerGuid() const { return m_ownerGuid; }
+
 		/// @brief Gets the replicated stand state (unit_stand_state::Type).
 		uint32 GetStandState() const { return m_standState; }
 
@@ -288,6 +292,13 @@ namespace mmo
 		/// @param other The other unit to check against.
 		/// @return True if this unit is friendly to the other unit.
 		bool IsFriendlyTo(const BotUnit& other) const;
+
+		/// @brief Gets the guid the reaction checks treat this unit as: its owner if it has one,
+		/// otherwise its own guid.
+		uint64 GetReactionOwnerGuid() const;
+
+		/// @brief Checks whether this unit is owned by a player (a player's pet, summon or totem).
+		bool IsOwnedByPlayer() const;
 
 		/// @brief Checks if this unit can be attacked by the specified unit.
 		/// 
@@ -402,6 +413,9 @@ namespace mmo
 		/// @brief Sets the target GUID.
 		void SetTargetGuid(uint64 targetGuid) { m_targetGuid = targetGuid; }
 
+		/// @brief Sets the guid of the unit's owner (object_fields::Owner), 0 if it has none.
+		void SetOwnerGuid(uint64 ownerGuid) { m_ownerGuid = ownerGuid; }
+
 		/// @brief Sets the replicated stand state.
 		void SetStandState(uint32 standState) { m_standState = standState; }
 
@@ -498,6 +512,7 @@ namespace mmo
 		uint32 m_displayId = 0;
 		uint32 m_unitFlags = 0;
 		uint32 m_npcFlags = 0;
+		uint64 m_ownerGuid = 0;
 		uint64 m_targetGuid = 0;
 		uint32 m_standState = 0;
 		uint32 m_moodEmote = 0;

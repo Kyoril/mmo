@@ -2146,6 +2146,10 @@ namespace mmo
 		{
 			unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
 		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Owner))
+		{
+			unit.SetOwnerGuid(fieldMap.GetFieldValue<uint64>(object_fields::Owner));
+		}
 		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::StandState))
 		{
 			unit.SetStandState(fieldMap.GetFieldValue<uint32>(object_fields::StandState));

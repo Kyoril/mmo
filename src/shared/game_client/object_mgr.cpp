@@ -35,6 +35,7 @@ namespace mmo
 
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
+	uint64 ObjectMgr::ms_activePetGuid = 0;
 	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
 	uint64 ObjectMgr::ms_hoveredObjectGuid = 0;
 	const proto_client::Project* ObjectMgr::ms_project = nullptr;
@@ -51,6 +52,7 @@ namespace mmo
 		ms_project = &project;
 		ms_objectyByGuid.clear();
 		ms_activePlayerGuid = 0;
+		ms_activePetGuid = 0;
 		ms_selectedObjectGuid = 0;
 		ms_hoveredObjectGuid = 0;
 		ms_itemCount.clear();
@@ -190,6 +192,14 @@ namespace mmo
 				return std::make_shared<PartyUnitHandle>(*ms_partyInfo, index);
 			}
 		}
+		else if (unitName == "pet")
+		{
+			// The summoned persistent pet, while it is in sight.
+			if (const auto pet = ObjectMgr::Get<GameUnitC>(ms_activePetGuid))
+			{
+				return std::make_shared<UnitHandle>(*pet);
+			}
+		}
 		else if (unitName == "mouseover")
 		{
 			const auto hoveredUnit = ObjectMgr::GetHoveredUnit();
@@ -301,6 +311,16 @@ namespace mmo
 	uint64 ObjectMgr::GetActivePlayerGuid()
 	{
 		return ms_activePlayerGuid;
+	}
+
+	void ObjectMgr::SetActivePetGuid(const uint64 guid)
+	{
+		ms_activePetGuid = guid;
+	}
+
+	uint64 ObjectMgr::GetActivePetGuid()
+	{
+		return ms_activePetGuid;
 	}
 
 	uint64 ObjectMgr::GetSelectedObjectGuid()

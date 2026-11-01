@@ -10,6 +10,7 @@
 #include "base/random.h"
 #include "base/sha1.h"
 #include "console/console_var.h"
+#include "game/pet_packets.h"
 #include "game/spell_target_map.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
@@ -1258,6 +1259,53 @@ namespace mmo
 		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CancelAura);
 			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetCommand(const uint8 command, const uint64 targetGuid, const uint32 param)
+	{
+		game::PetCommandRequest request;
+		request.command = command;
+		request.target = targetGuid;
+		request.param = param;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCommand);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetCastSpell(const uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		game::PetCastSpellRequest request;
+		request.spellId = spellId;
+		request.targetMap = targetMap;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCastSpell);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetRename(const String& name)
+	{
+		game::PetRenameRequest request;
+		request.name = name;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetRename);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetNameQuery(const uint64 petGuid)
+	{
+		game::PetNameQueryRequest request;
+		request.guid = petGuid;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetNameQuery);
+			packet << request;
 			packet.Finish();
 			});
 	}
