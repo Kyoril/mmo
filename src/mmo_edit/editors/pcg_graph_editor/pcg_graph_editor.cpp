@@ -17,6 +17,36 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Why a name cannot be the file name of a new graph, or empty if it can: no path separators, no "..",
+		/// no characters that are invalid in file names, no trailing dot or space.
+		String GraphFileNameError(const String& name)
+		{
+			if (name.empty())
+			{
+				return "The name is empty.";
+			}
+			if (name.find("..") != String::npos)
+			{
+				return "The name must not contain \"..\".";
+			}
+			for (const char c : name)
+			{
+				if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'
+					|| static_cast<unsigned char>(c) < 32)
+				{
+					return "The name must not contain path separators or any of : * ? \" < > |";
+				}
+			}
+			if (name.back() == '.' || name.back() == ' ')
+			{
+				return "The name must not end with a dot or a space.";
+			}
+			return {};
+		}
+	}
+
 	PcgGraphEditor::PcgGraphEditor(EditorHost& host)
 		: EditorBase(host)
 	{
@@ -52,14 +82,20 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::Text("%s", GraphAssetExtension);
 
-			// Never overwrite an existing graph: graph instances may already use it.
-			const bool exists = !m_graphName.empty() && AssetRegistry::HasFile(GetNewGraphPath());
+			// The name is one file name in the current folder; never overwrite an existing graph (graph instances
+			// may already use it).
+			const String nameError = GraphFileNameError(m_graphName);
+			const bool exists = nameError.empty() && AssetRegistry::HasFile(GetNewGraphPath());
+			if (!m_graphName.empty() && !nameError.empty())
+			{
+				ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", nameError.c_str());
+			}
 			if (exists)
 			{
 				ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "A file with this name already exists.");
 			}
 
-			ImGui::BeginDisabled(m_graphName.empty() || exists);
+			ImGui::BeginDisabled(!nameError.empty() || exists);
 			if (ImGui::Button("Create"))
 			{
 				CreateNewGraph();
@@ -117,6 +153,13 @@ namespace mmo
 
 	void PcgGraphEditor::CreateNewGraph()
 	{
+		const String nameError = GraphFileNameError(m_graphName);
+		if (!nameError.empty())
+		{
+			ELOG("Invalid PCG graph name '" << m_graphName << "': " << nameError);
+			return;
+		}
+
 		const String assetPath = GetNewGraphPath();
 		if (AssetRegistry::HasFile(assetPath))
 		{

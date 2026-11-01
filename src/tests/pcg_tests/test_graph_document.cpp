@@ -431,3 +431,47 @@ TEST_CASE("GraphDocument builds, binds and reloads a built-in chain", "[graph_do
 	REQUIRE(reloaded.GetGraph().parameters.size() == 1);
 	CHECK(reloaded.GetGraph().parameters[0].defaultValue == AttributeValue(3.0f));
 }
+
+TEST_CASE("GraphDocument EvalRevision ignores positions and comments", "[graph_document]")
+{
+	const NodeRegistry r = MakeRegistry();
+	GraphDocument doc;
+	String error;
+	REQUIRE(doc.Load(WriteGraph(Graph()), r, error));
+	const uint32 a = doc.AddNode("PointSource", 0, 0);
+	const uint32 sink = doc.AddNode("Sink", 0, 0);
+
+	uint64 revision = doc.Revision();
+	uint64 evalRevision = doc.EvalRevision();
+
+	// Positions and comments: Revision only.
+	REQUIRE(doc.SetNodePosition(a, 12.0f, 3.0f));
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() == evalRevision);
+	revision = doc.Revision();
+
+	REQUIRE(doc.SetNodeComment(a, "note"));
+	CHECK(doc.FindNode(a)->comment == "note");
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() == evalRevision);
+	revision = doc.Revision();
+	CHECK_FALSE(doc.SetNodeComment(a, "note"));
+	CHECK(doc.Revision() == revision);
+
+	// Everything else: both.
+	REQUIRE(doc.AddLink(Pin(doc, a, true, "Out"), Pin(doc, sink, false, "In")));
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() > evalRevision);
+	revision = doc.Revision();
+	evalRevision = doc.EvalRevision();
+
+	REQUIRE(doc.SetSetting(a, "radius", 1.0f));
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() > evalRevision);
+	revision = doc.Revision();
+	evalRevision = doc.EvalRevision();
+
+	doc.EditGraph();
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() > evalRevision);
+}

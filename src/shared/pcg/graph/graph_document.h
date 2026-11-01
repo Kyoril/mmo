@@ -96,18 +96,29 @@ namespace mmo::pcg::graph
 		bool SetSetting(uint32 node, const String& name, const AttributeValue& value);
 
 		/// @brief Sets a node's editor position.
-		/// @return True if the position changed (and the revision was bumped).
+		/// @return True if the position changed. Bumps Revision but not EvalRevision.
 		bool SetNodePosition(uint32 node, float x, float y);
 
 		/// @brief Gets the graph.
 		const Graph& GetGraph() const;
 
-		/// @brief Gets the graph for direct edits (parameters, comments, positions). Always bumps the revision.
+		/// @brief Gets the graph for direct edits (parameters, comments, positions). Always bumps Revision and EvalRevision.
 		///        Callers must not add nodes or links through it (use AddNode / AddLink).
 		Graph& EditGraph();
 
-		/// @brief Gets a counter that every mutation increases.
+		/// @brief Sets a node's free-form comment. Bumps Revision but not EvalRevision (comments do not affect
+		///        evaluation).
+		/// @return True if the comment changed.
+		bool SetNodeComment(uint32 node, const String& comment);
+
+		/// @brief Gets a counter that every mutation increases: the dirty / save counter.
 		uint64 Revision() const;
+
+		/// @brief Gets a counter that every mutation that can change the evaluation result increases: every
+		///        mutation except node positions (SetNodePosition) and node comments (SetNodeComment). EditGraph
+		///        bumps it too (conservative). Views that evaluate the graph (the debug view) re-evaluate when it
+		///        changes, so dragging nodes or editing comments never re-evaluates.
+		uint64 EvalRevision() const;
 
 		/// @brief Whether a node exists and its type is not registered.
 		bool IsUnknownNode(uint32 id) const;
@@ -152,10 +163,14 @@ namespace mmo::pcg::graph
 
 		void RebuildExtraPins();
 
+		/// Records a mutation: bumps Revision, and EvalRevision if the mutation can change evaluation.
+		void Touch(bool affectsEvaluation);
+
 	private:
 		const NodeRegistry* m_registry = nullptr;
 		Graph m_graph;
 		std::map<uint32, ExtraPins> m_extraPins;
 		uint64 m_revision = 0;
+		uint64 m_evalRevision = 0;
 	};
 }

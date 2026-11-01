@@ -147,6 +147,10 @@ namespace mmo
 		uint64 m_createFromPin { 0 };
 
 		String m_newParameterName;
+
+		/// @brief Why the last rename of parameter m_renameErrorParameter was refused (empty = no error).
+		String m_renameError;
+		String m_renameErrorParameter;
 		int m_newParameterType { 0 };
 	};
 }

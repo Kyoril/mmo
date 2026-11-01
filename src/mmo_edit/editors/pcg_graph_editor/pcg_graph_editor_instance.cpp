@@ -152,16 +152,27 @@ namespace mmo
 			return name;
 		}
 
-		NodeInstance* FindEditableNode(pcg::graph::Graph& graph, const uint32 id)
+		/// Why a name cannot be used for a new or renamed parameter, or empty if it can. Names are identifiers
+		/// ([A-Za-z_][A-Za-z0-9_]*), so a binding "$name" is never ambiguous (no leading '$').
+		String ParameterNameError(const pcg::graph::Graph& graph, const String& name)
 		{
-			for (NodeInstance& node : graph.nodes)
+			if (name.empty())
 			{
-				if (node.id == id)
-				{
-					return &node;
-				}
+				return "The name is empty.";
 			}
-			return nullptr;
+			const auto isIdentifierChar = [](const char c)
+			{
+				return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+			};
+			if ((name[0] >= '0' && name[0] <= '9') || !std::all_of(name.begin(), name.end(), isIdentifierChar))
+			{
+				return "Use letters, digits and '_' only, not starting with a digit.";
+			}
+			if (HasParameter(graph, name))
+			{
+				return "A parameter with this name exists.";
+			}
+			return {};
 		}
 	}
 
@@ -429,7 +440,7 @@ namespace mmo
 		ImGui::PushID(static_cast<int>(node.id));
 
 		// Header: title (and the warning mark), drawn over a bar in the category colour.
-		const String title = def != nullptr ? def->title : node.type + " (unknown)";
+		const String title = def != nullptr ? def->title : "Unknown: " + node.type;
 		ImGui::TextUnformatted(title.c_str());
 		if (hasWarning)
 		{
@@ -774,7 +785,7 @@ namespace mmo
 
 	void PcgGraphEditorInstance::CreateNode(const String& type, const ImVec2& canvasPosition, const uint64 linkFromPin)
 	{
-		const uint32 id = m_document.AddNode(type, std::floor(canvasPosition.x), std::floor(canvasPosition.y));
+		const uint32 id = m_document.AddNode(type, std::trunc(canvasPosition.x), std::trunc(canvasPosition.y));
 		if (id == 0 || linkFromPin == 0)
 		{
 			return;
@@ -799,7 +810,8 @@ namespace mmo
 
 	void PcgGraphEditorInstance::SyncPositionsFromEditor()
 	{
-		// The node editor floors positions, so a fractional position from the file is not a change.
+		// The node editor truncates positions toward zero (IM_FLOOR is (float)(int)x), so a fractional position
+		// from the file is not a change.
 		std::vector<std::pair<uint32, ImVec2>> moved;
 		for (const NodeInstance& node : m_document.GetGraph().nodes)
 		{
@@ -812,7 +824,7 @@ namespace mmo
 			{
 				continue;
 			}
-			if (position.x != std::floor(node.editorX) || position.y != std::floor(node.editorY))
+			if (position.x != std::trunc(node.editorX) || position.y != std::trunc(node.editorY))
 			{
 				moved.emplace_back(node.id, position);
 			}
@@ -891,6 +903,11 @@ namespace mmo
 			}
 
 			const uint32 id = node->id;
+
+			// Scoped by node id: a text field still active when the selection changes must not commit its text
+			// into the newly selected node (same widget ids for nodes of the same type).
+			ImGui::PushID(static_cast<int>(id));
+
 			const NodeTypeDef* def = m_document.FindNodeType(id);
 			ImGui::TextUnformatted(def != nullptr ? def->title.c_str() : node->type.c_str());
 			ImGui::TextDisabled("%s, id %u", node->type.c_str(), id);
@@ -925,10 +942,7 @@ namespace mmo
 			String comment = node->comment;
 			if (ImGui::InputTextMultiline("Comment", &comment, ImVec2(0.0f, ImGui::GetTextLineHeight() * 3.0f)))
 			{
-				if (NodeInstance* editable = FindEditableNode(m_document.EditGraph(), id))
-				{
-					editable->comment = comment;
-				}
+				m_document.SetNodeComment(id, comment);
 			}
 
 			ImGui::Separator();
@@ -968,6 +982,8 @@ namespace mmo
 					ImGui::BulletText("%s = %s", setting.first.c_str(), ValueToText(setting.second).c_str());
 				}
 			}
+
+			ImGui::PopID();
 		}
 		ImGui::End();
 	}
@@ -1116,13 +1132,17 @@ namespace mmo
 			for (size_t i = 0; i < parameters.size(); ++i)
 			{
 				const ParameterDef& parameter = parameters[i];
-				ImGui::PushID(static_cast<int>(i));
+				// Scoped by name, not index: removing a row must not hand an active field to the next parameter.
+				ImGui::PushID(parameter.name.c_str());
 
 				String name = parameter.name;
 				ImGui::SetNextItemWidth(150.0f);
 				if (ImGui::InputText("##name", &name, ImGuiInputTextFlags_EnterReturnsTrue) && name != parameter.name)
 				{
-					if (!name.empty() && !HasParameter(m_document.GetGraph(), name))
+					const String error = ParameterNameError(m_document.GetGraph(), name);
+					m_renameErrorParameter = error.empty() ? String() : parameter.name;
+					m_renameError = error;
+					if (error.empty())
 					{
 						// Rename the parameter and every binding to it.
 						pcg::graph::Graph& graph = m_document.EditGraph();
@@ -1145,6 +1165,7 @@ namespace mmo
 				{
 					ImGui::SetTooltip("Press Enter to rename; bindings follow the new name.");
 				}
+				const bool showRenameError = !m_renameError.empty() && m_renameErrorParameter == parameter.name;
 
 				ImGui::SameLine();
 				int typeIndex = static_cast<int>(pcg::graph::TypeOf(parameter.defaultValue));
@@ -1162,6 +1183,10 @@ namespace mmo
 				if (ImGui::IsItemHovered())
 				{
 					ImGui::SetTooltip("Remove the parameter (settings bound to it then report an issue).");
+				}
+				if (showRenameError)
+				{
+					ImGui::TextColored(s_errorColor, "Not renamed: %s", m_renameError.c_str());
 				}
 
 				AttributeValue defaultValue = parameter.defaultValue;
@@ -1193,8 +1218,8 @@ namespace mmo
 			ImGui::SetNextItemWidth(90.0f);
 			ImGui::Combo("##new_type", &m_newParameterType, s_attributeTypeNames, IM_ARRAYSIZE(s_attributeTypeNames));
 			ImGui::SameLine();
-			const bool duplicate = HasParameter(m_document.GetGraph(), m_newParameterName);
-			ImGui::BeginDisabled(m_newParameterName.empty() || duplicate);
+			const String nameError = ParameterNameError(m_document.GetGraph(), m_newParameterName);
+			ImGui::BeginDisabled(!nameError.empty());
 			if (ImGui::Button(ICON_FA_PLUS " Add"))
 			{
 				ParameterDef parameter;
@@ -1204,9 +1229,9 @@ namespace mmo
 				m_newParameterName.clear();
 			}
 			ImGui::EndDisabled();
-			if (duplicate)
+			if (!m_newParameterName.empty() && !nameError.empty())
 			{
-				ImGui::TextColored(s_warningColor, "A parameter with this name exists.");
+				ImGui::TextColored(s_errorColor, "%s", nameError.c_str());
 			}
 		}
 		ImGui::End();

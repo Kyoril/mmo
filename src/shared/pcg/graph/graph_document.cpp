@@ -91,7 +91,7 @@ namespace mmo::pcg::graph
 		m_registry = &registry;
 		m_graph = std::move(parsed);
 		RebuildExtraPins();
-		++m_revision;
+		Touch(true);
 		return true;
 	}
 
@@ -133,7 +133,7 @@ namespace mmo::pcg::graph
 		}
 		m_graph.nodes.push_back(std::move(node));
 		m_graph.nextNodeId = id + 1;
-		++m_revision;
+		Touch(true);
 		return id;
 	}
 
@@ -154,7 +154,7 @@ namespace mmo::pcg::graph
 			return link.fromNode == id || link.toNode == id;
 		});
 		m_extraPins.erase(id);
-		++m_revision;
+		Touch(true);
 		return true;
 	}
 
@@ -230,7 +230,7 @@ namespace mmo::pcg::graph
 		}
 
 		m_graph.links.push_back(Link{ from.node, fromName, to.node, toName });
-		++m_revision;
+		Touch(true);
 		return true;
 	}
 
@@ -241,7 +241,7 @@ namespace mmo::pcg::graph
 			if (link.id == linkId)
 			{
 				m_graph.links.erase(m_graph.links.begin() + static_cast<std::ptrdiff_t>(link.index));
-				++m_revision;
+				Touch(true);
 				return true;
 			}
 		}
@@ -269,7 +269,7 @@ namespace mmo::pcg::graph
 		}
 
 		instance->settings[name] = value;
-		++m_revision;
+		Touch(true);
 		return true;
 	}
 
@@ -283,7 +283,7 @@ namespace mmo::pcg::graph
 
 		instance->editorX = x;
 		instance->editorY = y;
-		++m_revision;
+		Touch(false);
 		return true;
 	}
 
@@ -294,13 +294,40 @@ namespace mmo::pcg::graph
 
 	Graph& GraphDocument::EditGraph()
 	{
-		++m_revision;
+		Touch(true);
 		return m_graph;
+	}
+
+	bool GraphDocument::SetNodeComment(const uint32 node, const String& comment)
+	{
+		NodeInstance* instance = FindMutableNode(node);
+		if (instance == nullptr || instance->comment == comment)
+		{
+			return false;
+		}
+
+		instance->comment = comment;
+		Touch(false);
+		return true;
 	}
 
 	uint64 GraphDocument::Revision() const
 	{
 		return m_revision;
+	}
+
+	uint64 GraphDocument::EvalRevision() const
+	{
+		return m_evalRevision;
+	}
+
+	void GraphDocument::Touch(const bool affectsEvaluation)
+	{
+		++m_revision;
+		if (affectsEvaluation)
+		{
+			++m_evalRevision;
+		}
 	}
 
 	bool GraphDocument::IsUnknownNode(const uint32 id) const
