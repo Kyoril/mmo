@@ -2,8 +2,12 @@
 
 #include "node_util.h"
 
+#include "math/constants.h"
+#include "math/radian.h"
+
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace mmo::pcg::graph
 {
@@ -236,5 +240,289 @@ namespace mmo::pcg::graph
 			}
 		}
 		return inside;
+	}
+
+	Quaternion RotationOntoNormal(Vector3 normal)
+	{
+		const float len = normal.GetLength();
+		if (!(len > 1.0e-6f) || !std::isfinite(len))
+		{
+			return Quaternion::Identity;
+		}
+		normal = normal * (1.0f / len);
+		const float d = std::clamp(Vector3::UnitY.Dot(normal), -1.0f, 1.0f);
+		if (d > 0.999999f)
+		{
+			return Quaternion::Identity;
+		}
+		if (d < -0.999999f)
+		{
+			return Quaternion(Radian(Pi), Vector3::UnitX);
+		}
+		Vector3 axis = Vector3::UnitY.Cross(normal);
+		axis.Normalize();
+		return Quaternion(Radian(std::acos(d)), axis);
+	}
+
+	namespace
+	{
+		/// Pointer to the float a reserved point name refers to, or null ("scale" maps to scale.x).
+		const float* ReservedField(const Point& p, const String& name)
+		{
+			if (name == "density")
+			{
+				return &p.density;
+			}
+			if (name == "position.x")
+			{
+				return &p.position.x;
+			}
+			if (name == "position.y")
+			{
+				return &p.position.y;
+			}
+			if (name == "position.z")
+			{
+				return &p.position.z;
+			}
+			if (name == "scale" || name == "scale.x")
+			{
+				return &p.scale.x;
+			}
+			if (name == "scale.y")
+			{
+				return &p.scale.y;
+			}
+			if (name == "scale.z")
+			{
+				return &p.scale.z;
+			}
+			return nullptr;
+		}
+	}
+
+	bool IsReservedPointName(const String& name)
+	{
+		const Point probe;
+		return ReservedField(probe, name) != nullptr;
+	}
+
+	bool ToNumber(const AttributeValue& value, float& out)
+	{
+		float v = 0.0f;
+		if (const float* f = std::get_if<float>(&value))
+		{
+			v = *f;
+		}
+		else if (const int64* i = std::get_if<int64>(&value))
+		{
+			v = static_cast<float>(*i);
+		}
+		else if (const bool* b = std::get_if<bool>(&value))
+		{
+			v = *b ? 1.0f : 0.0f;
+		}
+		else
+		{
+			return false;
+		}
+		if (!std::isfinite(v))
+		{
+			return false;
+		}
+		out = v;
+		return true;
+	}
+
+	bool ReadPointValue(const DataItem& item, const size_t index, const String& name, AttributeValue& out)
+	{
+		if (index < item.points.points.size())
+		{
+			if (const float* field = ReservedField(item.points.points[index], name))
+			{
+				out = *field;
+				return true;
+			}
+			if (const AttributeValue* v = item.points.GetAttribute(index, name))
+			{
+				out = *v;
+				return true;
+			}
+		}
+		const auto it = item.attributes.find(name);
+		if (it == item.attributes.end())
+		{
+			return false;
+		}
+		out = it->second;
+		return true;
+	}
+
+	bool WritePointNumber(DataItem& item, const size_t index, const String& name, const float value)
+	{
+		if (index >= item.points.points.size())
+		{
+			return false;
+		}
+		Point& p = item.points.points[index];
+		if (name == "scale")
+		{
+			p.scale = Vector3(value, value, value);
+			return true;
+		}
+		if (const float* field = ReservedField(p, name))
+		{
+			*const_cast<float*>(field) = value;
+			return true;
+		}
+		const auto column = item.points.columns.find(name);
+		if (column != item.points.columns.end() && column->second.first != AttributeType::Float)
+		{
+			return false;
+		}
+		return item.points.SetAttribute(index, name, value);
+	}
+
+	SegmentDistanceIndex::SegmentDistanceIndex(const std::vector<SplineSample>& polyline, const bool closed, const float cellSize)
+		: m_samples(polyline)
+	{
+		const size_t n = m_samples.size();
+		if (n == 0)
+		{
+			return;
+		}
+		for (const SplineSample& s : m_samples)
+		{
+			m_bounds.Add(s.x, s.z);
+		}
+		if (n == 1)
+		{
+			m_segments.emplace_back(0u, 0u);
+		}
+		for (size_t i = 0; i + 1 < n; ++i)
+		{
+			m_segments.emplace_back(static_cast<uint32>(i), static_cast<uint32>(i + 1));
+		}
+		if (closed && n >= 3)
+		{
+			m_segments.emplace_back(static_cast<uint32>(n - 1), 0u);
+		}
+
+		const double width = static_cast<double>(m_bounds.maxX) - m_bounds.minX;
+		const double height = static_cast<double>(m_bounds.maxZ) - m_bounds.minZ;
+		double cs = std::isfinite(cellSize) ? std::max(static_cast<double>(cellSize), 0.01) : 1.0;
+		cs = std::max({ cs, width / 128.0, height / 128.0 });
+		m_cellSize = cs;
+		m_originX = m_bounds.minX;
+		m_originZ = m_bounds.minZ;
+		m_columns = static_cast<int64>(std::floor(width / cs)) + 1;
+		m_rows = static_cast<int64>(std::floor(height / cs)) + 1;
+		m_cells.resize(static_cast<size_t>(m_columns * m_rows));
+
+		auto cellX = [this](const double x) { return std::clamp<int64>(static_cast<int64>(std::floor((x - m_originX) / m_cellSize)), 0, m_columns - 1); };
+		auto cellZ = [this](const double z) { return std::clamp<int64>(static_cast<int64>(std::floor((z - m_originZ) / m_cellSize)), 0, m_rows - 1); };
+		for (size_t s = 0; s < m_segments.size(); ++s)
+		{
+			const SplineSample& a = m_samples[m_segments[s].first];
+			const SplineSample& b = m_samples[m_segments[s].second];
+			const int64 x0 = cellX(std::min(a.x, b.x));
+			const int64 x1 = cellX(std::max(a.x, b.x));
+			const int64 z0 = cellZ(std::min(a.z, b.z));
+			const int64 z1 = cellZ(std::max(a.z, b.z));
+			for (int64 z = z0; z <= z1; ++z)
+			{
+				for (int64 x = x0; x <= x1; ++x)
+				{
+					m_cells[static_cast<size_t>(z * m_columns + x)].push_back(static_cast<uint32>(s));
+				}
+			}
+		}
+	}
+
+	double SegmentDistanceIndex::SegmentDistance(const uint32 segment, const double x, const double z) const
+	{
+		const SplineSample& a = m_samples[m_segments[segment].first];
+		const SplineSample& b = m_samples[m_segments[segment].second];
+		const double dx = static_cast<double>(b.x) - a.x;
+		const double dz = static_cast<double>(b.z) - a.z;
+		const double len2 = dx * dx + dz * dz;
+		double t = 0.0;
+		if (len2 > 0.0)
+		{
+			t = std::clamp(((x - a.x) * dx + (z - a.z) * dz) / len2, 0.0, 1.0);
+		}
+		return std::hypot(a.x + t * dx - x, a.z + t * dz - z);
+	}
+
+	bool SegmentDistanceIndex::Nearest(const float x, const float z, const float maxDistance, float& distance) const
+	{
+		if (m_segments.empty() || !(maxDistance >= 0.0f) || !std::isfinite(x) || !std::isfinite(z))
+		{
+			return false;
+		}
+
+		// Cell of the query point (may lie outside the grid), clamped so far points cannot overflow.
+		constexpr double Far = 1.0e12;
+		const int64 cx = static_cast<int64>(std::clamp(std::floor((x - m_originX) / m_cellSize), -Far, Far));
+		const int64 cz = static_cast<int64>(std::clamp(std::floor((z - m_originZ) / m_cellSize), -Far, Far));
+		const int64 lastX = m_columns - 1;
+		const int64 lastZ = m_rows - 1;
+
+		// Rings of cells at Chebyshev distance k; a ring k cell is at least (k - 1) cells away from the point.
+		const int64 kMin = std::max<int64>({ 0, -cx, cx - lastX, -cz, cz - lastZ });
+		const int64 kMax = std::max({ std::abs(cx), std::abs(cx - lastX), std::abs(cz), std::abs(cz - lastZ) });
+		double best = std::numeric_limits<double>::infinity();
+		auto visit = [&](const int64 gx, const int64 gz)
+		{
+			for (const uint32 s : m_cells[static_cast<size_t>(gz * m_columns + gx)])
+			{
+				best = std::min(best, SegmentDistance(s, x, z));
+			}
+		};
+		for (int64 k = kMin; k <= kMax; ++k)
+		{
+			const double lower = k > 0 ? static_cast<double>(k - 1) * m_cellSize : 0.0;
+			if (lower > maxDistance || lower >= best)
+			{
+				break;
+			}
+			if (k == 0)
+			{
+				visit(cx, cz);
+				continue;
+			}
+			const int64 xa = std::max<int64>(0, cx - k);
+			const int64 xb = std::min<int64>(lastX, cx + k);
+			for (const int64 gz : { cz - k, cz + k })
+			{
+				if (gz < 0 || gz > lastZ)
+				{
+					continue;
+				}
+				for (int64 gx = xa; gx <= xb; ++gx)
+				{
+					visit(gx, gz);
+				}
+			}
+			const int64 za = std::max<int64>(0, cz - k + 1);
+			const int64 zb = std::min<int64>(lastZ, cz + k - 1);
+			for (const int64 gx : { cx - k, cx + k })
+			{
+				if (gx < 0 || gx > lastX)
+				{
+					continue;
+				}
+				for (int64 gz = za; gz <= zb; ++gz)
+				{
+					visit(gx, gz);
+				}
+			}
+		}
+		if (!(best <= maxDistance))
+		{
+			return false;
+		}
+		distance = static_cast<float>(best);
+		return true;
 	}
 }

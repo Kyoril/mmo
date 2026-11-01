@@ -61,6 +61,7 @@ namespace mmo::pcg::graph
 		// One explicit call per node family (no static registration: a static library link could drop it).
 		RegisterInputNodes(registry);
 		RegisterSamplerNodes(registry);
+		RegisterFilterNodes(registry);
 	}
 
 	namespace

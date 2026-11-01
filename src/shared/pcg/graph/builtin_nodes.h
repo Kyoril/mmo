@@ -13,4 +13,8 @@ namespace mmo::pcg::graph
 
 	/// @brief Registers the sampler nodes: SampleSpline, SampleArea and SampleTerrainSurface (nodes_sampler.cpp).
 	void RegisterSamplerNodes(NodeRegistry& registry);
+
+	/// @brief Registers the filter and spatial nodes: FilterByTag, FilterByAttribute, FilterByTerrain, DensityFilter,
+	///        SelfPrune, Difference, Intersection and DistanceTo (nodes_filter.cpp).
+	void RegisterFilterNodes(NodeRegistry& registry);
 }

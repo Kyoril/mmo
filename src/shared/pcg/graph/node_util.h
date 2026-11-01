@@ -6,7 +6,10 @@
 #include "node_registry.h"
 
 #include "math/path_spline.h"
+#include "math/quaternion.h"
+#include "math/vector3.h"
 
+#include <utility>
 #include <vector>
 
 namespace mmo::pcg::graph
@@ -84,5 +87,64 @@ namespace mmo::pcg::graph
 		std::vector<std::vector<uint32>> m_rows;
 		int64 m_firstRow = 0;
 		float m_rowHeight = 1.0f;
+	};
+
+	/// @brief Rotation that maps local +Y onto a normal (identity for a zero or non-finite normal).
+	Quaternion RotationOntoNormal(Vector3 normal);
+
+	/// @brief Whether a name refers to a point property instead of an attribute: density, position.x,
+	///        position.y, position.z, scale (reads scale.x, writes all three components), scale.x, scale.y,
+	///        scale.z. Filter by Attribute, Attribute Math, Copy Attributes from Control and Distance To treat
+	///        these names as the point property everywhere, even if a column of that name exists.
+	bool IsReservedPointName(const String& name);
+
+	/// @brief Converts a Float, Int or Bool value to float (Bool: 0 or 1). False for other types or non-finite values.
+	bool ToNumber(const AttributeValue& value, float& out);
+
+	/// @brief Looks up a value for one point: the point property for a reserved name, else the point's column,
+	///        else the item attribute.
+	/// @return False if none of them exists.
+	bool ReadPointValue(const DataItem& item, size_t index, const String& name, AttributeValue& out);
+
+	/// @brief Writes a number for one point: the point property for a reserved name, else a Float column
+	///        (created if missing, filled with 0 for the other points).
+	/// @return False if the column exists with another type (nothing is written).
+	bool WritePointNumber(DataItem& item, size_t index, const String& name, float value);
+
+	/// @brief Nearest-distance queries against a polyline on the x/z plane, with its segments bucketed into a
+	///        uniform grid. Results do not depend on the bucketing (the minimum over segments is exact).
+	class SegmentDistanceIndex
+	{
+	public:
+		/// @brief Buckets the polyline's segments (and the closing segment when closed).
+		/// @param polyline Polyline samples; a single sample acts as a point, none make an empty index.
+		/// @param closed Whether the last sample connects back to the first.
+		/// @param cellSize Preferred grid cell size; grown so the grid has at most 128 x 128 cells.
+		SegmentDistanceIndex(const std::vector<SplineSample>& polyline, bool closed, float cellSize);
+
+		/// @brief Finds the distance from (x, z) to the nearest segment if it is at most maxDistance.
+		/// @return False if the index is empty or no segment is within maxDistance.
+		bool Nearest(float x, float z, float maxDistance, float& distance) const;
+
+		/// @brief Bounds of the polyline (invalid when empty).
+		const Bounds2D& GetBounds() const
+		{
+			return m_bounds;
+		}
+
+	private:
+		/// @brief Distance from (x, z) to a segment.
+		double SegmentDistance(uint32 segment, double x, double z) const;
+
+	private:
+		std::vector<SplineSample> m_samples;
+		std::vector<std::pair<uint32, uint32>> m_segments;
+		std::vector<std::vector<uint32>> m_cells;
+		Bounds2D m_bounds;
+		double m_cellSize = 1.0;
+		double m_originX = 0.0;
+		double m_originZ = 0.0;
+		int64 m_columns = 0;
+		int64 m_rows = 0;
 	};
 }
