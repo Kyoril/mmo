@@ -399,8 +399,11 @@ jobs:
           name: client-overlay
           path: client-overlay.zip
 
+  # Only develop may push to the DockerHub environment, and test-nightly- releases are never
+  # deployed, so test runs on other branches publish without images and server symbols.
   images:
     needs: [check, gate]
+    if: needs.check.outputs.prefix == 'nightly-'
     uses: ./.github/workflows/docker-build.yml
     with:
       ref: ${{ needs.check.outputs.commit }}
@@ -409,6 +412,16 @@ jobs:
 
   publish:
     needs: [check, gate, client, client-macos, cook, images]
+    # images is skipped on test runs, which would skip publish too without this condition.
+    if: >-
+      always()
+      && needs.check.outputs.proceed == 'true'
+      && needs.gate.result == 'success'
+      && needs.client.result == 'success'
+      && needs.client-macos.result == 'success'
+      && needs.cook.result == 'success'
+      && (needs.images.result == 'success'
+        || (needs.images.result == 'skipped' && needs.check.outputs.prefix == 'test-nightly-'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -446,13 +459,15 @@ jobs:
       # Unstripped login/realm/world ELFs from the image builds, laid out as the symbol store
       # expects (<module>.elf/<commit>/<module>), so a Linux crash report of this release can be
       # symbolicated: tools/fetch_server_symbols.ps1 -Commit <sha> unpacks it into artifacts/symbols.
-      - uses: actions/download-artifact@v4
+      - if: needs.images.result == 'success'
+        uses: actions/download-artifact@v4
         with:
           pattern: server-symbols-*
           path: server-symbols-raw
           merge-multiple: true
 
       - name: Pack server symbols
+        if: needs.images.result == 'success'
         run: |
           mkdir -p server-symbols
           for module in login_server realm_server world_server; do
@@ -497,6 +512,8 @@ jobs:
           tag="${PREFIX}${VERSION}"
           # A forced re-release of the same commit has the same version.
           if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
+          server_symbols=""
+          if [ -f dist/server-symbols.zip ]; then server_symbols=dist/server-symbols.zip; fi
           gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
             dist/client-bin.zip dist/symbols.zip dist/client-macos.zip dist/symbols-macos.zip \
-            dist/client-overlay.zip dist/server-symbols.zip dist/release.json
+            dist/client-overlay.zip $server_symbols dist/release.json
