@@ -10,6 +10,7 @@
 #include "game_server/spells/spell_interrupt_rules.h"
 #include "game/id_mask.h"
 #include "game_server/spells/trade_skill_cast_rules.h"
+#include "game_server/pets/pet_manager.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -548,6 +549,12 @@ namespace mmo
 		if (HasAttributes(0, spell_attributes::NotInCombat) && m_cast.GetExecuter().IsInCombat())
 		{
 			SendEndCast(spell_cast_result::FailedAffectingCombat);
+			return false;
+		}
+
+		if (const SpellCastResult petResult = CheckSummonPetLimit(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
 			return false;
 		}
 

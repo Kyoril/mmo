@@ -508,6 +508,7 @@ namespace mmo
 
 	// Forward declaration for the CC movement controller
 	class CCMovementController;
+	class PetManager;
 
 	/// Result of rolling a block against an incoming physical attack.
 	struct BlockResult
@@ -1715,6 +1716,14 @@ public:
 		/// @param other The other unit to check.
 		[[nodiscard]] bool SharesTopOwnerWith(const GameUnitS& other) const;
 
+		/// Gets the pets of this unit, creating the (empty) pet manager on first use.
+		/// @returns The pet manager of this unit.
+		PetManager& GetPets();
+
+		/// Gets the pets of this unit without creating the pet manager.
+		/// @returns The pet manager, or nullptr if this unit never had pets.
+		[[nodiscard]] PetManager* FindPets() const { return m_pets.get(); }
+
 		/// Gets the faction template of the unit.
 		/// @returns A pointer to the faction template entry.
 		const proto::FactionTemplateEntry *GetFactionTemplate() const;
@@ -1992,6 +2001,8 @@ public:
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
 		std::unique_ptr<CCMovementController> m_ccMovementController;
+		/// Pets of this unit, created on first use.
+		std::unique_ptr<PetManager> m_pets;
 		Countdown m_attackSwingCountdown;
 		Countdown m_offhandSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;

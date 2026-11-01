@@ -281,6 +281,8 @@ namespace mmo
 			FailedSkillTooLow,
 			/// The caster's bags cannot hold the item the spell creates.
 			FailedInventoryFull,
+			/// A summon would exceed the cap of its pet group, and the summon fails at the cap.
+			FailedTooManyPets,
 
 			/// Custom value used if no error occurred (will not be sent to the client)
 			CastOkay = 0xFF

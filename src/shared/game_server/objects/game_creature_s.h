@@ -133,6 +133,16 @@ namespace mmo
 		///	        summoner is already gone).
 		[[nodiscard]] std::shared_ptr<GameUnitS> GetSummonOwner() const { return m_summonOwner.lock(); }
 
+		/// @return Whether this creature is a pet (temporary or persistent) of some unit.
+		[[nodiscard]] bool IsPet() const { return m_isPet; }
+
+		/// @return The pet group of a temporary pet; 0 for persistent pets and non-pets.
+		[[nodiscard]] uint32 GetPetGroup() const { return m_petGroup; }
+
+		/// Marks this creature as a pet.
+		/// @param group The pet group of a temporary pet, or 0 for a persistent pet.
+		void SetPetGroup(const uint32 group) { m_isPet = true; m_petGroup = group; }
+
 		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
 		/// the fight and heals it back up.
 		void ResetDamageContributions();
@@ -345,6 +355,10 @@ namespace mmo
 		std::vector<PatrolWaypoint> m_patrolWaypoints;
 		/// Unit that summoned this creature. Empty when it was not summoned by anybody.
 		std::weak_ptr<GameUnitS> m_summonOwner;
+		/// Whether this creature is a pet.
+		bool m_isPet = false;
+		/// Pet group of a temporary pet.
+		uint32 m_petGroup = 0;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
 		/// Whether a follow target is currently assigned (distinguishes "never followed" from

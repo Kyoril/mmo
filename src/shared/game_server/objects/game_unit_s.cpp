@@ -3,6 +3,7 @@
 #include "game_unit_s.h"
 
 #include "game_server/cc_movement_controller.h"
+#include "game_server/pets/pet_manager.h"
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/world/world_instance.h"
@@ -400,6 +401,12 @@ namespace mmo
 		// the target leaving the world. Tearing the cast down here happens while the unit is still
 		// fully alive, which drops m_selfHold and every subscription with it.
 		m_spellCast->AbandonCast();
+
+		// Temporary pets never outlive their owner's stay in the world (despawn, logout, map change).
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
 
 		// Capture persistable auras before clearing them: the despawn fires the despawned signal
 		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
@@ -3544,6 +3551,16 @@ namespace mmo
 		return &GetTopOwner() == &other.GetTopOwner();
 	}
 
+	PetManager& GameUnitS::GetPets()
+	{
+		if (!m_pets)
+		{
+			m_pets = std::make_unique<PetManager>(*this);
+		}
+
+		return *m_pets;
+	}
+
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
 		const GameUnitS& topOwner = GetTopOwner();
@@ -3685,6 +3702,12 @@ namespace mmo
 
 		Set<uint64>(object_fields::TargetUnit, 0);
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+
+		// Temporary pets die with their owner's life.
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
 
 		killed(killer);
 

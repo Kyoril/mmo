@@ -12,6 +12,7 @@
 #include "objects/game_unit_s.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/world/universe.h"
+#include "game_server/pets/pet_manager.h"
 
 namespace mmo
 {
@@ -140,6 +141,12 @@ namespace mmo
 
 	void CreatureAI::Reset()
 	{
+		// The pets a creature summoned for its fight go away with the fight.
+		if (PetManager* pets = m_controlled.FindPets())
+		{
+			pets->DespawnTemporaryPets();
+		}
+
 		auto state = std::make_shared<CreatureAIResetState>(*this);
 		SetState(std::move(state));
 
