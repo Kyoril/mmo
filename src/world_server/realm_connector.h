@@ -24,6 +24,7 @@ namespace mmo
 	class Vector3;
 	struct QuestStatusData;
 	struct ItemData;
+	struct PersistentPetData;
 	class GamePlayerS;
 	class GroupManager;
 	class BugReportService;
@@ -98,6 +99,12 @@ namespace mmo
 		/// Sends quest data updates to the realm server.
 		void SendQuestData(uint64 characterGuid, uint32 questId, const QuestStatusData& questData);
 
+		/// Sends the current state of a character's stored pets to the realm, which saves it.
+		void SendPetData(uint64 characterGuid, const std::vector<PersistentPetData>& pets);
+
+		/// Asks the realm to create a stored pet (answered with realm_world_packet::PetCreated).
+		void SendCreatePet(uint64 characterGuid, const PersistentPetData& request);
+
 		/// Sends a teleport request to the realm server.
 		void SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing);
 
@@ -145,6 +152,10 @@ namespace mmo
 
 		/// Sends the answer to a bug report back to the realm.
 		void SendBugReportResult(uint64 characterGuid, game::BugReportResult result);
+
+		/// Whether a world-owned subsystem is available on this node. Without subsystem state
+		/// (SetBugReporting not called) everything is available.
+		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const;
 
 	private:
 		/// Perform client-side srp6-a calculations after we received server values
@@ -208,6 +219,12 @@ namespace mmo
 
 		/// Handles a GM / REST toggle of a world-owned subsystem.
 		PacketParseResult OnSetSubsystemEnabled(auth::IncomingPacket& packet);
+
+		/// Handles the stored pets of a character, sent by the realm right after its join.
+		PacketParseResult OnPlayerPetData(auth::IncomingPacket& packet);
+
+		/// Handles the realm's answer to a CreatePet request.
+		PacketParseResult OnPetCreated(auth::IncomingPacket& packet);
 		/// Handles the realm's order to shut down for good: removes the remaining players the same
 		/// way as PlayerCharacterLeave so their data is saved, then fires shutdownRequested.
 		PacketParseResult OnShutdown(auth::IncomingPacket& packet);

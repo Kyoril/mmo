@@ -4,7 +4,7 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 12 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
 | `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 34 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
@@ -104,6 +104,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 13 | 2026-11-01 | Persistent pets: realm->world `PlayerPetData` (uint64 character guid + uint8-counted `PersistentPetData` list, sent right after `PlayerCharacterJoin`) and `PetCreated` (character guid + the created pet), world->realm `PetData` (the same list, sent with every character save and on every stored pet change) and `CreatePet` (character guid + the pet to create, id 0). `PersistentPetData` is written by `src/shared/game_server/pets/persistent_pet.cpp` |
 | 12 | 2026-10-29 | Data-driven attributes: `CharacterClassData` (inside CharacterData and the world->realm character updates) carries `MaxAttributes` (10) spent-point counts instead of 5, followed by a uint32 `attributeLayout` |
 | 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |

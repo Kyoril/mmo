@@ -7,15 +7,15 @@
 	],
 	"_format": 3,
 	"auth": {
-		"version": 12,
-		"fingerprint": "sha256:b76b17d59755436d19a1b0561e652578fa6350601ffa84efa73edaf44b9e429d",
+		"version": 13,
+		"fingerprint": "sha256:934cb1dc05bd6783d3bdcc4083c3c6b9070b0dc678f1a7e8c100b8d65ee390e1",
 		"files": {
 			"src/shared/auth_protocol/auth_incoming_packet.cpp": "sha256:0e23f09921b76939917c9f7e660deab2977ba79eaa03c9e7ea92e38764f7d5ff",
 			"src/shared/auth_protocol/auth_incoming_packet.h": "sha256:324112379d24eacb03fc3f2984a5180e741ddb95978d1c91616ce43fa68a0745",
 			"src/shared/auth_protocol/auth_outgoing_packet.cpp": "sha256:7003aee85725f5955505c74037f0bcdfb89fd4ebd647257d2edc9d4b06268ca1",
 			"src/shared/auth_protocol/auth_outgoing_packet.h": "sha256:eff0a023adf8133bf02c2df220b97cb364e7b91b82b45470da2cbec34307926c",
 			"src/shared/auth_protocol/auth_protocol.cpp": "sha256:3ae02697539b108be5892fb3288d1480749c9a720e5d4545e2efbfb5601de224",
-			"src/shared/auth_protocol/auth_protocol.h": "sha256:c094f179534a8f1d35fcc2d251bb571ccdbadffa3687052420bad0f739fffe26"
+			"src/shared/auth_protocol/auth_protocol.h": "sha256:e75e619f6aac3eacf5f5952d6a3148b54265c9ea71fb945c6d9af5284ec15fb7"
 		},
 		"symbols": [
 			"auth::AuthLocale::Default = 0",
@@ -93,11 +93,13 @@
 			"auth::realm_world_packet::MailDraftResult = 12",
 			"auth::realm_world_packet::MailTakeItemResult = 14",
 			"auth::realm_world_packet::MailTakeMoneyResult = 13",
+			"auth::realm_world_packet::PetCreated = 21",
 			"auth::realm_world_packet::PlayerCharacterJoin = 2",
 			"auth::realm_world_packet::PlayerCharacterLeave = 3",
 			"auth::realm_world_packet::PlayerGroupChanged = 8",
 			"auth::realm_world_packet::PlayerGroupLootMethodChanged = 10",
 			"auth::realm_world_packet::PlayerGuildChanged = 9",
+			"auth::realm_world_packet::PlayerPetData = 20",
 			"auth::realm_world_packet::ProxyPacket = 4",
 			"auth::realm_world_packet::ResetInstance = 19",
 			"auth::realm_world_packet::SetSubsystemEnabled = 17",
@@ -115,6 +117,7 @@
 			"auth::world_realm_packet::BugReportResult = 20",
 			"auth::world_realm_packet::CharacterData = 9",
 			"auth::world_realm_packet::CharacterLocationResponse = 12",
+			"auth::world_realm_packet::CreatePet = 23",
 			"auth::world_realm_packet::DeleteInventoryItems = 15",
 			"auth::world_realm_packet::InstanceCreated = 3",
 			"auth::world_realm_packet::InstanceDestroyed = 4",
@@ -124,6 +127,7 @@
 			"auth::world_realm_packet::MailRestoreItem = 19",
 			"auth::world_realm_packet::MailTakeItem = 18",
 			"auth::world_realm_packet::MailTakeMoney = 17",
+			"auth::world_realm_packet::PetData = 22",
 			"auth::world_realm_packet::PlayerCharacterJoinFailed = 6",
 			"auth::world_realm_packet::PlayerCharacterJoined = 5",
 			"auth::world_realm_packet::PlayerCharacterLeft = 7",

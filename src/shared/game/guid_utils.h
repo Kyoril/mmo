@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "base/macros.h"
 
 namespace mmo
 {
@@ -65,12 +66,18 @@ namespace mmo
 		return static_cast<uint64>(low | (entry << 24) | (static_cast<uint64_t>(type) << 52) | 0xF100000000000000);
 	}
 
+	/// The largest stored pet database id that fits the low 24 bits of a pet guid (MakePetGuid).
+	constexpr uint64 MaxPetGuidDbId = (uint64(1) << 24) - 1;
+
 	/// Creates the guid of a persistent pet. It is stable across summons, since it is made from the
 	/// stored pet's database id and its pet entry.
-	/// @param dbId Database id of the stored pet (the low part; only 24 bits fit).
+	/// @param dbId Database id of the stored pet (the low part; only 24 bits fit, see MaxPetGuidDbId).
 	/// @param petEntry Id of the pet entry.
 	inline uint64 MakePetGuid(const uint64 dbId, const uint32 petEntry)
 	{
+		// A larger id would overlap the entry bits and could collide with another pet's guid. The
+		// realm, which assigns the ids, logs an error when it hands out one this large.
+		ASSERT(dbId <= MaxPetGuidDbId);
 		return CreateEntryGUID(dbId, petEntry, GuidType::Pet);
 	}
 

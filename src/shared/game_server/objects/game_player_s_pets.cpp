@@ -119,8 +119,18 @@ namespace mmo
 		return result;
 	}
 
+	bool GamePlayerS::ArePetsAvailable() const
+	{
+		return !m_netPlayerWatcher || m_netPlayerWatcher->ArePetsAvailable();
+	}
+
 	pet_result::Type GamePlayerS::SummonStoredPet(const uint32 petEntry)
 	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
 		PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(false);
 		if (!pet)
 		{
@@ -138,6 +148,13 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::SummonPet(PersistentPetData& pet)
 	{
+		// Also covers the summons nobody asked for: the return with the owner and a tamed pet the
+		// realm created. Such a pet stays wasSummoned and comes back once pets are available again.
+		if (!ArePetsAvailable())
+		{
+			return pet_result::Disabled;
+		}
+
 		// Class lock: a pet belongs to the class that granted or tamed it.
 		if (pet.classId != Get<uint32>(object_fields::Class))
 		{
@@ -545,6 +562,11 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::TameCreature(GameCreatureS& target)
 	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
 		if (!target.IsAlive() || target.IsPet() || target.GetOwnerGuid() != 0)
 		{
 			return PetActionFailed(pet_result::NotTamable);
@@ -588,6 +610,11 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::GrantPersistentPet(const uint32 petEntry)
 	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
 		const proto::PetEntry* entry = m_project.pets.getById(petEntry);
 		if (!entry)
 		{
@@ -620,6 +647,11 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::RevivePet(const uint32 petEntry, const uint32 healthPercent)
 	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
 		PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(true);
 		if (!pet || !pet->isDead)
 		{
@@ -652,6 +684,11 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::LearnPetSpell(const uint32 spellId)
 	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
 		const auto pet = m_summonedPet.lock();
 		PersistentPetData* data = pet ? FindStoredPetByDbId(m_summonedPetDbId) : nullptr;
 		const proto::PetEntry* entry = data ? m_project.pets.getById(data->petEntry) : nullptr;

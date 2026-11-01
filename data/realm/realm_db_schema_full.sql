@@ -67,6 +67,38 @@ CREATE TABLE `character_spells` (
   CONSTRAINT `fk_spell_character_id` FOREIGN KEY (`character`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
 
+/*Table structure for table `character_pets` */
+
+DROP TABLE IF EXISTS `character_pets`;
+
+CREATE TABLE `character_pets` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `character_id` bigint unsigned NOT NULL,
+  `class_id` int unsigned NOT NULL,
+  `pet_entry` int unsigned NOT NULL,
+  `unit_entry` int unsigned NOT NULL DEFAULT '0',
+  `name` varchar(32) NOT NULL,
+  `level` int unsigned NOT NULL DEFAULT '1',
+  `xp` int unsigned NOT NULL DEFAULT '0',
+  `health` int unsigned NOT NULL DEFAULT '0',
+  `power` int unsigned NOT NULL DEFAULT '0',
+  `is_dead` tinyint(1) NOT NULL DEFAULT '0',
+  `was_summoned` tinyint(1) NOT NULL DEFAULT '0',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `character_id` (`character_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+/*Table structure for table `character_pet_spells` */
+
+DROP TABLE IF EXISTS `character_pet_spells`;
+
+CREATE TABLE `character_pet_spells` (
+  `pet_id` bigint unsigned NOT NULL,
+  `spell_id` int unsigned NOT NULL,
+  PRIMARY KEY (`pet_id`,`spell_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 /*Table structure for table `world` */
 
 DROP TABLE IF EXISTS `world`;
@@ -89,6 +121,10 @@ CREATE TABLE `history` (
   `id` varchar(32) COLLATE latin1_german1_ci NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
+
+/* Updates whose changes are already part of this schema */
+
+INSERT INTO `history` (`id`) VALUES ('20261101_1_character_pets');
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;

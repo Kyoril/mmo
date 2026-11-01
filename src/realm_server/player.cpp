@@ -409,10 +409,26 @@ namespace mmo
 		std::weak_ptr weakThis = shared_from_this();
 		auto handler = [weakThis](const std::optional<CharacterData> &characterData)
 		{
-			if (const auto strongThis = weakThis.lock())
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			if (!characterData)
 			{
 				strongThis->OnCharacterData(characterData);
+				return;
 			}
+
+			// The modules load what they hand to the world node with the join (stored pets) first.
+			strongThis->m_modules.OnCharacterLoading(*strongThis, characterData->characterId, [weakThis, characterData]()
+			{
+				if (const auto loadedThis = weakThis.lock())
+				{
+					loadedThis->OnCharacterData(characterData);
+				}
+			});
 		};
 
 		m_database.asyncRequestKeyed(guid, std::move(handler), &IDatabase::CharacterEnterWorld, guid, m_accountId);
@@ -1353,6 +1369,9 @@ namespace mmo
 					// TODO: Get exact reason
 					strongThis->OnWorldTransferAborted(game::transfer_abort_reason::NotFound);
 				} });
+
+		// Right behind the join request, so the node has it before it saves anything of the character.
+		m_modules.OnJoiningWorld(*this, *world);
 
 		return PacketParseResult::Pass;
 	}
@@ -3602,6 +3621,9 @@ namespace mmo
 			{
 				strongThis->OnWorldJoinFailed(game::player_login_response::NoWorldServer);
 			} });
+
+		// Right behind the join request, so the node has it before it saves anything of the character.
+		m_modules.OnJoiningWorld(*this, *world);
 	}
 
 	void Player::OnWorldDestroyed(World &world)

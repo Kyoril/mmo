@@ -63,4 +63,22 @@ namespace mmo
 
 	/// Reads a stored pet written with operator<<.
 	io::Reader& operator>>(io::Reader& reader, PersistentPetData& data);
+
+	/// Whether two stored pets are the same in every field.
+	bool operator==(const PersistentPetData& a, const PersistentPetData& b);
+
+	/// Whether two stored pets differ in any field.
+	inline bool operator!=(const PersistentPetData& a, const PersistentPetData& b)
+	{
+		return !(a == b);
+	}
+
+	/// Writes a character's stored pets the way the realm <-> world pet packets carry them
+	/// (realm_world_packet::PlayerPetData, world_realm_packet::PetData): a uint8 count, then each
+	/// pet (operator<<). At most 255 pets are written.
+	void WritePersistentPets(io::Writer& writer, const std::vector<PersistentPetData>& pets);
+
+	/// Reads a list written with WritePersistentPets, replacing the content of @p pets.
+	/// @return Whether the list could be read completely.
+	bool ReadPersistentPets(io::Reader& reader, std::vector<PersistentPetData>& pets);
 }

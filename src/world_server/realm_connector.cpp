@@ -432,6 +432,27 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendPetData(const uint64 characterGuid, const std::vector<PersistentPetData>& pets)
+	{
+		sendSinglePacket([characterGuid, &pets](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::PetData);
+				outPacket << io::write<uint64>(characterGuid);
+				WritePersistentPets(outPacket, pets);
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::SendCreatePet(const uint64 characterGuid, const PersistentPetData& request)
+	{
+		sendSinglePacket([characterGuid, &request](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::CreatePet);
+				outPacket << io::write<uint64>(characterGuid) << request;
+				outPacket.Finish();
+			});
+	}
+
 	void RealmConnector::SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing)
 	{
 		sendSinglePacket([characterGuid, mapId, &position, &facing](auth::OutgoingPacket& outPacket)
@@ -537,6 +558,8 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::SetSubsystemEnabled, *this, &RealmConnector::OnSetSubsystemEnabled);
 				RegisterPacketHandler(auth::realm_world_packet::Shutdown, *this, &RealmConnector::OnShutdown);
 				RegisterPacketHandler(auth::realm_world_packet::ResetInstance, *this, &RealmConnector::OnResetInstance);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerPetData, *this, &RealmConnector::OnPlayerPetData);
+				RegisterPacketHandler(auth::realm_world_packet::PetCreated, *this, &RealmConnector::OnPetCreated);
 
 				m_loggedIn = true;
 				if (m_subsystems)
@@ -1450,6 +1473,54 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				NotifyWorldInstanceLeft(characterGuid, auth::world_left_reason::Disconnect);
 			}
 		}
+	}
+
+	bool RealmConnector::IsSubsystemAvailable(const game::Subsystem subsystem) const
+	{
+		return !m_subsystems || m_subsystems->IsAvailable(subsystem);
+	}
+
+	PacketParseResult RealmConnector::OnPlayerPetData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		std::vector<PersistentPetData> pets;
+		if (!(packet >> io::read<uint64>(characterGuid)) || !ReadPersistentPets(packet, pets))
+		{
+			ELOG("Failed to read PlayerPetData packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			WLOG("Received stored pets for unknown player character " << log_hex_digit(characterGuid));
+			return PacketParseResult::Pass;
+		}
+
+		player->ApplyStoredPets(std::move(pets));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPetCreated(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		PersistentPetData pet;
+		if (!(packet >> io::read<uint64>(characterGuid) >> pet))
+		{
+			ELOG("Failed to read PetCreated packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			// The realm keeps the pet; the character gets it with its next join.
+			WLOG("Received a created pet for unknown player character " << log_hex_digit(characterGuid));
+			return PacketParseResult::Pass;
+		}
+
+		player->GetCharacter().OnPetCreated(pet);
+		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult RealmConnector::OnSetSubsystemEnabled(auth::IncomingPacket& packet)

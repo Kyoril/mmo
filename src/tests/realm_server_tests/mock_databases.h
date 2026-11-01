@@ -188,4 +188,61 @@ struct MockGroupDatabase : IGroupDatabase
     }
 };
 
+// -----------------------------------------------------------------------
+// MockPetDatabase
+// -----------------------------------------------------------------------
+
+struct MockPetDatabase : IPetDatabase
+{
+    /// The rows per character. Loading fails while loadFails is set.
+    std::map<uint64, std::vector<PersistentPetData>> petsByCharacter;
+    bool loadFails = false;
+
+    /// The id the next created pet gets; 0 makes the creation fail.
+    uint64 nextPetId = 1;
+
+    struct SaveCall
+    {
+        uint64 characterId;
+        std::vector<PersistentPetData> pets;
+        std::vector<uint64> removedPetIds;
+    };
+    std::vector<SaveCall> saves;
+    std::vector<std::pair<uint64, PersistentPetData>> creations;
+    std::vector<uint64> deletedCharacters;
+
+    std::optional<std::vector<PersistentPetData>> LoadCharacterPets(uint64 characterId) override
+    {
+        if (loadFails)
+        {
+            return std::nullopt;
+        }
+
+        const auto it = petsByCharacter.find(characterId);
+        return it != petsByCharacter.end() ? it->second : std::vector<PersistentPetData>{};
+    }
+
+    void SaveCharacterPets(uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds) override
+    {
+        saves.push_back({ characterId, pets, removedPetIds });
+    }
+
+    uint64 CreateCharacterPet(uint64 characterId, const PersistentPetData& pet) override
+    {
+        creations.emplace_back(characterId, pet);
+        if (nextPetId == 0)
+        {
+            return 0;
+        }
+
+        return nextPetId++;
+    }
+
+    void DeleteCharacterPets(uint64 characterId) override
+    {
+        deletedCharacters.push_back(characterId);
+        petsByCharacter.erase(characterId);
+    }
+};
+
 } // namespace mmo

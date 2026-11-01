@@ -100,6 +100,14 @@ namespace mmo
 		virtual void OnPetResult(pet_result::Type result)
 		{
 		}
+
+		/// Whether persistent pets are available (the PETS subsystem of the world node). While
+		/// they are not, summoning, granting, taming, reviving and teaching pets fail with
+		/// pet_result::Disabled and no stored pet changes; dismissing still works.
+		[[nodiscard]] virtual bool ArePetsAvailable() const
+		{
+			return true;
+		}
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -745,6 +753,9 @@ namespace mmo
 
 		/// @return Whether another stored pet can be created (stored plus pending creations).
 		[[nodiscard]] bool HasFreePetSlot() const;
+
+		/// @return Whether persistent pets are available (NetPlayerWatcher::ArePetsAvailable).
+		[[nodiscard]] bool ArePetsAvailable() const;
 
 		/// Asks the realm to create a stored pet (petCreationRequested).
 		void RequestPetCreation(const PersistentPetData& pet);

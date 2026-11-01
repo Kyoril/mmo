@@ -321,6 +321,11 @@ namespace mmo
 		///	changed) as soon as the player has spawned. Used for refunds made while logging in.
 		void NotifyAttributePointsRefundedOnSpawn() { m_notifyAttributeRefundOnSpawn = true; }
 
+		/// Applies the stored pets the realm sent after the join (PlayerPetData). From then on the
+		/// stored pets are reported to the realm with every save: before, the character's (empty)
+		/// list is not what the realm has, so nothing is saved.
+		void ApplyStoredPets(std::vector<PersistentPetData> pets);
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -992,6 +997,12 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
+		/// The PETS subsystem of this node.
+		[[nodiscard]] bool ArePetsAvailable() const override;
+
+		/// Reports the stored pets to the realm, once the realm sent them (ApplyStoredPets).
+		void SaveStoredPets() const;
+
 		void OnStunChanged(bool applied, uint32 ackId) override;
 
 		void OnSleepChanged(bool applied, uint32 ackId) override;
@@ -1071,6 +1082,9 @@ namespace mmo
 		ConditionMgr& m_conditionMgr;
 
 		bool m_spawned{ false };
+
+		/// Whether the realm sent the character's stored pets (ApplyStoredPets).
+		bool m_storedPetsReceived{ false };
 
 		/// Send the attribute points reset notification once spawned (see NotifyAttributePointsRefundedOnSpawn).
 		bool m_notifyAttributeRefundOnSpawn{ false };

@@ -60,10 +60,13 @@ TEST_CASE("WorldSubsystemState only signals effective changes", "[bug_report]")
 	state.SetHealthy(game::subsystem::BugReport, true);
 	CHECK(changes == 0);
 
+	// Every world-owned subsystem, in id order: BUG_REPORT and PETS.
 	const auto full = state.GetWorldOwnedStatus();
-	REQUIRE(full.size() == 1);
+	REQUIRE(full.size() == 2);
 	CHECK(full[0].first == game::subsystem::BugReport);
 	CHECK(full[0].second == game::subsystem_status::Unavailable);
+	CHECK(full[1].first == game::subsystem::Pets);
+	CHECK(full[1].second == game::subsystem_status::Unavailable);
 }
 
 // ---------------------------------------------------------------------------------------------

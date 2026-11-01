@@ -40,6 +40,8 @@ namespace mmo
 	class PlayerManager;
 	class AsyncDatabase;
 	class TimeOfDayManager;
+	class PetModule;
+	struct PersistentPetData;
 
 	/// Callback executed after a world join returned a result.
 	typedef std::function<void(InstanceId instanceId, bool success)> JoinWorldCallback;
@@ -66,7 +68,8 @@ namespace mmo
 			std::shared_ptr<Client> connection,
 			const std::string &address,
 			const proto::Project& project,
-			const TimeOfDayManager& timeOfDayManager);
+			const TimeOfDayManager& timeOfDayManager,
+			PetModule& petModule);
 
 		/// Gets the connection class used to send packets to the world node client.
 		Client &GetConnection() const { assert(m_connection); return *m_connection; }
@@ -164,6 +167,12 @@ namespace mmo
 		/// Tells the world node to remove its remaining players and shut down for good.
 		void SendShutdown() const;
 
+		/// Hands the stored pets of a character to this node (right after its join request).
+		void SendPlayerPetData(uint64 characterGuid, const std::vector<PersistentPetData>& pets) const;
+
+		/// Answers a CreatePet request of this node with the created pet (id 0 = not created).
+		void SendPetCreated(uint64 characterGuid, const PersistentPetData& pet) const;
+
 	private:
 		TimerQueue& m_timerQueue;
 		WorldManager &m_manager;
@@ -196,6 +205,7 @@ namespace mmo
 		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
 		const proto::Project& m_project;
 		const TimeOfDayManager& m_timeOfDayManager;
+		PetModule& m_petModule;
 		SubsystemStatusArray m_subsystemStatus = MakeUnavailableSubsystemArray();
 
 	private:
@@ -276,6 +286,12 @@ namespace mmo
 
 		/// Handles the node's answer to a bug report.
 		PacketParseResult OnBugReportResult(auth::IncomingPacket& packet);
+
+		/// Handles the current state of a character's stored pets, to be saved.
+		PacketParseResult OnPetData(auth::IncomingPacket& packet);
+
+		/// Handles a request to create a stored pet (granted or tamed).
+		PacketParseResult OnCreatePet(auth::IncomingPacket& packet);
 	};
 
 }

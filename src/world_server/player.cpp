@@ -101,6 +101,16 @@ namespace mmo
 			// Known-class set changed (e.g. a class-change spell was learned)
 			m_character->knownClassesChanged.connect(*this, &Player::OnKnownClassesChanged),
 
+			// Persistent pets: every change is saved, and new pets are created by the realm
+			m_character->storedPetsChanged.connect([this]()
+			{
+				SaveStoredPets();
+			}),
+			m_character->petCreationRequested.connect([this](const PersistentPetData& request)
+			{
+				m_connector.SendCreatePet(m_character->GetGuid(), request);
+			}),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -1860,6 +1870,29 @@ namespace mmo
 
 		DLOG("Time played: " << GetTimePlayed() << " seconds");
 		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), GetTimePlayed(), *m_character);
+		SaveStoredPets();
+	}
+
+	void Player::SaveStoredPets() const
+	{
+		if (!m_character || !m_storedPetsReceived)
+		{
+			return;
+		}
+
+		m_connector.SendPetData(m_character->GetGuid(), m_character->GetStoredPets());
+	}
+
+	void Player::ApplyStoredPets(std::vector<PersistentPetData> pets)
+	{
+		// Set first: applying them can summon a pet, which is a change to save.
+		m_storedPetsReceived = true;
+		m_character->SetStoredPets(std::move(pets));
+	}
+
+	bool Player::ArePetsAvailable() const
+	{
+		return m_connector.IsSubsystemAvailable(game::subsystem::Pets);
 	}
 
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)

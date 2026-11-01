@@ -86,7 +86,10 @@ namespace
 		void OnPetXpChanged(const uint32 xp, const uint32 nextLevelXp) override { lastXp = xp; lastNextLevelXp = nextLevelXp; ++xpChanged; }
 		void OnPetLearnedSpell(const uint32 spellId) override { learned.push_back(spellId); }
 		void OnPetResult(const pet_result::Type result) override { results.push_back(result); }
+		bool ArePetsAvailable() const override { return petsAvailable; }
 
+		/// The PETS subsystem switch the world node would report.
+		bool petsAvailable = true;
 		uint32 spellsChanged = 0;
 		uint32 xpChanged = 0;
 		uint32 lastXp = 0;
@@ -898,6 +901,77 @@ TEST_CASE_METHOD(PersistentPetFixture, "the owner leaving the world mid-fight st
 
 	// Back in the world (login, map change), the pet is summoned again.
 	world->AddGameObject(*player);
+	CHECK(RunUntil([&] { return PersistentPetOf(*player) != nullptr; }));
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "the pet's state is stored before the owner's despawned signal saves it", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	player->SetStoredPets({ MakeStoredPet(ImpPetId) });
+	GameCreatureS* pet = Summon(*player, ImpPetId);
+	pet->Set<uint32>(object_fields::Health, 41);
+
+	// The world node saves the character (and its pets) from the despawned signal.
+	bool saved = false;
+	uint32 savedHealth = 0;
+	bool savedWasSummoned = false;
+	const scoped_connection onDespawned{ player->despawned.connect([&](GameObjectS&)
+		{
+			saved = true;
+			const PersistentPetData& stored = player->GetStoredPets().front();
+			savedHealth = stored.health;
+			savedWasSummoned = stored.wasSummoned;
+		}) };
+
+	world->RemoveGameObject(*player);
+
+	REQUIRE(saved);
+	CHECK(savedHealth == 41);
+	CHECK(savedWasSummoned);
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "with the PETS subsystem off, pet actions fail and touch no pet data", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	PersistentPetData dead = MakeStoredPet(BeastPetId, 2);
+	dead.unitEntry = BoarUnitId;
+	dead.isDead = true;
+	player->SetStoredPets({ MakeStoredPet(ImpPetId), dead });
+	const std::vector<PersistentPetData> before = player->GetStoredPets();
+	const auto boar = SpawnCreature(*boarUnit);
+
+	watcher.petsAvailable = false;
+	const uint32 changesBefore = storedPetsChangedCount;
+
+	CHECK(player->SummonStoredPet(ImpPetId) == pet_result::Disabled);
+	CHECK(player->GrantPersistentPet(ScholarPetId) == pet_result::Disabled);
+	CHECK(player->TameCreature(*boar) == pet_result::Disabled);
+	CHECK(player->RevivePet(BeastPetId, 100) == pet_result::Disabled);
+
+	// Through the spell effects, too: the cast goes through, the pet action does not.
+	REQUIRE(CastAt(*player, CallPetSpellId, nullptr) == spell_cast_result::CastOkay);
+	REQUIRE(CastAt(*player, TameSpellId, boar.get()) == spell_cast_result::CastOkay);
+
+	RunFor(std::chrono::milliseconds(50));
+	CHECK(PersistentPetOf(*player) == nullptr);
+	CHECK(requests.empty());
+	CHECK(boar->GetWorldInstance() != nullptr);
+	CHECK(storedPetsChangedCount == changesBefore);
+	CHECK(player->GetStoredPets() == before);
+
+	REQUIRE(watcher.results.size() >= 6);
+	CHECK(std::all_of(watcher.results.end() - 6, watcher.results.end(), [](const pet_result::Type result) { return result == pet_result::Disabled; }));
+
+	// A pet that was summoned when it was stored waits until the subsystem is back.
+	PersistentPetData summoned = MakeStoredPet(ImpPetId);
+	summoned.wasSummoned = true;
+	player->SetStoredPets({ summoned });
+	RunFor(std::chrono::milliseconds(50));
+	CHECK(PersistentPetOf(*player) == nullptr);
+	CHECK(player->GetStoredPets().front().wasSummoned);
+
+	watcher.petsAvailable = true;
+	CHECK(player->SummonStoredPet(ImpPetId) == pet_result::Ok);
 	CHECK(RunUntil([&] { return PersistentPetOf(*player) != nullptr; }));
 }
 
