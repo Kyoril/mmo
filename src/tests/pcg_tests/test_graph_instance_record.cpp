@@ -256,6 +256,26 @@ TEST_CASE("AreasOverlap separates contact from shared interior", "[graph_instanc
 		CHECK_FALSE(AreasOverlap(ell, Square(10.0f, 10.0f, 20.0f, 20.0f)));
 		CHECK(AreasOverlap(ell, Square(8.0f, 8.0f, 14.0f, 14.0f)));
 	}
+	SECTION("collinear partial overlap")
+	{
+		CHECK(AreasOverlap(Square(0.0f, 0.0f, 10.0f, 10.0f), Square(5.0f, 0.0f, 15.0f, 10.0f)));
+	}
+	SECTION("slanted edge contact")
+	{
+		const PathSpline lower = Polygon({ { 0.0f, 0.0f }, { 10.0f, 0.0f }, { 0.0f, 10.0f } });
+		const PathSpline upper = Polygon({ { 10.0f, 0.0f }, { 10.0f, 10.0f }, { 0.0f, 10.0f } });
+		CHECK_FALSE(AreasOverlap(lower, upper));
+	}
+	SECTION("slanted shared edge at large coordinates")
+	{
+		const float o = 20000.0f;
+		const PathSpline lower = Polygon({ { o, o }, { o + 10.0f, o }, { o, o + 10.0f } });
+		const PathSpline upper = Polygon({ { o + 10.0f, o }, { o + 10.0f, o + 10.0f }, { o, o + 10.0f } });
+		CHECK_FALSE(AreasOverlap(lower, upper));
+		CHECK_FALSE(AreasOverlap(upper, lower));
+		CHECK(AreasOverlap(lower, Polygon({ { o + 9.5f, o }, { o + 10.0f, o }, { o + 10.0f, o + 10.0f }, { o, o + 10.0f }, { o, o + 9.5f } })));
+		CHECK(AreasOverlap(lower, Polygon({ { o + 4.5f, o + 4.5f }, { o + 10.0f, o + 10.0f }, { o, o + 10.0f } })));
+	}
 	SECTION("degenerate areas never overlap")
 	{
 		PathSpline two = base;

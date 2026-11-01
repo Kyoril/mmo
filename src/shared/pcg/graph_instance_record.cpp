@@ -24,12 +24,20 @@ namespace mmo::pcg
 		constexpr uint32 PlacementVersion = 4;
 		/// How far probe points are nudged off an edge into the polygon.
 		constexpr double ProbeOffset = 1.0e-3;
+		/// Distance from a line within which a point counts as on it; well below ProbeOffset.
+		constexpr double CollinearTolerance = 1.0e-4;
 
-		/// Sign of the cross product (b - a) x (c - a): 1, -1 or 0.
+		/// Which side of the line a-b the point c lies on: 1, -1, or 0 when it is within CollinearTolerance of the line
+		/// (sampled points on a shared slanted edge differ by float rounding, which must not count as a crossing).
 		int Orientation(const double ax, const double az, const double bx, const double bz, const double cx, const double cz)
 		{
-			const double v = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
-			return v > 0.0 ? 1 : (v < 0.0 ? -1 : 0);
+			const double len = std::hypot(bx - ax, bz - az);
+			if (len <= 0.0)
+			{
+				return 0;
+			}
+			const double distance = ((bx - ax) * (cz - az) - (bz - az) * (cx - ax)) / len;
+			return distance > CollinearTolerance ? 1 : (distance < -CollinearTolerance ? -1 : 0);
 		}
 
 		/// Whether two segments cross at a point interior to both (touching and collinear contact do not count).
@@ -75,6 +83,8 @@ namespace mmo::pcg
 
 		/// Whether a point just inside an edge of a is inside both a and b. Without crossing edges this finds
 		/// containment and edge-sharing overlap; contact from outside never has such a point.
+		/// Complete because with no proper crossings, shared interior implies a boundary edge of one runs through the
+		/// interior of the other, or along its edge with the interior on the same side; either way its midpoint probe hits.
 		bool AnyProbeInsideBoth(const SampledPath& a, const graph::RowIndexedPolygon& bPolygon)
 		{
 			const std::vector<SplineSample>& s = a.GetSamples();
@@ -252,10 +262,30 @@ namespace mmo::pcg
 			return false;
 		}
 
+		// Translate both areas by a common origin so the probe math below runs near zero: far from the origin the
+		// float spacing would swallow the small inward nudge.
+		float originX = a.points[0].x;
+		float originZ = a.points[0].z;
+		for (const PathSpline* spline : { &a, &b })
+		{
+			for (const SplinePoint& p : spline->points)
+			{
+				originX = std::min(originX, p.x);
+				originZ = std::min(originZ, p.z);
+			}
+		}
 		PathSpline closedA = a;
 		closedA.closed = true;
 		PathSpline closedB = b;
 		closedB.closed = true;
+		for (PathSpline* spline : { &closedA, &closedB })
+		{
+			for (SplinePoint& p : spline->points)
+			{
+				p.x -= originX;
+				p.z -= originZ;
+			}
+		}
 		const SampledPath pathA(closedA, graph::EvaluationStep(closedA, graph::SamplingStep));
 		const SampledPath pathB(closedB, graph::EvaluationStep(closedB, graph::SamplingStep));
 		const std::vector<SplineSample>& sa = pathA.GetSamples();
