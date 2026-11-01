@@ -166,9 +166,10 @@ namespace mmo
 			return friendly ? filters.friendlyPlayers : filters.enemyPlayers;
 		}
 
-		// Units owned by another unit count as pets (there is no pet system yet, but the
-		// filter is future-proof for when summoned units arrive).
-		if (unit.Get<uint64>(object_fields::Owner) != 0)
+		// Units owned by a player (pets and their summons) use the pet filters. Units owned
+		// only by creatures (boss adds, NPC swarms) keep the NPC filters, so they keep their
+		// enemy plates and cast bars.
+		if (unit.IsOwnedByPlayer())
 		{
 			return friendly ? filters.friendlyPets : filters.enemyPets;
 		}

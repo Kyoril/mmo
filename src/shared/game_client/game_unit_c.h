@@ -826,6 +826,11 @@ namespace mmo
 		/// @return The top owner, or this unit if it has no owner in sight.
 		const GameUnitC &GetTopOwner() const;
 
+		/// @brief Checks whether this unit is controlled by a player through its owner chain (a player's
+		///	pet or a summon of it). Units owned by creatures (boss adds, NPC swarms) are not, see
+		///	owner_chain::IsOwnedByPlayer.
+		bool IsOwnedByPlayer() const;
+
 		/// @brief Sets the name of a persistent pet (from PetNameQueryResult). A non-empty pet name
 		///	replaces the creature entry's name.
 		/// @param name The pet's name, empty to use the creature entry's name again.

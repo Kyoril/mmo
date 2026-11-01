@@ -58,6 +58,12 @@ namespace mmo
 		/// @param unit The new unit.
 		void OnUnitSpawned(GameUnitC& unit);
 
+		/// Called after a unit's object_fields::Owner changed (a GM made it a pet, or its owner was
+		/// cleared). Adds the unit to or removes it from the temporary pets and fires PET_CHANGED
+		/// when the presence of pets changed.
+		/// @param unit The unit.
+		void OnUnitOwnerChanged(const GameUnitC& unit);
+
 		/// Called before a unit is removed from the client.
 		/// @param guid The guid of the unit.
 		void OnUnitDespawned(uint64 guid);

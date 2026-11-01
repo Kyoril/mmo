@@ -2858,6 +2858,13 @@ namespace mmo
 		return owner_chain::ResolveTopOwner(*this, &FindUnitOwner);
 	}
 
+	bool GameUnitC::IsOwnedByPlayer() const
+	{
+		return owner_chain::IsOwnedByPlayer(*this, &FindUnitOwner,
+			[](const GameUnitC& unit) { return unit.GetGuid(); },
+			[](const GameUnitC& unit) { return unit.Get<uint64>(object_fields::Owner); });
+	}
+
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
 	{
 		return owner_chain::IsFriendly(*this, other, &FindUnitOwner, &FactionIsFriendly);

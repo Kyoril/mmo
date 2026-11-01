@@ -2945,6 +2945,7 @@ namespace mmo
 				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
 				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
 				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+				const uint64 previousOwner = isUnit ? obj->Get<uint64>(object_fields::Owner) : 0;
 
 				obj->Deserialize(packet, creation);
 				if (!packet)
@@ -2956,6 +2957,18 @@ namespace mmo
 				if (isUnit)
 				{
 					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
+
+					// A unit can become (or stop being) the player's pet after it spawned, e.g. by
+					// the GM petmake command: the pet bar follows its Owner field.
+					if (obj->Get<uint64>(object_fields::Owner) != previousOwner)
+					{
+						PetInfo* petInfo = GetClientContext().petInfo.get();
+						const auto unit = std::dynamic_pointer_cast<GameUnitC>(obj);
+						if (petInfo && unit)
+						{
+							petInfo->OnUnitOwnerChanged(*unit);
+						}
+					}
 				}
 
 				// Check if this was an item update for the active player

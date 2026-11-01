@@ -8,6 +8,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "game/guid_utils.h"
 
 namespace mmo
 {
@@ -38,6 +39,28 @@ namespace mmo
 			}
 
 			return *current;
+		}
+
+		/// Checks whether a unit is owned by a player, directly or further up its owner chain (a player's
+		/// pet, or a summon of that pet). Units owned only by creatures (boss adds, NPC swarms) are not.
+		/// When the chain leaves the known units (an owner out of sight), the guid of the last known
+		/// owner link decides.
+		/// @param unit The unit to check.
+		/// @param findOwner See ResolveTopOwner.
+		/// @param guidOf Callable (const Unit&) -> uint64: the unit's guid.
+		/// @param ownerGuidOf Callable (const Unit&) -> uint64: the unit's owner guid (0 if none).
+		/// @return true if the top of the owner chain is a player other than @p unit itself.
+		template <typename Unit, typename FindOwner, typename GuidOf, typename OwnerGuidOf>
+		bool IsOwnedByPlayer(const Unit& unit, FindOwner&& findOwner, GuidOf&& guidOf, OwnerGuidOf&& ownerGuidOf)
+		{
+			const Unit& top = ResolveTopOwner(unit, findOwner);
+			if (&top != &unit && IsPlayerGUID(guidOf(top)))
+			{
+				return true;
+			}
+
+			const uint64 ownerGuid = ownerGuidOf(top);
+			return ownerGuid != 0 && ownerGuid != guidOf(top) && IsPlayerGUID(ownerGuid);
 		}
 
 		/// Checks whether two units are friendly, resolving their owners first.

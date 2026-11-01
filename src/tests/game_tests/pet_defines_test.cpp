@@ -54,3 +54,15 @@ TEST_CASE("Stored pet names are clamped to the realm's column size at a characte
 	const String straddle = String(31, 'a') + "\xE2\x82\xAC";
 	CHECK(ClampStoredPetName(straddle) == prefix);
 }
+
+TEST_CASE("Only units owned by the active player are its temporary pets", "[pets]")
+{
+	constexpr uint64 player = 1;
+	constexpr uint64 persistentPet = 50;
+	CHECK(IsTemporaryPetOf(10, player, player, persistentPet));
+	CHECK_FALSE(IsTemporaryPetOf(10, 2, player, persistentPet));
+	CHECK_FALSE(IsTemporaryPetOf(10, 0, player, persistentPet));
+	CHECK_FALSE(IsTemporaryPetOf(player, player, player, persistentPet));
+	CHECK_FALSE(IsTemporaryPetOf(persistentPet, player, player, persistentPet));
+	CHECK_FALSE(IsTemporaryPetOf(10, 0, 0, 0));
+}

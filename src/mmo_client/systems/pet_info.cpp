@@ -167,15 +167,25 @@ namespace mmo
 			return;
 		}
 
-		const uint64 playerGuid = ObjectMgr::GetActivePlayerGuid();
-		if (playerGuid != 0 && guid != playerGuid && unit.Get<uint64>(object_fields::Owner) == playerGuid)
+		OnUnitOwnerChanged(unit);
+	}
+
+	void PetInfo::OnUnitOwnerChanged(const GameUnitC& unit)
+	{
+		const uint64 guid = unit.GetGuid();
+		const bool hadTemporaryPets = HasTemporaryPets();
+		if (IsTemporaryPetOf(guid, unit.Get<uint64>(object_fields::Owner), ObjectMgr::GetActivePlayerGuid(), m_pet.petGuid))
 		{
-			const bool hadTemporaryPets = HasTemporaryPets();
 			m_temporaryPets.insert(guid);
-			if (!hadTemporaryPets)
-			{
-				FrameManager::Get().TriggerLuaEvent("PET_CHANGED");
-			}
+		}
+		else
+		{
+			m_temporaryPets.erase(guid);
+		}
+
+		if (hadTemporaryPets != HasTemporaryPets())
+		{
+			FrameManager::Get().TriggerLuaEvent("PET_CHANGED");
 		}
 	}
 

@@ -101,6 +101,17 @@ namespace mmo
 		};
 	}
 
+	/// Checks whether the client counts a unit as one of the active player's temporary pets: a
+	/// unit owned by the player that is neither the player nor its persistent pet.
+	/// @param unitGuid The unit.
+	/// @param ownerGuid The unit's object_fields::Owner.
+	/// @param playerGuid The active player (0 if there is none yet).
+	/// @param persistentPetGuid The player's summoned persistent pet (0 if none).
+	inline bool IsTemporaryPetOf(const uint64 unitGuid, const uint64 ownerGuid, const uint64 playerGuid, const uint64 persistentPetGuid)
+	{
+		return playerGuid != 0 && unitGuid != playerGuid && unitGuid != persistentPetGuid && ownerGuid == playerGuid;
+	}
+
 	/// Maximum number of stored (stabled) pets per character.
 	constexpr uint32 MaxStoredPets = 5;
 

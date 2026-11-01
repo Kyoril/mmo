@@ -203,3 +203,43 @@ TEST_CASE("Bot units: pets of the same owner are friendly to each other", "[pets
 	CHECK(first.IsFriendlyTo(second));
 	CHECK_FALSE(first.IsHostileTo(second));
 }
+
+namespace
+{
+	bool IsOwnedByPlayer(const FakeWorld& world, const FakeUnit& unit)
+	{
+		return owner_chain::IsOwnedByPlayer(unit,
+			[&world](const FakeUnit& u) { return world.FindOwner(u); },
+			[](const FakeUnit& u) { return u.guid; },
+			[](const FakeUnit& u) { return u.owner; });
+	}
+}
+
+TEST_CASE("Only units whose owner chain ends at a player count as player owned", "[pets]")
+{
+	FakeWorld world;
+	const uint64 playerGuid = 1;
+	const uint64 bossGuid = CreateEntryGUID(1, 100, GuidType::Unit);
+	const uint64 addGuid = CreateEntryGUID(2, 101, GuidType::Unit);
+	const uint64 petGuid = CreateEntryGUID(3, 102, GuidType::Unit);
+	const uint64 petSummonGuid = CreateEntryGUID(4, 103, GuidType::Unit);
+	const uint64 hiddenOwnerPetGuid = CreateEntryGUID(5, 104, GuidType::Unit);
+	const uint64 hiddenBossAddGuid = CreateEntryGUID(6, 105, GuidType::Unit);
+
+	const FakeUnit& player = world.Add(playerGuid, PlayerFaction);
+	const FakeUnit& boss = world.Add(bossGuid, MonsterFaction);
+	const FakeUnit& add = world.Add(addGuid, MonsterFaction, bossGuid);
+	const FakeUnit& pet = world.Add(petGuid, MonsterFaction, playerGuid);
+	const FakeUnit& petSummon = world.Add(petSummonGuid, MonsterFaction, petGuid);
+	// Owners that are not in sight: the owner guid's type decides.
+	const FakeUnit& hiddenOwnerPet = world.Add(hiddenOwnerPetGuid, MonsterFaction, 77);
+	const FakeUnit& hiddenBossAdd = world.Add(hiddenBossAddGuid, MonsterFaction, CreateEntryGUID(9, 100, GuidType::Unit));
+
+	CHECK_FALSE(IsOwnedByPlayer(world, player));
+	CHECK_FALSE(IsOwnedByPlayer(world, boss));
+	CHECK_FALSE(IsOwnedByPlayer(world, add));
+	CHECK(IsOwnedByPlayer(world, pet));
+	CHECK(IsOwnedByPlayer(world, petSummon));
+	CHECK(IsOwnedByPlayer(world, hiddenOwnerPet));
+	CHECK_FALSE(IsOwnedByPlayer(world, hiddenBossAdd));
+}
