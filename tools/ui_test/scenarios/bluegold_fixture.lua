@@ -39,7 +39,7 @@ local function item(index, quality)
 	function object:IsUsable() return true end
 	return object
 end
-local equipment = { [65283] = item(1, 3), [65295] = item(2, 2), [65285] = item(3, 1), [65287] = item(8, 2), [65294] = item(10, 2) }
+local equipment = { [65283] = item(1, 3), [65295] = item(2, 3), [65296] = item(9, 3), [65285] = item(3, 1), [65287] = item(8, 2), [65294] = item(10, 2) }
 local backpack = {}
 for i = 0, 11 do backpack[GetBackpackSlot(i)] = item(i % #icons + 1, i % 3 == 0 and 3 or 1) end
 function GetInventorySlotItem(unit, slot) return equipment[slot] or backpack[slot] end
@@ -56,9 +56,10 @@ function GetActionButtonSpell(index)
 	local icon = spells[index + 1]
 	return icon and { id = index + 1, name = icon, icon = "Interface/Icons/Spells/" .. icon .. ".htex" } or nil
 end
+local previousKeysForBinding = GetKeysForBinding
 function GetKeysForBinding(binding)
 	local index = tonumber(binding:match("^ACTIONBUTTON(%d+)$"))
-	if not index then return {} end
+	if not index then return previousKeysForBinding(binding) end
 	local keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "+" }
 	return { (index > 12 and "CTRL-" or "") .. keys[(index - 1) % 12 + 1] }
 end

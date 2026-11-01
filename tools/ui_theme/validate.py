@@ -24,7 +24,7 @@ def canonical(element):
         node.tail = None
     return ET.tostring(element)
 
-def validate(legacy_parity=False):
+def validate(legacy_parity=False, legacy_ref='HEAD'):
     contracts = []
     shared_templates = qualify(ET.parse(UI / 'GameTemplates.xml').getroot())
     inherited_styles = {f.get('name'): f.find(NS + 'Visual').get('inherits')
@@ -86,13 +86,25 @@ def validate(legacy_parity=False):
                     assert prop.get('value') in fonts or prop.get('value') == 'Default', f'{path}: Unknown font {prop.get("value")}'
             if legacy_parity and theme == 'Legacy':
                 original = qualify(ET.fromstring(subprocess.check_output(
-                    ['git', '-C', str(CLIENT), 'show', 'HEAD:' + path.relative_to(CLIENT).as_posix()])))
+                    ['git', '-C', str(CLIENT), 'show', legacy_ref + ':' + path.relative_to(CLIENT).as_posix()])))
                 # Fonts moved without changes; expand appearance references back in place.
                 for parent in list(layout.iter()):
                     for index, visual in enumerate(list(parent)):
                         if visual.tag == NS + 'Visual':
                             parent.remove(visual)
                             parent.insert(index, copy.deepcopy(styles[visual.get('inherits')]))
+                if path.name == 'GameMenu.xml':
+                    # Legacy keeps its original parent border. The new foreground
+                    # decorator is empty in this theme and passes all input through.
+                    # Verify that exact neutral definition before excluding it.
+                    menu = layout.find(NS + "Frame[@name='GameMenu']")
+                    overlay = menu.find(NS + "Frame[@name='GameMenuBorder']")
+                    assert overlay is not None
+                    assert overlay.attrib == dict(name='GameMenuBorder', renderer='DefaultRenderer', setAllPoints='true', frameLevel='1')
+                    assert {p.get('name'): p.get('value') for p in overlay.findall(NS + 'Property')} == dict(Clickable='false', MousePassThrough='true')
+                    assert all(c.tag in (NS + 'Property', NS + 'Visual') for c in overlay)
+                    assert not any(c.tag.endswith('Component') for c in overlay.iter())
+                    menu.remove(overlay)
                 for font in original.findall(NS + 'Font'):
                     assert canonical(font) == canonical(fonts[font.get('name')])
                     original.remove(font)
@@ -118,5 +130,7 @@ def validate(legacy_parity=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--legacy-parity', action='store_true', help='Compare expanded Legacy against the client submodule HEAD')
-    validate(parser.parse_args().legacy_parity)
+    parser.add_argument('--legacy-ref', default='HEAD', help='Client data revision before the theme extraction (after committing it, use its parent)')
+    args = parser.parse_args()
+    validate(args.legacy_parity, args.legacy_ref)
 

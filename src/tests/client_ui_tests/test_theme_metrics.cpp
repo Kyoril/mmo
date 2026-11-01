@@ -60,7 +60,7 @@ TEST_CASE("Theme metrics preserve legacy defaults and item quality semantics", "
 	CHECK(ThemeText(state, "ACTION_SOCKET_NORMAL_TINT") == (theme == "BlueGold" ? "FFBEB7AC" : "FF998D7C"));
 	CHECK(ThemeText(state, "ACTION_EMPTY_SOCKET_TINT") == (theme == "BlueGold" ? "304C607C" : "4D998D7C"));
 	RunThemeChunk(state, R"lua(
-		ItemQualityColors = { [3] = "FF0070DD" };
+		ItemQualityColors = { [2] = "FF20FF00", [3] = "FF0070DD" };
 		slot = { properties = { QualityBorder = "true" } };
 		function slot:GetProperty(name) return self.properties[name]; end
 		function slot:SetProperty(name, value) self.properties[name] = value; end
@@ -70,11 +70,14 @@ TEST_CASE("Theme metrics preserve legacy defaults and item quality semantics", "
 		InventoryItemButton_UpdateQualityBorder(slot, nil);
 		emptyColor = slot.properties.QualityColor;
 		emptyBackground = slot.properties.BackgroundColor;
+		InventoryItemButton_UpdateQualityBorder(slot, { GetQuality = function() return 2; end });
+		uncommonColor = slot.properties.QualityColor;
 	)lua");
-	CHECK(ThemeText(state, "itemColor") == "FF0070DD");
+	CHECK(ThemeText(state, "itemColor") == (theme == "BlueGold" ? "FF388FFF" : "FF0070DD"));
 	CHECK(ThemeText(state, "itemBackground") == "00FFFFFF");
-	CHECK(ThemeText(state, "emptyColor") == (theme == "BlueGold" ? "FF8793A3" : "FF505050"));
+	CHECK(ThemeText(state, "emptyColor") == (theme == "BlueGold" ? "FF676B73" : "FF505050"));
 	CHECK(ThemeText(state, "emptyBackground") == "FF909090");
+	CHECK(ThemeText(state, "uncommonColor") == "FF20FF00");
 	lua_close(state);
 }
 
@@ -131,11 +134,11 @@ TEST_CASE("Experience dock reserves the active theme height for every visible ba
 	CHECK(ThemeNumber(state, "ExperienceDock.height") == count * (height + 4));
 	CHECK(ThemeNumber(state, "ExperienceDock.visible and 1 or 0") == (count > 0 ? 1 : 0));
 	CHECK(ThemeNumber(state, "PlayerClassExperienceBar.anchors[AnchorPoint.BOTTOM]") == (characterVisible ? -height - 4 : 0));
-	CHECK(ThemeNumber(state, "ExperienceDock.anchors[AnchorPoint.BOTTOM]") == (theme == "BlueGold" ? -148 : 8));
+	CHECK(ThemeNumber(state, "ExperienceDock.anchors[AnchorPoint.BOTTOM]") == (theme == "BlueGold" ? -146 : 8));
 	CHECK(ThemeNumber(state, "ExperienceDock.anchors[AnchorPoint.LEFT]") == (theme == "BlueGold" ? -8 : -56));
 	CHECK(ThemeNumber(state, "ExperienceDock.anchors[AnchorPoint.RIGHT]") == (theme == "BlueGold" ? 8 : 56));
 	CHECK(ThemeNumber(state, "ExperienceDock.relativePoints[AnchorPoint.BOTTOM]") == (theme == "BlueGold" ? 1 : 2));
-	CHECK(ThemeNumber(state, "GameMenuBar.height") == (theme == "BlueGold" ? 176 + count * (height + 4) : 156));
+	CHECK(ThemeNumber(state, "GameMenuBar.height") == (theme == "BlueGold" ? 152 + count * (height + 4) : 156));
 	CHECK(ThemeNumber(state, "layoutUpdates") == 1);
 	lua_close(state);
 }

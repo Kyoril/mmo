@@ -73,6 +73,74 @@ namespace
 		lua_State* lua = nullptr;
 		Localization localization;
 	};
+
+	class ProgressAreaProbe final : public FrameComponent
+	{
+	public:
+		ProgressAreaProbe(Frame& frame, std::vector<Rect>& areas)
+			: FrameComponent(frame)
+			, m_areas(areas)
+		{
+		}
+
+		std::unique_ptr<FrameComponent> Copy() const override
+		{
+			return std::make_unique<ProgressAreaProbe>(*m_frame, m_areas);
+		}
+
+		void Render(const Rect& area, const Color&) override
+		{
+			m_areas.push_back(area);
+		}
+
+	private:
+		std::vector<Rect>& m_areas;
+	};
+}
+
+TEST_CASE("Progress fills stay inside their inset housing at low and full values", "[theme][progress]")
+{
+	ThemeFixture fixture;
+	auto& manager = FrameManager::Get();
+	auto frame = manager.Create("ProgressBar", "InsetProgress");
+	auto* bar = static_cast<ProgressBar*>(frame.get());
+	bar->SetSize(200, 40);
+	std::vector<Rect> areas;
+	ImagerySection section("Fill");
+	section.AddComponent(std::make_unique<ProgressAreaProbe>(*bar, areas));
+	FrameLayer layer;
+	layer.AddSection(*bar->AddImagerySection(section));
+	StateImagery state("Progress");
+	state.AddLayer(layer);
+	bar->AddStateImagery(state);
+
+	const float inset = GENERATE(0.0f, 10.0f);
+	bar->SetProperty("ProgressInset", inset == 0 ? "0" : "10");
+	const auto scale = manager.GetUIScale();
+	const Rect bounds = bar->GetAbsoluteFrameRect();
+	for (const float progress : { 0.01f, 0.5f, 1.0f })
+	{
+		INFO("Inset: " << inset << ", progress: " << progress);
+		areas.clear();
+		bar->SetProgress(progress);
+		bar->Render();
+		REQUIRE(areas.size() == 1);
+		const Rect& fill = areas.front();
+		CHECK(fill.left == Approx(bounds.left + inset * scale.x));
+		CHECK(fill.top == Approx(bounds.top + inset * scale.y));
+		CHECK(fill.bottom == Approx(bounds.bottom - inset * scale.y));
+		CHECK(fill.GetWidth() == Approx((bounds.GetWidth() - 2 * inset * scale.x) * progress));
+		CHECK(fill.right <= bounds.right - inset * scale.x + 0.001f);
+		CHECK(fill.GetWidth() > 0);
+	}
+	areas.clear();
+	bar->SetProgress(0);
+	bar->Render();
+	CHECK(areas.empty());
+	bar->SetProperty("ProgressInset", "100");
+	bar->SetProgress(1);
+	bar->Render();
+	CHECK(areas.empty());
 }
 
 TEST_CASE("Appearance copies replace imagery without changing behavior or layout", "[theme]")
@@ -173,6 +241,19 @@ TEST_CASE("Both shipped theme manifests load native visual templates and font ro
 	REQUIRE(manager.Find("ThemeGlueButtonVisual") != nullptr);
 	REQUIRE(manager.Find("ThemeMinimapBorderVisual") != nullptr);
 	REQUIRE(manager.Find("ThemeChatBubbleTemplateVisual") != nullptr);
+	if (theme == "BlueGold")
+	{
+		// The large circular source is reduced several times on the HUD. Without
+		// mipmaps its fine alpha edges alias even with linear texture filtering.
+		auto minimap = manager.Find("ThemeMinimapBorderVisual");
+		auto imagery = minimap->GetStateImageryByName("Enabled");
+		REQUIRE(imagery != nullptr);
+		imagery->Render(Rect(0, 0, 256, 256), Color::White);
+		auto ring = minimap->GetGeometryBuffer().GetActiveTexture();
+		REQUIRE(ring != nullptr);
+		CHECK(ring->HasMipMaps());
+		CHECK(ring->GetTextureFilter() != TextureFilter::None);
+	}
 
 	// Shared behavioral templates must accept either appearance contract.
 	manager.LoadUIFile("Interface/GameUI/GameTemplates.xml");
