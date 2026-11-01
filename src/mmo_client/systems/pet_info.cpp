@@ -194,6 +194,13 @@ namespace mmo
 		}
 	}
 
+	void PetInfo::OnWorldObjectsCleared()
+	{
+		m_temporaryPets.clear();
+		m_petObservers.disconnect();
+		FrameManager::Get().TriggerLuaEvent("PET_CHANGED");
+	}
+
 	void PetInfo::OnSpellCooldown(const uint64 casterGuid, const uint32 spellId, const uint32 cooldownMs)
 	{
 		if (casterGuid == 0 || casterGuid != m_pet.petGuid || cooldownMs == 0)

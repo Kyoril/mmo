@@ -4599,6 +4599,10 @@ namespace mmo
 		// Remove all objects at once
 		m_playerController->SetControlledUnit(nullptr);
 		ObjectMgr::RemoveAllObjects();
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnWorldObjectsCleared();
+		}
 
 		// Voice throttle gates are keyed by guid, which are meaningless in the new world
 		m_combatSoundPlayer.Clear();

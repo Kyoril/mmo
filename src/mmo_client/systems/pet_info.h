@@ -62,6 +62,11 @@ namespace mmo
 		/// @param guid The guid of the unit.
 		void OnUnitDespawned(uint64 guid);
 
+		/// Called after all objects were removed at once (map transfer). Forgets the temporary pets and
+		/// the persistent pet's unit observers and fires PET_CHANGED. The persistent pet state is kept:
+		/// the world node re-sends PetSpells and respawns the pet in the new world.
+		void OnWorldObjectsCleared();
+
 		/// Called for every SpellStart / SpellGo with a cooldown. Starts the local cooldown of a spell
 		/// of the persistent pet.
 		/// @param casterGuid The caster.
