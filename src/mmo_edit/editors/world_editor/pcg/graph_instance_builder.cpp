@@ -139,6 +139,9 @@ namespace mmo
 			/// Section placements added by the last placement step.
 			size_t sectionPlacements = 0;
 
+			/// True if content.prepare took over the dry run instead of evaluating again.
+			bool reusedDryRun = false;
+
 			/// Paint layers the terrain step had to skip.
 			pcg::graph::TerrainEvaluateNotes notes;
 
@@ -700,6 +703,7 @@ namespace mmo
 				base = std::move(dryRun);
 				warnings = std::move(dryWarnings);
 				state->terrain = std::move(dryTerrain);
+				state->reusedDryRun = true;
 			}
 			else
 			{
@@ -798,7 +802,8 @@ namespace mmo
 		{
 			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << state->spawns.size()
 				<< " spawn placement(s) inside the area, " << state->clipped << " clipped, " << state->sectionPlacements
-				<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written");
+				<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written"
+				<< (state->reusedDryRun ? " (no previous contribution: the dry run was reused)" : ""));
 		}
 		return report;
 	}
