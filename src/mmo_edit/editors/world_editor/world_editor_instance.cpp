@@ -177,6 +177,9 @@ namespace mmo
 	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
 		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
 	{
+		// Registered first so that an instance whose world file fails to load is still listed until it closes.
+		m_instanceSerial = ++s_lastInstanceSerial;
+		s_openInstances.push_back(this);
 
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
@@ -555,6 +558,8 @@ namespace mmo
 		{
 			s_lastCreated = nullptr;
 		}
+
+		s_openInstances.erase(std::remove(s_openInstances.begin(), s_openInstances.end(), this), s_openInstances.end());
 
 		// Stop background loading thread
 		m_work.reset();
@@ -5487,6 +5492,29 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	uint64 WorldEditorInstance::GenerateFoliageUniqueId()
 	{
 		return FoliageEditMode::GenerateInstanceId();
+	}
+
+	uint64 WorldEditorInstance::GetTerrainRevision() const
+	{
+		return m_terrain ? m_terrain->GetDataRevision() : 0;
+	}
+
+	WorldEditorInstance* WorldEditorInstance::FindOpenInstance(const uint64 serial)
+	{
+		if (serial == 0)
+		{
+			return nullptr;
+		}
+
+		for (WorldEditorInstance* instance : s_openInstances)
+		{
+			if (instance->m_instanceSerial == serial)
+			{
+				return instance;
+			}
+		}
+
+		return nullptr;
 	}
 
 	bool WorldEditorInstance::EnsurePagesLoaded(const float minX, const float minZ, const float maxX, const float maxZ, String &error)

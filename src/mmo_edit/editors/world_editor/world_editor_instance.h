@@ -527,6 +527,9 @@ namespace mmo
 		/// @copydoc IWorldEditor::EnsurePagesLoaded
 		bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String &error) override;
 
+		/// @copydoc IWorldEditor::GetTerrainRevision
+		uint64 GetTerrainRevision() const override;
+
 	public:
 		// In-place furnishing: editing prop kits of placed world models
 
@@ -736,6 +739,20 @@ namespace mmo
 		/// @brief The most recently created world editor instance (the --bake-terrain-lod command line
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
+
+		/// @brief Every world editor instance that is currently open, in creation order. The constructor
+		///        adds the instance, the destructor removes it. Main thread only; do not hold on to the
+		///        pointers across frames, keep GetInstanceSerial and use FindOpenInstance instead.
+		static const std::vector<WorldEditorInstance*>& GetOpenInstances() { return s_openInstances; }
+
+		/// @brief Finds an open instance by its serial.
+		/// @param serial A value from GetInstanceSerial.
+		/// @return The instance, or null if it has been closed (or the serial is 0).
+		static WorldEditorInstance* FindOpenInstance(uint64 serial);
+
+		/// @brief Gets the serial of this instance: unique per process and never reused, so it stays a
+		///        safe handle after the instance has been closed (FindOpenInstance then returns null).
+		[[nodiscard]] uint64 GetInstanceSerial() const { return m_instanceSerial; }
 
 		/// @brief Rebuilds procedural content (oases and section paths) without any UI, for unattended runs.
 		/// @param idOrZero Id of the control to rebuild, or 0 for all of them.
@@ -1063,6 +1080,15 @@ namespace mmo
 		uint32 m_worldFileVersion;
 
 		static inline WorldEditorInstance* s_lastCreated = nullptr;
+
+		/// Open instances (see GetOpenInstances).
+		static inline std::vector<WorldEditorInstance*> s_openInstances;
+
+		/// Last serial handed out; serials start at 1.
+		static inline uint64 s_lastInstanceSerial = 0;
+
+		/// This instance's serial (see GetInstanceSerial).
+		uint64 m_instanceSerial = 0;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 

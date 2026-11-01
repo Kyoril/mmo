@@ -394,6 +394,10 @@ namespace mmo
 			/// @brief Tells the terrain that data the ocean mask depends on changed.
 			void NotifyOceanMaskChanged();
 
+			/// @brief Marks the page as having unsaved changes and bumps the terrain's data revision
+			///        (Terrain::NotifyDataChanged). Every edit of page data goes through here; loading does not.
+			void MarkChanged();
+
 			void UpdateBoundingBox();
 
 			void UpdateMaterial();

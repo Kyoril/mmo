@@ -275,6 +275,19 @@ namespace mmo
 			/// @brief Bumps the ocean mask revision. Called by pages when their data changes.
 			void NotifyOceanMaskChanged() { ++m_oceanMaskRevision; }
 
+			/// @brief Gets a counter that changes whenever terrain data is edited: heights, normals,
+			///        vertex colours, splat weights, holes, areas, tile materials, water (mask, type,
+			///        heights, flow, material), a materialised ocean placeholder, the sea level or the
+			///        default material.
+			/// @details The single hook is Page::MarkChanged, which every page data setter calls
+			///          (SetSeaLevel and SetDefaultMaterial bump it directly), so every edit path is
+			///          covered: brushes, region paste and fill, terrain undo, PCG apply/unapply, water
+			///          tools, tile materials. Pages streaming in or out do not change it. Main thread only.
+			[[nodiscard]] uint64 GetDataRevision() const { return m_dataRevision; }
+
+			/// @brief Bumps the data revision. Called by Page::MarkChanged, SetSeaLevel and SetDefaultMaterial.
+			void NotifyDataChanged() { ++m_dataRevision; }
+
 			/// @brief Turns every prepared ocean placeholder page overlapping a world-space rectangle
 			///        into a real, editable page (flat seabed constants::OceanSeabedDepth below the sea
 			///        level, ocean water up to the sea level everywhere), building its tiles if loaded.
@@ -988,6 +1001,7 @@ namespace mmo
 			float m_seaLevel = constants::DefaultSeaLevel;
 			bool m_oceanRenderedExternally = false;
 			uint64 m_oceanMaskRevision = 1;
+			uint64 m_dataRevision = 1;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
 

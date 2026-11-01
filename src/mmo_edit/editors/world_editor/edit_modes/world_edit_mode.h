@@ -232,6 +232,12 @@ namespace mmo
 		/// @return True only if every page intersecting the rect (inside the terrain) is prepared and
 		///         loaded afterwards. Callers must not edit the terrain there otherwise.
 		virtual bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String& error) = 0;
+
+		/// @brief Gets a counter that changes on every terrain height, splat, hole, water or tile material
+		///        edit (and on sea level changes), whatever the edit path. Pages streaming in or out do not
+		///        change it. Hooked at Page::MarkChanged through terrain::Terrain::GetDataRevision.
+		/// @return The revision, or 0 if the world has no terrain.
+		virtual uint64 GetTerrainRevision() const = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

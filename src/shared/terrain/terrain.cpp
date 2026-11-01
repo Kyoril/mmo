@@ -558,6 +558,7 @@ namespace mmo
 
 			m_seaLevel = seaLevel;
 			NotifyOceanMaskChanged();
+			NotifyDataChanged();
 		}
 
 		void Terrain::SetOceanRenderedExternally(const bool external)
@@ -776,7 +777,14 @@ namespace mmo
 
 		void Terrain::SetDefaultMaterial(MaterialPtr material)
 		{
+			if (m_defaultMaterial == material)
+			{
+				return;
+			}
+
+			// Tiles without their own material use it, so their paint layers change with it.
 			m_defaultMaterial = std::move(material);
+			NotifyDataChanged();
 		}
 
 		Scene &Terrain::GetScene() const
