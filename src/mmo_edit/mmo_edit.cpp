@@ -96,7 +96,9 @@
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_editor/pcg/section_bake_job.h"
+#include "editors/world_editor/pcg/graph_instance_builder.h"
 #include "editors/world_editor/pcg/section_path_builder.h"
+#include "terrain/terrain.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
@@ -1073,8 +1075,8 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-rebuild")
 			{
 				// mmo_edit --pcg-rebuild <world.hwld> [--oasis|--id <id hex>]
-				// Opens the world, rebuilds one or all procedural controls (oases and section paths), saves
-				// the world and exits (0 = success).
+				// Opens the world, rebuilds one or all procedural controls (oases, section paths and graph
+				// instances; a graph instance uses its saved graph), saves the world and exits (0 = success).
 				mmo::RedirectUnattendedLog("pcg_rebuild");
 
 				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis|--id <id hex>]"))
@@ -1524,11 +1526,264 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-new-graph-instance")
+			{
+				// mmo_edit --pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N]
+				//          [--set param=value ...]
+				// Adds a graph instance over the closed area through the points (sharp corners) with the graph, seed
+				// and parameter overrides (typed by the graph's parameters). Does not build it (use --pcg-rebuild);
+				// saves the world and logs the new id (0 = success). An area overlapping another graph instance's
+				// area ("overlaps"), an unreadable graph or a bad --set are refused before anything is added or saved.
+				mmo::RedirectUnattendedLog("pcg_new_graph_instance");
+
+				const char* usage = "--pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N] [--set param=value ...]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				const auto parseFloat = [](const std::string& text, float& out)
+				{
+					char* end = nullptr;
+					out = std::strtof(text.c_str(), &end);
+					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
+				};
+
+				// "x,z;x,z;..." -> points (at least three).
+				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
+				{
+					out.clear();
+					size_t start = 0;
+					while (start <= text.size())
+					{
+						const size_t end = std::min(text.find(';', start), text.size());
+						const std::string pair = text.substr(start, end - start);
+						const size_t comma = pair.find(',');
+						float x = 0.0f, z = 0.0f;
+						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
+						{
+							return false;
+						}
+						out.emplace_back(x, z);
+						start = end + 1;
+					}
+					return out.size() >= 3;
+				};
+
+				std::vector<std::pair<float, float>> points;
+				std::string graphPath;
+				std::string name;
+				uint64 seed = 1;
+				std::vector<std::pair<std::string, std::string>> settings;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = parsePoints(args[++j], points);
+					}
+					else if (option == "--graph" && j + 1 < argCount)
+					{
+						graphPath = args[++j];
+						argumentsValid = !graphPath.empty();
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseSeed(args[++j], seed);
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked against the graph's parameters once the world is open.
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						argumentsValid = equals != std::string::npos && equals > 0;
+						if (argumentsValid)
+						{
+							settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-graph-instance: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || graphPath.empty()))
+				{
+					ELOG("--pcg-new-graph-instance: --graph and --points (at least three x,z pairs) are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-graph-instance", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralGraphInstance(graphPath, points, seed, name, settings, id, error))
+					{
+						// The world is not saved: a refused run leaves no record behind.
+						ELOG("--pcg-new-graph-instance: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-graph-instance: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-graph-instance: created graph instance " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-eval-graph")
+			{
+				// mmo_edit --pcg-eval-graph <world.hwld> --id <id hex> --out <file.json>
+				// Evaluates a graph instance's saved graph without applying it and writes the evaluation dump
+				// (WriteEvalDump, with timing) to the file. Logs validation issues, node errors, how many spawned
+				// points lie inside the area and how many were clipped, and the terrain height (GetSmoothHeightAt)
+				// under the first three placements next to their evaluated height. Never saves the world. Exit 0 if
+				// the graph validated and no node failed (the dump is written in either case).
+				mmo::RedirectUnattendedLog("pcg_eval_graph");
+
+				const char* usage = "--pcg-eval-graph <world.hwld> --id <id hex> --out <file.json>";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 instanceId = 0;
+				std::string outPath;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--id" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseOasisId(args[++j], instanceId);
+					}
+					else if (option == "--out" && j + 1 < argCount)
+					{
+						outPath = args[++j];
+						argumentsValid = !outPath.empty();
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-eval-graph: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (instanceId == 0 || outPath.empty()))
+				{
+					ELOG("--pcg-eval-graph: --id and --out are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-eval-graph", args[i + 1]))
+				{
+					mmo::GraphInstanceEvaluation evaluation;
+					std::string error;
+					if (!world->EvaluateProceduralGraphInstance(instanceId, evaluation, error))
+					{
+						ELOG("--pcg-eval-graph: " << error);
+					}
+					else
+					{
+						const std::string dump = mmo::pcg::graph::WriteEvalDump(evaluation.graph, evaluation.result, true);
+						std::ofstream outFile(outPath, std::ios::out | std::ios::trunc | std::ios::binary);
+						outFile << dump;
+						outFile.close();
+						const bool written = static_cast<bool>(outFile);
+						if (!written)
+						{
+							ELOG("--pcg-eval-graph: could not write " << outPath);
+						}
+
+						for (const std::string& warning : evaluation.warnings)
+						{
+							WLOG("--pcg-eval-graph: warning: " << warning);
+						}
+
+						bool nodeFailed = false;
+						for (const auto& [nodeId, nodeResult] : evaluation.result.nodes)
+						{
+							if (!nodeResult.output.error.empty())
+							{
+								ELOG("--pcg-eval-graph: node " << nodeId << " failed: " << nodeResult.output.error);
+								nodeFailed = true;
+							}
+						}
+
+						if (!evaluation.result.issues.empty())
+						{
+							ELOG("--pcg-eval-graph: validation issues: " << mmo::DescribeGraphIssues(evaluation.graph, evaluation.result.issues));
+						}
+						else
+						{
+							const size_t inside = evaluation.collected.placements.size();
+							ILOG("--pcg-eval-graph: spawned points " << inside + evaluation.collected.clipped << ", inside the area " << inside
+								<< ", clipped " << evaluation.collected.clipped);
+
+							// The evaluated heights next to the terrain's own answer (the sampler must agree with it).
+							mmo::terrain::Terrain* terrain = world->GetTerrain();
+							for (size_t p = 0; terrain && p < inside && p < 3; ++p)
+							{
+								const mmo::Vector3& position = evaluation.collected.placements[p].position;
+								char line[192];
+								std::snprintf(line, sizeof(line), "height check %zu: x %.3f z %.3f evaluated y %.4f GetSmoothHeightAt %.4f", p,
+									static_cast<double>(position.x), static_cast<double>(position.z), static_cast<double>(position.y),
+									static_cast<double>(terrain->GetSmoothHeightAt(position.x, position.z)));
+								ILOG("--pcg-eval-graph: " << line);
+							}
+						}
+
+						if (written)
+						{
+							ILOG("--pcg-eval-graph: wrote " << outPath);
+						}
+						succeeded = written && evaluation.result.ok && evaluation.result.issues.empty() && !nodeFailed;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--pcg-delete")
 			{
 				// mmo_edit --pcg-delete <world.hwld> --oasis|--id <id hex>
-				// Deletes a procedural control (oasis or section path) and everything it generated like the
-				// "Delete" button, saves the world and exits (0 = success).
+				// Deletes a procedural control (oasis, section path, graph instance or placed control) and
+				// everything it generated like the "Delete" button, saves the world and exits (0 = success).
+				// Deleting a placed control and creating it again (--pcg-new-control) moves it.
 				mmo::RedirectUnattendedLog("pcg_delete");
 
 				const char* usage = "--pcg-delete <world.hwld> --oasis|--id <id hex>";

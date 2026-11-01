@@ -11,11 +11,14 @@
 #include "pcg/oasis_record.h"
 #include "pcg/section_asset.h"
 #include "pcg/section_path_record.h"
+#include "pcg/graph_instance_record.h"
 #include "pcg/graph/controls.h"
+#include "pcg/graph/graph.h"
 #include "../selected_control_transform.h"
 #include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
 #include "../pcg/control_library.h"
+#include "../pcg/graph_instance_builder.h"
 #include "../pcg/oasis_builder.h"
 #include "../pcg/section_path_builder.h"
 
@@ -35,10 +38,13 @@ namespace mmo
 	///        - a section path: an open 3D spline that lays a baked section asset (.hsec) along it;
 	///        - a placed control: a loop, spline, volume or point of a data-driven control type (.hctl of a
 	///          biome) with extra tags and property overrides. It generates nothing itself; graph instances
-	///          read it (ResolvePlacedControls).
-	///        Rebuilding writes the generated content into the world; oasis and section path records are
-	///        persisted next to the world as .hpcg (the record kind is peeked from the file), placed
-	///        controls as .hpcgc (JSON) in the same folder.
+	///          read it (ResolvePlacedControls);
+	///        - a graph instance: a PCG graph (.hpcgg) applied to a closed area, with a seed, parameter
+	///          overrides and a point limit. Its rebuild evaluates the saved graph and reconciles the spawned
+	///          placements (no terrain step yet). Areas of graph instances must not overlap each other.
+	///        Rebuilding writes the generated content into the world; oasis, section path and graph instance
+	///        records are persisted next to the world as .hpcg (the record kind is peeked from the file),
+	///        placed controls as .hpcgc (JSON) in the same folder.
 	///        A clicked spline point becomes the editor selection (SelectedSplinePoint), so the transform
 	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport. A
 	///        placed volume or point becomes the editor selection as a SelectedControlTransform.
@@ -87,7 +93,7 @@ namespace mmo
 		/// @brief Whether a spline point is being dragged (the camera must not rotate then).
 		bool IsDragging() const { return m_splineEditor.IsDragging(); }
 
-		/// @brief Loads every *.hpcg record of the folder (oases and section paths), every *.hpcgc placed
+		/// @brief Loads every *.hpcg record of the folder (oases, section paths and graph instances), every *.hpcgc placed
 		///        control (kept also when its control type is missing) and the shared oasis recipe
 		///        (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to OasisParams
 		///        defaults and empty asset lists, and oasis rebuilds are refused until a valid recipe is
@@ -108,16 +114,17 @@ namespace mmo
 		/// @return True if the recipe is loaded.
 		bool CheckRecipe(String& error);
 
-		/// @brief Rebuilds every control (oases and section paths). Continues after a failure; all
-		///        errors are joined.
+		/// @brief Rebuilds every control (oases, section paths and graph instances). Continues after a
+		///        failure; all errors are joined.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if all controls were rebuilt (also when there are none).
 		bool RebuildAll(String& error);
 
 		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
 		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
-		///        are refused if their influence overlaps another built control. A placed control has
-		///        nothing to build (graph instances read it); the call succeeds without changes.
+		///        are refused if their influence overlaps another built oasis or section path. A graph
+		///        instance is refused as RebuildGraphInstance describes (its saved graph is used). A placed
+		///        control has nothing to build (graph instances read it); the call succeeds without changes.
 		/// @param controlId Id of the control.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
@@ -179,6 +186,34 @@ namespace mmo
 		/// @return True if every setting was applied.
 		bool SetPlacedControlProperties(uint64 id, const std::vector<std::pair<String, String>>& settings, String& error);
 
+		/// @brief Adds a graph instance over a closed area through the given x/z points (sharp corners: manual,
+		///        zero tangents, so the area is the polygon; heights from the terrain, which is loaded under the
+		///        points first). Does not build it. The "New Graph Instance" button uses this with a 128 m square
+		///        around the viewport centre and no graph.
+		/// @param graphPath Asset path of the graph (.hpcgg); may be empty (picked later). A non-empty path must be
+		///        readable and parse.
+		/// @param points World x/z of the area points, at least 3.
+		/// @param seed Seed of the instance.
+		/// @param name Name of the instance; empty picks "Graph Instance <n>".
+		/// @param parameterSettings Parameter overrides as name and value text (typed by the graph's parameter
+		///        defaults, see ParseGraphParameterValue); every name must be a parameter of the graph.
+		/// @param id Receives the id of the new instance.
+		/// @param error Receives the reason when the call returns false (nothing is added then).
+		/// @return False on too few or non-finite points, an area overlapping another graph instance's area
+		///         ("... overlaps ..."), an unreadable graph or a bad parameter setting.
+		bool CreateGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, uint64 seed, const String& name,
+			const std::vector<std::pair<String, String>>& parameterSettings, uint64& id, String& error);
+
+		/// @brief Evaluates a graph instance's saved graph without applying it (see EvaluateGraphInstance).
+		/// @param id Id of the graph instance.
+		/// @param out Receives the evaluation.
+		/// @param error Receives the reason when the call returns false.
+		/// @return False if there is no such instance, or its graph or context could not be prepared.
+		bool EvaluateInstance(uint64 id, GraphInstanceEvaluation& out, String& error);
+
+		/// @brief Gets the record of a graph instance, or null if the id names none.
+		[[nodiscard]] const pcg::GraphInstanceRecord* FindGraphInstance(uint64 id) const;
+
 		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides), on every
 		///        structural change of the control list of any kind (creation, deletion, load) and on any
 		///        change of a control type in the library.
@@ -210,7 +245,7 @@ namespace mmo
 		/// @brief Number of oases in the world.
 		size_t GetOasisCount() const;
 
-		/// @brief Number of controls (oases, section paths and placed controls) in the world.
+		/// @brief Number of controls (oases, section paths, placed controls and graph instances) in the world.
 		size_t GetControlCount() const { return m_controls.size(); }
 
 		/// @brief One-line summary of the last operation, for logs.
@@ -249,7 +284,8 @@ namespace mmo
 		{
 			Oasis,
 			SectionPath,
-			Placed
+			Placed,
+			GraphInstance
 		};
 
 		/// @brief A control in the list and whether it must be written on the next save.
@@ -262,6 +298,12 @@ namespace mmo
 			pcg::SectionPathRecord path;
 			/// Used when kind is Placed.
 			pcg::graph::ControlInstance placed;
+			/// Used when kind is GraphInstance.
+			pcg::GraphInstanceRecord instance;
+			/// Graph instances: summary of the last rebuild or delete attempt in this session (empty = none),
+			/// and whether it succeeded.
+			String lastReport;
+			bool lastReportOk = true;
 			bool dirty = false;
 			/// Failed attempts to load the terrain under a loop without heights (see EnsureHeights).
 			uint32 heightAttempts = 0;
@@ -269,22 +311,108 @@ namespace mmo
 			uint64 nextHeightAttemptFrame = 0;
 
 			/// @brief Id of the control.
-			uint64 Id() const { return kind == ControlKind::Oasis ? oasis.id : (kind == ControlKind::SectionPath ? path.id : placed.id); }
+			uint64 Id() const
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return oasis.id;
+				case ControlKind::SectionPath:
+					return path.id;
+				case ControlKind::Placed:
+					return placed.id;
+				case ControlKind::GraphInstance:
+					return instance.id;
+				}
+				return 0;
+			}
 			/// @brief Display name.
-			const String& Name() const { return kind == ControlKind::Oasis ? oasis.name : (kind == ControlKind::SectionPath ? path.name : placed.name); }
+			const String& Name() const { return const_cast<Control*>(this)->Name(); }
 			/// @brief Display name.
-			String& Name() { return kind == ControlKind::Oasis ? oasis.name : (kind == ControlKind::SectionPath ? path.name : placed.name); }
-			/// @brief The edited spline (oasis loop, section path, placed loop or spline; empty for a placed
-			///        volume or point).
-			PathSpline& Spline() { return kind == ControlKind::Oasis ? oasis.loop : (kind == ControlKind::SectionPath ? path.spline : placed.spline); }
+			String& Name()
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return oasis.name;
+				case ControlKind::SectionPath:
+					return path.name;
+				case ControlKind::Placed:
+					return placed.name;
+				case ControlKind::GraphInstance:
+					break;
+				}
+				return instance.name;
+			}
+			/// @brief The edited spline (oasis loop, section path, placed loop or spline, graph instance area;
+			///        empty for a placed volume or point).
+			PathSpline& Spline()
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return oasis.loop;
+				case ControlKind::SectionPath:
+					return path.spline;
+				case ControlKind::Placed:
+					return placed.spline;
+				case ControlKind::GraphInstance:
+					break;
+				}
+				return instance.area;
+			}
 			/// @brief The edited spline (see above).
-			const PathSpline& Spline() const { return kind == ControlKind::Oasis ? oasis.loop : (kind == ControlKind::SectionPath ? path.spline : placed.spline); }
-			/// @brief Stable point ids of the spline (section paths and placed controls), or null for an oasis.
-			std::vector<uint64>* PointIds() { return kind == ControlKind::SectionPath ? &path.pointIds : (kind == ControlKind::Placed ? &placed.pointIds : nullptr); }
-			/// @brief Next point id to hand out (section paths and placed controls), or null for an oasis.
-			uint64* NextPointId() { return kind == ControlKind::SectionPath ? &path.nextPointId : (kind == ControlKind::Placed ? &placed.nextPointId : nullptr); }
+			const PathSpline& Spline() const { return const_cast<Control*>(this)->Spline(); }
+			/// @brief Stable point ids of the spline (section paths, placed controls and graph instances), or
+			///        null for an oasis.
+			std::vector<uint64>* PointIds()
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return nullptr;
+				case ControlKind::SectionPath:
+					return &path.pointIds;
+				case ControlKind::Placed:
+					return &placed.pointIds;
+				case ControlKind::GraphInstance:
+					return &instance.pointIds;
+				}
+				return nullptr;
+			}
+			/// @brief Next point id to hand out (section paths, placed controls and graph instances), or null
+			///        for an oasis.
+			uint64* NextPointId()
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return nullptr;
+				case ControlKind::SectionPath:
+					return &path.nextPointId;
+				case ControlKind::Placed:
+					return &placed.nextPointId;
+				case ControlKind::GraphInstance:
+					return &instance.nextPointId;
+				}
+				return nullptr;
+			}
 			/// @brief What the control has in the world (always empty for a placed control).
-			const pcg::OwnedContent& Content() const { return kind == ControlKind::Oasis ? oasis.content : (kind == ControlKind::SectionPath ? path.content : NoContent()); }
+			const pcg::OwnedContent& Content() const
+			{
+				switch (kind)
+				{
+				case ControlKind::Oasis:
+					return oasis.content;
+				case ControlKind::SectionPath:
+					return path.content;
+				case ControlKind::Placed:
+					return NoContent();
+				case ControlKind::GraphInstance:
+					return instance.content;
+				}
+				return NoContent();
+			}
 			/// @brief Whether this is a placed volume or point (no spline; edited through a SelectedControlTransform).
 			bool HasTransform() const { return kind == ControlKind::Placed && placed.spline.points.empty(); }
 
@@ -340,6 +468,30 @@ namespace mmo
 
 		/// @brief Draws the details of a selected placed control.
 		void DrawPlacedControlDetails(Control& control);
+
+		/// @brief A graph as read for the details panel (parameter definitions), with the read error.
+		struct CachedGraph
+		{
+			bool valid = false;
+			pcg::graph::Graph graph;
+			String error;
+		};
+
+		/// @brief Gets a graph for the details panel (read once; refreshed by Rebuild and the "Reload Graph" button).
+		const CachedGraph& GetCachedGraph(const String& graphPath);
+
+		/// @brief Adds a graph instance over a 128 m square around the viewport's ground hit, without a graph.
+		void CreateGraphInstanceAtViewportCentre();
+
+		/// @brief Draws the details of a selected graph instance: graph picker, seed, parameter overrides, point
+		///        limit and the last build report.
+		void DrawGraphInstanceDetails(Control& control);
+
+		/// @brief Rebuilds one graph instance (see Rebuild).
+		bool RebuildGraphInstanceControl(Control& control, String& error);
+
+		/// @brief The records of every graph instance except the one with the id.
+		std::vector<const pcg::GraphInstanceRecord*> GetOtherGraphInstances(uint64 id) const;
 
 		/// @brief Makes a placed volume or point the editor selection (replacing whatever was selected).
 		/// @param controlIndex Index of the control in the list.
@@ -502,6 +654,12 @@ namespace mmo
 
 		/// Section asset the "New Section Path" button uses.
 		String m_newPathAsset;
+
+		/// Graphs read for the details panel, by asset path.
+		std::map<String, CachedGraph> m_graphs;
+
+		/// Whether the graph picker offers the graphs of every biome instead of the active biome's.
+		bool m_showAllGraphs = false;
 
 		/// Defaults of the recipe, used for new oases.
 		pcg::OasisParams m_defaultParams;

@@ -306,10 +306,18 @@ namespace mmo
 			return report;
 		}
 
+		// Without a terrain target the terrain is not touched at all: a recorded contribution (if any)
+		// stays as it is, and only the placements are reconciled.
+		const bool writesTerrain = static_cast<bool>(content.terrain);
+
 		// The terrain brushes turn ocean placeholder pages into real terrain before writing; do the
 		// same so no write of the contribution is silently dropped. Only where the build may write:
 		// a page that stays open ocean is neither changed nor saved.
-		if (content.writeRects.empty())
+		if (!writesTerrain)
+		{
+			// Nothing is written.
+		}
+		else if (content.writeRects.empty())
 		{
 			terrain->MaterializeOceanPages(content.influence.minX, content.influence.minZ, content.influence.maxX, content.influence.maxZ);
 		}
@@ -329,16 +337,19 @@ namespace mmo
 		access.SetDefaultWaterMaterial(content.waterMaterial);
 
 		// 2. Undo the previous contribution (keeps hand sculpting done since as a height delta).
-		if (!CheckRecordMatchesTerrain(access, owned.terrain, report.error))
+		if (writesTerrain)
 		{
-			report.milliseconds = MillisecondsSince(start);
-			return report;
-		}
-		pcg::Unapply(access, owned.terrain);
+			if (!CheckRecordMatchesTerrain(access, owned.terrain, report.error))
+			{
+				report.milliseconds = MillisecondsSince(start);
+				return report;
+			}
+			pcg::Unapply(access, owned.terrain);
 
-		// The contribution is gone from the world now; the record must not claim it even if prepare
-		// fails below (Unapply clears it already, this keeps the invariant explicit).
-		owned.terrain.Clear();
+			// The contribution is gone from the world now; the record must not claim it even if prepare
+			// fails below (Unapply clears it already, this keeps the invariant explicit).
+			owned.terrain.Clear();
+		}
 
 		// 3. Let the generator prepare on the current ground, then write the new contribution.
 		const GroundFunction groundHeight = [terrain](const float x, const float z)
@@ -353,12 +364,17 @@ namespace mmo
 			return report;
 		}
 
-		owned.influence = content.influence;
-		if (content.terrain)
+		if (writesTerrain)
 		{
+			owned.influence = content.influence;
 			pcg::Apply(access, owned.influence, content.terrain, content.tileMaterial, owned.terrain);
+			report.terrainSamples = CountSamples(owned.terrain);
 		}
-		report.terrainSamples = CountSamples(owned.terrain);
+		else if (owned.terrain.IsEmpty())
+		{
+			// A kept contribution keeps the influence it was written with (its undo loads those pages).
+			owned.influence = content.influence;
+		}
 
 		// 4. Placements on the final ground, reconciled against what the generator owns.
 		const GroundFunction groundSlope = [terrain](const float x, const float z)

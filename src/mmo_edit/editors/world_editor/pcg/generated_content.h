@@ -69,8 +69,9 @@ namespace mmo
 		///        (the previous contribution is already undone then). May be empty.
 		std::function<bool(const GroundFunction& ground, String& error)> prepare;
 
-		/// @brief What the generator wants on the terrain inside the influence. May be empty (no
-		///        terrain contribution).
+		/// @brief What the generator wants on the terrain inside the influence. May be empty: the build
+		///        then leaves the terrain alone (no ocean pages materialised, the recorded contribution is
+		///        neither undone nor rewritten) and only reconciles the placements.
 		pcg::TerrainTargetFunction terrain;
 
 		/// @brief Material set on tiles where a target asks for it ("" = none).

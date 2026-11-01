@@ -760,7 +760,8 @@ namespace mmo
 		///        safe handle after the instance has been closed (FindOpenInstance then returns null).
 		[[nodiscard]] uint64 GetInstanceSerial() const { return m_instanceSerial; }
 
-		/// @brief Rebuilds procedural content (oases and section paths) without any UI, for unattended runs.
+		/// @brief Rebuilds procedural content (oases, section paths and graph instances) without any UI, for
+		///        unattended runs.
 		/// @param idOrZero Id of the control to rebuild, or 0 for all of them.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if everything requested was rebuilt.
@@ -806,10 +807,33 @@ namespace mmo
 		bool CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
 			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
 
+		/// @brief Adds a graph instance over a closed area through the given x/z points, for unattended runs. Does
+		///        not build it and does not save the world. Refused before anything is added if the area has fewer
+		///        than 3 points, overlaps another graph instance's area, the graph cannot be read, or a parameter
+		///        setting names no parameter of the graph or has an invalid value.
+		/// @param graphPath Asset path of the graph (.hpcgg).
+		/// @param points World x/z of the area points, at least 3.
+		/// @param seed Seed of the instance.
+		/// @param name Name of the instance; empty picks the default name.
+		/// @param settings Parameter overrides as name and value text.
+		/// @param id Receives the id of the new instance.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the instance was added.
+		bool CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, uint64 seed, const String& name,
+			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
+
+		/// @brief Evaluates a graph instance's saved graph without applying it, for unattended runs.
+		/// @param id Id of the graph instance.
+		/// @param out Receives the evaluation.
+		/// @param error Receives the reason when the call returns false.
+		/// @return False if there is no such instance or its graph or context could not be prepared.
+		bool EvaluateProceduralGraphInstance(uint64 id, GraphInstanceEvaluation& out, String& error);
+
 		/// @brief Gets the procedural edit mode of this world (placed controls, control library), or null.
 		[[nodiscard]] ProceduralEditMode* GetProceduralEditMode() const { return m_proceduralEditMode.get(); }
 
-		/// @brief Deletes a procedural control (oasis or section path) and everything it generated like
+		/// @brief Deletes a procedural control (oasis, section path, graph instance or placed control) and
+		///        everything it generated like
 		///        the "Delete" button does, for unattended runs. The world is not saved.
 		/// @param id Id of the control.
 		/// @param error Receives the reason when the call returns false.
@@ -819,7 +843,7 @@ namespace mmo
 		/// @brief Number of oases of the world.
 		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
 
-		/// @brief Number of procedural controls (oases and section paths) of the world.
+		/// @brief Number of procedural controls (oases, section paths, placed controls and graph instances) of the world.
 		size_t GetProceduralControlCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetControlCount() : 0; }
 
 		/// @brief Loads the entities and authored foliage of the given pages unless streaming already

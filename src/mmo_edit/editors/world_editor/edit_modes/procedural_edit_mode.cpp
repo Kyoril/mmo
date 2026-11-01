@@ -16,6 +16,7 @@
 #include "pcg/terrain_contribution.h"
 #include "scene_graph/camera.h"
 #include "terrain/terrain.h"
+#include "editor_windows/asset_picker_widget.h"
 #include "../pcg/control_details.h"
 
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -46,6 +47,9 @@ namespace mmo
 
 		/// Half extents of a new placed volume, in metres.
 		constexpr float NewVolumeHalfExtent = 16.0f;
+
+		/// Side of the square area of a new graph instance, in metres.
+		constexpr float NewGraphInstanceSize = 128.0f;
 
 		/// Screen radius of the handle of a placed volume or point, in pixels.
 		constexpr float TransformHandleRadius = 9.0f;
@@ -425,6 +429,8 @@ namespace mmo
 			return "A section path";
 		case ControlKind::Placed:
 			return "A placed control";
+		case ControlKind::GraphInstance:
+			return "A graph instance";
 		}
 		return "A control";
 	}
@@ -824,6 +830,15 @@ namespace mmo
 				}
 				break;
 
+			case pcg::RecordKind::GraphInstance:
+				control.kind = ControlKind::GraphInstance;
+				if (!pcg::ReadGraphInstanceRecord(reader, control.instance))
+				{
+					ELOG("Graph instance record " << fileName << " is corrupt or from an unsupported version, skipping it");
+					continue;
+				}
+				break;
+
 			default:
 				ELOG("Procedural record " << fileName << " is of an unknown kind, skipping it");
 				continue;
@@ -944,9 +959,22 @@ namespace mmo
 
 			io::StreamSink sink{ *file };
 			io::Writer writer{ sink };
-			const bool written = control.kind == ControlKind::Oasis
-				? pcg::WriteOasisRecord(writer, control.oasis)
-				: pcg::WriteSectionPathRecord(writer, control.path);
+			bool written = false;
+			switch (control.kind)
+			{
+			case ControlKind::Oasis:
+				written = pcg::WriteOasisRecord(writer, control.oasis);
+				break;
+			case ControlKind::SectionPath:
+				written = pcg::WriteSectionPathRecord(writer, control.path);
+				break;
+			case ControlKind::GraphInstance:
+				written = pcg::WriteGraphInstanceRecord(writer, control.instance);
+				break;
+			case ControlKind::Placed:
+				// Written above.
+				break;
+			}
 			if (!written)
 			{
 				SetStatus("Could not save '" + control.Name() + "': writing " + fileName + " failed.", StatusLevel::Error);
@@ -1496,9 +1524,240 @@ namespace mmo
 		}
 	}
 
+	void ProceduralEditMode::CreateGraphInstanceAtViewportCentre()
+	{
+		if (!m_worldEditor.HasTerrain())
+		{
+			SetStatus("This world has no terrain.", StatusLevel::Error);
+			return;
+		}
+
+		const Ray ray = m_camera.GetCameraToViewportRay(0.5f, 0.5f, 50000.0f);
+		const auto hit = m_worldEditor.GetTerrain()->RayIntersects(ray);
+		if (!hit.first)
+		{
+			SetStatus("No ground under the viewport centre. Look at the terrain and try again.", StatusLevel::Error);
+			return;
+		}
+
+		const float x = hit.second.position.x;
+		const float z = hit.second.position.z;
+		const float half = NewGraphInstanceSize * 0.5f;
+		const std::vector<std::pair<float, float>> points = { { x - half, z - half }, { x + half, z - half }, { x + half, z + half }, { x - half, z + half } };
+
+		String error;
+		uint64 id = 0;
+		CreateGraphInstance("", points, 1, "", {}, id, error);
+	}
+
+	bool ProceduralEditMode::CreateGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed, const String& name,
+		const std::vector<std::pair<String, String>>& parameterSettings, uint64& id, String& error)
+	{
+		id = 0;
+		const auto fail = [this, &error](const String& reason)
+		{
+			error = reason;
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		};
+
+		if (points.size() < MinLoopPoints)
+		{
+			return fail("A graph instance area needs at least " + std::to_string(MinLoopPoints) + " points.");
+		}
+
+		for (const auto& [x, z] : points)
+		{
+			if (!std::isfinite(x) || !std::isfinite(z))
+			{
+				return fail("Area points must be finite.");
+			}
+		}
+
+		pcg::GraphInstanceRecord record;
+		record.graphPath = graphPath;
+		record.seed = seed;
+
+		// Overrides are typed by the graph's parameters, so the graph must be readable when any are given.
+		if (!graphPath.empty())
+		{
+			pcg::graph::Graph graph;
+			String graphError;
+			if (!LoadGraphAsset(graphPath, graph, graphError))
+			{
+				return fail(graphError);
+			}
+
+			for (const auto& [parameterName, text] : parameterSettings)
+			{
+				const auto parameter = std::find_if(graph.parameters.begin(), graph.parameters.end(),
+					[&parameterName](const pcg::graph::ParameterDef& def) { return def.name == parameterName; });
+				if (parameter == graph.parameters.end())
+				{
+					return fail("graph '" + graphPath + "' has no parameter '" + parameterName + "'");
+				}
+
+				pcg::graph::AttributeValue value;
+				String parseError;
+				if (!ParseGraphParameterValue(*parameter, text, value, parseError))
+				{
+					return fail(parseError);
+				}
+				record.parameterOverrides[parameterName] = value;
+			}
+		}
+		else if (!parameterSettings.empty())
+		{
+			return fail("Parameter overrides need a graph.");
+		}
+
+		// Sharp corners (manual, zero tangents): the area is the polygon through the points, so neighbouring
+		// instances can share an edge exactly. Points on the ground: load the terrain under them first.
+		record.area.closed = true;
+		record.area.interpolation = SplineInterpolation::CatmullRom;
+		pcg::WorldRect bounds{ points.front().first, points.front().second, points.front().first, points.front().second };
+		for (const auto& [x, z] : points)
+		{
+			bounds.minX = std::min(bounds.minX, x);
+			bounds.minZ = std::min(bounds.minZ, z);
+			bounds.maxX = std::max(bounds.maxX, x);
+			bounds.maxZ = std::max(bounds.maxZ, z);
+		}
+		String loadError;
+		if (m_worldEditor.HasTerrain())
+		{
+			m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, loadError);
+		}
+
+		for (const auto& [x, z] : points)
+		{
+			SplinePoint point;
+			point.x = x;
+			point.z = z;
+			point.autoTangents = false;
+			if (!m_worldEditor.HasTerrain() || !m_worldEditor.GetTerrain()->TryGetSmoothHeightAt(x, z, point.y))
+			{
+				point.y = 0.0f;
+			}
+			record.area.points.push_back(point);
+			record.pointIds.push_back(record.nextPointId++);
+		}
+
+		for (const Control& other : m_controls)
+		{
+			if (other.kind == ControlKind::GraphInstance && pcg::AreasOverlap(record.area, other.instance.area))
+			{
+				return fail("The area overlaps the area of graph instance '" + other.Name() + "' (" + FormatId(other.Id()) + ").");
+			}
+		}
+
+		record.id = m_worldEditor.GenerateEntityUniqueId();
+		const size_t instanceCount = static_cast<size_t>(std::count_if(m_controls.begin(), m_controls.end(),
+			[](const Control& c) { return c.kind == ControlKind::GraphInstance; }));
+		record.name = name.empty() ? "Graph Instance " + std::to_string(instanceCount + 1) : name;
+
+		Control control;
+		control.kind = ControlKind::GraphInstance;
+		control.instance = std::move(record);
+		MarkChanged(control);
+		id = control.instance.id;
+		m_controls.push_back(std::move(control));
+		OnControlsChanged();
+		SelectControl(static_cast<int32>(m_controls.size()) - 1);
+		SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + ")."
+			+ (graphPath.empty() ? " Pick its graph, edit the area, then Rebuild." : " Edit the area, then Rebuild."), StatusLevel::Ok);
+		ILOG(m_status);
+		return true;
+	}
+
+	bool ProceduralEditMode::EvaluateInstance(const uint64 id, GraphInstanceEvaluation& out, String& error)
+	{
+		const int32 index = FindControl(id);
+		if (index < 0 || m_controls[index].kind != ControlKind::GraphInstance)
+		{
+			error = "No graph instance with id " + FormatId(id);
+			return false;
+		}
+
+		return EvaluateGraphInstance(m_worldEditor, m_controls[index].instance, *this, out, error);
+	}
+
+	const pcg::GraphInstanceRecord* ProceduralEditMode::FindGraphInstance(const uint64 id) const
+	{
+		const int32 index = FindControl(id);
+		return index >= 0 && m_controls[index].kind == ControlKind::GraphInstance ? &m_controls[index].instance : nullptr;
+	}
+
+	std::vector<const pcg::GraphInstanceRecord*> ProceduralEditMode::GetOtherGraphInstances(const uint64 id) const
+	{
+		std::vector<const pcg::GraphInstanceRecord*> others;
+		for (const Control& control : m_controls)
+		{
+			if (control.kind == ControlKind::GraphInstance && control.Id() != id)
+			{
+				others.push_back(&control.instance);
+			}
+		}
+		return others;
+	}
+
+	const ProceduralEditMode::CachedGraph& ProceduralEditMode::GetCachedGraph(const String& graphPath)
+	{
+		const auto found = m_graphs.find(graphPath);
+		if (found != m_graphs.end())
+		{
+			return found->second;
+		}
+
+		CachedGraph cached;
+		cached.valid = LoadGraphAsset(graphPath, cached.graph, cached.error);
+		return m_graphs.emplace(graphPath, std::move(cached)).first->second;
+	}
+
+	bool ProceduralEditMode::RebuildGraphInstanceControl(Control& control, String& error)
+	{
+		// The rebuild reads the saved graph file; the panel follows what it read.
+		m_graphs.erase(control.instance.graphPath);
+
+		const GeneratorBuildReport report = RebuildGraphInstance(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this);
+		if (!report.ok)
+		{
+			error = report.error;
+			control.lastReport = error;
+			control.lastReportOk = false;
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		MarkChanged(control);
+
+		// Node warnings can be many: the status line shows the first few, the log all of them.
+		constexpr size_t maxShownWarnings = 8;
+		String text = DescribeReport(report, "Rebuilt '" + control.Name() + "'");
+		for (size_t i = 0; i < report.warnings.size() && i < maxShownWarnings; ++i)
+		{
+			text += "\nWarning: " + report.warnings[i];
+		}
+		if (report.warnings.size() > maxShownWarnings)
+		{
+			text += "\n... and " + std::to_string(report.warnings.size() - maxShownWarnings) + " more warning(s) (see the log).";
+		}
+		control.lastReport = text;
+		control.lastReportOk = true;
+		SetStatus(text, report.warnings.empty() ? StatusLevel::Ok : StatusLevel::Warning);
+		ILOG(DescribeReport(report, "Rebuilt '" + control.Name() + "'"));
+		for (const String& warning : report.warnings)
+		{
+			WLOG("'" << control.Name() << "': " << warning);
+		}
+		return true;
+	}
+
 	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(const Control& control)
 	{
-		if (control.Content().IsEmpty())
+		// Graph instances write no terrain (yet): their placements do not get in the way of a terrain
+		// contribution. Their areas are checked against each other instead (AreasOverlap).
+		if (control.kind == ControlKind::GraphInstance || control.Content().IsEmpty())
 		{
 			return {};
 		}
@@ -1587,7 +1846,18 @@ namespace mmo
 			return true;
 		}
 
-		return control.kind == ControlKind::Oasis ? RebuildOasisControl(control, error) : RebuildSectionPathControl(control, error);
+		switch (control.kind)
+		{
+		case ControlKind::Oasis:
+			return RebuildOasisControl(control, error);
+		case ControlKind::SectionPath:
+			return RebuildSectionPathControl(control, error);
+		case ControlKind::GraphInstance:
+			return RebuildGraphInstanceControl(control, error);
+		case ControlKind::Placed:
+			break;
+		}
+		return true;
 	}
 
 	bool ProceduralEditMode::RebuildOasisControl(Control& control, String& error)
@@ -1757,12 +2027,26 @@ namespace mmo
 		}
 		else
 		{
-			const OasisBuildReport report = control.kind == ControlKind::Oasis
-				? DeleteOasisContent(m_worldEditor, control.oasis)
-				: DeleteSectionPathContent(m_worldEditor, control.path);
+			OasisBuildReport report;
+			switch (control.kind)
+			{
+			case ControlKind::Oasis:
+				report = DeleteOasisContent(m_worldEditor, control.oasis);
+				break;
+			case ControlKind::SectionPath:
+				report = DeleteSectionPathContent(m_worldEditor, control.path);
+				break;
+			case ControlKind::GraphInstance:
+				report = DeleteGraphInstanceContent(m_worldEditor, control.instance);
+				break;
+			case ControlKind::Placed:
+				break;
+			}
 			if (!report.ok)
 			{
 				error = "Delete of '" + control.Name() + "' failed: " + report.error;
+				control.lastReport = error;
+				control.lastReportOk = false;
 				SetStatus(error, StatusLevel::Error);
 				return false;
 			}
@@ -1824,6 +2108,16 @@ namespace mmo
 		if (ImGui::Button("New Oasis"))
 		{
 			CreateOasisAtViewportCentre();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("New Graph Instance"))
+		{
+			CreateGraphInstanceAtViewportCentre();
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("A %.0f m square area around the viewport centre (refused if it overlaps another graph instance).\n"
+				"Pick its graph in the details, edit the area like a spline, then Rebuild.", NewGraphInstanceSize);
 		}
 		ImGui::SameLine();
 		ImGui::BeginDisabled(m_controls.empty());
@@ -1904,6 +2198,10 @@ namespace mmo
 					ImGui::TextUnformatted(placedType ? (placedType->name.empty() ? FileStem(control.placed.typePath).c_str() : placedType->name.c_str())
 						: (FileStem(control.placed.typePath) + " (missing)").c_str());
 				}
+				else if (control.kind == ControlKind::GraphInstance)
+				{
+					ImGui::TextUnformatted("Graph Instance");
+				}
 				else
 				{
 					ImGui::TextUnformatted(control.kind == ControlKind::Oasis ? "Oasis" : "Section Path");
@@ -1949,6 +2247,10 @@ namespace mmo
 			{
 				ImGui::Text("Remove the placed control '%s'?\n(Graph instances over it change on their next rebuild.)", m_controls[pending].Name().c_str());
 			}
+			else if (pending >= 0 && m_controls[pending].kind == ControlKind::GraphInstance)
+			{
+				ImGui::Text("Remove the graph instance '%s' and every object it spawned?", m_controls[pending].Name().c_str());
+			}
 			else
 			{
 				ImGui::Text("Remove '%s' and everything it generated\n(terrain changes, paint, water, objects)?",
@@ -1990,6 +2292,12 @@ namespace mmo
 		if (current.kind == ControlKind::Placed)
 		{
 			DrawPlacedControlDetails(current);
+			return;
+		}
+
+		if (current.kind == ControlKind::GraphInstance)
+		{
+			DrawGraphInstanceDetails(current);
 			return;
 		}
 
@@ -2219,6 +2527,233 @@ namespace mmo
 			{
 				MarkChanged(control);
 			}
+		}
+	}
+
+	void ProceduralEditMode::DrawGraphInstanceDetails(Control& control)
+	{
+		pcg::GraphInstanceRecord& record = control.instance;
+
+		// Graph picker: the active biome's graphs (combo), or every graph through the asset picker.
+		String graphPath = record.graphPath;
+		bool graphChanged = false;
+		if (m_showAllGraphs)
+		{
+			static const std::set<String> s_graphExtensions = { GraphAssetExtension };
+			std::string path = graphPath;
+			if (AssetPickerWidget::Draw("Graph", path, s_graphExtensions, nullptr, nullptr, 0.0f) && path != graphPath)
+			{
+				graphPath = path;
+				graphChanged = true;
+			}
+		}
+		else if (ImGui::BeginCombo("Graph", graphPath.empty() ? "(none)" : graphPath.c_str()))
+		{
+			// Listed only while the combo is open (the registry is scanned).
+			const String folder = String(ControlLibrary::BiomesFolder) + m_activeBiome + "/Graphs/";
+			std::vector<String> graphs = m_activeBiome.empty() ? std::vector<String>() : AssetRegistry::ListFiles(folder, GraphAssetExtension);
+			std::sort(graphs.begin(), graphs.end());
+			if (graphs.empty())
+			{
+				ImGui::TextDisabled("No graphs in %s", m_activeBiome.empty() ? ControlLibrary::BiomesFolder : folder.c_str());
+			}
+			for (const String& graph : graphs)
+			{
+				const bool selected = graph == graphPath;
+				if (ImGui::Selectable(graph.c_str(), selected) && !selected)
+				{
+					graphPath = graph;
+					graphChanged = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		if (graphChanged)
+		{
+			record.graphPath = graphPath;
+			MarkChanged(control);
+		}
+
+		ImGui::Checkbox("All biomes##graphPicker", &m_showAllGraphs);
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Off: the graphs of the active biome (Biome combo above). On: every graph.");
+		}
+		ImGui::SameLine();
+		ImGui::BeginDisabled(record.graphPath.empty());
+		if (ImGui::Button("Reload Graph"))
+		{
+			m_graphs.erase(record.graphPath);
+		}
+		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGui::SetTooltip("Reads the graph file again for this panel. Rebuild always uses the saved file.");
+		}
+
+		const CachedGraph* cached = record.graphPath.empty() ? nullptr : &GetCachedGraph(record.graphPath);
+		if (record.graphPath.empty())
+		{
+			ImGui::TextColored(StatusWarningColor, "Pick a graph before rebuilding.");
+		}
+		else if (!cached->valid)
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+			ImGui::TextWrapped("%s", cached->error.c_str());
+			ImGui::PopStyleColor();
+		}
+
+		uint64 seed = record.seed;
+		if (ImGui::InputScalar("Seed", ImGuiDataType_U64, &seed))
+		{
+			record.seed = seed;
+			MarkChanged(control);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Randomize"))
+		{
+			record.seed = RandomSeed();
+			MarkChanged(control);
+		}
+
+		uint64 pointLimit = static_cast<uint64>(record.pointLimit);
+		if (ImGui::InputScalar("Point limit", ImGuiDataType_U64, &pointLimit))
+		{
+			record.pointLimit = static_cast<size_t>(std::max<uint64>(pointLimit, 1));
+			MarkChanged(control);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Most points one node may produce; a node over it stops with a warning.");
+		}
+
+		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			std::set<String> declared;
+			if (cached && cached->valid)
+			{
+				if (cached->graph.parameters.empty())
+				{
+					ImGui::TextDisabled("The graph has no parameters.");
+				}
+
+				for (const pcg::graph::ParameterDef& parameter : cached->graph.parameters)
+				{
+					declared.insert(parameter.name);
+					ImGui::PushID(parameter.name.c_str());
+					const auto found = record.parameterOverrides.find(parameter.name);
+					const bool overridden = found != record.parameterOverrides.end()
+						&& pcg::graph::TypeOf(found->second) == pcg::graph::TypeOf(parameter.defaultValue);
+					pcg::graph::AttributeValue value = overridden ? found->second : parameter.defaultValue;
+
+					if (overridden)
+					{
+						ImGui::PushStyleColor(ImGuiCol_Text, StatusWarningColor);
+					}
+					bool edited = false;
+					const char* label = parameter.name.c_str();
+					switch (pcg::graph::TypeOf(value))
+					{
+					case pcg::graph::AttributeType::Float:
+						edited = ImGui::DragFloat(label, &std::get<float>(value), 0.01f, 0.0f, 0.0f, "%.3f");
+						break;
+					case pcg::graph::AttributeType::Int:
+						edited = ImGui::InputScalar(label, ImGuiDataType_S64, &std::get<int64>(value));
+						break;
+					case pcg::graph::AttributeType::Bool:
+						edited = ImGui::Checkbox(label, &std::get<bool>(value));
+						break;
+					case pcg::graph::AttributeType::Vector3:
+					{
+						Vector3& vector = std::get<Vector3>(value);
+						float components[3] = { vector.x, vector.y, vector.z };
+						edited = ImGui::DragFloat3(label, components, 0.01f, 0.0f, 0.0f, "%.3f");
+						vector = Vector3(components[0], components[1], components[2]);
+						break;
+					}
+					case pcg::graph::AttributeType::String:
+						edited = ImGui::InputText(label, &std::get<String>(value));
+						break;
+					}
+					if (overridden)
+					{
+						ImGui::PopStyleColor();
+					}
+					if (ImGui::IsItemHovered() && !parameter.description.empty())
+					{
+						ImGui::SetTooltip("%s", parameter.description.c_str());
+					}
+
+					if (edited)
+					{
+						record.parameterOverrides[parameter.name] = value;
+						MarkChanged(control);
+					}
+					else if (overridden)
+					{
+						ImGui::SameLine();
+						if (ImGui::SmallButton("Reset"))
+						{
+							record.parameterOverrides.erase(parameter.name);
+							MarkChanged(control);
+						}
+					}
+					ImGui::PopID();
+				}
+			}
+			else
+			{
+				ImGui::TextDisabled("The parameters are shown once the graph can be read.");
+			}
+
+			// Overrides the graph does not declare (or with another type than its default) are kept but unused.
+			for (auto it = record.parameterOverrides.begin(); it != record.parameterOverrides.end();)
+			{
+				const bool known = declared.count(it->first) > 0;
+				bool typeMatches = true;
+				if (known && cached && cached->valid)
+				{
+					for (const pcg::graph::ParameterDef& parameter : cached->graph.parameters)
+					{
+						if (parameter.name == it->first)
+						{
+							typeMatches = pcg::graph::TypeOf(parameter.defaultValue) == pcg::graph::TypeOf(it->second);
+						}
+					}
+				}
+				if ((known && typeMatches) || !cached || !cached->valid)
+				{
+					++it;
+					continue;
+				}
+
+				ImGui::PushID(it->first.c_str());
+				ImGui::TextColored(StatusWarningColor, known ? "Override '%s' has the wrong type (unused)" : "Override '%s' is not a parameter of the graph (unused)", it->first.c_str());
+				ImGui::SameLine();
+				const bool remove = ImGui::SmallButton("Remove");
+				ImGui::PopID();
+				if (remove)
+				{
+					it = record.parameterOverrides.erase(it);
+					MarkChanged(control);
+				}
+				else
+				{
+					++it;
+				}
+			}
+		}
+
+		ImGui::TextWrapped("Area: %d points (sharp corners unless their tangents are reset to auto). Click a point to select it (the gizmo moves it) or drag it, Alt+click the outline to add a point, Delete or Ctrl+click removes a point (minimum %u). Areas of graph instances must not overlap; sharing an edge is fine.",
+			static_cast<int>(record.area.points.size()), GetMinPoints(control));
+		DrawPointDetails(control);
+
+		ImGui::Text("Owned objects: %d", static_cast<int>(record.content.placements.size()));
+		if (!control.lastReport.empty())
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, control.lastReportOk ? StatusOkColor : StatusErrorColor);
+			ImGui::TextWrapped("Last build: %s", control.lastReport.c_str());
+			ImGui::PopStyleColor();
 		}
 	}
 
@@ -2925,6 +3460,11 @@ namespace mmo
 			{
 				style.lineColor = IM_COL32(130, 230, 110, 200);
 				style.selectedColor = IM_COL32(190, 255, 160, 255);
+			}
+			else if (control.kind == ControlKind::GraphInstance)
+			{
+				style.lineColor = IM_COL32(200, 130, 255, 200);
+				style.selectedColor = IM_COL32(230, 180, 255, 255);
 			}
 			else
 			{

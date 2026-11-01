@@ -1162,6 +1162,30 @@ namespace mmo
 		return m_proceduralEditMode->SetPlacedControlProperties(id, settings, error);
 	}
 
+	bool WorldEditorInstance::CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed,
+		const String& name, const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->CreateGraphInstance(graphPath, points, seed, name, settings, id, error);
+	}
+
+	bool WorldEditorInstance::EvaluateProceduralGraphInstance(const uint64 id, GraphInstanceEvaluation& out, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->EvaluateInstance(id, out, error);
+	}
+
 	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
 	{
 		id = 0;
