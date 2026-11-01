@@ -98,6 +98,7 @@
 #include "editors/world_editor/pcg/section_bake_job.h"
 #include "editors/world_editor/pcg/graph_instance_builder.h"
 #include "editors/world_editor/pcg/section_path_builder.h"
+#include "editors/world_editor/pcg/text_parsing.h"
 #include "terrain/terrain.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
@@ -258,6 +259,31 @@ namespace mmo
 		char* end = nullptr;
 		seed = std::strtoull(text, &end, 10);
 		return end != text && *end == '\0' && errno != ERANGE;
+	}
+
+	/// @brief Parses a point list "x,z;x,z;..." (each number as ParseFloatText reads it).
+	/// @param text The command line argument.
+	/// @param out Receives the points (cleared first).
+	/// @param minCount Fewest points the list must have.
+	/// @return True if every pair is valid and there are at least minCount points.
+	bool ParsePointList(const String& text, std::vector<std::pair<float, float>>& out, const size_t minCount)
+	{
+		out.clear();
+		size_t start = 0;
+		while (start <= text.size())
+		{
+			const size_t end = std::min(text.find(';', start), text.size());
+			const String pair = text.substr(start, end - start);
+			const size_t comma = pair.find(',');
+			float x = 0.0f, z = 0.0f;
+			if (comma == String::npos || !ParseFloatText(pair.substr(0, comma), x) || !ParseFloatText(pair.substr(comma + 1), z))
+			{
+				return false;
+			}
+			out.emplace_back(x, z);
+			start = end + 1;
+		}
+		return out.size() >= minCount;
 	}
 
 	/// @brief Parses an oasis id: the whole text is a non-zero hexadecimal number.
@@ -1152,13 +1178,6 @@ int main(int argc, char* arg[])
 					break;
 				}
 
-				const auto parseFloat = [](const char* text, float& out)
-				{
-					char* end = nullptr;
-					out = std::strtof(text, &end);
-					return end != text && *end == '\0' && std::isfinite(out);
-				};
-
 				float x = 0.0f, z = 0.0f, radius = 40.0f;
 				uint64 seed = 1;
 				std::string name;
@@ -1169,13 +1188,13 @@ int main(int argc, char* arg[])
 					const std::string option = args[j];
 					if (option == "--at" && j + 2 < argCount)
 					{
-						argumentsValid = parseFloat(args[j + 1], x) && parseFloat(args[j + 2], z);
+						argumentsValid = mmo::ParseFloatText(args[j + 1], x) && mmo::ParseFloatText(args[j + 2], z);
 						hasCentre = argumentsValid;
 						j += 2;
 					}
 					else if (option == "--radius" && j + 1 < argCount)
 					{
-						argumentsValid = parseFloat(args[++j], radius) && radius > 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], radius) && radius > 0.0f;
 					}
 					else if (option == "--seed" && j + 1 < argCount)
 					{
@@ -1253,34 +1272,6 @@ int main(int argc, char* arg[])
 					break;
 				}
 
-				const auto parseFloat = [](const std::string& text, float& out)
-				{
-					char* end = nullptr;
-					out = std::strtof(text.c_str(), &end);
-					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
-				};
-
-				// "x,z;x,z;..." -> points.
-				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
-				{
-					out.clear();
-					size_t start = 0;
-					while (start <= text.size())
-					{
-						const size_t end = std::min(text.find(';', start), text.size());
-						const std::string pair = text.substr(start, end - start);
-						const size_t comma = pair.find(',');
-						float x = 0.0f, z = 0.0f;
-						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
-						{
-							return false;
-						}
-						out.emplace_back(x, z);
-						start = end + 1;
-					}
-					return out.size() >= 2;
-				};
-
 				std::vector<std::pair<float, float>> points;
 				std::string section;
 				std::string name;
@@ -1291,7 +1282,7 @@ int main(int argc, char* arg[])
 					const std::string option = args[j];
 					if (option == "--points" && j + 1 < argCount)
 					{
-						argumentsValid = parsePoints(args[++j], points);
+						argumentsValid = mmo::ParsePointList(args[++j], points, 2);
 					}
 					else if (option == "--section" && j + 1 < argCount)
 					{
@@ -1320,7 +1311,7 @@ int main(int argc, char* arg[])
 					else if (option == "--smoothing" && j + 1 < argCount)
 					{
 						float smoothing = 0.0f;
-						argumentsValid = parseFloat(args[++j], smoothing) && smoothing >= 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], smoothing) && smoothing >= 0.0f;
 						options.groundSmoothing = smoothing;
 					}
 					else if (option == "--mass")
@@ -1418,34 +1409,6 @@ int main(int argc, char* arg[])
 					break;
 				}
 
-				const auto parseFloat = [](const std::string& text, float& out)
-				{
-					char* end = nullptr;
-					out = std::strtof(text.c_str(), &end);
-					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
-				};
-
-				// "x,z;x,z;..." -> points (at least one).
-				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
-				{
-					out.clear();
-					size_t start = 0;
-					while (start <= text.size())
-					{
-						const size_t end = std::min(text.find(';', start), text.size());
-						const std::string pair = text.substr(start, end - start);
-						const size_t comma = pair.find(',');
-						float x = 0.0f, z = 0.0f;
-						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
-						{
-							return false;
-						}
-						out.emplace_back(x, z);
-						start = end + 1;
-					}
-					return !out.empty();
-				};
-
 				std::vector<std::pair<float, float>> points;
 				std::string typePath;
 				std::string name;
@@ -1456,7 +1419,7 @@ int main(int argc, char* arg[])
 					const std::string option = args[j];
 					if (option == "--points" && j + 1 < argCount)
 					{
-						argumentsValid = parsePoints(args[++j], points);
+						argumentsValid = mmo::ParsePointList(args[++j], points, 1);
 					}
 					else if (option == "--type" && j + 1 < argCount)
 					{
@@ -1542,34 +1505,6 @@ int main(int argc, char* arg[])
 					break;
 				}
 
-				const auto parseFloat = [](const std::string& text, float& out)
-				{
-					char* end = nullptr;
-					out = std::strtof(text.c_str(), &end);
-					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
-				};
-
-				// "x,z;x,z;..." -> points (at least three).
-				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
-				{
-					out.clear();
-					size_t start = 0;
-					while (start <= text.size())
-					{
-						const size_t end = std::min(text.find(';', start), text.size());
-						const std::string pair = text.substr(start, end - start);
-						const size_t comma = pair.find(',');
-						float x = 0.0f, z = 0.0f;
-						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
-						{
-							return false;
-						}
-						out.emplace_back(x, z);
-						start = end + 1;
-					}
-					return out.size() >= 3;
-				};
-
 				std::vector<std::pair<float, float>> points;
 				std::string graphPath;
 				std::string name;
@@ -1581,7 +1516,7 @@ int main(int argc, char* arg[])
 					const std::string option = args[j];
 					if (option == "--points" && j + 1 < argCount)
 					{
-						argumentsValid = parsePoints(args[++j], points);
+						argumentsValid = mmo::ParsePointList(args[++j], points, 3);
 					}
 					else if (option == "--graph" && j + 1 < argCount)
 					{

@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "control_details.h"
+#include "text_parsing.h"
 
 #include "editor_windows/asset_picker_widget.h"
 #include "editor_windows/editor_imgui_helpers.h"
@@ -35,13 +36,6 @@ namespace mmo
 			float weight = 1.0f;
 		};
 
-		bool ParseFloat(const String& text, float& out)
-		{
-			char* end = nullptr;
-			out = std::strtof(text.c_str(), &end);
-			return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
-		}
-
 		/// "asset|weight;asset|weight" -> entries (a missing or invalid weight is 1).
 		std::vector<WeightedAsset> ParseAssetList(const String& text)
 		{
@@ -60,7 +54,7 @@ namespace mmo
 				WeightedAsset entry;
 				const size_t bar = item.rfind('|');
 				entry.asset = item.substr(0, bar);
-				if (bar != String::npos && !ParseFloat(item.substr(bar + 1), entry.weight))
+				if (bar != String::npos && !ParseFloatText(item.substr(bar + 1), entry.weight))
 				{
 					entry.weight = 1.0f;
 				}
@@ -230,7 +224,7 @@ namespace mmo
 		case PropertyType::Float:
 		{
 			float f = 0.0f;
-			if (!ParseFloat(text, f))
+			if (!ParseFloatText(text, f))
 			{
 				error = "property '" + property.name + "' needs a number, got '" + text + "'";
 				return false;
@@ -288,7 +282,7 @@ namespace mmo
 			for (int c = 0; c < 3; ++c)
 			{
 				const size_t end = c < 2 ? text.find(',', start) : text.size();
-				if (end == String::npos || !ParseFloat(text.substr(start, end - start), rgb[c]))
+				if (end == String::npos || !ParseFloatText(text.substr(start, end - start), rgb[c]))
 				{
 					error = "property '" + property.name + "' needs a colour r,g,b, got '" + text + "'";
 					return false;

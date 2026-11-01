@@ -2,11 +2,14 @@
 
 #include "graph_instance_builder.h"
 
+#include "text_parsing.h"
+
 #include "assets/asset_registry.h"
 #include "editors/world_editor/edit_modes/procedural_edit_mode.h"
 #include "editors/world_editor/edit_modes/world_edit_mode.h"
 #include "log/default_log_levels.h"
 #include "pcg/graph/graph_io.h"
+#include "pcg/graph/node_util.h"
 #include "pcg/graph/node_registry.h"
 #include "terrain/constants.h"
 #include "terrain/terrain.h"
@@ -56,6 +59,39 @@ namespace mmo
 			return rect;
 		}
 
+		/// Conservative x/z bounds of a resolved control: its spline (loops and splines), its box footprint at any
+		/// yaw (volumes) or its position (points). Invalid without a type or instance.
+		pcg::graph::Bounds2D GetControlBounds(const pcg::graph::ResolvedControl& control)
+		{
+			pcg::graph::Bounds2D bounds;
+			if (!control.type || !control.instance)
+			{
+				return bounds;
+			}
+
+			const pcg::graph::ControlInstance& instance = *control.instance;
+			switch (control.type->shape)
+			{
+			case pcg::graph::ControlShape::ClosedLoop:
+			case pcg::graph::ControlShape::OpenSpline:
+				return pcg::graph::SplineBounds(instance.spline);
+
+			case pcg::graph::ControlShape::Volume:
+			{
+				// The footprint's diagonal radius covers every yaw.
+				const float radius = std::sqrt(instance.halfExtents.x * instance.halfExtents.x + instance.halfExtents.z * instance.halfExtents.z);
+				bounds.Add(instance.position.x - radius, instance.position.z - radius);
+				bounds.Add(instance.position.x + radius, instance.position.z + radius);
+				return bounds;
+			}
+
+			case pcg::graph::ControlShape::Point:
+				bounds.Add(instance.position.x, instance.position.z);
+				return bounds;
+			}
+			return bounds;
+		}
+
 		bool CheckArea(const PathSpline& area, String& error)
 		{
 			if (!area.closed || area.points.size() < 3)
@@ -85,13 +121,6 @@ namespace mmo
 				}
 			}
 			return "?";
-		}
-
-		bool ParseFloatText(const String& text, float& out)
-		{
-			char* end = nullptr;
-			out = std::strtof(text.c_str(), &end);
-			return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
 		}
 	}
 
@@ -224,18 +253,31 @@ namespace mmo
 			return false;
 		}
 
+		controls.ResolvePlacedControls(out.controls, out.warnings);
+
 		// Streaming a page in does not bump the terrain revision, so a sampler would not notice newly loaded pages:
-		// load everything under the area first, with a margin for the loop bulging between its points.
-		const pcg::WorldRect bounds = GetAreaBounds(record.area);
+		// load everything the evaluation may read first. That is the area and every control reaching into it
+		// (samplers cover whole controls, and pruning near the border needs real heights outside the area too),
+		// with a margin.
+		const pcg::graph::Bounds2D areaBounds = pcg::graph::SplineBounds(record.area);
+		pcg::graph::Bounds2D bounds = areaBounds;
+		for (const pcg::graph::ResolvedControl& control : out.controls)
+		{
+			const pcg::graph::Bounds2D controlBounds = GetControlBounds(control);
+			if (controlBounds.valid && pcg::graph::SaneBounds(controlBounds) && controlBounds.Intersects(areaBounds))
+			{
+				bounds.Add(controlBounds.minX, controlBounds.minZ);
+				bounds.Add(controlBounds.maxX, controlBounds.maxZ);
+			}
+		}
+
 		const float margin = static_cast<float>(terrain::constants::PageSize / 8.0);
 		String loadError;
 		if (!editor.EnsurePagesLoaded(bounds.minX - margin, bounds.minZ - margin, bounds.maxX + margin, bounds.maxZ + margin, loadError))
 		{
-			error = "the terrain under the area could not be loaded: " + loadError;
+			error = "the terrain under the area and its controls could not be loaded: " + loadError;
 			return false;
 		}
-
-		controls.ResolvePlacedControls(out.controls, out.warnings);
 		out.sampler = std::make_unique<EditorTerrainSampler>(*terrain, [&editor]() { return editor.GetTerrainRevision(); });
 
 		out.context = pcg::graph::EvalContext();

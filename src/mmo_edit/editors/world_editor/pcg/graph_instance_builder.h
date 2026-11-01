@@ -85,9 +85,10 @@ namespace mmo
 	/// @return True if the text is a valid value of the parameter's type.
 	bool ParseGraphParameterValue(const pcg::graph::ParameterDef& parameter, const String& text, pcg::graph::AttributeValue& out, String& error);
 
-	/// @brief Builds the evaluation context of a graph instance. Loads the terrain pages under the area first
-	///        (page streaming does not change the terrain revision, so the sampler would not notice them otherwise),
-	///        resolves the placed controls (problems become warnings), and creates the editor terrain sampler. The graph
+	/// @brief Builds the evaluation context of a graph instance. Resolves the placed controls (problems become
+	///        warnings), loads the terrain pages under the area and under every resolved control whose bounds reach into
+	///        it, plus a margin (page streaming does not change the terrain revision, so the sampler would not notice
+	///        them otherwise), and creates the editor terrain sampler. The graph
 	///        is not read here, so a caller can evaluate an in-memory graph with the same context.
 	/// @param editor The world editor of the instance. Must have a terrain.
 	/// @param record The instance.

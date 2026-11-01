@@ -328,6 +328,15 @@ namespace mmo
 			return (static_cast<uint64>(device()) << 32) | static_cast<uint64>(device());
 		}
 
+		/// Makes a spline point a sharp corner: manual tangents with zero handles, so the curve runs straight to
+		/// its neighbours (graph instance areas are polygons).
+		void MakeSharpCorner(SplinePoint& point)
+		{
+			point.autoTangents = false;
+			point.inX = point.inY = point.inZ = 0.0f;
+			point.outX = point.outY = point.outZ = 0.0f;
+		}
+
 		/// Draws an influence rect on the ground.
 		template<typename Project, typename Height>
 		void DrawRect(ImDrawList& drawList, const pcg::WorldRect& rect, const ImU32 color, const Project& project, const Height& height)
@@ -1624,9 +1633,11 @@ namespace mmo
 			bounds.maxZ = std::max(bounds.maxZ, z);
 		}
 		String loadError;
-		if (m_worldEditor.HasTerrain())
+		if (m_worldEditor.HasTerrain() && !m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, loadError))
 		{
-			m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, loadError);
+			// Only the drawn heights of the area points suffer (the evaluation ignores them).
+			WLOG("New graph instance: the terrain under its area could not be loaded (" << loadError
+				<< "); points without terrain are put at height 0");
 		}
 
 		for (const auto& [x, z] : points)
@@ -1634,7 +1645,7 @@ namespace mmo
 			SplinePoint point;
 			point.x = x;
 			point.z = z;
-			point.autoTangents = false;
+			MakeSharpCorner(point);
 			if (!m_worldEditor.HasTerrain() || !m_worldEditor.GetTerrain()->TryGetSmoothHeightAt(x, z, point.y))
 			{
 				point.y = 0.0f;
@@ -3151,6 +3162,12 @@ namespace mmo
 				{
 					// A new point gets a new id; ids are never reused.
 					pointIds->insert(pointIds->begin() + inserted, (*nextPointId)++);
+
+					// Graph instance areas are polygons: a new point is a sharp corner like the others.
+					if (control.kind == ControlKind::GraphInstance)
+					{
+						MakeSharpCorner(control.Spline().points[inserted]);
+					}
 				}
 
 				if (m_splineEditor.DragMoved())
