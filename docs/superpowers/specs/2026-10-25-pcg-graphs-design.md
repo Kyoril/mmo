@@ -329,3 +329,50 @@ section) and is the acceptance example for the node set's expressiveness.
   mode that undoes the old contribution and writes nothing.
 - **Order of Rebuild All.** Graph instances are rebuilt after terrain writers. Keep that order when graph instances
   start writing terrain themselves, and decide how instances that both read and write terrain are ordered.
+
+## Decided while building phase 3b
+
+From the rulings made while the phase was executed:
+
+- **Prepare's seam `neighbours` parameter defaults to empty.** Existing callers and tests stay unchanged; the
+  editor passes the neighbours explicitly.
+- **A river is not the water it falls into.** The waterfall rule's Distance To and Copy Attributes from Control
+  read Get Controls(`water`, excluding `river`); a river falling into another river gets no waterfall in v1.
+- **The basin rim check runs only when `depth` > 0,** so flat depth-0 lakes keep their phase 3a output without
+  warnings.
+- **Stamp length 0 is resolved when the terrain is prepared** (marker params `stampLength`/`stampAnchor`), because
+  nodes have no asset access; an explicit length emits a plain SectionPath op.
+- **A missing `section` on Stamp Section at Points is a node error,** as for Lay Section, even with no points.
+- **Inside `width` the river owns the bed height** (surface − depth, even where the ground is lower), like a section
+  corridor; a river across a deep hollow builds a raised bed there.
+- **Flow paths end exactly at the river's last point** (the last gap may be shorter than 4 m).
+- **A closed River spline is skipped with a warning;** rivers flow one way.
+- **`waterMargin` 2 leaves a thin dry band below the waterline** at bank 4 / depth 1.5; graphs set 3 (FalwynValley
+  does) until the default is revisited.
+- **Records always write version 2;** an existing record grows by 4 bytes on its next rebuild.
+- **The world's flow file is `<world folder>/<world>.hflow`** (world 2: `Worlds/Collision/Collision.hflow`).
+- **A rebuild shares flow with the open editor's hand rivers** through an `IWorldEditor` hook (pending flow edits
+  are flushed first); the `.hflow` on disk is read only when no Water mode exists.
+- **Seam neighbours are found by `CollectSeamNeighbours`:** an instance counts when it wrote terrain or its graph
+  has a node with a Terrain pin (the R11 rule).
+
+Task 7 (Falwyn stream and waterfall):
+
+- **River controls carry a `clearance` (10 m = bed + bank + 2 m).** Difference clears points around a spline only by
+  `distance` + the spline's `clearance`; the `exclusion` tag alone removes nothing.
+- **Lakes are Get Controls(`water`, excluding `river`)** for Water Area too: Water Area takes areas, and the lake
+  basin (`depth` 3, `shoreWidth` 6) must not see the river spline.
+- **Waterfall section:** L 12, halfWidth 6, sideFalloff 4. The lip (local z 0–3) is rock at 0 beside a 9 m spill
+  notch at −0.8, below the river's water surface (−0.4) so the water spills over it; the face drops to a plunge
+  pool at −6.9…−7.5 (under water for drops up to ~6.5 m). `SM_Waterfall2` ×1.3 (14.7 m wide, 4.9 m tall, fits a
+  ~5 m drop) at z 4, its top at the water surface. Six `SM_stone_06` rocks, no paint, no prop rules.
+- **The drop comes from a hand base.** World 2's valley floor is flat (~20.5 m) and lower than the lake level 21.5.
+  A terrace east of MeadowLake (+5.8 m scarp 2–7 m from the shore, rising to +10.2 m upstream) gives the river a
+  5.65 m drop. A berm around the lake (ground lifted to 22.8 m within 3 m of the shore, fading out by 12 m) fixes
+  the rim warning (base rim was 20.24 m).
+- **Moving a control point unattended means editing the control file.** Delete and create again would sample the
+  point heights from the already carved terrain.
+- **Re-creating an instance reproduces its terrain byte for byte, but not its placement ids.** Created placements get
+  new unique ids, so the committed state is the original instance (its record id kept), not the re-created one.
+- **River materials win page-wide.** A page with a river renders all its water, the lake included, with
+  `Water_River.hmat`.
