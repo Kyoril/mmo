@@ -345,10 +345,14 @@ From the rulings made while the phase was executed:
 - **A missing `section` on Stamp Section at Points is a node error,** as for Lay Section, even with no points.
 - **Inside `width` the river owns the bed height** (surface − depth, even where the ground is lower), like a section
   corridor; a river across a deep hollow builds a raised bed there.
+- **A river has flat end caps.** Past the first and the last point (projected along the end segment) there is no
+  water and no owned bed; only the bank closes the bed there, by the distance to the bed's end edge, and it only
+  lowers. Round caps put a sheet of river water up to `width` + `waterMargin` past the end, floating over a waterfall
+  pool.
 - **Flow paths end exactly at the river's last point** (the last gap may be shorter than 4 m).
 - **A closed River spline is skipped with a warning;** rivers flow one way.
-- **`waterMargin` 2 leaves a thin dry band below the waterline** at bank 4 / depth 1.5; graphs set 3 (FalwynValley
-  does) until the default is revisited.
+- **`waterMargin` defaults to 3.** 2 left a thin dry band below the waterline at bank 4 / depth 1.5. River `depth` is
+  clamped to >= 0 and WaterArea `depth` to <= 200 when the terrain is prepared.
 - **Records always write version 2;** an existing record grows by 4 bytes on its next rebuild.
 - **The world's flow file is `<world folder>/<world>.hflow`** (world 2: `Worlds/Collision/Collision.hflow`).
 - **A rebuild shares flow with the open editor's hand rivers** through an `IWorldEditor` hook (pending flow edits
@@ -374,5 +378,10 @@ Task 7 (Falwyn stream and waterfall):
   point heights from the already carved terrain.
 - **Re-creating an instance reproduces its terrain byte for byte, but not its placement ids.** Created placements get
   new unique ids, so the committed state is the original instance (its record id kept), not the re-created one.
-- **River materials win page-wide.** A page with a river renders all its water, the lake included, with
-  `Water_River.hmat`.
+- **River materials win page-wide, inside the region only.** A page where the instance writes water gets the River
+  op's material (`Water_River.hmat`) if it has none yet, so a page with a river renders all its water, the lake
+  included, with it. The flow update (`Terrain::ApplyWaterFlow`) assigns no material: it would reach every page with
+  water near any path, hand rivers and pages outside the region included, and Delete could not take it back.
+- **The waterfall's water is the mesh alone.** With flat end caps the river water stops at the lip and the plunge
+  pool between the lake margin and the fall is dry. In `--capture-view`, `SM_Waterfall2` shows only as white
+  fragments: the falling water in the first phase 3b capture was the floating river sheet sloping down to the lake.

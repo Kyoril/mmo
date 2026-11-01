@@ -64,9 +64,9 @@ namespace mmo::pcg::graph
 			const char* name;
 			float defaultValue;
 			const char* description;
-				/// UI range; used when max > min.
-				float min = 0.0f;
-				float max = 0.0f;
+			/// UI range; used when max > min.
+			float min = 0.0f;
+			float max = 0.0f;
 		};
 
 		/// Everything that differs between the nodes.
@@ -106,15 +106,15 @@ namespace mmo::pcg::graph
 				{ { "level", 0.0f, "Water surface height (m); the item attribute 'level' overrides it" },
 				  { "levelOffset", 0.0f, "Added to the level (m)" },
 				  { "margin", 4.0f, "Distance (m) past the shore that still holds water" },
-					  { "depth", 0.0f, "Basin depth (m) below the water level; 0 leaves the ground alone", 0.0f, 200.0f },
-					  { "shoreWidth", 6.0f, "Distance (m) inwards over which the shore slopes down to the bed", 0.5f, 200.0f } },
+				  { "depth", 0.0f, "Basin depth (m) below the water level; 0 leaves the ground alone", 0.0f, 200.0f },
+				  { "shoreWidth", 6.0f, "Distance (m) inwards over which the shore slopes down to the bed", 0.5f, 200.0f } },
 				"areas" };
 			static const TerrainNodeDef river{ "River", "River", TerrainOpType::River, { ItemKind::Spline },
 				{ { "width", 5.0f, "Half width (m) of the bed floor, per side" },
 				  { "bank", 4.0f, "Distance (m) beyond the bed over which the bank rises back to the ground" },
 				  { "depth", 1.5f, "Depth (m) of the bed below the water surface" },
 				  { "surfaceOffset", -0.4f, "Water surface relative to the spline height (m); the surface never climbs downstream" },
-				  { "waterMargin", 2.0f, "Distance (m) past the bed that still holds water, covering the bank's waterline" } },
+				  { "waterMargin", 3.0f, "Distance (m) past the bed that still holds water, covering the bank's waterline" } },
 				"splines" };
 			switch (type)
 			{

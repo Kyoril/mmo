@@ -495,7 +495,7 @@ TEST_CASE("River emits a River op with the defaults and the material", "[graph_n
 	CHECK(Number(item, "bank") == 4.0f);
 	CHECK(Number(item, "depth") == 1.5f);
 	CHECK(Number(item, "surfaceOffset") == -0.4f);
-	CHECK(Number(item, "waterMargin") == 2.0f);
+	CHECK(Number(item, "waterMargin") == 3.0f);
 	CHECK(item.op.asset == "Worlds/Water_River.hmat");
 	CHECK(item.op.params.count("material") == 0);
 	CHECK(item.op.stackOrder == 0);

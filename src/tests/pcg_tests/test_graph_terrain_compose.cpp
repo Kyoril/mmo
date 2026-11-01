@@ -8,6 +8,7 @@
 #include "pcg/section_path.h"
 #include "terrain_io/water_flow.h"
 
+#include <chrono>
 #include <cmath>
 #include <map>
 
@@ -986,7 +987,7 @@ namespace
 
 TEST_CASE("A river carves its bed below a running water surface", "[terrain_compose]")
 {
-	// Defaults: width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 2. The spline lies on the 2 % slope.
+	// Defaults: width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 3. The spline lies on the 2 % slope.
 	PreparedTerrain t;
 	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
 	CHECK(t.GetWarnings().empty());
@@ -1010,11 +1011,59 @@ TEST_CASE("A river carves its bed below a running water surface", "[terrain_comp
 	// The bank never raises the ground above the running height.
 	CHECK(Written(t.Evaluate(100.0f, 8.0f, 2.0f, {}), 2.0f) == Approx(2.0f));
 
-	// Water inside width + waterMargin = 7, none beyond.
-	CHECK(t.Evaluate(100.0f, 6.9f, 8.0f, {}).waterType == 1);
-	CHECK(t.Evaluate(100.0f, -6.9f, 8.0f, {}).waterHeight == Approx(7.6f).margin(1e-4));
-	CHECK(t.Evaluate(100.0f, 7.1f, 8.0f, {}).waterType == 0);
+	// Water inside width + waterMargin = 8, none beyond.
+	CHECK(t.Evaluate(100.0f, 7.9f, 8.0f, {}).waterType == 1);
+	CHECK(t.Evaluate(100.0f, -7.9f, 8.0f, {}).waterHeight == Approx(7.6f).margin(1e-4));
+	CHECK(t.Evaluate(100.0f, 8.1f, 8.0f, {}).waterType == 0);
 	CHECK(t.Evaluate(100.0f, 30.0f, 8.0f, {}).waterType == 0);
+}
+
+TEST_CASE("A river has flat end caps: no water and no bed past its ends", "[terrain_compose]")
+{
+	// Defaults (width 5, bank 4, depth 1.5, waterMargin 3); the river runs along z = 0 from x = 0 to x = 200.
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
+
+	// Just inside either end: bed and water as along the river.
+	for (const float x : { 0.25f, 199.75f })
+	{
+		const float ground = Slope(x, 0.0f);
+		const TerrainTarget inside = t.Evaluate(x, 0.0f, ground, {});
+		CHECK(inside.waterType == 1);
+		CHECK(Written(inside, ground) == Approx(inside.waterHeight - 1.5f).margin(1e-4));
+	}
+
+	// Past either end (round caps reached width + waterMargin = 8 m with water and width = 5 m with the bed).
+	for (const float past : { 0.25f, 1.0f, 2.0f, 4.0f, 6.0f, 7.9f })
+	{
+		for (const float z : { 0.0f, 3.0f, -4.9f, 7.5f })
+		{
+			for (const auto& [x, surface] : { std::make_pair(-past, 9.6f), std::make_pair(200.0f + past, 5.6f) })
+			{
+				const float ground = Slope(x, z);
+				const TerrainTarget target = t.Evaluate(x, z, ground, {});
+				CHECK(target.waterType == 0);
+				// No owned bed: the bank closing the bed only lowers, less the further past the end.
+				const float bed = surface - 1.5f;
+				if (past >= 1.0f)
+				{
+					CHECK(Written(target, ground) > bed + 0.1f);
+				}
+				CHECK(Written(target, ground) <= ground);
+				if (past >= 4.0f)
+				{
+					CHECK(target.heightWeight == 0.0f);
+				}
+			}
+		}
+	}
+
+	// The bank closing the bed meets the bed at the end line and the ground at bank distance past it.
+	const float atEnd = Written(t.Evaluate(200.001f, 0.0f, Slope(200.0f, 0.0f), {}), Slope(200.0f, 0.0f));
+	CHECK(atEnd == Approx(5.6f - 1.5f).margin(1e-2));
+	// Halfway (smoothstep 0.5); ground below the bed is never raised.
+	CHECK(Written(t.Evaluate(202.0f, 0.0f, 4.0f, {}), 4.0f) == Approx(4.0f));
+	CHECK(Written(t.Evaluate(202.0f, 0.0f, 9.0f, {}), 9.0f) == Approx(9.0f - 0.5f * 4.9f).margin(1e-4));
 }
 
 TEST_CASE("A river surface stays flat over a bump in the spline, with one warning", "[terrain_compose]")
@@ -1085,7 +1134,7 @@ TEST_CASE("River flow paths follow the river inside the region", "[terrain_compo
 	CHECK(paths[0].front().x == Approx(0.0f));
 	CHECK(paths[0].back().x == Approx(30.0f));
 	CHECK(paths[0][7].x == Approx(28.0f));
-	CHECK(paths[0][0].halfWidth == Approx(7.0f));
+	CHECK(paths[0][0].halfWidth == Approx(8.0f));
 
 	// No rivers, no paths.
 	PreparedTerrain none;
@@ -1289,6 +1338,24 @@ TEST_CASE("Without neighbours the result is identical", "[terrain_compose]")
 			}
 		}
 	}
+}
+
+TEST_CASE("Touching 1 km regions find their seam quickly", "[terrain_compose]")
+{
+	// 16000 border samples each (0.25 m step). A linear scan of the neighbour per query took 2 x 10^9 segment tests.
+	const PathSpline regionA = Square(0.0f, 0.0f, 1000.0f);
+	const PathSpline regionB = Square(1000.0f, 0.0f, 1000.0f);
+	const auto start = std::chrono::steady_clock::now();
+	PreparedTerrain a;
+	PrepareWithNeighbours(a, regionA, { regionB });
+	PreparedTerrain b;
+	PrepareWithNeighbours(b, regionB, { regionA });
+	const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+	WARN("two touching 1 km regions prepared in " << seconds << " s");
+	CHECK(a.GetSeamHash() != 0);
+	CHECK(b.GetSeamHash() != 0);
+	CHECK(a.GetSeamNeighbours() == std::vector<size_t>{ 0 });
+	CHECK(b.GetSeamNeighbours() == std::vector<size_t>{ 0 });
 }
 
 TEST_CASE("A neighbour that only touches at a corner creates no seam", "[terrain_compose]")

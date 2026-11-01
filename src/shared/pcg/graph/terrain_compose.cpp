@@ -42,46 +42,20 @@ namespace mmo::pcg::graph
 		}
 
 		/// A region edge segment lies on a neighbour edge if points along it are within this (m) of the neighbour's border.
-		constexpr double kSeamTolerance = 0.05;
-
-		/// Distance from (x, z) to the segment a-b.
-		double DistanceToSegment(const double x, const double z, const SplineSample& a, const SplineSample& b)
-		{
-			const double dx = static_cast<double>(b.x) - a.x;
-			const double dz = static_cast<double>(b.z) - a.z;
-			const double len2 = dx * dx + dz * dz;
-			double t = 0.0;
-			if (len2 > 0.0)
-			{
-				t = std::min(1.0, std::max(0.0, ((x - a.x) * dx + (z - a.z) * dz) / len2));
-			}
-			const double px = x - (a.x + dx * t);
-			const double pz = z - (a.z + dz * t);
-			return std::sqrt(px * px + pz * pz);
-		}
-
-		/// Whether (x, z) lies within the seam tolerance of the closed loop.
-		bool NearLoop(const double x, const double z, const std::vector<SplineSample>& loop)
-		{
-			const size_t n = loop.size();
-			for (size_t i = 0; i < n; ++i)
-			{
-				if (DistanceToSegment(x, z, loop[i], loop[(i + 1) % n]) <= kSeamTolerance)
-				{
-					return true;
-				}
-			}
-			return false;
-		}
+		constexpr float kSeamTolerance = 0.05f;
 
 		/// Whether the region segment a-b lies on the neighbour's border: both end points and points along it (eighths)
-		/// all lie on the neighbour loop. A segment that only ends at a neighbour corner, or cuts across it, fails.
-		bool IsSeamSegment(const SplineSample& a, const SplineSample& b, const std::vector<SplineSample>& neighbour)
+		/// all lie within the seam tolerance of the neighbour loop (indexed with that reach). A segment that only ends at a
+		/// neighbour corner, or cuts across it, fails.
+		bool IsSeamSegment(const SplineSample& a, const SplineSample& b, const PolylineIndex& neighbour)
 		{
+			NearestHit hit;
 			for (int step = 0; step <= 8; ++step)
 			{
 				const double t = static_cast<double>(step) / 8.0;
-				if (!NearLoop(a.x + (static_cast<double>(b.x) - a.x) * t, a.z + (static_cast<double>(b.z) - a.z) * t, neighbour))
+				const double x = a.x + (static_cast<double>(b.x) - a.x) * t;
+				const double z = a.z + (static_cast<double>(b.z) - a.z) * t;
+				if (!neighbour.Nearest(static_cast<float>(x), static_cast<float>(z), hit))
 				{
 					return false;
 				}
@@ -158,6 +132,47 @@ namespace mmo::pcg::graph
 		/// Flow path points are every this many surface samples (4 m at the preferred step).
 		constexpr size_t kRiverFlowStride = 4;
 
+		/// Whether (x, z), whose nearest point on the open polyline `samples` is `hit`, projects past an end of it (before
+		/// the first sample or after the last, along the end segment). Then `past` is the distance beyond the end line and
+		/// `lateral` the distance from the end segment's line.
+		bool RiverPastEnd(const std::vector<SplineSample>& samples, const NearestHit& hit, const float x, const float z,
+			float& past, float& lateral)
+		{
+			if (samples.size() < 2)
+			{
+				return false;
+			}
+			const uint32 last = static_cast<uint32>(samples.size() - 1);
+			const bool atStart = hit.a == 0 && hit.b == 1 && hit.t <= 0.0f;
+			const bool atEnd = hit.a + 1 == last && hit.b == last && hit.t >= 1.0f;
+			if (!atStart && !atEnd)
+			{
+				return false;
+			}
+			const SplineSample& end = atStart ? samples[0] : samples[last];
+			const SplineSample& inner = atStart ? samples[1] : samples[last - 1];
+			const float dx = end.x - inner.x;
+			const float dz = end.z - inner.z;
+			const float length = std::hypot(dx, dz);
+			if (!(length > 0.0f))
+			{
+				return false;
+			}
+			// Outward along the end segment.
+			const float ux = dx / length;
+			const float uz = dz / length;
+			const float ox = x - end.x;
+			const float oz = z - end.z;
+			const float beyond = ox * ux + oz * uz;
+			if (!(beyond > 0.0f))
+			{
+				return false;
+			}
+			past = beyond;
+			lateral = std::abs(oz * ux - ox * uz);
+			return true;
+		}
+
 		/// A river spline may climb this far above its running water surface without a warning.
 		constexpr float kRiverClimbTolerance = 0.5f;
 
@@ -227,6 +242,7 @@ namespace mmo::pcg::graph
 			}
 			return lowest;
 		}
+
 		/// Adds the layer weights `splat` at `weight` over the composited paint (premultiplied, Porter-Duff over).
 		void CompositeSplat(std::array<double, 4>& premultiplied, double& alpha, const std::array<uint8, 4>& splat, const float weight)
 		{
@@ -449,11 +465,14 @@ namespace mmo::pcg::graph
 				{
 					continue;
 				}
+				// Indexed: a linear scan per query is O(region samples x neighbour samples).
+				PolylineIndex otherIndex;
+				otherIndex.Build(otherSamples, true, kSeamTolerance);
 				for (size_t i = 0; i < sampleCount; ++i)
 				{
 					const SplineSample& a = samples[i];
 					const SplineSample& b = samples[(i + 1) % sampleCount];
-					if (IsSeamSegment(a, b, otherSamples))
+					if (IsSeamSegment(a, b, otherIndex))
 					{
 						touching[n] = 1;
 						if (!seamSegments[i])
@@ -697,20 +716,20 @@ namespace mmo::pcg::graph
 				prepared->polygon = MakePolygon(path);
 				prepared->edge.Build(path.GetSamples(), true, prepared->margin);
 				prepared->bounds = Grow(PathRect(path), prepared->margin);
-					prepared->depth = std::max(0.0f, SettingFloat(op.params, "depth", 0.0f));
-					if (prepared->depth > 0.0f)
+				prepared->depth = std::min(200.0f, std::max(0.0f, SettingFloat(op.params, "depth", 0.0f)));
+				if (prepared->depth > 0.0f)
+				{
+					prepared->shoreWidth = std::max(0.5f, SettingFloat(op.params, "shoreWidth", 6.0f));
+					prepared->basinEdge.Build(path.GetSamples(), true, prepared->shoreWidth);
+					prepared->centroid = AreaCentroid(path.GetSamples());
+					const float lowest = LowestRim(path.GetSamples(), ground);
+					if (lowest < prepared->level)
 					{
-						prepared->shoreWidth = std::max(0.5f, SettingFloat(op.params, "shoreWidth", 6.0f));
-						prepared->basinEdge.Build(path.GetSamples(), true, prepared->shoreWidth);
-						prepared->centroid = AreaCentroid(path.GetSamples());
-						const float lowest = LowestRim(path.GetSamples(), ground);
-						if (lowest < prepared->level)
-						{
-							Warn("WaterArea (node " + std::to_string(op.order) + ", control " + std::to_string(in.sourceId)
-								+ "): base rim drops to " + FormatMeters(lowest) + " m, below the water level "
-								+ FormatMeters(prepared->level) + " m; water will show past the shore");
-						}
+						Warn("WaterArea (node " + std::to_string(op.order) + ", control " + std::to_string(in.sourceId)
+							+ "): base rim drops to " + FormatMeters(lowest) + " m, below the water level "
+							+ FormatMeters(prepared->level) + " m; water will show past the shore");
 					}
+				}
 				if (!op.asset.empty())
 				{
 					if (m_waterMaterial.empty())
@@ -729,8 +748,8 @@ namespace mmo::pcg::graph
 				const SampledPath path(in.spline, EvaluationStep(in.spline, SamplingStep));
 				prepared->width = std::max(0.0f, SettingFloat(op.params, "width", 5.0f));
 				prepared->bank = std::max(0.0f, SettingFloat(op.params, "bank", 4.0f));
-				prepared->depth = SettingFloat(op.params, "depth", 1.5f);
-				prepared->margin = std::max(0.0f, SettingFloat(op.params, "waterMargin", 2.0f));
+				prepared->depth = std::max(0.0f, SettingFloat(op.params, "depth", 1.5f));
+				prepared->margin = std::max(0.0f, SettingFloat(op.params, "waterMargin", 3.0f));
 				const float surfaceOffset = SettingFloat(op.params, "surfaceOffset", -0.4f);
 				const float reach = prepared->width + std::max(prepared->bank, prepared->margin);
 				const float length = path.GetLength();
@@ -857,12 +876,12 @@ namespace mmo::pcg::graph
 			{
 				samples = &op->edge.GetSamples();
 				outline.closed = op->edge.IsClosed();
-					if (op->type == TerrainOpType::WaterArea && op->depth > 0.0f)
-					{
-						outline.depth = op->depth;
-						outline.level = op->level;
-						outline.centroid = op->centroid;
-					}
+				if (op->type == TerrainOpType::WaterArea && op->depth > 0.0f)
+				{
+					outline.depth = op->depth;
+					outline.level = op->level;
+					outline.centroid = op->centroid;
+				}
 			}
 			if (samples != nullptr)
 			{
@@ -1085,12 +1104,12 @@ namespace mmo::pcg::graph
 			case TerrainOpType::WaterArea:
 			{
 				NearestHit hit;
-					if (wantHeights && op.depth > 0.0f && op.polygon->Contains(x, z))
-					{
-						// Inward distance d; past the shore width the reach finds nothing and the bed holds.
-						const float s = op.basinEdge.Nearest(x, z, hit) ? Smoothstep01(hit.distance / op.shoreWidth) : 1.0f;
-						blendHeight(std::min(h, h + (op.level - op.depth - h) * s), 1.0f);
-					}
+				if (wantHeights && op.depth > 0.0f && op.polygon->Contains(x, z))
+				{
+					// Inward distance d; past the shore width the reach finds nothing and the bed holds.
+					const float s = op.basinEdge.Nearest(x, z, hit) ? Smoothstep01(hit.distance / op.shoreWidth) : 1.0f;
+					blendHeight(std::min(h, h + (op.level - op.depth - h) * s), 1.0f);
+				}
 				if (wantWater && (op.polygon->Contains(x, z) || op.edge.Nearest(x, z, hit)))
 				{
 					out.waterType = 1;
@@ -1108,6 +1127,25 @@ namespace mmo::pcg::graph
 				const std::vector<SplineSample>& samples = op.edge.GetSamples();
 				const float along = samples[hit.a].distance + (samples[hit.b].distance - samples[hit.a].distance) * hit.t;
 				const float surface = op.SurfaceAt(along);
+
+				// Flat end caps: past an end of the spline there is no water and no owned bed. Only the bank closes
+				// the bed there, by the distance to the bed's end edge, and it only ever lowers the running height.
+				float past = 0.0f;
+				float lateral = hit.distance;
+				if (RiverPastEnd(samples, hit, x, z, past, lateral))
+				{
+					if (wantHeights && op.bank > 0.0f)
+					{
+						const float d = std::hypot(std::max(0.0f, lateral - op.width), past);
+						if (d < op.bank)
+						{
+							const float w = 1.0f - Smoothstep01(d / op.bank);
+							blendHeight(std::min(h, h + (surface - op.depth - h) * w), 1.0f);
+						}
+					}
+					break;
+				}
+
 				if (wantHeights && hit.distance <= op.width + op.bank)
 				{
 					// The bed is owned by the river; the bank only ever lowers the running height.

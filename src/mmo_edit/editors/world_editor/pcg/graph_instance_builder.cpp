@@ -339,9 +339,12 @@ namespace mmo
 			const std::vector<terrain_io::water_flow::FlowPath> generated = controls.CollectGeneratedFlowPaths(record.id, newPaths);
 			paths.insert(paths.end(), generated.begin(), generated.end());
 
-			// Same settings for both sets: Water mode applied the pages with them.
+			// Same settings for both sets: Water mode applied the pages with them. No material: ApplyWaterFlow would give it
+			// to every page with water near any path (hand rivers and pages outside the region included) and nothing would
+			// take it back. The instance's own water gets its material from the terrain write (content.waterMaterial, the
+			// River op's material), which the contribution undo takes back with the water.
 			const terrain::Terrain::WaterFlowResult result = terrain->ApplyWaterFlow(paths, settings, record.flowPaths,
-				settings, newPaths.empty() ? String() : String(RiverWaterMaterial));
+				settings, String());
 			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): river flow written to "
 				<< result.pagesWritten << " page(s), cleared on " << result.pagesCleared);
 			record.flowPaths = std::move(newPaths);
