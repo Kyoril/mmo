@@ -643,7 +643,7 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--import-texture")
 			{
-				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]
+				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map] [--mipmaps]
 				static std::ofstream importLog("texture_import.log", std::ios::out | std::ios::trunc);
 				static std::mutex importLogMutex;
 				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
@@ -663,6 +663,7 @@ int main(int argc, char* arg[])
 				mmo::TextureUsage usage = mmo::TextureUsage::Color;
 				bool compress = false;
 				bool heightMap = false;
+				bool mipMaps = false;
 				for (int j = i + 2; j < argCount; ++j)
 				{
 					const std::string arg = args[j];
@@ -670,11 +671,12 @@ int main(int argc, char* arg[])
 					else if (arg == "--grayscale") usage = mmo::TextureUsage::Grayscale;
 					else if (arg == "--compress") compress = true;
 					else if (arg == "--height-map") heightMap = true;
+					else if (arg == "--mipmaps") mipMaps = true;
 					else files.emplace_back(arg);
 				}
 
 				mmo::TextureImport importer;
-				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap) ? 0 : 1);
+				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap, mipMaps) ? 0 : 1);
 				break;
 			}
 

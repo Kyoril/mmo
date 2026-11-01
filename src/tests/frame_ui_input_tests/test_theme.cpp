@@ -444,18 +444,32 @@ TEST_CASE("Render production character inventory options and HUD layouts", "[.th
 	for (int i = 0; i < 9; ++i)
 	{
 		auto frame = clone("GameMenuBarImageButton", find("MenuBarButtons"), static_cast<float>(i * 70), 0, 70, 104);
-		const std::string menuIcons[] = { "Character", "Spellbook", "Talents", "Social", "Inventory", "QuestLog", "Achievements", "Options", "BugReport" };
-		// Gold legacy glyphs are used here just as in the production menu; do not substitute placeholders.
-		frame->SetProperty("Icon", "Interface/Icons/fg4_iconsGold_" + std::string(i % 2 == 0 ? "close_result" : "plus_result") + ".htex");
+		const std::string menuIcons[] = { "Character", "Repertoire", "Professions", "Emotes", "Inventory", "Quests", "Talents", "Menu", "Menu" };
+		// Use the actual production menu artwork, not placeholder glyphs.
+		frame->SetProperty("Icon", "Interface/GameUI/Alestia/MenuIcons/" + menuIcons[i] + ".htex");
 	}
 	find("InventoryFrame")->SetSize(973, 577);
 	find("InventoryTitleBar")->SetText("Inventory");
+	for (int bag = 0; bag < 4; ++bag)
+	{
+		auto frame = clone("InventoryItemButtonTemplate", find("BagContainer"), 0, static_cast<float>(bag * 102), 102, 102);
+		frame->SetProperty("Background", "Interface/Icons/ItemSlots/icons_01_bag.htex");
+	}
+	const std::string items[] = { "acolyte_robe_icon", "acolyte_staff_icon", "arcane_cord_icon", "ashen_quarterstaff_icon", "barrowfront_mail_hauberk_icon", "belt_of_sanctity_icon", "berserker_ring_icon", "boots_of_the_templar_icon", "cadet_shield_icon", "cloak_of_radiant_devotion_icon" };
+	const std::string equipment[] = { "CharacterInvSlotChest", "CharacterInvSlotMainHand", "CharacterInvSlotWaist", "CharacterInvSlotFeet", "CharacterInvSlotBack" };
+	for (int i = 0; i < 5; ++i)
+	{
+		find(equipment[i])->SetProperty("Icon", "Interface/Icons/Items/" + items[i] + ".htex");
+		find(equipment[i])->SetProperty("BackgroundColor", "00000000");
+		find(equipment[i])->SetProperty("QualityColor", i == 0 ? "FF6FAFC4" : "FFB59D73");
+	}
 	for (int i = 0; i < 32; ++i)
 	{
 		auto frame = clone("InventoryItemButtonTemplate", find("ItemSlotContainer"), static_cast<float>((i % 8) * 102), static_cast<float>((i / 8) * 102), 102, 102);
 		if (i < 12)
 		{
-			frame->SetProperty("Icon", "Interface/Icons/Spells/" + icons[i % 6] + ".htex");
+			frame->SetProperty("Icon", "Interface/Icons/Items/" + items[i % 10] + ".htex");
+			frame->SetProperty("QualityColor", i % 3 == 0 ? "FF6FAFC4" : "FFFFFFFF");
 		}
 	}
 	for (const std::string name : { "PlayerHealthBar", "TargetHealthBar", "PlayerManaBar", "TargetManaBar", "PlayerExperienceBar", "PlayerClassExperienceBar" })
@@ -463,8 +477,14 @@ TEST_CASE("Render production character inventory options and HUD layouts", "[.th
 		auto frame = find(name);
 		frame->Show();
 		static_cast<ProgressBar*>(frame.get())->SetProgress(name.find("Experience") != std::string::npos ? 0.45f : 0.85f);
-		frame->SetText(name.find("Experience") != std::string::npos ? "Class Experience: 271 / 400" : "99 / 99");
+		frame->SetText(name.find("Experience") != std::string::npos ? (name.find("Class") != std::string::npos ? "Class Experience: 271 / 400" : "Character Experience: 48 / 2800") : "99 / 99");
 	}
+	// Run the real shared XP layout function so theme metrics and second-bar spacing are exercised.
+	const auto scriptPath = std::filesystem::path(MMO_TEST_CLIENT_DATA_DIR) / "Interface/GameUI/GameMenuBar.lua";
+	const int scriptResult = luaL_dofile(fixture.lua, scriptPath.string().c_str());
+	REQUIRE(scriptResult == 0);
+	lua_getglobal(fixture.lua, "GameMenuBar_UpdateExperienceBarLayout");
+	REQUIRE(lua_pcall(fixture.lua, 0, 0, 0) == 0);
 	find("PlayerName")->SetText("Arwyn");
 	find("TargetName")->SetText("Training Dummy");
 	find("MinimapTitleBar")->SetText("Oakenshire");
@@ -503,6 +523,8 @@ TEST_CASE("Render production character inventory options and HUD layouts", "[.th
 	}
 	auto heading = clone("OptionsHeaderRowTemplate", find("OptionsScrollContent"), 0, 0, 1630, 96);
 	heading->GetChild(0)->SetText("Display");
+	find("PlayerManaBar")->SetProperty("ProgressColor", "FF3686C7");
+	find("TargetManaBar")->SetProperty("ProgressColor", "FF3686C7");
 	find("OptionsDefaultsButton")->SetText("Defaults");
 	find("OptionsOkayButton")->SetText("Okay");
 	find("OptionsCancelButton")->SetText("Cancel");
