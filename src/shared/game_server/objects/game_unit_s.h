@@ -1622,6 +1622,14 @@ public:
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
 
+		/// Checks whether one of this unit's pets is in combat (and so this unit is, too).
+		/// @returns true if a pet of this unit is in combat.
+		[[nodiscard]] bool IsAnyPetInCombat() const;
+
+		/// Leaves combat unless something still keeps the unit in it: attacking units, a running
+		/// pvp combat timer or a pet in combat. Called when a pet of this unit leaves combat.
+		void LeaveCombatIfIdle();
+
 		/// Gets the number of units currently attacking this unit.
 		/// @returns The number of attacking units.
 		size_t GetAttackerCount() const { return m_attackingUnits.size(); }

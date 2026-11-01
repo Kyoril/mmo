@@ -3,8 +3,11 @@
 #include "pet_manager.h"
 
 #include "base/utilities.h"
+#include "game_server/ai/creature_ai.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/world/universe.h"
+#include "game_server/world/world_instance.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/units.pb.h"
 
@@ -120,10 +123,126 @@ namespace mmo
 		}
 	}
 
-	void PetManager::Command(pet_command::Type /*command*/, uint64 /*targetGuid*/, uint32 /*param*/)
+	void PetManager::Command(const pet_command::Type command, const uint64 targetGuid, const uint32 param)
 	{
-		// Intentionally empty: pet commands are executed by the pet mode of CreatureAI, which is
-		// forwarded to from here once it exists. Until then pets simply follow their owner.
+		if (command == pet_command::Dismiss)
+		{
+			DespawnTemporaryPets();
+			DismissPersistentPet();
+			return;
+		}
+
+		ForEachPet([command, targetGuid, param](GameCreatureS& pet)
+			{
+				if (CreatureAI* ai = pet.GetAI())
+				{
+					ai->OnPetCommand(command, targetGuid, param);
+				}
+			});
+	}
+
+	void PetManager::OnOwnerAttack(GameUnitS& victim)
+	{
+		if (m_temporaryPets.empty() && m_persistentPet.expired())
+		{
+			return;
+		}
+
+		WorldInstance* world = m_owner.GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		// Posted: this runs inside the owner's attack and spell code, and engaging changes the pets'
+		// AI states, which in turn touch other units' threat lists.
+		std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(m_owner.shared_from_this());
+		std::weak_ptr<GameUnitS> weakVictim = std::static_pointer_cast<GameUnitS>(victim.shared_from_this());
+		world->GetUniverse().Post([weakOwner, weakVictim]()
+			{
+				const auto owner = weakOwner.lock();
+				const auto victim = weakVictim.lock();
+				if (!owner || !victim || !owner->FindPets() || victim->GetWorldInstance() != owner->GetWorldInstance())
+				{
+					return;
+				}
+
+				owner->FindPets()->ForEachPet([&victim](GameCreatureS& pet)
+					{
+						if (CreatureAI* ai = pet.GetAI())
+						{
+							ai->OnOwnerAttack(*victim);
+						}
+					});
+			});
+	}
+
+	void PetManager::OnOwnerAttacked(const uint64 attackerGuid)
+	{
+		if (m_temporaryPets.empty() && m_persistentPet.expired())
+		{
+			return;
+		}
+
+		WorldInstance* world = m_owner.GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		// Posted for the same reason as OnOwnerAttack: this runs inside the attacker's threat code.
+		std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(m_owner.shared_from_this());
+		world->GetUniverse().Post([weakOwner, attackerGuid]()
+			{
+				const auto owner = weakOwner.lock();
+				WorldInstance* ownerWorld = owner ? owner->GetWorldInstance() : nullptr;
+				GameUnitS* attacker = ownerWorld ? ownerWorld->FindByGuid<GameUnitS>(attackerGuid) : nullptr;
+				if (!attacker || !owner->FindPets())
+				{
+					return;
+				}
+
+				const auto strongAttacker = std::static_pointer_cast<GameUnitS>(attacker->shared_from_this());
+				owner->FindPets()->ForEachPet([&strongAttacker](GameCreatureS& pet)
+					{
+						if (CreatureAI* ai = pet.GetAI())
+						{
+							ai->OnOwnerAttacked(*strongAttacker);
+						}
+					});
+			});
+	}
+
+	bool PetManager::IsAnyPetInCombat()
+	{
+		bool inCombat = false;
+		ForEachPet([&inCombat](GameCreatureS& pet)
+			{
+				inCombat = inCombat || (pet.IsAlive() && pet.IsInCombat());
+			});
+		return inCombat;
+	}
+
+	void PetManager::GetPetSlot(const GameCreatureS& pet, uint32& slotIndex, uint32& slotCount)
+	{
+		slotIndex = 0;
+		slotCount = 0;
+		ForEachPet([&](GameCreatureS& each)
+			{
+				if (&each == &pet)
+				{
+					slotIndex = slotCount;
+				}
+				++slotCount;
+			});
+		slotCount = std::max<uint32>(1, slotCount);
+	}
+
+	void PetManager::DismissPersistentPet()
+	{
+		// Intentionally empty for now: a persistent pet is dismissed by storing it (health, power,
+		// was_summoned) and removing it from the world, which is part of the persistent pet
+		// lifetime. That code hooks in here.
 	}
 
 	GameCreatureS* PetManager::GetPersistentPet() const
@@ -232,5 +351,36 @@ namespace mmo
 		}
 
 		return spell_cast_result::CastOkay;
+	}
+
+	void NotifyPetOwnerOfAttacker(GameUnitS& pet, const uint64 attackerGuid)
+	{
+		WorldInstance* world = pet.GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		// A player owner is put in combat through the pet's combat flag (GameUnitS::SetInCombat).
+		// A creature owner's combat belongs to its AI: it joins the fight like an ally called for help.
+		auto* owner = world->FindByGuid<GameCreatureS>(pet.GetOwnerGuid());
+		if (!owner || owner == &pet || !owner->GetAI())
+		{
+			return;
+		}
+
+		std::weak_ptr<GameCreatureS> weakOwner = std::static_pointer_cast<GameCreatureS>(owner->shared_from_this());
+		world->GetUniverse().Post([weakOwner, attackerGuid]()
+			{
+				const auto strongOwner = weakOwner.lock();
+				WorldInstance* ownerWorld = strongOwner ? strongOwner->GetWorldInstance() : nullptr;
+				GameUnitS* attacker = ownerWorld ? ownerWorld->FindByGuid<GameUnitS>(attackerGuid) : nullptr;
+				if (!attacker || !strongOwner->GetAI())
+				{
+					return;
+				}
+
+				strongOwner->GetAI()->OnCalledForHelp(*attacker);
+			});
 	}
 }

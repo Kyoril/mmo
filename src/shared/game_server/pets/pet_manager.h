@@ -24,9 +24,6 @@ namespace mmo
 	class GameUnitS;
 	class GameCreatureS;
 
-	/// Distance at which a temporary pet follows its owner until the pet AI takes over.
-	constexpr float PetFollowDistance = 2.0f;
-
 	/// Keeps track of the pets of one unit: the temporary pets it summoned (grouped and capped per
 	/// summon effect) and its summoned persistent pet. Pets are held weakly; a pet that leaves the
 	/// world on its own (duration over, killed and decayed, removed by a GM) drops out by itself.
@@ -68,12 +65,32 @@ namespace mmo
 		/// @param callback The function to call.
 		void ForEachPet(const std::function<void(GameCreatureS&)>& callback);
 
-		/// Gives a command to every pet of the owner.
-		/// Currently a no-op: the pet AI that executes commands is wired up separately.
+		/// Gives a command to every pet of the owner (the temporary pets and the persistent pet).
+		/// Dismiss despawns the temporary pets; dismissing the persistent pet (storing it) is done by
+		/// DismissPersistentPet. Everything else is executed by each pet's CreatureAI::OnPetCommand.
 		/// @param command The command.
 		/// @param targetGuid The target of the command (Attack), or 0.
 		/// @param param A command parameter (SetStrategy: the pet_strategy), or 0.
 		void Command(pet_command::Type command, uint64 targetGuid, uint32 param);
+
+		/// Called when the owner starts attacking a unit (auto attack, or a harmful spell cast at it).
+		/// Assisting pets join in.
+		/// @param victim The unit the owner attacks.
+		void OnOwnerAttack(GameUnitS& victim);
+
+		/// Called when a unit starts attacking the owner. Assisting pets defend their owner.
+		/// @param attackerGuid Guid of the attacking unit.
+		void OnOwnerAttacked(uint64 attackerGuid);
+
+		/// @return Whether any pet of the owner is in combat.
+		[[nodiscard]] bool IsAnyPetInCombat();
+
+		/// Determines the follow slot of a pet: its position among the owner's pets (ForEachPet
+		/// order) and the number of pets.
+		/// @param pet The pet.
+		/// @param slotIndex Receives the pet's index, 0 if it is not one of the owner's pets.
+		/// @param slotCount Receives the number of pets, at least 1.
+		void GetPetSlot(const GameCreatureS& pet, uint32& slotIndex, uint32& slotCount);
 
 		/// @return The summoned persistent pet, or nullptr if there is none.
 		[[nodiscard]] GameCreatureS* GetPersistentPet() const;
@@ -94,6 +111,11 @@ namespace mmo
 		/// Drops the entries of pets that are gone (despawned, dead or destroyed) from the list.
 		void PurgeGone();
 
+		/// Dismisses the summoned persistent pet (Dismiss command). Storing it with its health and
+		/// power belongs to the persistent pet lifetime and is not wired up yet: until then this does
+		/// nothing, so a persistent pet stays summoned.
+		void DismissPersistentPet();
+
 		/// Despawns a pet on the next timer tick.
 		static void Despawn(GameCreatureS& pet);
 
@@ -104,6 +126,13 @@ namespace mmo
 		std::weak_ptr<GameCreatureS> m_persistentPet;
 		scoped_connection m_persistentPetDespawned;
 	};
+
+	/// Tells the owner of a pet that a unit started attacking the pet. A creature owner that is not
+	/// fighting yet joins in (pet combat is the owner's combat); a player owner is put in combat by
+	/// the pet's own combat flag instead.
+	/// @param pet The attacked pet (a unit with an owner).
+	/// @param attackerGuid Guid of the attacking unit.
+	void NotifyPetOwnerOfAttacker(GameUnitS& pet, uint64 attackerGuid);
 
 	/// Resolves the level of a pet.
 	/// @param source Where the level comes from.

@@ -901,6 +901,15 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
+			// A harmful spell cast at an enemy is an attack: assisting pets join in
+			if (m_pets && target.HasUnitTarget() && m_worldInstance)
+			{
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
+				{
+					m_pets->OnOwnerAttack(*victim);
+				}
+			}
+
 			startedCasting(spell);
 
 			// NOTE: Cast-interrupt auras (e.g. Stealth) are intentionally NOT removed here. For instant
@@ -3097,6 +3106,12 @@ namespace mmo
 
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
+
+		// Assisting pets join the attack
+		if (m_pets)
+		{
+			m_pets->OnOwnerAttack(*victim);
+		}
 	}
 
 	void GameUnitS::StopAttack()
@@ -3215,6 +3230,24 @@ namespace mmo
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 			m_pvpCombatCountdown.Cancel();
 		}
+
+		// Pet combat is the owner's combat: a player owner is in combat while one of its pets is.
+		// (A creature owner's combat flag belongs to its AI, which NotifyPetOwnerOfAttacker drives.)
+		if (regenRatesUpdate.changed && GetOwnerGuid() != 0 && m_worldInstance)
+		{
+			GameUnitS* owner = m_worldInstance->FindByGuid<GameUnitS>(GetOwnerGuid());
+			if (owner && owner != this && owner->IsPlayer())
+			{
+				if (inCombat)
+				{
+					owner->SetInCombat(true, pvp);
+				}
+				else
+				{
+					owner->LeaveCombatIfIdle();
+				}
+			}
+		}
 	}
 
 	float GameUnitS::GetMeleeReach() const
@@ -3242,17 +3275,48 @@ namespace mmo
 
 	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
-		m_attackingUnits.add(&attacker);
+		const bool added = m_attackingUnits.optionalAdd(&attacker);
 		SetInCombat(true, attacker.IsPlayer());
+
+		if (added)
+		{
+			// Assisting pets defend their owner
+			if (m_pets)
+			{
+				m_pets->OnOwnerAttacked(attacker.GetGuid());
+			}
+
+			// A pet's fight is its owner's fight
+			if (GetOwnerGuid() != 0)
+			{
+				NotifyPetOwnerOfAttacker(*this, attacker.GetGuid());
+			}
+		}
 	}
 
 	void GameUnitS::RemoveAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.remove(&attacker);
-		if (m_attackingUnits.empty())
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, attacker.IsPlayer());
 		}
+	}
+
+	bool GameUnitS::IsAnyPetInCombat() const
+	{
+		return m_pets && m_pets->IsAnyPetInCombat();
+	}
+
+	void GameUnitS::LeaveCombatIfIdle()
+	{
+		// Still attacked, in a pvp fight, or fighting through a pet
+		if (!IsInCombat() || !m_attackingUnits.empty() || m_pvpCombatCountdown.IsRunning() || IsAnyPetInCombat())
+		{
+			return;
+		}
+
+		SetInCombat(false, false);
 	}
 
 	void GameUnitS::RemoveAllAttackingUnits()
@@ -4645,8 +4709,8 @@ namespace mmo
 
 	void GameUnitS::OnPvpCombatTimer()
 	{
-		// Leave combat when no other attacking units
-		if (m_attackingUnits.empty())
+		// Leave combat when no other attacking units (and no pet fighting)
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, true);
 		}

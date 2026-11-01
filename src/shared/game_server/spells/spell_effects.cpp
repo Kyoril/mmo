@@ -14,6 +14,7 @@
 #include "game/spell_points.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/world/world_instance.h"
+#include "game_server/ai/creature_ai.h"
 #include "game_server/pets/pet_manager.h"
 #include "math/math_utils.h"
 #include "proto_data/trigger_helper.h"
@@ -834,7 +835,10 @@ namespace mmo
 							pet->TriggerDespawnTimer(despawnMs);
 						}
 
-						pet->SetFollowedUnit(owner, PetFollowDistance);
+						if (CreatureAI* ai = pet->GetAI())
+						{
+							ai->EnterPetMode(*owner);
+						}
 					}
 				});
 		}
