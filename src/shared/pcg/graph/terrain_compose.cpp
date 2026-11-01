@@ -3,13 +3,13 @@
 #include "terrain_compose.h"
 
 #include "node_util.h"
+#include "polyline_index.h"
 
 #include "pcg/pcg_random.h"
 #include "pcg/section_path.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -22,9 +22,6 @@ namespace mmo::pcg::graph
 		/// Seed of the Noise op's fractal noise (combined with the op order).
 		constexpr uint64 kNoiseSeed = 0x7e44a1f3c0de5eedull;
 
-		/// Largest grid size (cells per axis) of a PolylineIndex.
-		constexpr double kMaxIndexCells = 256.0;
-
 		float Saturate(const float v)
 		{
 			return std::min(1.0f, std::max(0.0f, v));
@@ -35,195 +32,6 @@ namespace mmo::pcg::graph
 			t = Saturate(t);
 			return t * t * (3.0f - 2.0f * t);
 		}
-
-		/// Result of a nearest-segment query.
-		struct NearestHit
-		{
-			float distance = 0.0f;
-			/// Sample indices of the segment's ends and the parameter of the nearest point between them.
-			uint32 a = 0;
-			uint32 b = 0;
-			float t = 0.0f;
-		};
-
-		/// Nearest segment of a polyline within a fixed reach, with the segments bucketed into a uniform grid: every
-		/// cell lists (ascending) the segments whose bounds grown by the reach touch it, so the cell holding a point
-		/// lists every segment within reach of it. Exact: the minimum over the listed segments, ties to the lowest
-		/// segment index.
-		class PolylineIndex
-		{
-		public:
-			void Build(const std::vector<SplineSample>& samples, const bool closed, const float reach)
-			{
-				m_samples = samples;
-				m_closed = closed;
-				m_reach = std::max(0.0f, reach);
-				m_segments.clear();
-				m_cellStart.clear();
-				m_cells.clear();
-				m_columns = 0;
-				m_rows = 0;
-				if (m_samples.empty())
-				{
-					return;
-				}
-
-				const uint32 n = static_cast<uint32>(m_samples.size());
-				if (n == 1)
-				{
-					m_segments.emplace_back(0, 0);
-				}
-				for (uint32 i = 0; i + 1 < n; ++i)
-				{
-					m_segments.emplace_back(i, i + 1);
-				}
-				if (closed && n >= 3)
-				{
-					m_segments.emplace_back(n - 1, 0);
-				}
-
-				double minX = m_samples[0].x;
-				double maxX = minX;
-				double minZ = m_samples[0].z;
-				double maxZ = minZ;
-				for (const SplineSample& s : m_samples)
-				{
-					minX = std::min(minX, static_cast<double>(s.x));
-					maxX = std::max(maxX, static_cast<double>(s.x));
-					minZ = std::min(minZ, static_cast<double>(s.z));
-					maxZ = std::max(maxZ, static_cast<double>(s.z));
-				}
-				minX -= m_reach;
-				minZ -= m_reach;
-				maxX += m_reach;
-				maxZ += m_reach;
-				const double extent = std::max(maxX - minX, maxZ - minZ);
-				m_cellSize = std::max({ static_cast<double>(m_reach), extent / kMaxIndexCells, 0.5 });
-				m_originX = minX;
-				m_originZ = minZ;
-				m_columns = static_cast<int64>(std::floor((maxX - minX) / m_cellSize)) + 1;
-				m_rows = static_cast<int64>(std::floor((maxZ - minZ) / m_cellSize)) + 1;
-
-				// Two passes: count, then fill (CSR, segments ascending per cell).
-				const size_t cellCount = static_cast<size_t>(m_columns * m_rows);
-				std::vector<uint32> counts(cellCount, 0);
-				for (int pass = 0; pass < 2; ++pass)
-				{
-					std::vector<uint32> fill;
-					if (pass == 1)
-					{
-						m_cellStart.assign(cellCount + 1, 0);
-						for (size_t c = 0; c < cellCount; ++c)
-						{
-							m_cellStart[c + 1] = m_cellStart[c] + counts[c];
-						}
-						m_cells.resize(m_cellStart[cellCount]);
-						fill.assign(m_cellStart.begin(), m_cellStart.end() - 1);
-					}
-					for (uint32 s = 0; s < static_cast<uint32>(m_segments.size()); ++s)
-					{
-						const SplineSample& a = m_samples[m_segments[s].first];
-						const SplineSample& b = m_samples[m_segments[s].second];
-						const int64 x0 = CellOf(std::min(a.x, b.x) - m_reach, m_originX, m_columns);
-						const int64 x1 = CellOf(std::max(a.x, b.x) + m_reach, m_originX, m_columns);
-						const int64 z0 = CellOf(std::min(a.z, b.z) - m_reach, m_originZ, m_rows);
-						const int64 z1 = CellOf(std::max(a.z, b.z) + m_reach, m_originZ, m_rows);
-						for (int64 z = z0; z <= z1; ++z)
-						{
-							for (int64 x = x0; x <= x1; ++x)
-							{
-								const size_t c = static_cast<size_t>(z * m_columns + x);
-								if (pass == 0)
-								{
-									++counts[c];
-								}
-								else
-								{
-									m_cells[fill[c]++] = s;
-								}
-							}
-						}
-					}
-				}
-			}
-
-			/// Nearest segment within the reach of (x, z); false if there is none.
-			bool Nearest(const float x, const float z, NearestHit& hit) const
-			{
-				if (m_columns == 0)
-				{
-					return false;
-				}
-				const double cx = std::floor((x - m_originX) / m_cellSize);
-				const double cz = std::floor((z - m_originZ) / m_cellSize);
-				if (!(cx >= 0.0 && cz >= 0.0 && cx < static_cast<double>(m_columns) && cz < static_cast<double>(m_rows)))
-				{
-					return false;
-				}
-				const size_t c = static_cast<size_t>(static_cast<int64>(cz) * m_columns + static_cast<int64>(cx));
-				bool found = false;
-				double best = 0.0;
-				for (uint32 i = m_cellStart[c]; i < m_cellStart[c + 1]; ++i)
-				{
-					const std::pair<uint32, uint32>& seg = m_segments[m_cells[i]];
-					const SplineSample& a = m_samples[seg.first];
-					const SplineSample& b = m_samples[seg.second];
-					const double dx = static_cast<double>(b.x) - a.x;
-					const double dz = static_cast<double>(b.z) - a.z;
-					const double len2 = dx * dx + dz * dz;
-					double t = 0.0;
-					if (len2 > 0.0)
-					{
-						t = std::min(1.0, std::max(0.0, ((x - a.x) * dx + (z - a.z) * dz) / len2));
-					}
-					const double px = x - (a.x + dx * t);
-					const double pz = z - (a.z + dz * t);
-					const double d = std::sqrt(px * px + pz * pz);
-					if (d <= m_reach && (!found || d < best))
-					{
-						found = true;
-						best = d;
-						hit.a = seg.first;
-						hit.b = seg.second;
-						hit.t = static_cast<float>(t);
-					}
-				}
-				hit.distance = static_cast<float>(best);
-				return found;
-			}
-
-			/// The polyline's samples as built.
-			const std::vector<SplineSample>& GetSamples() const
-			{
-				return m_samples;
-			}
-
-			/// Whether the polyline was built closed.
-			bool IsClosed() const
-			{
-				return m_closed;
-			}
-
-		private:
-			int64 CellOf(const double v, const double origin, const int64 count) const
-			{
-				const int64 c = static_cast<int64>(std::floor((v - origin) / m_cellSize));
-				return std::min(count - 1, std::max<int64>(0, c));
-			}
-
-		private:
-			std::vector<SplineSample> m_samples;
-			bool m_closed = false;
-			std::vector<std::pair<uint32, uint32>> m_segments;
-			std::vector<uint32> m_cellStart;
-			std::vector<uint32> m_cells;
-			float m_reach = 0.0f;
-			double m_cellSize = 1.0;
-			double m_originX = 0.0;
-			double m_originZ = 0.0;
-			int64 m_columns = 0;
-			int64 m_rows = 0;
-		};
 
 		bool Contains(const WorldRect& r, const float x, const float z)
 		{
