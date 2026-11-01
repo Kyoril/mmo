@@ -7,6 +7,14 @@
 
 namespace mmo::pcg::graph
 {
+	void WarnOnce(NodeOutput& out, const String& message)
+	{
+		if (std::find(out.warnings.begin(), out.warnings.end(), message) == out.warnings.end())
+		{
+			out.warnings.push_back(message);
+		}
+	}
+
 	float SettingFloat(const AttributeSet& settings, const String& name, const float fallback)
 	{
 		const auto it = settings.find(name);

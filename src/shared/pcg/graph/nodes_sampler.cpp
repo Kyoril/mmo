@@ -1,11 +1,12 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 // Sampler nodes. All of them read the context (at least ctx.pointLimit) and therefore set readsContext.
-// Every sampler stops once it has produced ctx.pointLimit points in total (over all items) and reports a
+// Every sampler stops once it has output ctx.pointLimit points in total (over all items) and reports a
 // warning. Each input item yields at most one output Points item carrying the input's tags, item
-// attributes and sourceId; items that produce no points are left out. Items of kinds a sampler does not
-// sample are skipped with a warning. Geometry that is non-finite or beyond MaxWorldCoordinate is skipped
-// with a warning.
+// attributes and sourceId; items that produce no points are left out; items keep their input order. Items
+// of kinds a sampler does not sample are skipped with a warning. Geometry that is non-finite or beyond
+// MaxWorldCoordinate is skipped with a warning. How seeds behave for duplicates and overlaps is documented
+// once in point_prune.h ("Seeding contract").
 //
 // SampleSpline  input "In" (Splines, Areas). settings: spacing (arc length between points), offset (signed
 //               lateral offset along SampledPath::NormalAtDistance: left of travel for open splines, outward
@@ -14,20 +15,23 @@
 //               lie at arc distances 0, spacing, 2*spacing, ... (open: up to and including the length; closed:
 //               below the length), at the curve's height. Columns: "distance" (Float, arc distance) plus one
 //               column per item attribute holding the item's value (an item attribute named "distance" is
-//               dropped with a warning). Seed and cell of a point: its position quantized to 1 cm cells,
-//               seed = Hash(nodeSeed, cellX, cellZ, Hash(salt, sourceId)). Output order: by (cellZ, cellX), then
-//               distance.
+//               dropped with a warning). Seed: Hash(nodeSeed, cellX, cellZ, Hash(Hash(salt, item key), distance
+//               in cm)) with the position quantized to 1 cm cells; the item key is the sourceId, or the item's
+//               input index when sourceId is 0. Output order: path order (ascending distance) per item.
 // SampleArea    input "In" (Areas). settings: cellSize, minSpacing, jitter (0-1), densityAttribute. World-anchored
 //               cells (ix, iz) of size cellSize covering the area's bounds; per cell one candidate at
-//               ((ix + 0.5 + jitter * (u - 0.5)) * cellSize, 0, (iz + 0.5 + jitter * (v - 0.5)) * cellSize) with
+//               ((ix + 0.5 + jitter * (u - 0.5)) * cellSize, y, (iz + 0.5 + jitter * (v - 0.5)) * cellSize) with
 //               u, v, a from Hash(nodeSeed, ix, iz, salt) (also the point seed). The candidate is kept if a <
 //               density and it lies inside the area (even-odd, as SampledPath::Contains). density is the item
 //               attribute named by densityAttribute (Float or Int, clamped to [0,1]; missing or non-numeric:
-//               warning, density 1) or 1; it is also stored as the point's density. Then, if minSpacing > 0, the
-//               points of the item are pruned with PruneByDistance (planar, 1 round: a point's fate depends only
-//               on points within 3 * minSpacing). Points are placed at y = 0. Output order: by (cellZ, cellX).
-//               Overlapping areas yield the same candidates in their overlap (the cells are world-anchored).
-//               Besides the point limit, at most 16 * pointLimit + 65536 cells are visited (warning when hit).
+//               warning, density 1) or 1; it is also stored as the point's density. If minSpacing > 0 the
+//               candidates are pruned with PruneByDistance (planar, 1 round), in bands of cell rows that are
+//               extended by the prune's locality radius 3 * minSpacing on both sides, so the result equals a
+//               prune of the whole item while memory stays bounded. The point limit counts the points that
+//               survive the prune. y is ctx.terrain->Height at the point; without a terrain y = 0, and where the
+//               terrain has no height the point is kept at y = 0 with a warning. Output order: by (cellZ, cellX).
+//               Besides the point limit, at most 16 * pointLimit + 65536 cells are visited and a band holds at
+//               most 4 * pointLimit + 65536 candidates (warning when either is hit).
 // SampleTerrainSurface  input "In" (Areas, optional: when the pin has no link the instance region is sampled).
 //               settings: cellSize, alignToNormal. One point per world-anchored cell centre inside the area where
 //               ctx.terrain has a height, at that height; rotation maps local +Y onto the terrain normal when
@@ -41,12 +45,12 @@
 #include "node_util.h"
 #include "point_prune.h"
 
+#include "math/constants.h"
 #include "math/radian.h"
 #include "pcg/pcg_random.h"
 
 #include <algorithm>
 #include <cmath>
-#include <tuple>
 
 namespace mmo::pcg::graph
 {
@@ -59,32 +63,28 @@ namespace mmo::pcg::graph
 		constexpr float MinSpacing = 0.01f;
 		constexpr double SplineCellSize = 0.01;
 
-		/// Adds a warning unless the same text was already reported.
-		void WarnOnce(NodeOutput& out, const String& message)
-		{
-			if (std::find(out.warnings.begin(), out.warnings.end(), message) == out.warnings.end())
-			{
-				out.warnings.push_back(message);
-			}
-		}
-
 		/// Remaining output points and cells of one node execution.
 		struct Budget
 		{
 			size_t pointsLeft = 0;
 			uint64 cellsLeft = 0;
+
+			/// Most candidates held at once (Sample Area keeps one band of candidates before pruning).
+			size_t candidateCap = 0;
 			bool pointLimitHit = false;
 			bool cellLimitHit = false;
+			bool candidateLimitHit = false;
 
 			explicit Budget(const size_t pointLimit)
 				: pointsLeft(pointLimit)
 				, cellsLeft(static_cast<uint64>(pointLimit) * 16u + 65536u)
+				, candidateCap(pointLimit * 4u + 65536u)
 			{
 			}
 
 			bool Exhausted() const
 			{
-				return pointLimitHit || cellLimitHit;
+				return pointLimitHit || cellLimitHit || candidateLimitHit;
 			}
 
 			void Report(NodeOutput& out, const size_t pointLimit) const
@@ -96,6 +96,10 @@ namespace mmo::pcg::graph
 				if (cellLimitHit)
 				{
 					WarnOnce(out, "cell budget exhausted (cell size too small for the area), output truncated");
+				}
+				if (candidateLimitHit)
+				{
+					WarnOnce(out, "candidate cap reached (cell size too small for the area), output truncated");
 				}
 			}
 		};
@@ -142,7 +146,7 @@ namespace mmo::pcg::graph
 			}
 			if (d < -0.999999f)
 			{
-				return Quaternion(Radian(3.14159265358979f), Vector3::UnitX);
+				return Quaternion(Radian(Pi), Vector3::UnitX);
 			}
 			Vector3 axis = Vector3::UnitY.Cross(normal);
 			axis.Normalize();
@@ -242,26 +246,27 @@ namespace mmo::pcg::graph
 					continue;
 				}
 
-				const uint64 salt = Hash(SplineSalt, static_cast<int64>(source.sourceId));
+				// Item key: the producing control, or the input index for generated items (so coincident or
+				// derived splines never share seeds); the distance separates self-intersection crossings.
+				const size_t itemIndex = static_cast<size_t>(&source - in->second.data());
+				const uint64 itemKey = source.sourceId != 0
+					? Hash(SplineSalt, static_cast<int64>(source.sourceId), 0)
+					: Hash(SplineSalt, static_cast<int64>(itemIndex), 1);
 				const float eps = std::min(0.01f, length * 0.001f);
-				struct Sample
-				{
-					int64 cz;
-					int64 cx;
-					float distance;
-					Point point;
-				};
-				std::vector<Sample> samples;
-				samples.reserve(distances.size());
+
+				// Path order: distances ascend.
+				DataItem item = PointsItemFrom(source);
+				const size_t n = distances.size();
+				item.points.points.reserve(n);
+				std::vector<AttributeValue> distanceColumn;
+				distanceColumn.reserve(n);
 				for (const float d : distances)
 				{
 					const SplineSample s = path.SampleAtDistance(d);
 					float nx = 0.0f, nz = 0.0f;
 					path.NormalAtDistance(d, nx, nz);
 
-					Sample sample;
-					sample.distance = d;
-					Point& p = sample.point;
+					Point p;
 					p.position = Vector3(s.x + nx * offset, s.y, s.z + nz * offset);
 					if (alignToPath)
 					{
@@ -269,25 +274,12 @@ namespace mmo::pcg::graph
 						const SplineSample b = path.SampleAtDistance(d + eps);
 						p.rotation = YawTowards(b.x - a.x, b.z - a.z);
 					}
-					sample.cx = CellIndex(p.position.x, SplineCellSize);
-					sample.cz = CellIndex(p.position.z, SplineCellSize);
-					p.seed = Hash(nodeSeed, sample.cx, sample.cz, salt);
-					samples.push_back(sample);
-				}
-				std::stable_sort(samples.begin(), samples.end(), [](const Sample& a, const Sample& b)
-				{
-					return std::tie(a.cz, a.cx, a.distance) < std::tie(b.cz, b.cx, b.distance);
-				});
-
-				DataItem item = PointsItemFrom(source);
-				const size_t n = samples.size();
-				item.points.points.reserve(n);
-				std::vector<AttributeValue> distanceColumn;
-				distanceColumn.reserve(n);
-				for (const Sample& sample : samples)
-				{
-					item.points.points.push_back(sample.point);
-					distanceColumn.emplace_back(sample.distance);
+					const int64 cx = CellIndex(p.position.x, SplineCellSize);
+					const int64 cz = CellIndex(p.position.z, SplineCellSize);
+					const int64 distanceCm = static_cast<int64>(std::llround(static_cast<double>(d) * 100.0));
+					p.seed = Hash(nodeSeed, cx, cz, Hash(itemKey, distanceCm));
+					item.points.points.push_back(p);
+					distanceColumn.emplace_back(d);
 				}
 				item.points.columns["distance"] = { AttributeType::Float, std::move(distanceColumn) };
 				for (const auto& [name, value] : source.attributes)
@@ -427,42 +419,101 @@ namespace mmo::pcg::graph
 				const SampledPath path(source.spline, EvaluationStep(source.spline, cellSize * 0.5f));
 				const RowIndexedPolygon polygon = AreaPolygon(path, bounds, cellSize);
 
+				const int64 ix0 = CellIndex(bounds.minX, cell);
+				const int64 ix1 = CellIndex(bounds.maxX, cell);
+				const int64 iz0 = CellIndex(bounds.minZ, cell);
+				const int64 iz1 = CellIndex(bounds.maxZ, cell);
+
+				// Bands of cell rows. With a prune, each band is generated with extra rows on both sides that
+				// cover the prune's locality radius (3 * minSpacing for one round), so the points of the band's
+				// own rows come out exactly as from a prune of the whole item.
+				PruneOptions options;
+				options.minSpacing = minSpacing;
+				options.planar = true;
+				options.rounds = 1;
+				const bool prune = minSpacing > 0.0f;
+				const double radius = (2.0 * options.rounds + 1.0) * minSpacing;
+				const int64 marginRows = prune ? static_cast<int64>(std::ceil(radius / cell)) + 1 : 0;
+				const int64 bandRows = std::max<int64>(16, 4 * marginRows);
+
 				DataItem item = PointsItemFrom(source);
 				std::vector<Point>& points = item.points.points;
-				ForEachCell(bounds, cell, budget, [&](const int64 ix, const int64 iz)
+				std::vector<Point> candidates;
+				std::vector<uint8> ownRow;
+				for (int64 band = iz0; band <= iz1 && !budget.Exhausted(); band += bandRows)
 				{
-					const uint64 h = Hash(nodeSeed, ix, iz, AreaSalt);
-					if (!(HashToUnit(Hash(h, 3)) < density))
+					const int64 bandEnd = std::min(iz1, band + bandRows - 1);
+					const int64 genBegin = std::max(iz0, band - marginRows);
+					const int64 genEnd = std::min(iz1, bandEnd + marginRows);
+					candidates.clear();
+					ownRow.clear();
+					for (int64 iz = genBegin; iz <= genEnd && !budget.Exhausted(); ++iz)
 					{
-						return true;
-					}
-					const float x = static_cast<float>((static_cast<double>(ix) + 0.5 + jitter * (HashToUnit(Hash(h, 1)) - 0.5)) * cell);
-					const float z = static_cast<float>((static_cast<double>(iz) + 0.5 + jitter * (HashToUnit(Hash(h, 2)) - 0.5)) * cell);
-					if (!polygon.Contains(x, z))
-					{
-						return true;
-					}
-					if (budget.pointsLeft == 0)
-					{
-						budget.pointLimitHit = true;
-						return false;
-					}
-					--budget.pointsLeft;
-					Point p;
-					p.position = Vector3(x, 0.0f, z);
-					p.density = density;
-					p.seed = h;
-					points.push_back(p);
-					return true;
-				});
+						for (int64 ix = ix0; ix <= ix1; ++ix)
+						{
+							if (budget.cellsLeft == 0)
+							{
+								budget.cellLimitHit = true;
+								break;
+							}
+							--budget.cellsLeft;
 
-				if (minSpacing > 0.0f && points.size() > 1)
+							const uint64 h = Hash(nodeSeed, ix, iz, AreaSalt);
+							if (!(HashToUnit(Hash(h, 3)) < density))
+							{
+								continue;
+							}
+							const float x = static_cast<float>((static_cast<double>(ix) + 0.5 + jitter * (HashToUnit(Hash(h, 1)) - 0.5)) * cell);
+							const float z = static_cast<float>((static_cast<double>(iz) + 0.5 + jitter * (HashToUnit(Hash(h, 2)) - 0.5)) * cell);
+							if (!polygon.Contains(x, z))
+							{
+								continue;
+							}
+							if (candidates.size() >= budget.candidateCap)
+							{
+								budget.candidateLimitHit = true;
+								break;
+							}
+							Point p;
+							p.position = Vector3(x, 0.0f, z);
+							p.density = density;
+							p.seed = h;
+							candidates.push_back(p);
+							ownRow.push_back(iz >= band && iz <= bandEnd ? 1 : 0);
+						}
+					}
+
+					std::vector<uint8> keep = prune ? PruneByDistance(candidates, options) : std::vector<uint8>(candidates.size(), 1);
+					for (size_t i = 0; i < candidates.size(); ++i)
+					{
+						if (keep[i] == 0 || ownRow[i] == 0)
+						{
+							continue;
+						}
+						if (budget.pointsLeft == 0)
+						{
+							budget.pointLimitHit = true;
+							break;
+						}
+						--budget.pointsLeft;
+						points.push_back(candidates[i]);
+					}
+				}
+
+				if (ctx.terrain != nullptr)
 				{
-					PruneOptions options;
-					options.minSpacing = minSpacing;
-					options.planar = true;
-					options.rounds = 1;
-					item.points.Keep(PruneByDistance(points, options));
+					for (Point& p : points)
+					{
+						float h = 0.0f;
+						if (ctx.terrain->Height(p.position.x, p.position.z, h) && std::isfinite(h))
+						{
+							p.position.y = h;
+						}
+						else
+						{
+							WarnOnce(out, "some points have no terrain height and were kept at y 0");
+						}
+					}
 				}
 				if (!points.empty())
 				{

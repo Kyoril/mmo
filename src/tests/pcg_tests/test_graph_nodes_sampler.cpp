@@ -172,7 +172,11 @@ TEST_CASE("Sample Spline on a straight spline: count, spacing, offset, alignment
 		REQUIRE(w != nullptr);
 		CHECK(std::get<float>(*w) == 3.0f);
 	}
-	CHECK(SortedByCell(c[0], 0.01f));
+	// Path order: the output itself is sorted by distance.
+	for (size_t i = 0; i < c[0].points.points.size(); ++i)
+	{
+		CHECK(std::get<float>(*c[0].points.GetAttribute(i, "distance")) == Approx(2.0f * i));
+	}
 
 	SECTION("seeds are unique per point")
 	{
@@ -276,6 +280,60 @@ TEST_CASE("Sample Spline with empty or degenerate input outputs nothing", "[grap
 	CHECK(out.pins.at("Out").empty());
 	const NodeOutput ends = Exec("SampleSpline", { { "endsOnly", true } }, { { "In", { zero } } }, ctx);
 	CHECK(ends.pins.at("Out").empty());
+}
+
+TEST_CASE("Sample Spline outputs path order per item, items in input order", "[graph_nodes_sampler]")
+{
+	const EvalContext ctx;
+	// A curve that turns back on itself: cell order would differ from path order.
+	DataItem back = SplineItem({ { 0, 10 }, { 10, 0 }, { 0, -10 } }, false);
+	back.sourceId = 7;
+	DataItem other = SplineItem({ { 50, 0 }, { 60, 0 } }, false);
+	other.sourceId = 3;
+	const NodeOutput out = Exec("SampleSpline", { { "spacing", 1.0f } }, { { "In", { back, other } } }, ctx);
+	const Collection& c = out.pins.at("Out");
+	REQUIRE(c.size() == 2);
+	CHECK(c[0].sourceId == 7);
+	CHECK(c[1].sourceId == 3);
+	for (const DataItem& item : c)
+	{
+		for (size_t i = 1; i < item.points.points.size(); ++i)
+		{
+			CHECK(std::get<float>(*item.points.GetAttribute(i, "distance")) > std::get<float>(*item.points.GetAttribute(i - 1, "distance")));
+		}
+	}
+	CHECK(c[0].points.points.front().position.z == Approx(10.0f));
+}
+
+TEST_CASE("Sample Spline seeds differ for coincident and self-intersecting splines", "[graph_nodes_sampler]")
+{
+	const EvalContext ctx;
+	SECTION("two coincident generated splines")
+	{
+		const DataItem a = SplineItem({ { 0, 0 }, { 10, 0 } }, false);
+		const NodeOutput out = Exec("SampleSpline", { { "spacing", 2.0f } }, { { "In", { a, a } } }, ctx);
+		const Collection& c = out.pins.at("Out");
+		REQUIRE(c.size() == 2);
+		std::set<uint64> seeds;
+		for (const DataItem& item : c)
+		{
+			for (const Point& p : item.points.points)
+			{
+				seeds.insert(p.seed);
+			}
+		}
+		CHECK(seeds.size() == 12);
+	}
+	SECTION("a spline returning to its start")
+	{
+		DataItem loop = SplineItem({ { 0, 0 }, { 10, 0 }, { 0, 0 } }, false);
+		loop.sourceId = 5;
+		const NodeOutput out = Exec("SampleSpline", { { "spacing", 10.0f } }, { { "In", { loop } } }, ctx);
+		const auto& pts = out.pins.at("Out").at(0).points.points;
+		REQUIRE(pts.size() == 3);
+		CHECK(pts[0].position.x == Approx(pts[2].position.x).margin(1e-4));
+		CHECK(pts[0].seed != pts[2].seed);
+	}
 }
 
 TEST_CASE("Sample Spline respects the point limit", "[graph_nodes_sampler]")
@@ -431,6 +489,103 @@ TEST_CASE("Sample Area caps very dense requests at the point limit", "[graph_nod
 		const NodeOutput o = Exec("SampleArea", { { "cellSize", 0.01f }, { "densityAttribute", String("d") } }, { { "In", { none } } }, ctx);
 		CHECK(TotalPoints(o.pins.at("Out")) <= 1);
 		CHECK_FALSE(o.warnings.empty());
+	}
+}
+
+TEST_CASE("Sample Area applies the point limit after the prune", "[graph_nodes_sampler]")
+{
+	EvalContext ctx;
+	const DataItem forest = Square(0, 0, 60);
+
+	// Unpruned: 14400 candidates, far above the limit.
+	ctx.pointLimit = 100000;
+	const size_t unpruned = TotalPoints(Exec("SampleArea", { { "cellSize", 0.5f } }, { { "In", { forest } } }, ctx).pins.at("Out"));
+	REQUIRE(unpruned > 10000);
+
+	ctx.pointLimit = 1000;
+	const NodeOutput out = Exec("SampleArea", { { "cellSize", 0.5f }, { "minSpacing", 4.0f } }, { { "In", { forest } } }, ctx);
+	const auto& pts = out.pins.at("Out").at(0).points.points;
+	CHECK(out.warnings.empty());
+	REQUIRE(pts.size() > 100);
+	REQUIRE(pts.size() < 1000);
+
+	// Untruncated: the whole area is covered (points near all four borders).
+	float maxX = 0, maxZ = 0;
+	for (const Point& p : pts)
+	{
+		maxX = std::max(maxX, p.position.x);
+		maxZ = std::max(maxZ, p.position.z);
+	}
+	CHECK(maxX > 55.0f);
+	CHECK(maxZ > 55.0f);
+}
+
+TEST_CASE("Sample Area band-wise prune equals a prune of the whole item", "[graph_nodes_sampler]")
+{
+	EvalContext ctx;
+	const DataItem area = AreaItem({ { 0, 0 }, { 50, 5 }, { 45, 70 }, { 5, 60 } });
+	for (const float minSpacing : { 1.5f, 4.0f })
+	{
+		std::vector<Point> all = Exec("SampleArea", { { "cellSize", 0.5f } }, { { "In", { area } } }, ctx).pins.at("Out").at(0).points.points;
+		PruneOptions options;
+		options.minSpacing = minSpacing;
+		const std::vector<uint8> keep = PruneByDistance(all, options);
+		std::vector<std::tuple<uint64, float, float>> expected;
+		for (size_t i = 0; i < all.size(); ++i)
+		{
+			if (keep[i] != 0)
+			{
+				expected.emplace_back(all[i].seed, all[i].position.x, all[i].position.z);
+			}
+		}
+
+		const NodeOutput banded = Exec("SampleArea", { { "cellSize", 0.5f }, { "minSpacing", minSpacing } }, { { "In", { area } } }, ctx);
+		std::vector<std::tuple<uint64, float, float>> actual;
+		for (const Point& p : banded.pins.at("Out").at(0).points.points)
+		{
+			actual.emplace_back(p.seed, p.position.x, p.position.z);
+		}
+		CHECK(actual.size() == expected.size());
+		CHECK(actual == expected);
+	}
+}
+
+TEST_CASE("Sample Area takes y from the terrain", "[graph_nodes_sampler]")
+{
+	FakeTerrainSampler terrain;
+	terrain.base = 3.0f;
+	terrain.slopeX = 0.25f;
+	terrain.slopeZ = 0.5f;
+	EvalContext ctx;
+	ctx.terrain = &terrain;
+
+	const NodeOutput out = Exec("SampleArea", { { "cellSize", 1.0f } }, { { "In", { Square(0, 0, 10) } } }, ctx);
+	CHECK(out.warnings.empty());
+	const auto& pts = out.pins.at("Out").at(0).points.points;
+	REQUIRE(pts.size() == 100);
+	for (const Point& p : pts)
+	{
+		CHECK(p.position.y == Approx(3.0f + 0.25f * p.position.x + 0.5f * p.position.z));
+	}
+
+	SECTION("points where the terrain has no height stay at y 0 with a warning")
+	{
+		terrain.maxX = 5.0f;
+		const NodeOutput o = Exec("SampleArea", { { "cellSize", 1.0f } }, { { "In", { Square(0, 0, 10) } } }, ctx);
+		const auto& q = o.pins.at("Out").at(0).points.points;
+		REQUIRE(q.size() == 100);
+		CHECK_FALSE(o.warnings.empty());
+		for (const Point& p : q)
+		{
+			if (p.position.x > 5.0f)
+			{
+				CHECK(p.position.y == 0.0f);
+			}
+			else
+			{
+				CHECK(p.position.y == Approx(3.0f + 0.25f * p.position.x + 0.5f * p.position.z));
+			}
+		}
 	}
 }
 

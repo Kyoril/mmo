@@ -120,7 +120,7 @@ namespace mmo::pcg::graph
 			{
 				if (control.type == nullptr || control.instance == nullptr)
 				{
-					out.warnings.push_back("skipped a control without type or instance");
+					WarnOnce(out, "skipped a control without type or instance");
 					continue;
 				}
 				if (!controlType.empty() && control.instance->typePath != controlType)
@@ -185,7 +185,7 @@ namespace mmo::pcg::graph
 
 				if (!SaneBounds(bounds))
 				{
-					out.warnings.push_back("skipped control " + std::to_string(inst.id) + ": empty, non-finite or out of range geometry");
+					WarnOnce(out, "skipped control " + std::to_string(inst.id) + ": empty, non-finite or out of range geometry");
 					continue;
 				}
 				if (region.valid && !bounds.Intersects(region))

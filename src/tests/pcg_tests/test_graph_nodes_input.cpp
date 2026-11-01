@@ -358,6 +358,28 @@ TEST_CASE("Graph Parameters merges overrides over the graph defaults", "[graph_n
 	}
 }
 
+TEST_CASE("Changing a graph parameter default re-executes a cached Graph Parameters node", "[graph_nodes_input]")
+{
+	Graph g;
+	NodeInstance n;
+	n.id = 1;
+	n.type = "GraphParameters";
+	g.nodes.push_back(n);
+	g.parameters.push_back(ParameterDef{ "density", 0.5f, "" });
+	const EvalContext ctx;
+
+	GraphCache cache;
+	const EvalResult a = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
+	const EvalResult b = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
+	CHECK(b.nodes.at(1).fromCache);
+
+	g.parameters[0].defaultValue = 0.7f;
+	const EvalResult c = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
+	CHECK_FALSE(c.nodes.at(1).fromCache);
+	CHECK(std::get<float>(c.nodes.at(1).output.pins.at("Out").at(0).attributes.at("density")) == Approx(0.7f));
+	CHECK(c.nodes.at(1).hash != a.nodes.at(1).hash);
+}
+
 TEST_CASE("MergeParameters overlays matching overrides", "[graph_nodes_input]")
 {
 	std::vector<ParameterDef> params;

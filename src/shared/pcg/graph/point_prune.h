@@ -8,6 +8,16 @@
 
 namespace mmo::pcg::graph
 {
+	// Seeding contract of the samplers (what a prune over their output can rely on):
+	// - SampleArea and SampleTerrainSurface seed a point from its world cell and the node seed only, so where
+	//   areas overlap (or one area is linked twice) the same node produces exact duplicates: same position,
+	//   same seed. Different nodes (different node seeds) never share seeds.
+	// - SampleSpline seeds from the 1 cm position cell, the arc distance and an item key (sourceId, or the input
+	//   index for generated items with sourceId 0), so coincident, derived or self-intersecting splines yield
+	//   distinct seeds; only the same control linked twice repeats its points.
+	// - PruneByDistance resolves exact duplicates (distance 0 conflicts for any minSpacing > 0) by its rank:
+	//   priority, then seed, then index; for equal seeds the lower index, i.e. the earlier item, wins.
+
 	/// @brief Options of PruneByDistance.
 	struct PruneOptions
 	{

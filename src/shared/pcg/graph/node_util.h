@@ -3,6 +3,7 @@
 #pragma once
 
 #include "graph_data.h"
+#include "node_registry.h"
 
 #include "math/path_spline.h"
 
@@ -10,6 +11,9 @@
 
 namespace mmo::pcg::graph
 {
+	/// @brief Adds a warning to a node output unless the same text was already reported.
+	void WarnOnce(NodeOutput& out, const String& message);
+
 	/// @brief Gets a numeric setting (Float or Int) as float, or the fallback if it is missing, of another
 	///        type or not finite.
 	float SettingFloat(const AttributeSet& settings, const String& name, float fallback);
