@@ -105,8 +105,8 @@ namespace mmo
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
 		/// Puts the spell on its cooldown, as announced to the client in the SpellGo packet.
-		/// Called once the cast has gone off, which for a spell with a travel speed is well
-		/// before its projectile lands. Idempotent: the deferred impact path calls it again.
+		/// Called from ApplyAllEffects, and already when a projectile is launched, because that
+		/// spell's effects only resolve on impact. Idempotent, so the impact does not restart it.
 		void ApplySpellCooldown();
 
 		void ApplyAllEffects();

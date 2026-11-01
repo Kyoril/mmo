@@ -1035,8 +1035,8 @@ namespace mmo
 		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
 		const GameTime finalCD = CalculateFinalCooldown();
 
-		// Normally already done when the cast went off; still needed for the channeled path, which
-		// sends its own SpellGo and comes here directly.
+		// Idempotent: a spell with a travel speed already started its cooldown when its projectile
+		// was launched, which is the moment its SpellGo announced to the client.
 		ApplySpellCooldown();
 
 		// Make sure that the executer exists after all effects have been executed
@@ -1455,12 +1455,6 @@ namespace mmo
 
 		SendEndCast(spell_cast_result::CastOkay);
 
-		// The SpellGo packet above told the client the spell is on cooldown from now on, so start it
-		// on the server now as well. A spell with a travel speed resolves its effects only when its
-		// projectile lands; leaving the cooldown to that point let the caster fire again in the
-		// meantime, with nothing but the global cooldown in the way.
-		ApplySpellCooldown();
-
 		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor(); playerCaster && m_spell.skill() != 0)
 		{
 			std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
@@ -1529,6 +1523,13 @@ namespace mmo
 					m_projectileOrigin = m_cast.GetExecuter().GetPosition();
 					m_projectileDest = targetUnit->GetPosition();
 					m_impactCountdown.SetEnd(m_projectileStart + std::min<GameTime>(travelTimeMs, 200));
+
+					// This spell's effects - and with them its cooldown - are resolved only once the
+					// projectile lands. The SpellGo packet sent above already told the client the
+					// cooldown runs from now, so start it on the server now as well: leaving it to the
+					// impact let the caster fire again while the first projectile was still in flight,
+					// with nothing but the global cooldown in the way.
+					ApplySpellCooldown();
 				}
 			}
 		}
