@@ -358,6 +358,9 @@ namespace mmo
 		/// Asset path of the world's river flow paths (.hflow next to the world file).
 		[[nodiscard]] String GetFlowPathsFileName() const override;
 
+		/// Hand rivers and flow settings of Water mode as they are on the pages (see IWorldEditor::GetHandFlowPaths).
+		bool GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings) override;
+
 		/// @brief Asset path of the folder holding this world's procedural records (.hpcg).
 		[[nodiscard]] String GetPcgFolderName() const;
 

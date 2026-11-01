@@ -871,17 +871,21 @@ namespace mmo
 		return m_generatedFlowPaths ? m_generatedFlowPaths() : std::vector<terrain_io::water_flow::FlowPath>();
 	}
 
-	std::vector<terrain_io::water_flow::FlowPath> WaterEditMode::CollectFlowPaths() const
-	{
-		std::vector<terrain_io::water_flow::FlowPath> paths = CollectHandFlowPaths();
-		std::vector<terrain_io::water_flow::FlowPath> generated = CollectGeneratedFlowPaths();
-		paths.insert(paths.end(), std::make_move_iterator(generated.begin()), std::make_move_iterator(generated.end()));
-		return paths;
-	}
-
 	void WaterEditMode::SetGeneratedFlowPathsProvider(GeneratedFlowPathsProvider provider)
 	{
 		m_generatedFlowPaths = std::move(provider);
+	}
+
+	void WaterEditMode::GetAppliedHandFlow(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings)
+	{
+		// A pending apply would otherwise land after the caller's write and work from a stale picture of the pages.
+		if (m_flowApplyCountdown >= 0.0f)
+		{
+			ApplyFlow();
+		}
+
+		paths = m_appliedFlowPaths;
+		settings = m_appliedFlowSettings;
 	}
 
 	void WaterEditMode::ApplyFlow()
@@ -1045,8 +1049,12 @@ namespace mmo
 		// handles. They are not part of the spline editor, so they cannot be selected.
 		{
 			const ImU32 generatedColor = IM_COL32(170, 170, 170, 200);
+			constexpr float arrowSpacing = 15.0f;
 			for (const terrain_io::water_flow::FlowPath& path : CollectGeneratedFlowPaths())
 			{
+				// Arrows by distance along the whole path: generated paths have a point every few metres.
+				float nextArrow = arrowSpacing * 0.5f;
+				float travelled = 0.0f;
 				for (size_t i = 0; i + 1 < path.size(); ++i)
 				{
 					const terrain_io::water_flow::FlowPoint& a = path[i];
@@ -1066,13 +1074,12 @@ namespace mmo
 						drawList.AddLine(sa, sb, generatedColor, 2.0f);
 					}
 
-					// An arrow head about every 15 m, pointing downstream.
+					// An arrow head every arrowSpacing metres along the path, pointing downstream.
 					const float fx = dx / length;
 					const float fz = dz / length;
-					const int32 arrows = std::max(1, static_cast<int32>(length / 15.0f));
-					for (int32 c = 0; c < arrows; ++c)
+					for (; nextArrow <= travelled + length; nextArrow += arrowSpacing)
 					{
-						const float t = (static_cast<float>(c) + 0.5f) / static_cast<float>(arrows);
+						const float t = (nextArrow - travelled) / length;
 						const float cx = a.x + dx * t;
 						const float cz = a.z + dz * t;
 						const float size = 3.0f;
@@ -1086,6 +1093,7 @@ namespace mmo
 							drawList.AddLine(sRight, sTip, generatedColor, 2.0f);
 						}
 					}
+					travelled += length;
 				}
 			}
 		}

@@ -257,7 +257,7 @@ namespace mmo
 	///          placements keep their height above the base ground on the final ground; the section placements of
 	///          the ops are added under salted keys. After a successful write the river paths of the applied terrain
 	///          (PreparedTerrain::GetFlowPaths) join the world's river flow: Terrain::ApplyWaterFlow over the hand rivers
-	///          of the world's .hflow followed by every instance's paths (ProceduralEditMode::CollectGeneratedFlowPaths,
+	///          the editor holds (IWorldEditor::GetHandFlowPaths, else the .hflow) followed by every instance's paths (ProceduralEditMode::CollectGeneratedFlowPaths,
 	///          this one's new), with this instance's old paths as the previous set; they are then stored in
 	///          record.flowPaths. Bit-identical paths skip that step. A refused or failed rebuild touches no flow.
 	/// @param editor The world editor to work on. Must have a terrain.

@@ -101,6 +101,13 @@ namespace mmo
 		/// read-only in the overlay; they are never written to the .hflow file.
 		void SetGeneratedFlowPathsProvider(GeneratedFlowPathsProvider provider);
 
+		/// The hand-drawn river paths and flow settings that are on the terrain pages now: a pending (deferred)
+		/// apply is carried out first, so these equal the rivers and settings currently edited, saved or not.
+		/// A graph instance rebuild combines them with the generated paths.
+		/// @param paths Receives the usable hand paths (two points or more), in river order.
+		/// @param settings Receives the flow settings.
+		void GetAppliedHandFlow(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings);
+
 	private:
 		/// A river the flow brush edits: a name for the list and its path in downstream order.
 		struct River
@@ -133,9 +140,6 @@ namespace mmo
 
 		/// The river paths of the world's graph instances as they are now (empty without a provider).
 		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectGeneratedFlowPaths() const;
-
-		/// Every river path of the world: the hand-drawn ones followed by the generated ones.
-		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectFlowPaths() const;
 
 		/// Pointers to the river splines, in river order, for the spline editor.
 		[[nodiscard]] std::vector<PathSpline*> GetRiverSplines();

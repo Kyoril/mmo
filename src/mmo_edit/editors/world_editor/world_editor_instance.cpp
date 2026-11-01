@@ -1101,6 +1101,17 @@ namespace mmo
 		return fileName;
 	}
 
+	bool WorldEditorInstance::GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings)
+	{
+		if (!m_waterEditMode)
+		{
+			return false;
+		}
+
+		m_waterEditMode->GetAppliedHandFlow(paths, settings);
+		return true;
+	}
+
 	String WorldEditorInstance::GetPcgFolderName() const
 	{
 		return "Editor/Pcg/Worlds/" + m_assetPath.stem().string();

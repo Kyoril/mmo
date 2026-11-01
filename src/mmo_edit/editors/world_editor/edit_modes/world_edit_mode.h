@@ -8,6 +8,7 @@
 #include "game_common/fog_volume.h"
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
+#include "terrain_io/water_flow.h"
 
 #include <memory>
 #include <vector>
@@ -242,6 +243,13 @@ namespace mmo
 		/// @brief Asset path of the world's hand-drawn river paths (.hflow next to the world file), read with
 		///        ReadFlowPathsFile.
 		[[nodiscard]] virtual String GetFlowPathsFileName() const = 0;
+
+		/// @brief The hand-drawn river paths and flow settings the open editor holds, as they are on the terrain pages
+		///        now (saved or not; a pending deferred flow apply is carried out first).
+		/// @param paths Receives the usable hand paths (two points or more), in river order.
+		/// @param settings Receives the world's flow settings.
+		/// @return False if the editor holds no rivers (no Water mode); the caller then reads GetFlowPathsFileName().
+		virtual bool GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings) = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

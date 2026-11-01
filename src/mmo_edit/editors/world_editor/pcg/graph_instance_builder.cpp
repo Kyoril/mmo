@@ -289,11 +289,11 @@ namespace mmo
 			return true;
 		}
 
-		/// Makes the instance's river paths newPaths: recomputes the world's river flow from the hand rivers (the world's
-		/// .hflow, in file order) followed by every graph instance's paths (this one's replaced by newPaths), with this
+		/// Makes the instance's river paths newPaths: recomputes the world's river flow from the hand rivers (the open
+		/// editor's via GetHandFlowPaths, else the world's .hflow in file order) followed by every graph instance's paths (this one's replaced by newPaths), with this
 		/// instance's old paths as the previous set, then stores newPaths in the record. Bit-identical paths change
 		/// nothing. Call it only after the terrain write (or removal) succeeded.
-		/// @return False (with a warning, the record and the flow left as they were) if the .hflow file cannot be read.
+		/// @return False (with a warning, the record and the flow left as they were) if the .hflow file is needed and cannot be read.
 		bool ApplyInstanceFlow(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const ProceduralEditMode& controls,
 			std::vector<terrain_io::water_flow::FlowPath> newPaths, std::vector<String>& warnings)
 		{
@@ -310,28 +310,37 @@ namespace mmo
 				return true;
 			}
 
-			FlowPathsFile handRivers;
-			String error;
-			if (!ReadFlowPathsFile(editor.GetFlowPathsFileName(), handRivers, error))
+			// The hand rivers as they are on the pages: the open editor's (saved or not), else the .hflow file.
+			std::vector<terrain_io::water_flow::FlowPath> paths;
+			terrain_io::water_flow::FlowSettings settings;
+			if (!editor.GetHandFlowPaths(paths, settings))
 			{
-				warnings.push_back("the river flow was not updated: " + error);
-				WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << warnings.back());
-				return false;
+				FlowPathsFile handRivers;
+				String error;
+				if (!ReadFlowPathsFile(editor.GetFlowPathsFileName(), handRivers, error))
+				{
+					warnings.push_back("the river flow was not updated: " + error);
+					WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << warnings.back());
+					return false;
+				}
+
+				paths.clear();
+				for (const auto& river : handRivers.rivers)
+				{
+					if (river.second.points.size() >= 2)
+					{
+						paths.push_back(terrain_io::water_flow::FromSpline(river.second));
+					}
+				}
+				settings = handRivers.settings;
 			}
 
-			std::vector<terrain_io::water_flow::FlowPath> paths;
-			for (const auto& river : handRivers.rivers)
-			{
-				if (river.second.points.size() >= 2)
-				{
-					paths.push_back(terrain_io::water_flow::FromSpline(river.second));
-				}
-			}
 			const std::vector<terrain_io::water_flow::FlowPath> generated = controls.CollectGeneratedFlowPaths(record.id, newPaths);
 			paths.insert(paths.end(), generated.begin(), generated.end());
 
-			const terrain::Terrain::WaterFlowResult result = terrain->ApplyWaterFlow(paths, handRivers.settings, record.flowPaths,
-				handRivers.settings, newPaths.empty() ? String() : String(RiverWaterMaterial));
+			// Same settings for both sets: Water mode applied the pages with them.
+			const terrain::Terrain::WaterFlowResult result = terrain->ApplyWaterFlow(paths, settings, record.flowPaths,
+				settings, newPaths.empty() ? String() : String(RiverWaterMaterial));
 			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): river flow written to "
 				<< result.pagesWritten << " page(s), cleared on " << result.pagesCleared);
 			record.flowPaths = std::move(newPaths);
