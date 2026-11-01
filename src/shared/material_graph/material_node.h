@@ -4,22 +4,20 @@
 
 #include <any>
 #include <filesystem>
-#include <imgui.h>
 #include <optional>
 #include <span>
 #include <variant>
 
 #include "base/typedefs.h"
-#include "frame_ui/color.h"
+#include "base/color.h"
+#include "material_graph/node_layout_store.h"
 
-#include "imgui_node_editor.h"
-#include "node_editor/link_query_result.h"
-#include "node_editor/node_type_info.h"
+#include "material_graph/link_query_result.h"
+#include "material_graph/node_type_info.h"
 #include "base/signal.h"
 #include "graphics/material_compiler.h"
 #include "material_function.h"
 
-namespace ed = ax::NodeEditor;
 
 namespace io
 {
@@ -527,7 +525,7 @@ namespace mmo
 			return nullptr;
 	    }
 
-		virtual uint32 GetColor() { return IM_COL32(255, 255, 255, 64); }
+		virtual uint32 GetColor() { return 0x40FFFFFFu; }
 
 	    std::unique_ptr<Pin> CreatePin(PinType pinType, std::string_view name = "");
 		
@@ -1395,11 +1393,11 @@ namespace mmo
 
 		[[nodiscard]] uint32 GetColor() override
 		{
-			return IM_COL32(
-				static_cast<int>(m_color.GetRed() * 255.0f),
-				static_cast<int>(m_color.GetGreen() * 255.0f),
-				static_cast<int>(m_color.GetBlue() * 255.0f),
-				static_cast<int>(m_color.GetAlpha() * 255.0f));
+			// Truncating byte conversion with IM_COL32 byte order (red in the low byte).
+			return (static_cast<uint32>(static_cast<int>(m_color.GetAlpha() * 255.0f)) << 24)
+				| (static_cast<uint32>(static_cast<int>(m_color.GetBlue() * 255.0f)) << 16)
+				| (static_cast<uint32>(static_cast<int>(m_color.GetGreen() * 255.0f)) << 8)
+				| static_cast<uint32>(static_cast<int>(m_color.GetRed() * 255.0f));
 		}
 
 		[[nodiscard]] std::string_view GetName() const override

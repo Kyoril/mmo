@@ -16,15 +16,22 @@ add_subdirectory(game_common)
 # None of these needs a graphics device -- xml_handler is attribute parsing and a SAX
 # handler chain, tex is container header IO. They are built for test builds too, so their
 # suites keep working on the headless server build.
-if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TESTS)
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
 	add_subdirectory(xml_handler)
 	add_subdirectory(tex)
 	add_subdirectory(tex_v1_0)
 endif()
 
-if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
+# The material graph and the material compiler it targets have no device dependency, so they are
+# built for test builds as well, which keeps their suite running on the headless server build. The
+# cooking tool builds them without a client.
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
 	add_subdirectory(graphics)
 	add_subdirectory(graphics_null)
+	add_subdirectory(material_graph)
+endif()
+
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 	if (WIN32)
 		add_subdirectory(graphics_d3d11)
 	elseif(APPLE)
@@ -69,4 +76,9 @@ if (MMO_BUILD_BOTS)
 endif()
 if (MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS)
 	add_subdirectory(nav_build)
+endif()
+
+# Content cooking for releases (content_cook) builds on the material graph, see above.
+if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR OR MMO_BUILD_TOOLS OR MMO_BUILD_TESTS)
+	add_subdirectory(content_cook)
 endif()

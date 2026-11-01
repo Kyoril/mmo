@@ -11,7 +11,6 @@ add_subdirectory(world_server)
 
 if (APPLE AND (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR))
 	add_subdirectory(hlsl2msl)
-	add_subdirectory(metal_material_baker)
 endif()
 
 if (MMO_BUILD_CLIENT)
@@ -40,6 +39,11 @@ if (MMO_BUILD_TOOLS)
 	if (WIN32)
 		add_subdirectory(mmo_error)
 	endif()
+endif()
+
+# The client CI jobs build mmo_cook next to the client to cook their platform's shaders.
+if (MMO_BUILD_TOOLS OR MMO_BUILD_CLIENT)
+	add_subdirectory(mmo_cook)
 endif()
 
 if (MMO_BUILD_TESTS)

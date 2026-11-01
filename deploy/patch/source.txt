@@ -1,4 +1,5 @@
 // Every top-level entry here is downloaded into the install folder; list it in [UninstallDelete] of deploy/installer/setup.iss too.
+// mmo_client.app (condition OSX) comes from the nightly's client-macos.zip and is never installed on Windows.
 version = 0
 root = (type = "fs", from = ".", to = "", entries =
 {
@@ -33,5 +34,8 @@ root = (type = "fs", from = ".", to = "", entries =
 	)
 	(type = "if", condition = "WINDOWS", value =
 		(type = "fs", from = "mmo_error.exe")
+	)
+	(type = "if", condition = "OSX", value =
+		(type = "fs", from = "mmo_client.app")
 	)
 })

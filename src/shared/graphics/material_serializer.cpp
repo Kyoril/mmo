@@ -3,6 +3,7 @@
 #include "material_serializer.h"
 #include "graphics/material.h"
 #include "graphics/shader_platform.h"
+#include "graphics/shader_build_info.h"
 
 #include "base/chunk_writer.h"
 #include "binary_io/writer.h"
@@ -22,6 +23,7 @@ namespace mmo
 	static const ChunkMagic MaterialFoliageChunk = MakeChunkMagic('LOFM');
 	static const ChunkMagic MaterialSurfaceTypeChunk = MakeChunkMagic('FRSM');
 	static const ChunkMagic MaterialLayerBindingChunk = MakeChunkMagic('DNBM');
+	static const ChunkMagic MaterialBuildInfoChunk = MakeChunkMagic('DLBS');
 
 	MaterialDeserializer::MaterialDeserializer(Material& material)
 		: ChunkReader(true)
@@ -85,6 +87,11 @@ namespace mmo
 				if (version >= material_version::Version_0_8)
 				{
 					AddChunkHandler(*MaterialLayerBindingChunk, false, *this, &MaterialDeserializer::ReadMaterialLayerBindingChunk);
+				}
+
+				if (version >= material_version::Version_0_9)
+				{
+					AddChunkHandler(*MaterialBuildInfoChunk, false, *this, &MaterialDeserializer::ReadMaterialBuildInfoChunk);
 				}
 			}
 			else
@@ -630,6 +637,56 @@ namespace mmo
 		return reader;
 	}
 
+	bool MaterialDeserializer::ReadMaterialBuildInfoChunk(io::Reader& reader, uint32 chunkHeader, uint32 chunkSize)
+	{
+		uint8 hasGraphHash = 0;
+		SHA1Hash graphHash{};
+		reader
+			>> io::read<uint8>(hasGraphHash)
+			>> io::read_range(graphHash);
+		if (!reader)
+		{
+			return false;
+		}
+
+		if (hasGraphHash != 0)
+		{
+			m_material.SetGraphHash(graphHash);
+		}
+
+		uint8 platformCount = 0;
+		reader >> io::read<uint8>(platformCount);
+
+		for (uint8 i = 0; i < platformCount && reader; ++i)
+		{
+			String platform;
+			ShaderBuildInfo info;
+			uint16 functionCount = 0;
+			reader
+				>> io::read_container<uint8>(platform)
+				>> io::read_range(info.graphHash)
+				>> io::read<uint32>(info.generatorVersion)
+				>> io::read<uint32>(info.backendVersion)
+				>> io::read<uint16>(functionCount);
+
+			for (uint16 f = 0; f < functionCount && reader; ++f)
+			{
+				FunctionHash function;
+				reader
+					>> io::read_container<uint16>(function.path)
+					>> io::read_range(function.hash);
+				info.functions.push_back(std::move(function));
+			}
+
+			if (reader)
+			{
+				m_material.SetShaderBuildInfo(platform, std::move(info));
+			}
+		}
+
+		return reader;
+	}
+
 	void MaterialSerializer::Export(const Material& material, io::Writer& writer, MaterialVersion version)
 	{
 		// Layer bindings are the only thing that forces v0.8, so a material which does not use
@@ -640,7 +697,10 @@ namespace mmo
 			hasLayerBindings = !material.GetLayerBinding(layer).IsEmpty();
 		}
 
-		version = hasLayerBindings ? material_version::Version_0_8 : material_version::Version_0_7;
+		// Build info is the only thing that forces v0.9, for the same reason.
+		const bool hasBuildInfo = material.GetGraphHash().has_value() || !material.GetAllShaderBuildInfo().empty();
+
+		version = hasBuildInfo ? material_version::Version_0_9 : (hasLayerBindings ? material_version::Version_0_8 : material_version::Version_0_7);
 
 		// File version chunk
 		{
@@ -876,6 +936,34 @@ namespace mmo
 
 			writer << io::write_dynamic_range<uint16>(material.GetLayerBlendSharpnessParam());
 			layerBindingChunkWriter.Finish();
+		}
+
+		// Shader build info chunk (v0.9+). Only written when a graph hash or build info is recorded.
+		if (hasBuildInfo)
+		{
+			ChunkWriter buildInfoChunkWriter { MaterialBuildInfoChunk, writer };
+
+			const std::optional<SHA1Hash> graphHash = material.GetGraphHash();
+			writer << io::write<uint8>(graphHash.has_value() ? 1 : 0);
+			writer << io::write_range(graphHash.value_or(SHA1Hash{}));
+
+			const auto& allInfo = material.GetAllShaderBuildInfo();
+			writer << io::write<uint8>(static_cast<uint8>(allInfo.size()));
+			for (const auto& [platformId, info] : allInfo)
+			{
+				writer << io::write_dynamic_range<uint8>(platformId.begin(), platformId.end());
+				writer << io::write_range(info.graphHash);
+				writer << io::write<uint32>(info.generatorVersion);
+				writer << io::write<uint32>(info.backendVersion);
+				writer << io::write<uint16>(static_cast<uint16>(info.functions.size()));
+				for (const FunctionHash& function : info.functions)
+				{
+					writer << io::write_dynamic_range<uint16>(function.path.begin(), function.path.end());
+					writer << io::write_range(function.hash);
+				}
+			}
+
+			buildInfoChunkWriter.Finish();
 		}
 	}
 }

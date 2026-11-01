@@ -168,14 +168,32 @@ namespace mmo
 		{
 		case MaterialDomain::UserInterface:
 			pixelShaderType = PixelShaderType::UI; // UI always uses the UI pixel shader
-			ASSERT(m_parent->GetVertexShader(VertexShaderType::UI));
-			if (m_parent->GetVertexShader(VertexShaderType::UI)) m_parent->GetVertexShader(VertexShaderType::UI)->Set();
-			ASSERT(m_parent->GetPixelShader(pixelShaderType));
-			if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+			if (m_parent->GetVertexShader(VertexShaderType::UI))
+			{
+				m_parent->GetVertexShader(VertexShaderType::UI)->Set();
+			}
+			else
+			{
+				GetBaseMaterial()->ReportMissingVertexShader(VertexShaderType::UI);
+			}
+			if (m_parent->GetPixelShader(pixelShaderType))
+			{
+				m_parent->GetPixelShader(pixelShaderType)->Set();
+			}
+			else
+			{
+				GetBaseMaterial()->ReportMissingPixelShader(pixelShaderType);
+			}
 			break;
 		default:
-			ASSERT(m_parent->GetVertexShader(VertexShaderType::Default));
-			if (m_parent->GetVertexShader(VertexShaderType::Default)) m_parent->GetVertexShader(VertexShaderType::Default)->Set();
+			if (m_parent->GetVertexShader(VertexShaderType::Default))
+			{
+				m_parent->GetVertexShader(VertexShaderType::Default)->Set();
+			}
+			else
+			{
+				GetBaseMaterial()->ReportMissingVertexShader(VertexShaderType::Default);
+			}
 
 			// Opaque/unlit casters don't need a pixel shader to write shadow depth; binding none lets
 			// the GPU use its faster depth-only path. Masked materials still need the alpha-test shader.
@@ -187,8 +205,14 @@ namespace mmo
 			}
 			else
 			{
-				ASSERT(m_parent->GetPixelShader(pixelShaderType));
-				if (m_parent->GetPixelShader(pixelShaderType)) m_parent->GetPixelShader(pixelShaderType)->Set();
+				if (m_parent->GetPixelShader(pixelShaderType))
+				{
+					m_parent->GetPixelShader(pixelShaderType)->Set();
+				}
+				else
+				{
+					GetBaseMaterial()->ReportMissingPixelShader(pixelShaderType);
+				}
 			}
 			break;
 		}

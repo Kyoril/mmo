@@ -32,6 +32,7 @@ namespace mmo
 	MaterialGraph::MaterialGraph(MaterialGraph&& other)
 		: m_nodeRegistry(std::move(other.m_nodeRegistry))
 		, m_idGenerator(std::move(other.m_idGenerator))
+		, m_layoutStore(other.m_layoutStore)
 		, m_nodes(std::move(other.m_nodes))
 		, m_pins(std::move(other.m_pins))
 		, m_rootNode(other.m_rootNode)
@@ -55,7 +56,8 @@ namespace mmo
 		{
 			writer
 				<< io::write<uint32>(m_nodes.size())
-				<< io::write<uint32>(m_idGenerator.GetCurrentId())
+				// The id counter drifts when a graph is loaded, so it is not part of the content hash
+				<< io::write<uint32>(m_layoutFree ? 0 : m_idGenerator.GetCurrentId())
 				<< io::write<uint32>(m_rootNode ? m_rootNode->GetId() : 0xffffffff);
 			
 			for (const auto& node : m_nodes)
@@ -67,6 +69,15 @@ namespace mmo
 			}
 		}
 		chunkWriter.Finish();
+		return writer;
+	}
+
+	io::Writer& MaterialGraph::SerializeLayoutFree(io::Writer& writer) const
+	{
+		const bool previous = m_layoutFree;
+		m_layoutFree = true;
+		Serialize(writer);
+		m_layoutFree = previous;
 		return writer;
 	}
 
@@ -154,6 +165,7 @@ namespace mmo
 
 	    m_nodeRegistry = std::move(other.m_nodeRegistry);
 	    m_idGenerator = std::move(other.m_idGenerator);
+	    m_layoutStore = other.m_layoutStore;
 	    m_nodes = std::move(other.m_nodes);
 	    m_pins = std::move(other.m_pins);
 		m_rootNode = other.m_rootNode;

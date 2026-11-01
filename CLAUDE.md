@@ -85,6 +85,15 @@ each other. `tools/protocol_version_check.py` runs as the first step of the gate
 on changes it can see; it cannot see a payload change inside a handler, so that case still
 needs judgement. Record the bump in [docs/protocol_versions.md](docs/protocol_versions.md).
 
+## Material Compiler Version
+
+Any change to the shader code the material compiler generates (`MaterialCompilerHlsl`, the
+material graph nodes' code generation, or a platform backend such as `ShaderCompilerMetal`)
+requires bumping `material_compiler_version::Generator` in `src/shared/graphics/shader_build_info.h`,
+or that platform's backend version in `GetBackendVersion`. Without the bump, stale shaders are not
+detected in editors and development clients, and their caches keep serving the old code. Releases
+always cook fresh shaders, see [the content cooking design](docs/superpowers/specs/2026-10-31-content-cooking-design.md).
+
 ## Build Commands
 
 ### Prerequisites

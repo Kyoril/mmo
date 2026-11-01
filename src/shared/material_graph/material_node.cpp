@@ -1,50 +1,46 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "material_node.h"
+#include "material_graph/material_node.h"
 
 #include <unordered_set>
 
-#include "imgui_node_editor.h"
-#include "imgui_node_editor_internal.h"
-#include "material_function_manager.h"
-#include "material_graph.h"
-#include "reader.h"
-#include "writer.h"
+#include "material_graph/material_function_manager.h"
+#include "material_graph/material_graph.h"
+#include "binary_io/reader.h"
+#include "binary_io/writer.h"
 #include "assets/asset_registry.h"
 #include "base/chunk_reader.h"
 #include "base/chunk_writer.h"
 #include "log/default_log_levels.h"
 
-static ImTextureID s_headerBackground = nullptr;
-
 namespace mmo
 {
-	const uint32 ConstFloatNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ScalarParameterNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 IfNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ConstVectorNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
-	const uint32 VectorParameterNode::Color = ImColor(0.88f, 0.88f, 0.29f, 0.25f);
-	const uint32 GlobalScalarParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
-	const uint32 GlobalVectorParameterNode::Color = ImColor(0.29f, 0.66f, 0.88f, 0.25f);
-	const uint32 MaterialNode::Color = ImColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
-	const uint32 TextureNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
-	const uint32 TextureParameterNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
-	const uint32 TextureCoordNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 MaterialFunctionOutputNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
-	const uint32 MaterialFunctionNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
-	const uint32 MaterialFunctionInputNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 SineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 CosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 TangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ArcTangent2Node::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 FracNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 LengthNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ArcCosineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ArcSineNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ArcTangentNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 TimeNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 RotatorNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 FresnelNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ConstFloatNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ScalarParameterNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 IfNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ConstVectorNode::Color = PackNodeColor(0.88f, 0.88f, 0.29f, 0.25f);
+	const uint32 VectorParameterNode::Color = PackNodeColor(0.88f, 0.88f, 0.29f, 0.25f);
+	const uint32 GlobalScalarParameterNode::Color = PackNodeColor(0.29f, 0.66f, 0.88f, 0.25f);
+	const uint32 GlobalVectorParameterNode::Color = PackNodeColor(0.29f, 0.66f, 0.88f, 0.25f);
+	const uint32 MaterialNode::Color = PackNodeColor(114.0f / 255.0f, 92.0f / 255.0f, 71.0f / 255.0f, 0.50f);
+	const uint32 TextureNode::Color = PackNodeColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 TextureParameterNode::Color = PackNodeColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 TextureCoordNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 MaterialFunctionOutputNode::Color = PackNodeColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 MaterialFunctionNode::Color = PackNodeColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 MaterialFunctionInputNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SineNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 CosineNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 TangentNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcTangent2Node::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 FracNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 LengthNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcCosineNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcSineNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ArcTangentNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 TimeNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 RotatorNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 FresnelNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	Pin::Pin(GraphNode* node, const PinType type, const std::string_view name)
 		: m_id(node ? node->GetMaterial()->MakePinId(this) : 0)
@@ -66,7 +62,8 @@ namespace mmo
 	{
 		writer
 			<< io::write<uint32>(m_id)
-			<< io::write<uint32>(m_link ? m_link->GetId() : 0);
+			// An output only remembers the last input linked to it, so for hashing only the inputs describe connectivity
+			<< io::write<uint32>(m_link && !(!IsInput() && m_node && m_node->GetMaterial()->IsLayoutFreeSerialization()) ? m_link->GetId() : 0);
 
 		return writer;
 	}
@@ -331,43 +328,33 @@ namespace mmo
 		writer
 			<< io::write<uint32>(m_id);
 
-		// Read the *live* node position and size directly from the node editor rather than from the
-		// serialized state snapshot (m_NodesState). That snapshot is only refreshed when an editor
-		// state is applied/loaded - it is NOT updated when the user drags a node around or when a node
-		// is created at runtime. Reading it here caused freshly created nodes to be saved at (0, 0) and
-		// dragged nodes to be saved at their original pre-drag position, which is why nodes jumped to
-		// strange positions after reloading a material. GetNodePosition/GetNodeSize return the current
-		// bounds straight from the editor's live node objects.
-		float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
-		if (ed::GetCurrentEditor())
+		// Layout-free serialization (content hashing) leaves the bounds out entirely.
+		if (!(m_material && m_material->IsLayoutFreeSerialization()))
 		{
-			const ImVec2 position = ed::GetNodePosition(m_id);
-			const ImVec2 size = ed::GetNodeSize(m_id);
-
-			// GetNodePosition returns (FLT_MAX, FLT_MAX) when the node is not known to the editor yet
-			// (i.e. it has never been committed/rendered). In that case we keep (0, 0).
-			if (position.x != FLT_MAX && position.y != FLT_MAX)
+			// The node bounds are read live from the layout store (the node editor) rather than from any saved
+			// snapshot: a snapshot is not updated when the user drags a node around or when a node is created at
+			// runtime, which made nodes jump to strange positions after reloading a material.
+			float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
+			if (const INodeLayoutStore* layoutStore = m_material ? m_material->GetLayoutStore() : nullptr)
 			{
-				posX = position.x;
-				posY = position.y;
-				sizeX = size.x;
-				sizeY = size.y;
+				// The store reports no bounds when the node was never displayed. We keep (0, 0) then.
+				if (!layoutStore->GetNodeBounds(m_id, posX, posY, sizeX, sizeY))
+				{
+					posX = posY = sizeX = sizeY = 0.0f;
+					DLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
+				}
 			}
 			else
 			{
-				WLOG("Node " << m_id << " has no editor position yet, empty state will be saved");
+				DLOG("No layout store given, node state won't be saved");
 			}
-		}
-		else
-		{
-			WLOG("No editor context given, node state won't be saved");
-		}
 
-		writer
-			<< io::write<float>(posX)
-			<< io::write<float>(posY)
-			<< io::write<float>(sizeX)
-			<< io::write<float>(sizeY);
+			writer
+				<< io::write<float>(posX)
+				<< io::write<float>(posY)
+				<< io::write<float>(sizeX)
+				<< io::write<float>(sizeY);
+		}
 
 		writer
 			<< io::write<uint8>(GetInputPins().size());
@@ -410,24 +397,13 @@ namespace mmo
 			return reader;
 		}
 
-		const auto editorContext = reinterpret_cast<ed::Detail::EditorContext*>(ed::GetCurrentEditor());
-		if (editorContext)
+		if (INodeLayoutStore* layoutStore = m_material ? m_material->GetLayoutStore() : nullptr)
 		{
-			ed::Detail::EditorState& state = editorContext->GetState();
-			const auto nodeStateIt = state.m_NodesState.m_Nodes.find(m_id);
-			if (nodeStateIt == state.m_NodesState.m_Nodes.end())
-			{
-				state.m_NodesState.m_Nodes.emplace(m_id, ed::Detail::NodeState{ImVec2{positionX, positionY}, ImVec2{sizeX, sizeY}, ImVec2{0.0f, 0.0f}});
-			}
-			else
-			{
-				nodeStateIt->second.m_Location = ImVec2{positionX, positionY};
-				nodeStateIt->second.m_Size = ImVec2{sizeX, sizeY};
-			}
+			layoutStore->SetNodeBounds(m_id, positionX, positionY, sizeX, sizeY);
 		}
 		else
 		{
-			DLOG("No editor context given, node state won't be restored");
+			DLOG("No layout store given, node state won't be restored");
 		}
 
 		const uint32 actualInputCount = static_cast<uint32>(GetInputPins().size());
@@ -1071,7 +1047,7 @@ namespace mmo
 		}
 
 		// Unresolved reference: neutral grey so the broken link is visually obvious.
-		return IM_COL32(128, 128, 128, 255);
+		return 0xFF808080u;
 	}
 
 	ExpressionIndex NamedVariableGetNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
@@ -2205,9 +2181,9 @@ namespace mmo
 		return reader;
 	}
 
-	const uint32 PannerNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
-	const uint32 ReflectionVectorNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 SmoothStepNode::Color = ImColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 PannerNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
+	const uint32 ReflectionVectorNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SmoothStepNode::Color = PackNodeColor(0.57f, 0.88f, 0.29f, 0.25f);
 
 	ExpressionIndex PannerNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
@@ -2348,10 +2324,10 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	const uint32 PixelDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 SceneDepthNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 ScreenPositionNode::Color = ImColor(0.88f, 0.0f, 0.0f, 0.25f);
-	const uint32 SceneColorNode::Color = ImColor(0.29f, 0.29f, 0.88f, 0.25f);
+	const uint32 PixelDepthNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneDepthNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 ScreenPositionNode::Color = PackNodeColor(0.88f, 0.0f, 0.0f, 0.25f);
+	const uint32 SceneColorNode::Color = PackNodeColor(0.29f, 0.29f, 0.88f, 0.25f);
 
 	ExpressionIndex PixelDepthNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
@@ -2406,7 +2382,7 @@ namespace mmo
 		return m_compiledExpressionId;
 	}
 
-	const uint32 ScreenSpaceReflectionNode::Color = ImColor(0.0f, 0.55f, 0.88f, 0.25f);
+	const uint32 ScreenSpaceReflectionNode::Color = PackNodeColor(0.0f, 0.55f, 0.88f, 0.25f);
 
 	ExpressionIndex ScreenSpaceReflectionNode::Compile(MaterialCompiler& compiler, const Pin* outputPin)
 	{
@@ -2498,14 +2474,5 @@ namespace mmo
 		}
 
 		return m_compiledExpressionId;
-	}
-
-	ImColor GetIconColor(const PinType type)
-	{
-	    switch (type)
-	    {
-	        default:
-	        case PinType::Material: return ImColor(255,   255, 255);
-	    }
 	}
 }

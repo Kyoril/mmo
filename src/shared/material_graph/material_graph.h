@@ -4,9 +4,10 @@
 
 #include <functional>
 
-#include "node_editor/node_registry.h"
+#include "material_graph/node_registry.h"
 
 #include "base/id_generator.h"
+#include "material_graph/node_layout_store.h"
 
 #include <memory>
 
@@ -97,6 +98,14 @@ namespace mmo
 
 	public:
 		io::Writer& Serialize(io::Writer& writer) const;
+
+		/// @brief Serializes the graph like Serialize does, but without node positions and sizes, so that the
+		///        output only changes when the graph's content does. Used for content hashing. Silent, as there
+		///        is no layout to complain about.
+		io::Writer& SerializeLayoutFree(io::Writer& writer) const;
+
+		/// @brief Whether nodes currently leave their layout out when serialized.
+		[[nodiscard]] bool IsLayoutFreeSerialization() const { return m_layoutFree; }
 
 		io::Reader& Deserialize(io::Reader& reader, IMaterialGraphLoadContext& context);
 
@@ -215,9 +224,22 @@ namespace mmo
 
 	    bool IsRootNode(uint32 nodeId) const;
 
+		/// @brief Determines whether the graph has a root (material output) node.
+		[[nodiscard]] bool HasRootNode() const { return m_rootNode != nullptr; }
+
+		/// @brief Sets where node positions and sizes are read from when saving and written to when loading.
+		///        Without a store, nodes are saved with an empty layout and loaded layouts are dropped.
+		/// @param store The layout store, which has to outlive the graph or be reset to nullptr. Not owned.
+		void SetLayoutStore(INodeLayoutStore* store) { m_layoutStore = store; }
+
+		/// @brief Gets the layout store, if any.
+		[[nodiscard]] INodeLayoutStore* GetLayoutStore() const { return m_layoutStore; }
+
     private:
 	    std::shared_ptr<NodeRegistry> m_nodeRegistry;
 	    IdGenerator<uint32> m_idGenerator { 1 };
+	    INodeLayoutStore* m_layoutStore { nullptr };
+	    mutable bool m_layoutFree { false };
 	    std::vector<GraphNode*> m_nodes;
 	    std::vector<Pin*> m_pins;
 		GraphNode* m_rootNode { nullptr };

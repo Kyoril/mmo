@@ -10,8 +10,10 @@
 
 #include "node_editor/item_builder.h"
 #include "node_editor/item_deleter.h"
-#include "editors/material_editor/material_graph.h"
-#include "editors/material_editor/material_node.h"
+#include "material_graph/material_graph.h"
+#include "material_graph/material_graph_hash.h"
+#include "material_graph/material_node.h"
+#include "material_graph/material_shader_build.h"
 #include "node_editor/node_header_renderer.h"
 #include "node_editor/node_layout.h"
 #include "node_editor/node_pin_icons.h"
@@ -617,6 +619,7 @@ namespace mmo
 
 		m_material = std::static_pointer_cast<Material>(MaterialManager::Get().CreateManual(assetPath.string()));
 		m_graph = std::make_unique<MaterialGraph>();
+		m_graph->SetLayoutStore(&m_layoutStore);
 
 		std::shared_ptr<NodeRegistry> registry = m_graph->GetNodeRegistry();
 		ASSERT(registry);
@@ -711,6 +714,19 @@ namespace mmo
 
 		m_renderConnection = host.beforeUiUpdate.connect(this, &MaterialEditorInstance::RenderMaterialPreview);
 		m_material->SetName(assetPath.string());
+
+		// Shaders of the platform the editor runs on that are missing or out of date are rebuilt right
+		// away; the file is only written on the next save.
+		if (assetPath.extension() != ".hmf" && m_graph->HasRootNode())
+		{
+			const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
+			if (!IsMaterialShaderBuildCurrent(*m_material, *m_graph, shaderCompiler->GetPlatform()))
+			{
+				ILOG("Material " << assetPath << ": " << shaderCompiler->GetPlatform() << " shaders are out of date, rebuilding");
+				Compile();
+				m_shadersRebuiltOnOpen = true;
+			}
+		}
 	}
 
 	MaterialEditorInstance::~MaterialEditorInstance()
@@ -754,6 +770,21 @@ namespace mmo
 
 		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
 		materialCompiler->Compile(*m_material, *shaderCompiler);
+
+		// Only this platform's shaders were rebuilt; record what they were built from so loaders
+		// and the cook can tell whether they are still current. Other platforms keep their shaders.
+		if (GetAssetPath().extension() != ".hmf")
+		{
+			std::vector<FunctionHash> functions;
+			if (CollectFunctionHashes(*m_graph, functions))
+			{
+				RecordShaderBuildInfo(*m_material, *m_graph, shaderCompiler->GetPlatform(), std::move(functions));
+			}
+			else
+			{
+				WLOG("Material " << GetAssetPath() << ": a material function is missing, shader build info not updated");
+			}
+		}
 
 		// Keep the generated high level HLSL around so it can be inspected in the shader code panel.
 		CaptureGeneratedShaderCode(*materialCompiler);
@@ -837,6 +868,14 @@ namespace mmo
 			}
 
 			{
+				// Content hash of the graph without layout, so shaders built from this function can tell when it changed
+				const SHA1Hash graphHash = ComputeGraphHash(*m_graph);
+				ChunkWriter hashChunk{ ChunkMagic({ 'F', 'H', 'S', 'H' }), writer };
+				writer << io::write_range(graphHash);
+				hashChunk.Finish();
+			}
+
+			{
 				ChunkWriter outputChunk{ ChunkMagic({ 'O', 'U', 'T', 'P' }), writer };
 				writer << io::write<uint32>(outputNodes.size());
 				for (const auto& [name, outputNode] : outputNodes)
@@ -850,6 +889,7 @@ namespace mmo
 		// Serialize the material graph as well
 		m_graph->Serialize(writer);
 
+		m_shadersRebuiltOnOpen = false;
 		m_editor.GetPreviewManager().InvalidatePreview(m_assetPath.string());
 		return true;
 	}
@@ -902,6 +942,12 @@ namespace mmo
 		if (ImGui::Button("Save"))
 		{
 			Save();
+		}
+
+		if (m_shadersRebuiltOnOpen)
+		{
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Shaders were out of date and got rebuilt - save to keep them");
 		}
 	}
 

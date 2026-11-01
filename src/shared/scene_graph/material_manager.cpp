@@ -8,6 +8,10 @@
 #include "graphics/material_instance.h"
 #include "log/default_log_levels.h"
 #include "base/profiler.h"
+#include "binary_io/memory_source.h"
+
+#include <iterator>
+#include <vector>
 
 namespace mmo
 {
@@ -66,14 +70,33 @@ namespace mmo
 		{
 			auto material = std::make_shared<Material>(filename);
 
-			io::StreamSource source{ *file };
-			io::Reader reader{ source };
-
-			MaterialDeserializer deserializer{ *material };
-			if (!deserializer.Read(reader))
+			if (m_postLoadHook)
 			{
-				ELOG("Failed to load material");
-				return nullptr;
+				// The hook needs the file bytes (the graph chunk), so read them once and parse from memory.
+				const std::vector<char> bytes { std::istreambuf_iterator<char>(*file), std::istreambuf_iterator<char>() };
+				io::MemorySource source{ bytes.data(), bytes.data() + bytes.size() };
+				io::Reader reader{ source };
+
+				MaterialDeserializer deserializer{ *material };
+				if (!deserializer.Read(reader))
+				{
+					ELOG("Failed to load material");
+					return nullptr;
+				}
+
+				m_postLoadHook(*material, std::span<const uint8>(reinterpret_cast<const uint8*>(bytes.data()), bytes.size()));
+			}
+			else
+			{
+				io::StreamSource source{ *file };
+				io::Reader reader{ source };
+
+				MaterialDeserializer deserializer{ *material };
+				if (!deserializer.Read(reader))
+				{
+					ELOG("Failed to load material");
+					return nullptr;
+				}
 			}
 
 			material->Update();

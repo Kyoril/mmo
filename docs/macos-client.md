@@ -17,7 +17,7 @@ Xcode command line tools (Metal compiler, AppKit SDK) are required.
 ```bash
 cmake -S . -B build_mac -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMMO_BUILD_CLIENT=ON \
 	-DMMO_BUILD_TESTS=OFF -DMMO_BUILD_BOTS=OFF -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl@3
-cmake --build build_mac -t mmo_client metal_material_baker -j8
+cmake --build build_mac -t mmo_client -j8
 ```
 
 The app bundle lands in `bin/mmo_client.app`. Inside a bundle the client uses the directory
@@ -50,27 +50,34 @@ headers, so the version does not have to match the Windows SDK (2.00.08); 2.03.1
 Metal cannot run the D3D11 bytecode the engine ships, so all shaders are cross compiled from
 HLSL: HLSL → SPIR-V (glslang) → Metal Shading Language (SPIRV-Cross), implemented in
 `src/shared/msl_cross`. The result is a small blob (`metal_shader_blob.h`): a header with the
-stage and compute threadgroup size, followed by MSL source that the device compiles at load time.
+stage and compute threadgroup size, followed by either MSL source that the device compiles at
+load time (`MSL1`) or a precompiled Metal library (`MLB1`) it loads directly.
 
 - **Built-in shaders** (deferred passes, compute passes, fixed vertex format shaders) are
   converted at build time by the `hlsl2msl` tool (`mmo_add_metal_shaders` in
   `cmake/mmo_macros.cmake`). The generated headers use the same symbol names as fxc's output,
   so each shader seam only has an `#elif defined(__APPLE__)` include branch.
-- **Materials** (`.hmat`) store compiled shaders per platform. `metal_material_baker` recompiles
-  every material graph with the HLSL generator, cross compiles it, and stores the result as the
-  `METAL` platform. D3D11 bytecode and the graph chunk are written back byte for byte.
+- **Materials** (`.hmat`) store compiled shaders per platform, together with the build info
+  (graph hash, compiler versions) they were made from. The editor saves the shaders of the
+  platform it runs on. Players never get repository shaders: the nightly's cook
+  (`mmo_cook`, [content cooking design](superpowers/specs/2026-10-31-content-cooking-design.md))
+  builds D3D11 on Windows and precompiled Metal libraries on macOS (`ShaderCompilerMetal`,
+  `xcrun metal -std=macos-metal2.3 -mmacosx-version-min=11.0` and `metallib`) and ships them as
+  `client-overlay.zip`, which the deployer lays over the data checkout.
+- **Development clients** (`MMO_MATERIAL_RUNTIME_COMPILE`, on by default) compile a material whose
+  Metal shaders are missing or stale when it loads and cache the result in `Cache/Shaders` under
+  the data directory, so a Mac developer needs no baking step. Without the Xcode Metal compiler they
+  fall back to MSL source. Release clients (the option off) never compile: a missing variant shows
+  an error naming the material and exits.
 
 ```bash
-./bin/metal_material_baker data/client            # bake materials that lack Metal shaders
-./bin/metal_material_baker data/client --force    # rebake everything
-./bin/metal_material_baker data/client --check    # report materials without Metal shaders
+./bin/mmo_cook all --data data/client --out /tmp/cooked   # a fully cooked copy of the data
 ```
 
-Materials saved by the Windows editor keep their existing (possibly stale) Metal shaders, so
-rebake with `--force` after material changes. Materials without a graph (`Models/Mine/Mine.hmat`,
-`Textures/Desert/Rocks/Rock.hmat`) cannot be baked and render nothing on macOS. The UI variant of
-some 3D materials fails to compile because the generator references the world normal there; those
-variants are never used for 3D materials.
+Materials without a graph (`Models/Mine/Mine.hmat`, `Textures/Desert/Rocks/Rock.hmat`) cannot be
+cooked and render nothing on macOS. The UI variant of some 3D materials fails to compile because
+the generator references the world normal there; those variants are never used for 3D materials
+and show up as cook warnings.
 
 ### Resource binding conventions
 
