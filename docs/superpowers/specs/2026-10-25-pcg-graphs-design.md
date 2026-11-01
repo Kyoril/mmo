@@ -367,9 +367,12 @@ Task 7 (Falwyn stream and waterfall):
 - **Lakes are Get Controls(`water`, excluding `river`)** for Water Area too: Water Area takes areas, and the lake
   basin (`depth` 3, `shoreWidth` 6) must not see the river spline.
 - **Waterfall section:** L 12, halfWidth 6, sideFalloff 4. The lip (local z 0–3) is rock at 0 beside a 9 m spill
-  notch at −0.8, below the river's water surface (−0.4) so the water spills over it; the face drops to a plunge
-  pool at −6.9…−7.5 (under water for drops up to ~6.5 m). `SM_Waterfall2` ×1.3 (14.7 m wide, 4.9 m tall, fits a
-  ~5 m drop) at z 4, its top at the water surface. Six `SM_stone_06` rocks, no paint, no prop rules.
+  channel at −1.9, the river bed depth (1.5 m under the water surface −0.4) carried to the edge; the face drops to a
+  plunge pool at −6.9…−7.5. `SM_Waterfall2` is a map entity (foliage draws its translucent material as white
+  fragments), scale (1.0, 1.38, 1.1), at z 4. Section placements stand on the final ground under them, so its height
+  is tuned to the world 2 site (ground 20.62 under the pivot): foam at 21.55 on the lake (21.5), top at 26.79 on the
+  river surface (26.73). Other drops need their own tuning or a per-point scale. Six `SM_stone_06` rocks, no paint,
+  no prop rules.
 - **The drop comes from a hand base.** World 2's valley floor is flat (~20.5 m) and lower than the lake level 21.5.
   A terrace east of MeadowLake (+5.8 m scarp 2–7 m from the shore, rising to +10.2 m upstream) gives the river a
   5.65 m drop. A berm around the lake (ground lifted to 22.8 m within 3 m of the shore, fading out by 12 m) fixes
@@ -382,6 +385,9 @@ Task 7 (Falwyn stream and waterfall):
   op's material (`Water_River.hmat`) if it has none yet, so a page with a river renders all its water, the lake
   included, with it. The flow update (`Terrain::ApplyWaterFlow`) assigns no material: it would reach every page with
   water near any path, hand rivers and pages outside the region included, and Delete could not take it back.
-- **The waterfall's water is the mesh alone.** With flat end caps the river water stops at the lip and the plunge
-  pool between the lake margin and the fall is dry. In `--capture-view`, `SM_Waterfall2` shows only as white
-  fragments: the falling water in the first phase 3b capture was the floating river sheet sloping down to the lake.
+- **The waterfall's water is the mesh alone.** With flat end caps the river water stops at the lip; the curtain's top
+  sheet carries it over the slope (terrain cells are ~4.2 m, so the face is a slope, not a wall). MeadowLake has a
+  lobe (two points at x 334) that brings the lake to the foot of the fall, so the plunge pool is lake water.
+- **Translucent meshes must be entities, not foliage.** As a foliage instance `SM_Waterfall2` draws only as white
+  fragments (the same mesh renders correctly as an entity, as in Korash). An engine bug in the foliage path, not fixed
+  here.
