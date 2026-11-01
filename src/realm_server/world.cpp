@@ -16,6 +16,7 @@
 #include "player.h"
 #include "player_manager.h"
 #include "modules/bug_report_module.h"
+#include "modules/pet_module.h"
 #include "vector_sink.h"
 #include "base/big_number.h"
 #include "base/constants.h"
@@ -38,7 +39,8 @@ namespace mmo
 		std::shared_ptr<Client> connection, 
 		const String & address,
 		const proto::Project& project,
-		const TimeOfDayManager& timeOfDayManager)
+		const TimeOfDayManager& timeOfDayManager,
+		PetModule& petModule)
 		: m_timerQueue(timerQueue)
 		, m_manager(worldManager)
 		, m_playerManager(playerManager)
@@ -47,6 +49,7 @@ namespace mmo
 		, m_address(address)
 		, m_project(project)
 		, m_timeOfDayManager(timeOfDayManager)
+		, m_petModule(petModule)
 	{
 		m_connection->setListener(*this);
 
@@ -375,6 +378,8 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailRestoreItem, *strongThis, &World::OnMailRestoreItem);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::SubsystemStatus, *strongThis, &World::OnSubsystemStatus);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::BugReportResult, *strongThis, &World::OnBugReportResult);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PetData, *strongThis, &World::OnPetData);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::CreatePet, *strongThis, &World::OnCreatePet);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -1375,6 +1380,71 @@ namespace mmo
 			packet.Start(auth::realm_world_packet::Shutdown);
 			packet.Finish();
 		});
+	}
+
+	void World::SendPlayerPetData(const uint64 characterGuid, const std::vector<PersistentPetData>& pets) const
+	{
+		m_connection->sendSinglePacket([characterGuid, &pets](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::PlayerPetData);
+			packet << io::write<uint64>(characterGuid);
+			WritePersistentPets(packet, pets);
+			packet.Finish();
+		});
+	}
+
+	void World::SendPetCreated(const uint64 characterGuid, const PersistentPetData& pet) const
+	{
+		m_connection->sendSinglePacket([characterGuid, &pet](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::PetCreated);
+			packet << io::write<uint64>(characterGuid) << pet;
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult World::OnPetData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		std::vector<PersistentPetData> pets;
+		if (!(packet >> io::read<uint64>(characterGuid)) || !ReadPersistentPets(packet, pets))
+		{
+			ELOG("Failed to read PetData packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_petModule.SavePets(characterGuid, std::move(pets));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnCreatePet(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		PersistentPetData request;
+		if (!(packet >> io::read<uint64>(characterGuid) >> request))
+		{
+			ELOG("Failed to read CreatePet packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The answer goes to the node the character is on when the pet exists, which is not this one
+		// if the character changed its node meanwhile (then the next join hands the pet over).
+		PlayerManager& playerManager = m_playerManager;
+		m_petModule.CreatePet(characterGuid, request, [&playerManager, characterGuid](const PersistentPetData& created)
+		{
+			const Player* player = playerManager.GetPlayerByCharacterGuid(characterGuid);
+			if (!player)
+			{
+				return;
+			}
+
+			if (const auto world = player->GetWorld())
+			{
+				world->SendPetCreated(characterGuid, created);
+			}
+		});
+
+		return PacketParseResult::Pass;
 	}
 
 	void World::SendSetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled) const

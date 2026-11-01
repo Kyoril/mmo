@@ -4,6 +4,8 @@
 #include "asset_picker_widget.h"
 #include "editor_imgui_helpers.h"
 #include "loot_assignment_widget.h"
+#include "proto_entry_picker.h"
+#include "unit_spell_entry_table.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
@@ -963,122 +965,18 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Creature Spells", ImGuiTreeNodeFlags_None))
 		{
-			static const char* s_itemNone = "<None>";
+			DrawUnitSpellEntryTable("creaturespells", m_project, *currentEntry.mutable_creaturespells());
+		}
+				}
 
-			// Add button
-			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
+		if (const auto section = ScopedEditorSection("Taming", ImGuiTreeNodeFlags_None))
+		{
+			int tamePetEntry = static_cast<int>(currentEntry.tame_pet_entry());
+			if (DrawEntryPicker("##tamePetEntry", "Tame Pet Entry", tamePetEntry, m_project.pets, "The pet entry a player gets when taming this creature. None means the creature cannot be tamed."))
 			{
-				auto* newEntry = currentEntry.add_creaturespells();
-				newEntry->set_spellid(0);
+				currentEntry.set_tame_pet_entry(static_cast<uint32>(tamePetEntry));
 			}
-
-			if (ImGui::BeginTable("creaturespells", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Min Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Max Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Min Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Max Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Probability", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.creaturespells_size(); ++index)
-				{
-					auto* currentItem = currentEntry.mutable_creaturespells(index);
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					const uint32 spell = currentItem->spellid();
-
-					const auto* spellEntry = m_project.spells.getById(spell);
-					if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_itemNone, ImGuiComboFlags_None))
-					{
-						for (int i = 0; i < m_project.spells.count(); i++)
-						{
-							ImGui::PushID(i);
-							const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
-							const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
-							if (ImGui::Selectable(item_text, item_selected))
-							{
-								currentItem->set_spellid(m_project.spells.getTemplates().entry(i).id());
-							}
-							if (item_selected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-							ImGui::PopID();
-						}
-
-						ImGui::EndCombo();
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 priority = currentItem->priority();
-					if (ImGui::InputInt("##priority", &priority))
-					{
-						currentItem->set_priority(priority);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 mininitialcooldown = currentItem->mininitialcooldown();
-					if (ImGui::InputInt("ms##mininitialcooldown", &mininitialcooldown))
-					{
-						currentItem->set_mininitialcooldown(mininitialcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 maxinitialcooldown = currentItem->maxinitialcooldown();
-					if (ImGui::InputInt("ms##maxinitialcooldown", &maxinitialcooldown))
-					{
-						currentItem->set_maxinitialcooldown(maxinitialcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 mincooldown = currentItem->mincooldown();
-					if (ImGui::InputInt("ms##mininitialcooldown", &mincooldown))
-					{
-						currentItem->set_mincooldown(mincooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 maxcooldown = currentItem->maxcooldown();
-					if (ImGui::InputInt("ms##maxinitialcooldown", &maxcooldown))
-					{
-						currentItem->set_maxcooldown(maxcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 probability = currentItem->probability();
-					if (ImGui::InputInt("%##probability", &probability))
-					{
-						currentItem->set_probability(probability);
-					}
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_creaturespells()->erase(currentEntry.mutable_creaturespells()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-							ImGui::EndTable();
-						}
-					}
-				}
+		}
 
 		if (const auto section = ScopedEditorSection("Scripting", ImGuiTreeNodeFlags_None))
 		{

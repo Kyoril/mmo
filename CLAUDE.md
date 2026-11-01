@@ -22,6 +22,7 @@ The following systems are fully implemented and should not be suggested as futur
 - **Foliage & particle systems**
 - **Unit stat system** — creatures use stat formulas instead of hardcoded values
 - **Asset browser** — visual thumbnails, text search, drag & drop from browser into viewport
+- **Pet system** — temporary swarms and persistent (stored, nameable, class-locked) pets, taming, pet AI, pet frame/bar, GM pet commands; authoring guide in [docs/pets.md](docs/pets.md)
 
 ## Agentic Workflow
 

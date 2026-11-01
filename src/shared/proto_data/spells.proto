@@ -56,6 +56,15 @@ message SpellEffect {
 	// Which unit the condition is evaluated against. See spell_effect_condition_target
 	// (0 = the spell's primary target, 1 = the caster).
 	optional uint32 conditiontarget = 28 [default = 0];
+
+	// Pet effects: pet group the summon counts against.
+	optional uint32 pet_group = 29;
+	// Maximum number of pets of the group.
+	optional uint32 pet_max_count = 30;
+	// See pet_limit_policy in src/shared/game/pet_defines.h.
+	optional uint32 pet_limit_policy = 31;
+	// See pet_level_source in src/shared/game/pet_defines.h.
+	optional uint32 pet_level_source = 32;
 }
 
 message SpellEntry {

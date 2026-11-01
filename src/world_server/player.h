@@ -321,6 +321,11 @@ namespace mmo
 		///	changed) as soon as the player has spawned. Used for refunds made while logging in.
 		void NotifyAttributePointsRefundedOnSpawn() { m_notifyAttributeRefundOnSpawn = true; }
 
+		/// Applies the stored pets the realm sent after the join (PlayerPetData). From then on the
+		/// stored pets are reported to the realm with every save: before, the character's (empty)
+		/// list is not what the realm has, so nothing is saved.
+		void ApplyStoredPets(std::vector<PersistentPetData> pets);
+
 	private:
 		// Client Network Handlers, Implemented in player.cpp
 
@@ -490,6 +495,36 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnBuyBackItem(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		// === Pets (player_pet_handlers.cpp) ===
+
+		/// Handles a PetCommand: a command for all pets of the character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetCommand(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetCastSpell: the summoned persistent pet casts one of its spells.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetCastSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetRename: renames the summoned persistent pet (GamePlayerS::RenamePersistentPet).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetRename(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetNameQuery: answers with the name of a persistent pet in the character's world.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetNameQuery(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Sends a PetResult to the client.
+		/// @param result The result.
+		void SendPetResult(pet_result::Type result);
 
 		/// Handles the client's request to buy a spell from the currently interacted trainer npc.
 		///	@param opCode The op code of the packet.
@@ -696,6 +731,34 @@ namespace mmo
 		///	@param size The size of the packet content in bytes, excluding the packet header.
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: grants the selected player (or the sender) a stored pet of a pet entry.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (uint32 petEntry).
+		void OnCheatPetAdd(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: removes the stored pet of a pet entry from the selected player (or the sender).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (uint32 petEntry).
+		void OnCheatPetRemove(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: tames the selected creature, ignoring the level check.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (none).
+		void OnCheatPetTame(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: makes the selected creature the sender's temporary pet.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (none).
+		void OnCheatPetMake(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// @return The player a GM pet command acts on: the sender's selected unit if it is a
+		///	        player, else the sender.
+		GamePlayerS& GetCheatPetTargetPlayer() const;
 
 		/// Handles the client's request to make a selected unit face the player.
 		///	@param opCode The op code of the packet.
@@ -992,6 +1055,27 @@ namespace mmo
 
 		void OnRootChanged(bool applied, uint32 ackId) override;
 
+		/// The PETS subsystem of this node.
+		[[nodiscard]] bool ArePetsAvailable() const override;
+
+		/// Whether the realm's PlayerPetData for the character arrived (ApplyStoredPets).
+		[[nodiscard]] bool AreStoredPetsLoaded() const override;
+
+		/// Sends PetSpells with the summoned persistent pet's state (GamePlayerS::GetPetSpellsData).
+		void OnPetSpellsChanged() override;
+
+		/// Sends PetXp.
+		void OnPetXpChanged(uint32 xp, uint32 nextLevelXp) override;
+
+		/// Sends PetLearnedSpell.
+		void OnPetLearnedSpell(uint32 spellId) override;
+
+		/// Sends PetResult.
+		void OnPetResult(pet_result::Type result) override;
+
+		/// Reports the stored pets to the realm, once the realm sent them (ApplyStoredPets).
+		void SaveStoredPets() const;
+
 		void OnStunChanged(bool applied, uint32 ackId) override;
 
 		void OnSleepChanged(bool applied, uint32 ackId) override;
@@ -1071,6 +1155,9 @@ namespace mmo
 		ConditionMgr& m_conditionMgr;
 
 		bool m_spawned{ false };
+
+		/// Whether the realm sent the character's stored pets (ApplyStoredPets).
+		bool m_storedPetsReceived{ false };
 
 		/// Send the attribute points reset notification once spawned (see NotifyAttributePointsRefundedOnSpawn).
 		bool m_notifyAttributeRefundOnSpawn{ false };

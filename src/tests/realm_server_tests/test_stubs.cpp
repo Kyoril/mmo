@@ -23,4 +23,6 @@ namespace mmo
     // ---- World stubs ----
 
     void World::NotifyPlayerGroupChanged(uint64, uint64, uint8, uint8) {}
+
+    void World::SendPlayerPetData(uint64, const std::vector<PersistentPetData>&) const {}
 }

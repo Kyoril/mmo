@@ -113,6 +113,9 @@ message ClassEntry {
 	repeated AttackPowerStatSource armorStatSources = 16;
 	optional bool disabled = 23;
 
+	// How many persistent summoned pets a character of this class may have at once.
+	optional uint32 max_summoned_persistent_pets = 33 [default = 1];
+
 	repeated uint32 xpToNextLevel = 17;
 
 	repeated HealthStatSource healthStatSources = 18;

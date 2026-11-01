@@ -13,6 +13,11 @@
 
 namespace mmo
 {
+	namespace proto
+	{
+		class UnitSpellEntry;
+	}
+
 	/**
 	 * @brief Handles the combat state of a creature AI with intelligent behavior types.
 	 * 
@@ -275,7 +280,41 @@ namespace mmo
 		 */
 		void ResetSpellCooldowns();
 
+		/**
+		 * @brief Pet mode: makes the creature reconsider its victim on the next tick, after the owner
+		 *        picked a new target or a command was given.
+		 */
+		void ReconsiderPetVictim();
+
 	private:
+		// === Pet Mode ===
+
+		/**
+		 * @brief Pet mode: the victim the pet's strategy prefers over the threat table - the commanded
+		 *        target, else (Assist) the owner's victim. Puts it on the threat list.
+		 * @return The preferred victim, or nullptr to go by threat.
+		 */
+		GameUnitS* SelectPetVictim();
+
+		/**
+		 * @brief Pet mode: checks whether the pet should break off the fight and return to its owner
+		 *        (owner gone or dead, pet leashed too far away, passive pet without a commanded target).
+		 * @return True if the pet should return to its owner.
+		 */
+		bool ShouldPetDisengage();
+
+		/**
+		 * @brief Pet mode: whether the pet holds its stay position instead of chasing.
+		 * @return True for a staying pet without a commanded target.
+		 */
+		bool IsHoldingPetPosition() const;
+
+		/**
+		 * @brief Puts a unit on the threat list without threat and without choosing an action.
+		 * @param threatener The unit to add.
+		 */
+		void EnsureOnThreatList(GameUnitS& threatener);
+
 		// === Threat Management ===
 
 		/**
@@ -477,9 +516,17 @@ namespace mmo
 		// === Initialization Helpers ===
 
 		/**
-		 * @brief Initializes the available spells from creature entry.
+		 * @brief Initializes the available spells: the creature entry's `creaturespells`, followed by
+		 *        the extra spells of a pet (CreatureAI::SetPetSpells). This is the hook persistent pets
+		 *        use to feed their known spells and the pet entry's `ai_spells` tuning.
 		 */
 		void InitializeSpells();
+
+		/**
+		 * @brief Adds one spell to the available spells, unless it is unknown or passive.
+		 * @param spellEntry The creature spell entry (spell id, ranges, priority, cooldowns).
+		 */
+		void AddCombatSpell(const proto::UnitSpellEntry& spellEntry);
 
 		/**
 		 * @brief Sets up event connections for the combat state.

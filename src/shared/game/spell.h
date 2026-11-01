@@ -281,6 +281,22 @@ namespace mmo
 			FailedSkillTooLow,
 			/// The caster's bags cannot hold the item the spell creates.
 			FailedInventoryFull,
+			/// A summon would exceed the cap of its pet group, and the summon fails at the cap.
+			FailedTooManyPets,
+			/// There is no stored pet to summon, or no dead pet to revive.
+			FailedNoPet,
+			/// The stored pet to summon is a dead tamed pet, which needs to be revived first.
+			FailedPetDead,
+			/// The stored pet belongs to another class than the caster's active class.
+			FailedPetWrongClass,
+			/// The caster already has a stored pet of the pet entry to grant.
+			FailedAlreadyHavePet,
+			/// Every stored pet slot of the caster is used.
+			FailedNoFreePetSlot,
+			/// The target cannot be tamed.
+			FailedNotTamable,
+			/// The target's level is above the caster's level.
+			FailedTargetTooHighLevel,
 
 			/// Custom value used if no error occurred (will not be sent to the client)
 			CastOkay = 0xFF
@@ -745,6 +761,14 @@ namespace mmo
 			ChangeClass             = 56,
 			/// Unlocks the emote identified by miscvaluea for the player target (emote scrolls).
 			TeachEmote              = 57,
+			/// Summons the caster's stored pet of PetEntry miscvaluea (0 = most recently summoned). pet_group, pet_max_count, pet_limit_policy and pet_level_source apply.
+			SummonPersistentPet     = 58,
+			/// Adds a stored persistent pet of PetEntry miscvaluea to the caster if it does not have one yet (learn-style grant); the summon spell is separate.
+			GrantPersistentPet      = 59,
+			/// Dismisses (stores) the caster's summoned persistent pet. Temporary pets are not touched; the pet bar's Dismiss command despawns those.
+			DismissPet              = 60,
+			/// Revives a dead stored pet of the caster at basepoints % health.
+			RevivePet               = 61,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
 

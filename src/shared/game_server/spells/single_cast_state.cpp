@@ -10,6 +10,7 @@
 #include "game_server/spells/spell_interrupt_rules.h"
 #include "game/id_mask.h"
 #include "game_server/spells/trade_skill_cast_rules.h"
+#include "game_server/pets/pet_manager.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -551,6 +552,22 @@ namespace mmo
 			return false;
 		}
 
+		if (const SpellCastResult petResult = CheckSummonPetLimit(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
+			return false;
+		}
+
+		// A persistent pet summon, grant or revive that is bound to fail must not spend the cast.
+		if (const GamePlayerS* player = m_context.GetPlayerExecutor())
+		{
+			if (const SpellCastResult petResult = CheckPersistentPetEffects(m_spell, *player); petResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(petResult);
+				return false;
+			}
+		}
+
 		return true;
 	}
 
@@ -585,6 +602,18 @@ namespace mmo
 		}
 
 		GamePlayerS* player = m_context.GetPlayerExecutor();
+
+		// A target that cannot be tamed fails a tame spell before it is spent. Checked again when the
+		// cast finishes: someone else may have tamed the creature in the meantime.
+		if (unitTarget && player)
+		{
+			if (const SpellCastResult tameResult = CheckTameTarget(m_spell, *player, *unitTarget); tameResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(tameResult);
+				return false;
+			}
+		}
+
 		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && player)
 		{
 			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();
@@ -1140,6 +1169,12 @@ namespace mmo
 			{se::Dispel,                 SpellEffects::HandleDispel},
 			{se::Summon,                 SpellEffects::HandleSummon},
 			{se::SummonPet,              SpellEffects::HandleSummonPet},
+			{se::TameCreature,           SpellEffects::HandleTameCreature},
+			{se::LearnPetSpell,          SpellEffects::HandleLearnPetSpell},
+			{se::SummonPersistentPet,    SpellEffects::HandleSummonPersistentPet},
+			{se::GrantPersistentPet,     SpellEffects::HandleGrantPersistentPet},
+			{se::DismissPet,             SpellEffects::HandleDismissPet},
+			{se::RevivePet,              SpellEffects::HandleRevivePet},
 			{se::LearnSpell,             SpellEffects::HandleLearnSpell},
 			{se::Revive,                 SpellEffects::HandleRevive},
 			{se::RevivePct,              SpellEffects::HandleRevivePct},

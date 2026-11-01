@@ -27,6 +27,7 @@
 #include "graphics/graphics_device.h"
 #include "game/aura.h"
 #include "game/emote_defs.h"
+#include "game/owner_chain.h"
 #include "game/spell.h"
 #include "trade_skill_list.h"
 #include "game/character_customization/avatar_definition_mgr.h"
@@ -2485,8 +2486,24 @@ namespace mmo
 		RefreshUnitName();
 	}
 
+	void GameUnitC::SetPetName(const String &name)
+	{
+		if (m_petName == name)
+		{
+			return;
+		}
+
+		m_petName = name;
+		RefreshUnitName();
+	}
+
 	const String &GameUnitC::GetName() const
 	{
+		if (!m_petName.empty())
+		{
+			return m_petName;
+		}
+
 		if (m_creatureInfo.name.empty())
 		{
 			return GameObjectC::GetName();
@@ -2760,58 +2777,102 @@ namespace mmo
 		return m_proficiencies.contains(proficiencyId);
 	}
 
+	namespace
+	{
+		/// The owner of a unit as far as the client knows it (nullptr if it has none or it is not in sight).
+		const GameUnitC* FindUnitOwner(const GameUnitC& unit)
+		{
+			const uint64 ownerGuid = unit.Get<uint64>(object_fields::Owner);
+			if (ownerGuid == 0 || ownerGuid == unit.GetGuid())
+			{
+				return nullptr;
+			}
+
+			// The raw pointer stays valid for the reaction check: ObjectMgr keeps the object alive.
+			return ObjectMgr::Get<GameUnitC>(ownerGuid).get();
+		}
+
+		/// The faction part of GameUnitC::IsFriendlyTo, between two top owners.
+		bool FactionIsFriendly(const GameUnitC& unit, const GameUnitC& other)
+		{
+			const proto_client::FactionTemplateEntry* factionTemplate = unit.GetFactionTemplate();
+			const proto_client::FactionTemplateEntry* otherFactionTemplate = other.GetFactionTemplate();
+			if (factionTemplate == nullptr || otherFactionTemplate == nullptr)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == nullptr || other.GetFaction() == nullptr)
+			{
+				return false;
+			}
+
+			// Same faction template should always be friendly
+			if (factionTemplate == otherFactionTemplate)
+			{
+				return true;
+			}
+
+			if (unit.GetFaction() == other.GetFaction())
+			{
+				return true;
+			}
+
+			const uint32 otherFactionId = other.GetFaction()->id();
+			return std::find(factionTemplate->friends().begin(), factionTemplate->friends().end(), otherFactionId) != factionTemplate->friends().end();
+		}
+
+		/// The faction part of GameUnitC::IsHostileTo, between two top owners.
+		bool FactionIsHostile(const GameUnitC& unit, const GameUnitC& other)
+		{
+			const proto_client::FactionTemplateEntry* factionTemplate = unit.GetFactionTemplate();
+			const proto_client::FactionTemplateEntry* otherFactionTemplate = other.GetFactionTemplate();
+			if (factionTemplate == nullptr || otherFactionTemplate == nullptr)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == nullptr || other.GetFaction() == nullptr)
+			{
+				return false;
+			}
+
+			// Same faction template should always never be hostile
+			if (factionTemplate == otherFactionTemplate)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == other.GetFaction())
+			{
+				return false;
+			}
+
+			const uint32 otherFactionId = other.GetFaction()->id();
+			return std::find(factionTemplate->enemies().begin(), factionTemplate->enemies().end(), otherFactionId) != factionTemplate->enemies().end();
+		}
+	}
+
+	const GameUnitC &GameUnitC::GetTopOwner() const
+	{
+		return owner_chain::ResolveTopOwner(*this, &FindUnitOwner);
+	}
+
+	bool GameUnitC::IsOwnedByPlayer() const
+	{
+		return owner_chain::IsOwnedByPlayer(*this, &FindUnitOwner,
+			[](const GameUnitC& unit) { return unit.GetGuid(); },
+			[](const GameUnitC& unit) { return unit.Get<uint64>(object_fields::Owner); });
+	}
+
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
 	{
-		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
-		{
-			return false;
-		}
-
-		if (m_faction == nullptr || other.m_faction == nullptr)
-		{
-			return false;
-		}
-
-		// Same faction template should always be friendly
-		if (m_factionTemplate == other.m_factionTemplate)
-		{
-			return true;
-		}
-
-		if (m_faction == other.m_faction)
-		{
-			return true;
-		}
-
-		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId)
-							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
+		return owner_chain::IsFriendly(*this, other, &FindUnitOwner, &FactionIsFriendly);
 	}
 
 	bool GameUnitC::IsHostileTo(const GameUnitC &other) const
 	{
-		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
-		{
-			return false;
-		}
-
-		if (m_faction == nullptr || other.m_faction == nullptr)
-		{
-			return false;
-		}
-
-		// Same faction template should always never be hostile
-		if (m_factionTemplate == other.m_factionTemplate)
-		{
-			return false;
-		}
-
-		if (m_faction == other.m_faction)
-		{
-			return false;
-		}
-
-		return std::find_if(m_factionTemplate->enemies().begin(), m_factionTemplate->enemies().end(), [&other](uint32 factionId)
-							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
+		return owner_chain::IsHostile(*this, other, &FindUnitOwner, &FactionIsHostile);
 	}
 
 	bool GameUnitC::HasStealthAura() const

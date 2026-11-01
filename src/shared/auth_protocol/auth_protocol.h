@@ -31,7 +31,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000000C;
+		constexpr uint32 ProtocolVersion = 0x0000000D;
 
 		/// Largest payload, in bytes, that a single incoming auth packet may announce.
 		///
@@ -206,6 +206,17 @@ namespace mmo
 				/// its map gets a fresh one. The node refuses while the instance still holds
 				/// players. Payload: InstanceId.
 				ResetInstance,
+
+				/// The stored (persistent) pets of a character, sent right after PlayerCharacterJoin
+				/// so the node has them before anything of the character is saved. Payload: uint64
+				/// characterGuid, then the pets as WritePersistentPets writes them (uint8 count,
+				/// count x PersistentPetData).
+				PlayerPetData,
+
+				/// Answer to a CreatePet request: the request echoed back unchanged except for the
+				/// database id the realm assigned (0 if the pet could not be created). Payload: uint64
+				/// characterGuid, PersistentPetData.
+				PetCreated,
 			};
 		}
 
@@ -272,6 +283,16 @@ namespace mmo
 				/// Availability of the world-owned subsystems on this node. The full list after logon, the
 				/// changed entries afterwards. Payload: uint8 count, count x (uint8 subsystem, uint8 status).
 				SubsystemStatus,
+
+				/// The current state of a character's stored (persistent) pets, to be saved. Sent with
+				/// every character save and whenever the stored pets change. Payload: uint64
+				/// characterGuid, then the pets as WritePersistentPets writes them.
+				PetData,
+
+				/// Asks the realm to create a stored pet (granted or tamed) and assign its database id.
+				/// Answered with realm_world_packet::PetCreated. Payload: uint64 characterGuid,
+				/// PersistentPetData (dbId 0).
+				CreatePet,
 			};
 		}
 

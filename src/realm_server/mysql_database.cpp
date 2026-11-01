@@ -2990,6 +2990,220 @@ namespace mmo
 		}
 	}
 
+	std::optional<std::vector<PersistentPetData>> MySQLDatabase::LoadCharacterPets(const uint64 characterId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		std::vector<PersistentPetData> pets;
+
+		mysql::Select select(m_connection, std::format(
+			"SELECT `id`, `class_id`, `pet_entry`, `unit_entry`, `name`, `level`, `xp`, `health`, `power`, `is_dead`, `was_summoned` "
+			"FROM `character_pets` WHERE `character_id` = {0} ORDER BY `id` ASC;"
+			, characterId
+		));
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return std::nullopt;
+		}
+
+		for (mysql::Row row(select); row; row = mysql::Row::Next(select))
+		{
+			PersistentPetData pet;
+			uint32 isDead = 0;
+			uint32 wasSummoned = 0;
+			row.GetField(0, pet.dbId);
+			row.GetField(1, pet.classId);
+			row.GetField(2, pet.petEntry);
+			row.GetField(3, pet.unitEntry);
+			row.GetField(4, pet.name);
+			row.GetField(5, pet.level);
+			row.GetField(6, pet.xp);
+			row.GetField(7, pet.health);
+			row.GetField(8, pet.power);
+			row.GetField(9, isDead);
+			row.GetField(10, wasSummoned);
+			pet.isDead = isDead != 0;
+			pet.wasSummoned = wasSummoned != 0;
+			pets.push_back(std::move(pet));
+		}
+
+		if (pets.empty())
+		{
+			return pets;
+		}
+
+		mysql::Select spellSelect(m_connection, std::format(
+			"SELECT s.`pet_id`, s.`spell_id` FROM `character_pet_spells` s "
+			"JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+			"WHERE p.`character_id` = {0} ORDER BY s.`pet_id`, s.`spell_id`;"
+			, characterId
+		));
+		if (!spellSelect.Success())
+		{
+			PrintDatabaseError();
+			return std::nullopt;
+		}
+
+		for (mysql::Row row(spellSelect); row; row = mysql::Row::Next(spellSelect))
+		{
+			uint64 petId = 0;
+			uint32 spellId = 0;
+			row.GetField(0, petId);
+			row.GetField(1, spellId);
+
+			const auto it = std::find_if(pets.begin(), pets.end(), [petId](const PersistentPetData& pet) { return pet.dbId == petId; });
+			if (it != pets.end())
+			{
+				it->spells.push_back(spellId);
+			}
+		}
+
+		return pets;
+	}
+
+	namespace
+	{
+		/// The statements that replace the learned spells of a stored pet. Both only act if the pet
+		/// belongs to the character, so a pet id of another character changes nothing.
+		void AppendPetSpellStatements(std::vector<String>& statements, const uint64 characterId, const PersistentPetData& pet)
+		{
+			statements.push_back(std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+				"WHERE s.`pet_id` = {0} AND p.`character_id` = {1};"
+				, pet.dbId
+				, characterId
+			));
+
+			if (pet.spells.empty())
+			{
+				return;
+			}
+
+			std::ostringstream strm;
+			strm << "INSERT IGNORE INTO `character_pet_spells` (`pet_id`, `spell_id`) ";
+			bool isFirst = true;
+			for (const uint32 spellId : pet.spells)
+			{
+				if (!isFirst)
+				{
+					strm << " UNION ALL ";
+				}
+				isFirst = false;
+				strm << "SELECT `id`, " << spellId << " FROM `character_pets` WHERE `id` = " << pet.dbId << " AND `character_id` = " << characterId;
+			}
+			strm << ";";
+			statements.push_back(strm.str());
+		}
+	}
+
+	void MySQLDatabase::SaveCharacterPets(const uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds)
+	{
+		if (pets.empty() && removedPetIds.empty())
+		{
+			return;
+		}
+
+		// Rows are updated by id, never deleted and reinserted: the id is part of the pet's guid.
+		// Every statement is scoped to the character, so a pet id of another character changes nothing.
+		std::vector<String> statements;
+		for (const auto& pet : pets)
+		{
+			statements.push_back(std::format(
+				"UPDATE `character_pets` SET `class_id` = {2}, `pet_entry` = {3}, `unit_entry` = {4}, `name` = '{5}', `level` = {6}, "
+				"`xp` = {7}, `health` = {8}, `power` = {9}, `is_dead` = {10}, `was_summoned` = {11} "
+				"WHERE `id` = {0} AND `character_id` = {1};"
+				, pet.dbId
+				, characterId
+				, pet.classId
+				, pet.petEntry
+				, pet.unitEntry
+				, m_connection.EscapeString(pet.name)
+				, pet.level
+				, pet.xp
+				, pet.health
+				, pet.power
+				, pet.isDead ? 1 : 0
+				, pet.wasSummoned ? 1 : 0
+			));
+
+			AppendPetSpellStatements(statements, characterId, pet);
+		}
+
+		for (const uint64 petId : removedPetIds)
+		{
+			statements.push_back(std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+				"WHERE s.`pet_id` = {0} AND p.`character_id` = {1};"
+				, petId
+				, characterId
+			));
+			statements.push_back(std::format(
+				"DELETE FROM `character_pets` WHERE `id` = {0} AND `character_id` = {1};"
+				, petId
+				, characterId
+			));
+		}
+
+		ExecuteTransactionWithLockRetry("save stored pets", characterId, statements);
+	}
+
+	uint64 MySQLDatabase::CreateCharacterPet(const uint64 characterId, const PersistentPetData& pet)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		// Reports failure as 0 instead of throwing: the world node waits for an answer, and a request
+		// that throws gets none.
+		mysql::Transaction transaction(m_connection);
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `character_pets` (`character_id`, `class_id`, `pet_entry`, `unit_entry`, `name`, `level`, `xp`, `health`, `power`, `is_dead`, `was_summoned`) "
+			"VALUES ({0}, {1}, {2}, {3}, '{4}', {5}, {6}, {7}, {8}, {9}, 0);"
+			, characterId
+			, pet.classId
+			, pet.petEntry
+			, pet.unitEntry
+			, m_connection.EscapeString(pet.name)
+			, pet.level
+			, pet.xp
+			, pet.health
+			, pet.power
+			, pet.isDead ? 1 : 0
+		)))
+		{
+			PrintDatabaseError();
+			return 0;
+		}
+
+		PersistentPetData created = pet;
+		created.dbId = m_connection.GetLastInsertId();
+
+		std::vector<String> spellStatements;
+		AppendPetSpellStatements(spellStatements, characterId, created);
+		for (const auto& statement : spellStatements)
+		{
+			if (!m_connection.Execute(statement))
+			{
+				PrintDatabaseError();
+				return 0;
+			}
+		}
+
+		transaction.Commit();
+		return created.dbId;
+	}
+
+	void MySQLDatabase::DeleteCharacterPets(const uint64 characterId)
+	{
+		ExecuteTransactionWithLockRetry("delete stored pets", characterId, {
+			std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` WHERE p.`character_id` = {0};"
+				, characterId),
+			std::format(
+				"DELETE FROM `character_pets` WHERE `character_id` = {0};"
+				, characterId),
+		});
+	}
+
 	void MySQLDatabase::PrintDatabaseError()
 	{
 		ELOG("Realm database error: " << m_connection.GetErrorCode() << " - " << m_connection.GetErrorMessage());

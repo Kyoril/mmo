@@ -341,7 +341,10 @@ namespace mmo
 
 		void NotifyObjectMoved(GameObjectS& object, const MovementInfo& previousMovementInfo, const MovementInfo& newMovementInfo) const;
 
-		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
+		/// Creates a creature in this world. It is not spawned yet: AddGameObject spawns it.
+		/// @param guid The creature's guid, or 0 to generate a new creature guid. Persistent pets
+		///	       pass their stable pet guid here.
+		std::shared_ptr<GameCreatureS> CreateCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius, uint64 guid = 0);
 
 		std::shared_ptr<GameWorldObjectS> SpawnWorldObject(const proto::ObjectEntry& entry, const Vector3& position);
 
@@ -349,7 +352,8 @@ namespace mmo
 
 		/// Creates a temporary creature that the world instance will also keep a strong reference to. The creature will not be spawned and thus
 		///	needs to be spawned using the AddGameObject method.
-		std::shared_ptr<GameCreatureS> CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius);
+		///	@param guid The creature's guid, or 0 to generate a new creature guid (see CreateCreature).
+		std::shared_ptr<GameCreatureS> CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, float o, float randomWalkRadius, uint64 guid = 0);
 
 		/// Creates a spell zone on the ground and tells every client in sight of it. The zone
 		/// casts its trigger spell on each enemy of the caster inside it every tickInterval

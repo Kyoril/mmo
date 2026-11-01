@@ -106,6 +106,18 @@ cooldown is not tracked),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 
+Pets (see [docs/pets.md](../docs/pets.md)):
+`GetOwner(g)` (the unit's Owner field: `"0x0"` for none, `""` for an unknown unit),
+`GetTarget(g)` (the unit's TargetUnit field, same conventions; a creature targets what it attacks),
+`CountUnitsOwnedBy(owner [, entry])` / `GetOwnedUnits(owner [, entry]) -> { g, ... }` (living
+creatures the client knows that `owner` owns, optionally of one entry: pets, summons),
+`GetPet() -> g|nil`, `GetPetName()`, `GetPetEntry()`, `PetKnowsSpell(spellId)` (the summoned
+persistent pet as the last `PetSpells` described it; temporary pets have no such state),
+`PetSpellsCount()` (`PetSpells` packets received this session), `LastPetResult()` /
+`ClearLastPetResult()` (the last `PetResult`, a `pet_result` value, -1 for none),
+`PetAttack(g)`, `PetFollow()`, `PetStay()`, `PetSetStrategy(strategy)` (0 Assist, 1 Passive),
+`PetDismiss()` (commands to all own pets), `PetRename(name)`
+
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
@@ -131,6 +143,10 @@ server validates the player's position, so walk inside the area first)
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LearnEmote(emoteId)`, `GM.LevelUp(levels)`,
 `GM.ClassLevelUp(levels)` (levels the active class, not the character),
+`GM.PetAdd(petEntry)` / `GM.PetRemove(petEntry)` (grant / delete a stored pet of the selected
+player, else the test character), `GM.PetTame()` (tames the selected creature, ignoring the
+level check) and `GM.PetMake()` (the selected creature becomes a temporary pet without a
+duration), the latter two act on the current selection (`SetTarget`),
 `GM.GiveMoney(copper)`, `GM.CreateMonster(entry) -> g` (waits for the spawn),
 `GM.DestroyMonster(g)`, `GM.CreateObject(entry [, state]) -> g` (spawns a temporary
 world object at the player's position facing the player's direction; waits for the

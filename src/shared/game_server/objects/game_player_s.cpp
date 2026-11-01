@@ -10,6 +10,7 @@
 #include "game_server/quest_chain_gating.h"
 #include "game_server/quest_class_xp.h"
 #include "game_server/quest_reset.h"
+#include "game_server/pets/pet_manager.h"
 #include "game_server/world/universe.h"
 #include "base/utilities.h"
 #include "proto_data/project.h"
@@ -49,6 +50,13 @@ namespace mmo
 			{
 				ScheduleAutoRewardCheck(questId);
 			}
+		});
+
+		// A persistent pet that was summoned when the character left its last world (logout, map
+		// change) comes back.
+		m_onSpawnedPets = spawned.connect([this](WorldInstance&)
+		{
+			ResummonPersistentPet();
 		});
 	}
 
@@ -2041,6 +2049,9 @@ namespace mmo
 
 	void GamePlayerS::OnKilled(GameUnitS *killer)
 	{
+		// The persistent pet is dismissed alive and comes back when its owner is resurrected.
+		DismissPersistentPet(true);
+
 		GameUnitS::OnKilled(killer);
 
 		// Quests that require the player to stay alive fail upon death.
@@ -2408,6 +2419,9 @@ namespace mmo
 		{
 			// Recomputes the talent point budget from the new class level (UpdateTotalTalentPoints).
 			RefreshStats();
+
+			// A pet following the class level grows with it.
+			RefreshPersistentPetLevel();
 		}
 
 		if (m_netPlayerWatcher)
@@ -2551,6 +2565,9 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::NextLevelXp, xpToNextLevel);
+
+		// A pet following the character level grows with it.
+		RefreshPersistentPetLevel();
 	}
 
 	void GamePlayerS::UpdateDamage()
@@ -3470,6 +3487,14 @@ namespace mmo
 		{
 			WLOG("ChangeClass refused: race may not become class " << newClassId);
 			return false;
+		}
+
+		// Pets belong to the class that summoned them: the persistent pet is stored (and stays stored
+		// until its class is active again and it is summoned), temporary pets go away.
+		DismissPersistentPet(false);
+		if (FindPets())
+		{
+			FindPets()->DespawnTemporaryPets();
 		}
 
 		// Suppress per-spell learn/unlearn and talent-reset client notifications during the rebuild;

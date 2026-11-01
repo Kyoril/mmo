@@ -17,6 +17,7 @@
 #include "systems/mail_client.h"
 #include "systems/loot_client.h"
 #include "systems/party_info.h"
+#include "systems/pet_info.h"
 #include "systems/quest_client.h"
 #include "systems/spell_cast.h"
 #include "systems/talent_client.h"

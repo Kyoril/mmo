@@ -93,3 +93,17 @@ TEST_CASE("RealmSubsystemTable composes the realm's switch for realm-owned subsy
 	CHECK(list[game::subsystem::Friends].second == game::subsystem_status::Unavailable);
 	CHECK(list[game::subsystem::BugReport].second == game::subsystem_status::Available);
 }
+
+TEST_CASE("PETS is a world-owned subsystem", "[subsystem][pets]")
+{
+	game::Subsystem id;
+	REQUIRE(game::FindSubsystemByName("PETS", id));
+	CHECK(id == game::subsystem::Pets);
+	CHECK(game::GetSubsystemOwner(id) == game::subsystem_owner::World);
+	CHECK(std::string(game::GetSubsystemName(game::subsystem::Pets)) == "PETS");
+
+	// World-owned: unavailable without a world node that reports it, and the realm cannot switch it.
+	RealmSubsystemTable table;
+	CHECK_FALSE(table.IsAvailable(game::subsystem::Pets, nullptr));
+	CHECK_FALSE(table.SetRealmOwned(game::subsystem::Pets, false));
+}

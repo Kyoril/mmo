@@ -57,6 +57,13 @@ namespace mmo
 
 		static uint64 GetActivePlayerGuid();
 
+		/// @brief Sets the guid of the active player's summoned persistent pet (the "pet" unit token).
+		/// @param guid The pet's guid, 0 if there is none.
+		static void SetActivePetGuid(uint64 guid);
+
+		/// @brief Gets the guid of the active player's summoned persistent pet, 0 if there is none.
+		static uint64 GetActivePetGuid();
+
 		static uint64 GetSelectedObjectGuid();
 		
 		static std::shared_ptr<GameUnitC> GetSelectedObject();
@@ -114,6 +121,7 @@ namespace mmo
 	private:
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
 		static uint64 ms_activePlayerGuid;
+		static uint64 ms_activePetGuid;
 		static uint64 ms_selectedObjectGuid;
 		static uint64 ms_hoveredObjectGuid;
 		static const proto_client::Project* ms_project;
