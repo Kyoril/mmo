@@ -24,4 +24,8 @@ namespace mmo::pcg::graph
 
 	/// @brief Registers the spawner nodes: SpawnMeshes (nodes_spawn.cpp).
 	void RegisterSpawnNodes(NodeRegistry& registry);
+
+	/// @brief Registers the section nodes: LaySectionAlongSpline and LaySectionAlongLoop (nodes_section.cpp). They
+	///        emit SectionPath terrain ops on a "Terrain" pin.
+	void RegisterSectionNodes(NodeRegistry& registry);
 }

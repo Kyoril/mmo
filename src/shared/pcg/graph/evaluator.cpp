@@ -316,6 +316,18 @@ namespace mmo::pcg::graph
 			const auto end = std::chrono::steady_clock::now();
 			nodeResult.milliseconds = std::chrono::duration<double, std::milli>(end - start).count();
 
+			// A node cannot know its own id; Terrain items carry it as their composition order.
+			for (auto& [pinName, collection] : nodeResult.output.pins)
+			{
+				for (DataItem& item : collection)
+				{
+					if (item.kind == ItemKind::Terrain)
+					{
+						item.op.order = id;
+					}
+				}
+			}
+
 			NormalizeOutputs(def, nodeResult.output);
 
 			if (!nodeResult.output.error.empty())
