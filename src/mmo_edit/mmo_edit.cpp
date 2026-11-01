@@ -104,6 +104,7 @@
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
 #include "editors/pcg_graph_editor/pcg_graph_editor.h"
+#include "editors/pcg_control_type_editor/pcg_control_type_editor.h"
 #include "prop_kit_job.h"
 #include "entities_to_world_model_job.h"
 #include "glue_bake/glue_bake_job.h"
@@ -437,6 +438,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::PropKitEditor>(mainWindow, &previewProviderManager));
 	mainWindow.AddEditor(std::make_unique<mmo::PcgGraphEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::PcgControlTypeEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));

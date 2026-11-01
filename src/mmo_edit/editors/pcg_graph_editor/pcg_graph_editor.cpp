@@ -3,6 +3,7 @@
 #include "pcg_graph_editor.h"
 
 #include "pcg_graph_editor_instance.h"
+#include "asset_file_name.h"
 #include "editor_host.h"
 #include "icon_font.h"
 #include "assets/asset_registry.h"
@@ -17,36 +18,6 @@
 
 namespace mmo
 {
-	namespace
-	{
-		/// Why a name cannot be the file name of a new graph, or empty if it can: no path separators, no "..",
-		/// no characters that are invalid in file names, no trailing dot or space.
-		String GraphFileNameError(const String& name)
-		{
-			if (name.empty())
-			{
-				return "The name is empty.";
-			}
-			if (name.find("..") != String::npos)
-			{
-				return "The name must not contain \"..\".";
-			}
-			for (const char c : name)
-			{
-				if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'
-					|| static_cast<unsigned char>(c) < 32)
-				{
-					return "The name must not contain path separators or any of : * ? \" < > |";
-				}
-			}
-			if (name.back() == '.' || name.back() == ' ')
-			{
-				return "The name must not end with a dot or a space.";
-			}
-			return {};
-		}
-	}
-
 	PcgGraphEditor::PcgGraphEditor(EditorHost& host)
 		: EditorBase(host)
 	{
@@ -90,7 +61,7 @@ namespace mmo
 
 			// The name is one file name in the current folder; never overwrite an existing graph (graph instances
 			// may already use it).
-			const String nameError = GraphFileNameError(m_graphName);
+			const String nameError = AssetFileNameError(m_graphName);
 			const bool exists = nameError.empty() && AssetRegistry::HasFile(GetNewGraphPath());
 			if (!m_graphName.empty() && !nameError.empty())
 			{
@@ -159,7 +130,7 @@ namespace mmo
 
 	void PcgGraphEditor::CreateNewGraph()
 	{
-		const String nameError = GraphFileNameError(m_graphName);
+		const String nameError = AssetFileNameError(m_graphName);
 		if (!nameError.empty())
 		{
 			ELOG("Invalid PCG graph name '" << m_graphName << "': " << nameError);

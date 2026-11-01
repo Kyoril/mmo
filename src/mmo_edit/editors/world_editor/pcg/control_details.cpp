@@ -35,31 +35,30 @@ namespace mmo
 			}
 			return list;
 		}
+	}
 
-		/// Draws the widget of one property for its current value. @return True if the value changed.
-		bool DrawPropertyWidget(const PropertyDef& property, AttributeValue& value)
+	bool DrawControlPropertyWidget(const char* label, const PropertyDef& property, AttributeValue& value)
+	{
+		String widget;
+		switch (property.type)
 		{
-			String widget;
-			switch (property.type)
-			{
-			case PropertyType::Asset:
-				widget = "asset:" + PropertyAssetExtensionList();
-				break;
-			case PropertyType::AssetList:
-				widget = "assetList:" + PropertyAssetExtensionList();
-				break;
-			case PropertyType::Color:
-				widget = "color";
-				break;
-			default:
-				break;
-			}
-
-			static const std::vector<String> s_noEnumValues;
-			const std::vector<String>& enumValues = property.type == PropertyType::Enum ? property.enumValues : s_noEnumValues;
-			return DrawAttributeValueWidget(property.name.c_str(), value, pcg::graph::AttributeTypeOf(property.type), enumValues,
-				property.min, property.max, widget);
+		case PropertyType::Asset:
+			widget = "asset:" + PropertyAssetExtensionList();
+			break;
+		case PropertyType::AssetList:
+			widget = "assetList:" + PropertyAssetExtensionList();
+			break;
+		case PropertyType::Color:
+			widget = "color";
+			break;
+		default:
+			break;
 		}
+
+		static const std::vector<String> s_noEnumValues;
+		const std::vector<String>& enumValues = property.type == PropertyType::Enum ? property.enumValues : s_noEnumValues;
+		return DrawAttributeValueWidget(label, value, pcg::graph::AttributeTypeOf(property.type), enumValues,
+			property.min, property.max, widget);
 	}
 
 	const PropertyDef* FindControlProperty(const pcg::graph::ControlType& type, const String& name)
@@ -199,7 +198,7 @@ namespace mmo
 						// Overridden values stand out from defaults.
 						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.45f, 1.0f));
 					}
-					const bool edited = DrawPropertyWidget(property, value);
+					const bool edited = DrawControlPropertyWidget(property.name.c_str(), property, value);
 					if (overridden)
 					{
 						ImGui::PopStyleColor();

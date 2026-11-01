@@ -15,6 +15,14 @@ namespace mmo
 	/// @return True if anything changed.
 	bool DrawControlProperties(const pcg::graph::ControlType& type, pcg::graph::ControlInstance& instance);
 
+	/// @brief Draws the widget of one property for a value: by type a drag field, checkbox, combo (Enum), asset
+	///        picker, weighted asset list or colour picker, using the property's range and enum values.
+	/// @param label ImGui label (also the visible text).
+	/// @param property The property definition (type, range, enum values).
+	/// @param value The value; written when the user edits it.
+	/// @return True if the value changed.
+	bool DrawControlPropertyWidget(const char* label, const pcg::graph::PropertyDef& property, pcg::graph::AttributeValue& value);
+
 	/// @brief Finds a property of a control type by name.
 	/// @return The property, or null if the type has none of that name.
 	const pcg::graph::PropertyDef* FindControlProperty(const pcg::graph::ControlType& type, const String& name);
