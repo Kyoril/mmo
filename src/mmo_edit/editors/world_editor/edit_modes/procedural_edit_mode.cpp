@@ -1734,7 +1734,8 @@ namespace mmo
 			return false;
 		}
 
-		return EvaluateGraphInstance(m_worldEditor, m_controls[index].instance, *this, out, error);
+		// On the base terrain, like the rebuild (and the graph editor's debug view).
+		return EvaluateGraphInstance(m_worldEditor, m_controls[index].instance, *this, out, error, true);
 	}
 
 	const pcg::GraphInstanceRecord* ProceduralEditMode::FindGraphInstance(const uint64 id) const

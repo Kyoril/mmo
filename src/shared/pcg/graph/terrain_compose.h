@@ -61,6 +61,25 @@ namespace mmo::pcg::graph
 		std::set<std::pair<size_t, uint8>> missingSectionLayers;
 	};
 
+	/// @brief Where a prepared op acts, for debug drawing.
+	struct TerrainOpOutline
+	{
+		/// @brief The op.
+		TerrainOpType type = TerrainOpType::Noise;
+
+		/// @brief Producing node id (op.order).
+		uint32 order = 0;
+
+		/// @brief The op's spline or area as sampled for the op (y is the spline height).
+		std::vector<Vector3> points;
+
+		/// @brief True if the last point joins the first.
+		bool closed = false;
+
+		/// @brief SectionPath: the influence rect of every section copy (GetSectionCopyRects), in layout order.
+		std::vector<WorldRect> copyRects;
+	};
+
 	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
 	///        sorted by (op.order, node id, item index). Items of other kinds on that pin are ignored.
 	std::vector<TerrainOpInput> CollectTerrainOps(const Graph& graph, const EvalResult& result);
@@ -151,6 +170,10 @@ namespace mmo::pcg::graph
 
 		/// @brief Warnings of Prepare, each text once.
 		const std::vector<String>& GetWarnings() const;
+
+		/// @brief The outline of every prepared op, in op order (for debug drawing).
+		/// @param out Cleared, then receives one outline per op.
+		void GetOutlines(std::vector<TerrainOpOutline>& out) const;
 
 	private:
 		struct PreparedOp;

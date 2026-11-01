@@ -56,6 +56,7 @@ namespace mmo::pcg::graph
 			void Build(const std::vector<SplineSample>& samples, const bool closed, const float reach)
 			{
 				m_samples = samples;
+				m_closed = closed;
 				m_reach = std::max(0.0f, reach);
 				m_segments.clear();
 				m_cellStart.clear();
@@ -191,6 +192,18 @@ namespace mmo::pcg::graph
 				return found;
 			}
 
+			/// The polyline's samples as built.
+			const std::vector<SplineSample>& GetSamples() const
+			{
+				return m_samples;
+			}
+
+			/// Whether the polyline was built closed.
+			bool IsClosed() const
+			{
+				return m_closed;
+			}
+
 		private:
 			int64 CellOf(const double v, const double origin, const int64 count) const
 			{
@@ -200,6 +213,7 @@ namespace mmo::pcg::graph
 
 		private:
 			std::vector<SplineSample> m_samples;
+			bool m_closed = false;
 			std::vector<std::pair<uint32, uint32>> m_segments;
 			std::vector<uint32> m_cellStart;
 			std::vector<uint32> m_cells;
@@ -641,6 +655,41 @@ namespace mmo::pcg::graph
 			m_influence.maxZ = std::min(u.maxZ, r.maxZ);
 		}
 		return true;
+	}
+
+	void PreparedTerrain::GetOutlines(std::vector<TerrainOpOutline>& out) const
+	{
+		out.clear();
+		for (const auto& op : m_ops)
+		{
+			TerrainOpOutline outline;
+			outline.type = op->type;
+			outline.order = op->order;
+			const std::vector<SplineSample>* samples = nullptr;
+			if (op->type == TerrainOpType::SectionPath)
+			{
+				if (op->shape.path)
+				{
+					samples = &op->shape.path->GetSamples();
+					outline.closed = op->shape.path->IsClosed();
+				}
+				GetSectionCopyRects(op->shape, outline.copyRects);
+			}
+			else
+			{
+				samples = &op->edge.GetSamples();
+				outline.closed = op->edge.IsClosed();
+			}
+			if (samples != nullptr)
+			{
+				outline.points.reserve(samples->size());
+				for (const SplineSample& s : *samples)
+				{
+					outline.points.emplace_back(s.x, s.y, s.z);
+				}
+			}
+			out.push_back(std::move(outline));
+		}
 	}
 
 	WorldRect PreparedTerrain::GetInfluence() const

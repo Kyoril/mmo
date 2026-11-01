@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "base_terrain_sampler.h"
 #include "editor_terrain_sampler.h"
 #include "generated_content.h"
 
@@ -12,6 +13,7 @@
 #include "pcg/graph/graph.h"
 #include "pcg/graph/graph_output.h"
 #include "pcg/graph/node_util.h"
+#include "pcg/graph/terrain_compose.h"
 
 #include <functional>
 #include <memory>
@@ -79,8 +81,11 @@ namespace mmo
 		/// @brief The placed controls that could not be resolved (they are not in controls).
 		std::vector<UnresolvedPlacedControl> unresolved;
 
-		/// @brief Terrain sampler context.terrain points at.
+		/// @brief Terrain sampler context.terrain points at (the live terrain).
 		std::unique_ptr<EditorTerrainSampler> sampler;
+
+		/// @brief Set by UseBaseTerrain: the base terrain over sampler, which context.terrain then points at.
+		std::unique_ptr<BaseTerrainSampler> baseSampler;
 	};
 
 	/// @brief One evaluation of a graph instance, not applied to the world.
@@ -138,6 +143,40 @@ namespace mmo
 	bool BuildGraphInstanceContext(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
 		GraphInstanceContext& out, String& error);
 
+	/// @brief The terrain a rebuild of the instance would evaluate on: a BaseTerrainSampler over `live` undoing the
+	///        record's owned terrain contribution.
+	/// @param editor The world editor of the instance. Must have a terrain.
+	/// @param record The instance.
+	/// @param live The live terrain sampler. Must outlive the result.
+	/// @return Null if the record owns no outer height entries (the live terrain is the base then).
+	std::unique_ptr<BaseTerrainSampler> MakeBaseTerrainSampler(IWorldEditor& editor, const pcg::GraphInstanceRecord& record,
+		const pcg::graph::ITerrainSampler& live);
+
+	/// @brief Makes a built context evaluate on the base terrain (see MakeBaseTerrainSampler): sets context.baseSampler
+	///        and points context.context.terrain at it. Leaves the context on the live terrain if the record owns no
+	///        terrain heights.
+	/// @param editor The world editor the context was built for.
+	/// @param record The instance the context was built for.
+	/// @param context A context built by BuildGraphInstanceContext.
+	/// @return True if the context now evaluates on the base terrain.
+	bool UseBaseTerrain(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, GraphInstanceContext& context);
+
+	/// @brief Prepares the terrain ops one node of an evaluation produced (the items of the "Terrain" pins whose
+	///        op.order is the node id, see pcg::graph::CollectTerrainOps), the way a rebuild prepares them: on the
+	///        given ground, clipped to the instance's area with its borderFade, section assets read like the rebuild
+	///        reads them (a missing, unreadable or stale asset fails).
+	/// @param graph The evaluated graph.
+	/// @param result Its evaluation result.
+	/// @param nodeId The node whose ops to prepare.
+	/// @param record The instance.
+	/// @param ground Base ground height at a world position.
+	/// @param out Receives the prepared ops.
+	/// @param error Receives the reason (naming the node and asset) when the call returns false.
+	/// @return False if the ops could not be prepared.
+	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, uint32 nodeId,
+		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, pcg::graph::PreparedTerrain& out,
+		String& error);
+
 	/// @brief Reads the instance's saved graph, builds its context and evaluates it, without changing the world. When the
 	///        graph validates, the spawned points are collected and clipped to the area.
 	/// @param editor The world editor of the instance.
@@ -145,10 +184,12 @@ namespace mmo
 	/// @param controls The procedural mode holding the world's placed controls.
 	/// @param out Receives the evaluation.
 	/// @param error Receives the reason when the call returns false.
+	/// @param baseTerrain True evaluates on the base terrain a rebuild would see (UseBaseTerrain), false on the live
+	///        terrain.
 	/// @return False if the graph could not be read or parsed, or the context could not be built. Validation issues and
 	///         node errors do not fail the call; they are in out.result.
 	bool EvaluateGraphInstance(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
-		GraphInstanceEvaluation& out, String& error);
+		GraphInstanceEvaluation& out, String& error, bool baseTerrain = false);
 
 	/// @brief Rebuilds a graph instance: terrain ops and placements through ApplyGeneratedContent.
 	/// @details First a dry run on the live terrain decides every refusal, leaving the world and record untouched:

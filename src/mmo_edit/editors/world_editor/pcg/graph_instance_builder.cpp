@@ -2,6 +2,7 @@
 
 #include "graph_instance_builder.h"
 
+#include "editor_terrain_access.h"
 #include "editor_texture_layers.h"
 #include "section_path_builder.h"
 #include "text_parsing.h"
@@ -201,12 +202,16 @@ namespace mmo
 
 		/// Evaluates out.graph (already read) with a freshly built context, the way EvaluateGraphInstance does.
 		bool EvaluateLoadedGraph(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
-			GraphInstanceEvaluation& out, String& error)
+			GraphInstanceEvaluation& out, String& error, const bool baseTerrain = false)
 		{
 			GraphInstanceContext context;
 			if (!BuildGraphInstanceContext(editor, record, controls, context, error))
 			{
 				return false;
+			}
+			if (baseTerrain)
+			{
+				UseBaseTerrain(editor, record, context);
 			}
 
 			out.warnings = context.warnings;
@@ -503,15 +508,59 @@ namespace mmo
 		return true;
 	}
 
+	std::unique_ptr<BaseTerrainSampler> MakeBaseTerrainSampler(IWorldEditor& editor, const pcg::GraphInstanceRecord& record,
+		const pcg::graph::ITerrainSampler& live)
+	{
+		terrain::Terrain* terrain = editor.GetTerrain();
+		if (!terrain || record.content.terrain.outer.empty())
+		{
+			return nullptr;
+		}
+
+		const EditorTerrainAccess access(*terrain);
+		return std::make_unique<BaseTerrainSampler>(live, record.content.terrain, access.GetLayout());
+	}
+
+	bool UseBaseTerrain(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, GraphInstanceContext& context)
+	{
+		if (!context.sampler)
+		{
+			return false;
+		}
+
+		context.baseSampler = MakeBaseTerrainSampler(editor, record, *context.sampler);
+		if (!context.baseSampler)
+		{
+			return false;
+		}
+
+		context.context.terrain = context.baseSampler.get();
+		return true;
+	}
+
+	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, const uint32 nodeId,
+		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, pcg::graph::PreparedTerrain& out,
+		String& error)
+	{
+		std::vector<pcg::graph::TerrainOpInput> ops = pcg::graph::CollectTerrainOps(graph, result);
+		ops.erase(std::remove_if(ops.begin(), ops.end(), [nodeId](const pcg::graph::TerrainOpInput& op)
+		{
+			return op.op.order != nodeId;
+		}), ops.end());
+
+		SectionAssetCache sections;
+		return out.Prepare(ops, ground, sections.MakeProvider(), record.area, record.borderFade, error);
+	}
+
 	bool EvaluateGraphInstance(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
-		GraphInstanceEvaluation& out, String& error)
+		GraphInstanceEvaluation& out, String& error, const bool baseTerrain)
 	{
 		if (!LoadGraphAsset(record.graphPath, out.graph, error))
 		{
 			return false;
 		}
 
-		return EvaluateLoadedGraph(editor, record, controls, out, error);
+		return EvaluateLoadedGraph(editor, record, controls, out, error, baseTerrain);
 	}
 
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,

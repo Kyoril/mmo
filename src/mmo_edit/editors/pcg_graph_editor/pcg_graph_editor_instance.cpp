@@ -15,6 +15,7 @@
 #include "pcg/graph/hashing.h"
 #include "pcg/graph/node_registry.h"
 #include "pcg/graph/debug_geometry.h"
+#include "pcg/graph/terrain_debug.h"
 #include "pcg/graph_instance_record.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_editor/pcg/graph_instance_builder.h"
@@ -162,6 +163,9 @@ namespace mmo
 		constexpr size_t s_debugPointBudget = 200'000;
 		constexpr size_t s_debugLineBudget = 500'000;
 
+		/// Grid spacing (m) of the height ticks of terrain ops.
+		constexpr float s_debugTerrainTickStep = 4.0f;
+
 		/// Back-off of retries after building the debug evaluation context failed (seconds).
 		constexpr double s_debugFirstRetryDelay = 2.0;
 		constexpr double s_debugMaxRetryDelay = 30.0;
@@ -190,6 +194,31 @@ namespace mmo
 				static_cast<float>((argb >> 8) & 0xFF) / 255.0f,
 				static_cast<float>(argb & 0xFF) / 255.0f,
 				static_cast<float>((argb >> 24) & 0xFF) / 255.0f);
+		}
+
+		/// The colour with its rgb channels scaled by factor (0..1), alpha kept.
+		uint32 ShadeArgb(const uint32 argb, const float factor)
+		{
+			const auto channel = [argb, factor](const int shift)
+			{
+				const float value = static_cast<float>((argb >> shift) & 0xFFu) * factor + 0.5f;
+				return std::min(static_cast<uint32>(value), 0xFFu) << shift;
+			};
+			return (argb & 0xFF000000u) | channel(16) | channel(8) | channel(0);
+		}
+
+		/// True if the node's output has a Terrain item of its own (op.order is the node) on its "Terrain" pin.
+		bool HasOwnTerrainOps(const pcg::graph::NodeOutput& output, const uint32 nodeId)
+		{
+			const auto pin = output.pins.find("Terrain");
+			if (pin == output.pins.end())
+			{
+				return false;
+			}
+			return std::any_of(pin->second.begin(), pin->second.end(), [nodeId](const pcg::graph::DataItem& item)
+			{
+				return item.kind == pcg::graph::ItemKind::Terrain && item.op.order == nodeId;
+			});
 		}
 
 		/// Index of a node in the graph's node list (the node count if it is missing).
@@ -1376,6 +1405,8 @@ namespace mmo
 		m_hasDebugResult = false;
 		m_debugEvalKey = 0;
 		m_debugEvalMilliseconds = 0;
+		m_debugContributionHash = 0;
+		m_debugContributionKey = 0;
 		m_debugError.clear();
 		m_debugWarnings.clear();
 		m_nodeRunInfo.clear();
@@ -1447,11 +1478,25 @@ namespace mmo
 			m_debugEvalKey = 0;
 		}
 
+		// The evaluation runs on the base terrain (the instance's own contribution undone), so a rebuild that changes the
+		// contribution must re-evaluate. Hashing it is linear in its size: only when it may have changed.
+		const pcg::TerrainContribution& contribution = record->content.terrain;
+		pcg::graph::Hasher contributionKey;
+		contributionKey.U64(static_cast<uint64>(reinterpret_cast<uintptr_t>(contribution.outer.data())));
+		contributionKey.U64(contribution.outer.size());
+		contributionKey.U64(world->GetTerrainRevision());
+		if (contributionKey.Result() != m_debugContributionKey)
+		{
+			m_debugContributionKey = contributionKey.Result();
+			m_debugContributionHash = BaseTerrainSampler::HashContribution(contribution);
+		}
+
 		// Re-evaluate when anything the evaluation reads changed (not on node moves, comments or debug toggles).
 		pcg::graph::Hasher evalHasher;
 		evalHasher.U64(m_document.EvalRevision());
 		evalHasher.U64(mode->GetControlsRevision());
 		evalHasher.U64(world->GetTerrainRevision());
+		evalHasher.U64(m_debugContributionHash);
 		evalHasher.U64(InstanceSettingsHash(*record));
 		const uint64 evalKey = evalHasher.Result() | 1;
 		if (evalKey != m_debugEvalKey)
@@ -1475,6 +1520,8 @@ namespace mmo
 			}
 			else
 			{
+				// Like a rebuild, evaluate on the terrain without the instance's own contribution.
+				UseBaseTerrain(*world, *record, context);
 				m_debugContextFailed = false;
 				m_debugRetryDelay = 0;
 				m_debugWarnings = context.warnings;
@@ -1530,6 +1577,38 @@ namespace mmo
 		const size_t pointShare = s_debugPointBudget / debugNodeCount;
 		const size_t lineShare = s_debugLineBudget / debugNodeCount;
 
+		// Terrain ops are prepared and drawn on the base terrain, created when a node needs it. The pages under the area
+		// were loaded by the evaluation's context.
+		std::unique_ptr<EditorTerrainSampler> liveTerrain;
+		std::unique_ptr<BaseTerrainSampler> baseTerrain;
+		std::function<float(float, float)> baseGround;
+		const auto getBaseGround = [&]() -> const std::function<float(float, float)>&
+		{
+			if (!baseGround)
+			{
+				const pcg::graph::ITerrainSampler* sampler = nullptr;
+				if (terrain::Terrain* terrain = world->GetTerrain())
+				{
+					liveTerrain = std::make_unique<EditorTerrainSampler>(*terrain, nullptr);
+					baseTerrain = MakeBaseTerrainSampler(*world, *record, *liveTerrain);
+					sampler = baseTerrain ? static_cast<const pcg::graph::ITerrainSampler*>(baseTerrain.get()) : liveTerrain.get();
+				}
+				baseGround = [sampler](const float x, const float z)
+				{
+					float h = 0.0f;
+					return sampler != nullptr && sampler->Height(x, z, h) ? h : 0.0f;
+				};
+			}
+			return baseGround;
+		};
+
+		// Start the node overlay from the evaluation again: the terrain ops below add their problems to it.
+		if (m_hasDebugResult)
+		{
+			SetNodeResults(m_debugResult);
+			m_debugResultsShown = true;
+		}
+
 		std::vector<pcg::graph::DebugLine> lines;
 		m_debugLegend.clear();
 		for (size_t i = 0; i < graph.nodes.size(); ++i)
@@ -1567,6 +1646,33 @@ namespace mmo
 					entry.linesDrawn += geometry.linesDrawn;
 					entry.linesTotal += geometry.linesTotal;
 					lines.insert(lines.end(), geometry.lines.begin(), geometry.lines.end());
+				}
+
+				// Terrain ops of this node alone, composed on the base terrain as a rebuild prepares them: height ticks
+				// (node colour where the ground rises, darker where it sinks) and outlines, in the rest of its budget.
+				if (HasOwnTerrainOps(result->second.output, node.id))
+				{
+					pcg::graph::PreparedTerrain prepared;
+					String prepareError;
+					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), prepared, prepareError))
+					{
+						const pcg::graph::DebugGeometry geometry = pcg::graph::BuildTerrainDebugGeometry(prepared, getBaseGround(),
+							s_debugTerrainTickStep, entry.argb, ShadeArgb(entry.argb, 0.45f), lineBudget);
+						entry.linesDrawn += geometry.linesDrawn;
+						entry.linesTotal += geometry.linesTotal;
+						lines.insert(lines.end(), geometry.lines.begin(), geometry.lines.end());
+
+						NodeRunInfo& info = m_nodeRunInfo[node.id];
+						for (const String& warning : prepared.GetWarnings())
+						{
+							info.warnings.push_back("Terrain ops: " + warning);
+						}
+					}
+					else
+					{
+						NodeRunInfo& info = m_nodeRunInfo[node.id];
+						info.error += (info.error.empty() ? "" : "; ") + ("Terrain ops could not be prepared: " + prepareError);
+					}
 				}
 			}
 			m_debugLegend.push_back(std::move(entry));

@@ -208,7 +208,8 @@ namespace mmo
 		bool CreateGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, uint64 seed, const String& name,
 			const std::vector<std::pair<String, String>>& parameterSettings, uint64& id, String& error);
 
-		/// @brief Evaluates a graph instance's saved graph without applying it (see EvaluateGraphInstance).
+		/// @brief Evaluates a graph instance's saved graph without applying it (see EvaluateGraphInstance), on the base
+		///        terrain a rebuild sees (the instance's own terrain contribution undone, see UseBaseTerrain).
 		/// @param id Id of the graph instance.
 		/// @param out Receives the evaluation.
 		/// @param error Receives the reason when the call returns false.

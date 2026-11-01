@@ -95,6 +95,7 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor_instance.h"
+#include "editors/world_editor/edit_modes/procedural_edit_mode.h"
 #include "editors/world_editor/pcg/section_bake_job.h"
 #include "editors/world_editor/pcg/graph_instance_builder.h"
 #include "editors/world_editor/pcg/section_path_builder.h"
@@ -1601,7 +1602,8 @@ int main(int argc, char* arg[])
 			{
 				// mmo_edit --pcg-eval-graph <world.hwld> --id <id hex> --out <file.json>
 				// Evaluates a graph instance's saved graph without applying it and writes the evaluation dump
-				// (WriteEvalDump, with timing) to the file. Logs validation issues, node errors, how many spawned
+				// (WriteEvalDump, with timing) to the file. Like a rebuild, it evaluates on the base terrain (the instance's
+				// own terrain contribution undone, BaseTerrainSampler). Logs validation issues, node errors, how many spawned
 				// points lie inside the area and how many were clipped, and the terrain height (GetSmoothHeightAt)
 				// under the first three placements next to their evaluated height. Never saves the world. Exit 0 if
 				// the graph validated and no node failed (the dump is written in either case).
@@ -1695,16 +1697,39 @@ int main(int argc, char* arg[])
 							ILOG("--pcg-eval-graph: spawned points " << inside + evaluation.collected.clipped << ", inside the area " << inside
 								<< ", clipped " << evaluation.collected.clipped);
 
-							// The evaluated heights next to the terrain's own answer (the sampler must agree with it).
+							// The evaluated heights next to the terrain's own answer (the sampler must agree with it) and, when
+							// the instance owns terrain heights, the base height the evaluation ran on (its own contribution
+							// undone, as a rebuild sees the terrain).
 							mmo::terrain::Terrain* terrain = world->GetTerrain();
+							const mmo::ProceduralEditMode* mode = world->GetProceduralEditMode();
+							const mmo::pcg::GraphInstanceRecord* record = mode ? mode->FindGraphInstance(instanceId) : nullptr;
+							std::unique_ptr<mmo::EditorTerrainSampler> live;
+							std::unique_ptr<mmo::BaseTerrainSampler> base;
+							if (terrain && record)
+							{
+								live = std::make_unique<mmo::EditorTerrainSampler>(*terrain, nullptr);
+								base = mmo::MakeBaseTerrainSampler(*world, *record, *live);
+							}
+							if (base)
+							{
+								ILOG("--pcg-eval-graph: evaluated on the base terrain (the instance's contribution of "
+									<< record->content.terrain.outer.size() << " outer height(s) undone)");
+							}
 							for (size_t p = 0; terrain && p < inside && p < 3; ++p)
 							{
 								const mmo::Vector3& position = evaluation.collected.placements[p].position;
+								float baseHeight = 0.0f;
+								const bool hasBase = base && base->Height(position.x, position.z, baseHeight);
 								char line[192];
 								std::snprintf(line, sizeof(line), "height check %zu: x %.3f z %.3f evaluated y %.4f GetSmoothHeightAt %.4f", p,
 									static_cast<double>(position.x), static_cast<double>(position.z), static_cast<double>(position.y),
 									static_cast<double>(terrain->GetSmoothHeightAt(position.x, position.z)));
-								ILOG("--pcg-eval-graph: " << line);
+								char baseText[48] = "";
+								if (hasBase)
+								{
+									std::snprintf(baseText, sizeof(baseText), " base %.4f", static_cast<double>(baseHeight));
+								}
+								ILOG("--pcg-eval-graph: " << line << baseText);
 							}
 						}
 

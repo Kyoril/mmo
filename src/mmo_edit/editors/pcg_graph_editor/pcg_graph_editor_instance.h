@@ -56,7 +56,9 @@ namespace mmo
 		void SetNodeResults(const pcg::graph::EvalResult& result);
 
 		/// @brief Re-evaluates the document against the debug target when its inputs changed and redraws the debug
-		///        layer when the evaluation or the set of debug nodes changed. Called once per frame by the graph
+		///        layer when the evaluation or the set of debug nodes changed. Evaluates on the base terrain a rebuild
+		///        sees (the target instance's own terrain contribution undone); a debug node's own terrain ops are drawn
+		///        as height ticks and outlines (pcg::graph::BuildTerrainDebugGeometry). Called once per frame by the graph
 		///        editor, also while this instance's window is hidden; evaluates only while a node has debug on.
 		void UpdateDebugView();
 
@@ -203,6 +205,12 @@ namespace mmo
 		bool m_hasDebugResult { false };
 		uint64 m_debugEvalKey { 0 };
 		double m_debugEvalMilliseconds { 0 };
+
+		/// @brief Hash of the target instance's terrain contribution (BaseTerrainSampler::HashContribution), part of the
+		///        evaluation key, and the key it was computed for (contribution storage, size and terrain revision; a
+		///        rebuild changes them), so it is only recomputed when the contribution may have changed.
+		uint64 m_debugContributionHash { 0 };
+		uint64 m_debugContributionKey { 0 };
 
 		/// @brief Key of what the layer shows (0 = nothing drawn).
 		uint64 m_debugDrawKey { 0 };
