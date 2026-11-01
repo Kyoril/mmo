@@ -141,7 +141,23 @@ namespace mmo
 
 		/// Marks this creature as a pet.
 		/// @param group The pet group of a temporary pet, or 0 for a persistent pet.
-		void SetPetGroup(const uint32 group) { m_isPet = true; m_petGroup = group; }
+		void SetPetGroup(const uint32 group)
+		{
+			m_isPet = true;
+			m_petGroup = group;
+		}
+
+		/// Gives the creature a name of its own instead of its entry's name (persistent pets).
+		/// @param name The name, or an empty string to use the entry's name again.
+		void SetCustomName(const String& name) { m_customName = name; }
+
+		/// Scales the stats the creature gets from its entry (persistent pets, PetEntry multipliers).
+		/// Applied on every stat refresh; takes effect on the next RefreshStats (SetLevel).
+		/// @param health Max health multiplier.
+		/// @param mana Max mana multiplier.
+		/// @param damage Melee damage multiplier.
+		/// @param armor Armor multiplier.
+		void SetPetStatMultipliers(float health, float mana, float damage, float armor);
 
 		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
 		/// the fight and heals it back up.
@@ -328,6 +344,15 @@ namespace mmo
 		/// Gets the unit class of this creature if it uses the stat based system, otherwise nullptr.
 		[[nodiscard]] const proto::UnitClassEntry* GetStatUnitClass() const;
 
+		/// Applies a pet's stat multipliers and its out-of-combat health regeneration on top of
+		/// the stats just computed from its entry.
+		void ApplyPetStats();
+
+	public:
+		/// Share of its max health a pet without a unit class health regeneration rate regenerates
+		/// per regeneration tick (two seconds).
+		static constexpr float PetHealthRegenShare = 0.03f;
+
 	protected:
 		float GetMeleeCritChanceFromAttributes() const override;
 
@@ -359,6 +384,13 @@ namespace mmo
 		bool m_isPet = false;
 		/// Pet group of a temporary pet.
 		uint32 m_petGroup = 0;
+		/// Name of a persistent pet; empty for every other creature.
+		String m_customName;
+		/// Stat multipliers of a persistent pet (health, mana, damage, armor).
+		float m_petHealthMultiplier = 1.0f;
+		float m_petManaMultiplier = 1.0f;
+		float m_petDamageMultiplier = 1.0f;
+		float m_petArmorMultiplier = 1.0f;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
 		/// Whether a follow target is currently assigned (distinguishes "never followed" from

@@ -212,8 +212,11 @@ namespace mmo
 			}
 		}
 
-		// Stop regeneration out of combat
-		controlled.StopRegeneration();
+		// Stop regeneration out of combat. A pet keeps regenerating: it does not evade-heal.
+		if (!GetAI().IsPetMode())
+		{
+			controlled.StopRegeneration();
+		}
 
 		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();

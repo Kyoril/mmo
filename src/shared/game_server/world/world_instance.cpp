@@ -1064,7 +1064,7 @@ namespace mmo
 		}
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius)
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius, const uint64 guid)
 	{
 		// Create the unit
 		auto spawned = std::make_shared<GameCreatureS>(
@@ -1075,7 +1075,7 @@ namespace mmo
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, Vector3::Zero });
 		spawned->Initialize();
-		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		spawned->Set<uint64>(object_fields::Guid, guid != 0 ? guid : CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		
 		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
 		spawned->SetWorldInstance(this);
@@ -1099,9 +1099,9 @@ namespace mmo
 		return std::static_pointer_cast<GameWorldObjectS>(spawned);
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius)
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius, const uint64 guid)
 	{
-		auto creature = CreateCreature(entry, position, o, randomWalkRadius);
+		auto creature = CreateCreature(entry, position, o, randomWalkRadius, guid);
 		m_temporaryCreatures[creature->GetGuid()] = creature;
 
 		creature->destroy = [this](const GameObjectS& gameObjectS)

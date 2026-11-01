@@ -787,6 +787,11 @@ namespace mmo
 			unit->Set<uint32>(object_fields::Mana, unit->Get<uint32>(object_fields::MaxMana));
 		}
 		unit->StartRegeneration();
+
+		if (auto* revivedPlayer = dynamic_cast<GamePlayerS*>(unit))
+		{
+			revivedPlayer->OnResurrected();
+		}
 	}
 #endif
 

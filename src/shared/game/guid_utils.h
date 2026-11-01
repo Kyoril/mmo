@@ -65,6 +65,15 @@ namespace mmo
 		return static_cast<uint64>(low | (entry << 24) | (static_cast<uint64_t>(type) << 52) | 0xF100000000000000);
 	}
 
+	/// Creates the guid of a persistent pet. It is stable across summons, since it is made from the
+	/// stored pet's database id and its pet entry.
+	/// @param dbId Database id of the stored pet (the low part; only 24 bits fit).
+	/// @param petEntry Id of the pet entry.
+	inline uint64 MakePetGuid(const uint64 dbId, const uint32 petEntry)
+	{
+		return CreateEntryGUID(dbId, petEntry, GuidType::Pet);
+	}
+
 	/// Determines if a GUID has an entry part based on it's type.
 	inline bool GuidHasEntryPart(uint64 guid)
 	{

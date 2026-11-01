@@ -132,6 +132,14 @@ namespace mmo
 		scoped_connection m_persistentPetDespawned;
 	};
 
+	/// How long the corpse of a pet stays in the world before it despawns, in milliseconds.
+	constexpr uint32 PetCorpseDespawnDelay = 2000;
+
+	/// Makes the corpse of a killed pet despawn after PetCorpseDespawnDelay, instead of decaying like
+	/// a creature's corpse. Safe to call from inside the pet's killed signal.
+	/// @param pet The killed pet.
+	void DespawnPetCorpse(GameCreatureS& pet);
+
 	/// Tells the owner of a pet that a unit started attacking the pet. A creature owner that is not
 	/// fighting yet joins in (pet combat is the owner's combat); a player owner is put in combat by
 	/// the pet's own combat flag instead.

@@ -3059,6 +3059,7 @@ namespace mmo
 		}
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
 	}
@@ -3127,6 +3128,7 @@ namespace mmo
 		m_character->Set<uint32>(object_fields::Health, std::min(reviveHealth, maxHealth));
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(reviveMap, revivePosition, reviveFacing);
 	}

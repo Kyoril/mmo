@@ -373,6 +373,11 @@ namespace mmo
 		// The pet state does the following; an escort follow target would fight it.
 		m_controlled.ClearFollowedUnit();
 
+		// A pet never evades back to full health, so it regenerates all the time instead of only in
+		// combat like other creatures (see CreatureAICombatState::OnLeave).
+		m_controlled.SetRegeneration(regeneration_flags::Health | regeneration_flags::Power);
+		m_controlled.StartRegeneration();
+
 		SetState(std::make_shared<CreatureAIPetState>(*this));
 	}
 

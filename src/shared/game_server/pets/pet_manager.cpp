@@ -67,10 +67,15 @@ namespace mmo
 				entryPtr->pet.reset();
 			});
 
-		// A dead pet no longer counts: its corpse decays on its own.
-		entry->killed = pet.killed.connect([entryPtr](GameUnitS*)
+		// A dead pet no longer counts, and its corpse goes away shortly.
+		std::weak_ptr<GameCreatureS> weakPet = entry->pet;
+		entry->killed = pet.killed.connect([entryPtr, weakPet](GameUnitS*)
 			{
 				entryPtr->pet.reset();
+				if (const auto corpse = weakPet.lock())
+				{
+					DespawnPetCorpse(*corpse);
+				}
 			});
 
 		m_temporaryPets.push_back(std::move(entry));
@@ -255,9 +260,18 @@ namespace mmo
 
 	void PetManager::DismissPersistentPet()
 	{
-		// Intentionally empty for now: a persistent pet is dismissed by storing it (health, power,
-		// was_summoned) and removing it from the world, which is part of the persistent pet
-		// lifetime. That code hooks in here.
+		// A player's persistent pet is stored with its health and power before it leaves.
+		if (auto* player = dynamic_cast<GamePlayerS*>(&m_owner))
+		{
+			player->DismissPersistentPet(false);
+			return;
+		}
+
+		if (GameCreatureS* pet = GetPersistentPet())
+		{
+			SetPersistentPet(nullptr);
+			Despawn(*pet);
+		}
 	}
 
 	GameCreatureS* PetManager::GetPersistentPet() const
@@ -300,6 +314,26 @@ namespace mmo
 		// Removal from the world is not allowed during the world update, which is where an owner
 		// can die or reset. A zero despawn timer removes the pet on the next timer tick instead.
 		pet.TriggerDespawnTimer(0);
+	}
+
+	void DespawnPetCorpse(GameCreatureS& pet)
+	{
+		WorldInstance* world = pet.GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		// Posted: the creature's death state sets its own (longer) corpse despawn delay when it is
+		// killed, and this has to override it.
+		std::weak_ptr<GameCreatureS> weakPet = std::static_pointer_cast<GameCreatureS>(pet.shared_from_this());
+		world->GetUniverse().Post([weakPet]()
+			{
+				if (const auto corpse = weakPet.lock(); corpse && corpse->GetWorldInstance() && !corpse->IsAlive())
+				{
+					corpse->TriggerDespawnTimer(PetCorpseDespawnDelay);
+				}
+			});
 	}
 
 	uint32 ResolvePetLevel(const pet_level_source::Type source, const GameUnitS& owner, const proto::UnitEntry& entry)

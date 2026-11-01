@@ -843,6 +843,79 @@ namespace mmo
 				});
 		}
 
+		void HandleTameCreature(SpellEffectContext& ctx)
+		{
+			auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor());
+			if (!player)
+			{
+				return;
+			}
+
+			for (GameObjectS* target : ctx.effectTargets)
+			{
+				if (auto* creature = dynamic_cast<GameCreatureS*>(target))
+				{
+					ctx.markAffectedTarget(*creature);
+					player->TameCreature(*creature);
+					return;
+				}
+			}
+
+			// Players and objects cannot be tamed.
+			player->NotifyPetResult(pet_result::NotTamable);
+		}
+
+		void HandleLearnPetSpell(SpellEffectContext& ctx)
+		{
+			auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor());
+			if (!player)
+			{
+				return;
+			}
+
+			const uint32 spellId = ctx.effect.triggerspell();
+			if (spellId == 0)
+			{
+				ELOG("LearnPetSpell effect of spell " << ctx.castContext.GetSpell().id() << " has no trigger spell");
+				return;
+			}
+
+			player->LearnPetSpell(spellId);
+		}
+
+		void HandleSummonPersistentPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->SummonStoredPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+			}
+		}
+
+		void HandleGrantPersistentPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->GrantPersistentPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+			}
+		}
+
+		void HandleDismissPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->DismissPersistentPet(false);
+			}
+		}
+
+		void HandleRevivePet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				const uint32 healthPercent = ctx.basePoints > 0 ? static_cast<uint32>(ctx.basePoints) : 100;
+				player->RevivePet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())), healthPercent);
+			}
+		}
+
 		void HandleWeaponDamage(SpellEffectContext& ctx)
 		{
 			HandleInternalWeaponDamage(ctx, static_cast<SpellSchool>(ctx.castContext.GetSpell().spellschool()));
