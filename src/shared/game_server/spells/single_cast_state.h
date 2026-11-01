@@ -104,6 +104,11 @@ namespace mmo
 
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
 
+		/// Puts the spell on its cooldown, as announced to the client in the SpellGo packet.
+		/// Called once the cast has gone off, which for a spell with a travel speed is well
+		/// before its projectile lands. Idempotent: the deferred impact path calls it again.
+		void ApplySpellCooldown();
+
 		void ApplyAllEffects();
 		/// Applies a single effect. Does not evaluate the effect's gating condition; ApplyAllEffects
 		/// does that for every effect before the first one runs.
@@ -155,6 +160,9 @@ namespace mmo
 		bool m_tookReagents { false };
 		bool m_delayedCast;
 		bool m_cooldownStartedOnCastStart { false };
+		/// Whether ApplySpellCooldown already ran for this cast, so a projectile landing later
+		/// does not restart the cooldown the client was told about when the cast went off.
+		bool m_spellCooldownApplied { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
 		bool m_globalCooldownTriggered { false };
 		GameTime m_appliedGlobalCooldownMs { 0 };

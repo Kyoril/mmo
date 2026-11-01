@@ -1005,20 +1005,39 @@ namespace mmo
 		return finalCD;
 	}
 
-	void SingleCastState::ApplyAllEffects()
+	void SingleCastState::ApplySpellCooldown()
 	{
+		if (m_spellCooldownApplied)
+		{
+			return;
+		}
+		m_spellCooldownApplied = true;
+
 		// "Disabled While Active" spells (e.g. Stealth) do not start their cooldown when cast - the
 		// cooldown only begins once the aura they place on the caster fades (handled in
 		// AuraContainer::SetApplied / GameUnitS::StartDeferredSpellCooldown). Skip the normal cooldown
-		// here for such spells; a fallback below still applies it immediately if no aura was gained.
-		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+		// here for such spells; a fallback in ApplyAllEffects still applies it immediately if no aura
+		// was gained.
+		if ((m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0)
+		{
+			return;
+		}
 
 		// Add spell cooldown if any - unless it was already started at cast start.
-		const GameTime finalCD = CalculateFinalCooldown();
-		if (finalCD && !m_cooldownStartedOnCastStart && !disabledWhileActive)
+		if (const GameTime finalCD = CalculateFinalCooldown(); finalCD && !m_cooldownStartedOnCastStart)
 		{
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
+	}
+
+	void SingleCastState::ApplyAllEffects()
+	{
+		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+		const GameTime finalCD = CalculateFinalCooldown();
+
+		// Normally already done when the cast went off; still needed for the channeled path, which
+		// sends its own SpellGo and comes here directly.
+		ApplySpellCooldown();
 
 		// Make sure that the executer exists after all effects have been executed
 		auto strongCaster = std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
@@ -1435,6 +1454,12 @@ namespace mmo
 		}
 
 		SendEndCast(spell_cast_result::CastOkay);
+
+		// The SpellGo packet above told the client the spell is on cooldown from now on, so start it
+		// on the server now as well. A spell with a travel speed resolves its effects only when its
+		// projectile lands; leaving the cooldown to that point let the caster fire again in the
+		// meantime, with nothing but the global cooldown in the way.
+		ApplySpellCooldown();
 
 		if (GamePlayerS* playerCaster = m_context.GetPlayerExecutor(); playerCaster && m_spell.skill() != 0)
 		{
