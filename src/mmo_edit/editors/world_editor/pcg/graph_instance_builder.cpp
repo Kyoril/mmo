@@ -54,6 +54,14 @@ namespace mmo
 		/// Salt of the keys of section placements, keeping them apart from the spawn keys (CollectPlacements).
 		constexpr uint64 SectionPlacementKeySalt = 0x5EC7A11Du;
 
+		/// The rect clipped to the world extent of the terrain.
+		pcg::WorldRect ClampToTerrain(const pcg::WorldRect& rect, const terrain::Terrain& terrain)
+		{
+			const auto halfX = static_cast<float>(static_cast<double>(terrain.GetWidth()) / 2.0 * terrain::constants::PageSize);
+			const auto halfZ = static_cast<float>(static_cast<double>(terrain.GetHeight()) / 2.0 * terrain::constants::PageSize);
+			return pcg::WorldRect{ std::max(rect.minX, -halfX), std::max(rect.minZ, -halfZ), std::min(rect.maxX, halfX), std::min(rect.maxZ, halfZ) };
+		}
+
 		/// Conservative x/z bounds of the area (pcg::graph::SplineBounds: its points and tangent handles).
 		pcg::WorldRect GetAreaRect(const PathSpline& area)
 		{
@@ -544,6 +552,7 @@ namespace mmo
 			return refuse(error);
 		}
 
+		// The warnings come from the run on the base terrain (content.prepare); these are discarded.
 		std::vector<String> dryWarnings;
 		if (!CheckEvaluation(dryRun, record.area, dryWarnings, error))
 		{
@@ -564,7 +573,9 @@ namespace mmo
 			return refuse(error);
 		}
 
-		const pcg::WorldRect areaRect = GetAreaRect(record.area);
+		// Clamped to the terrain: the bounds include tangent handles, which may reach past its edge (nothing is
+		// written there anyway) while ApplyGeneratedContent needs an influence inside the terrain.
+		const pcg::WorldRect areaRect = ClampToTerrain(GetAreaRect(record.area), *terrain);
 		if (!dryTerrain.IsEmpty() && checkTerrainOverlap && !checkTerrainOverlap(areaRect, error))
 		{
 			return refuse(error);
@@ -583,7 +594,11 @@ namespace mmo
 		content.waterMaterial = dryTerrain.GetWaterMaterial();
 
 		const pcg::graph::Graph& graph = dryRun.graph;
-		content.prepare = [&editor, &record, &controls, &graph, sections, state](const GroundFunction& ground, String& prepareError)
+		const bool dryEmpty = dryTerrain.IsEmpty();
+		const pcg::WorldRect dryInfluence = dryTerrain.GetInfluence();
+		const String dryWaterMaterial = dryTerrain.GetWaterMaterial();
+		content.prepare = [&editor, &record, &controls, &graph, sections, state, dryEmpty, dryInfluence, dryWaterMaterial](
+			const GroundFunction& ground, String& prepareError)
 		{
 			// The previous contribution is undone: the graph sees the base terrain.
 			GraphInstanceEvaluation base;
@@ -593,6 +608,25 @@ namespace mmo
 				!CheckEvaluation(base, record.area, warnings, prepareError) ||
 				!PrepareTerrainOps(base, record, ground, *sections, state->terrain, prepareError))
 			{
+				return false;
+			}
+
+			// writeRects and waterMaterial were fixed from the dry run before the undo (ApplyGeneratedContent reads them
+			// first). Op geometry and materials do not depend on the heights, so they must not differ; if they do
+			// anyway, ocean pages outside the dry influence would silently drop writes or the water would get the
+			// wrong material, so the build fails (and the old contribution is put back).
+			const pcg::WorldRect influence = state->terrain.GetInfluence();
+			const bool contained = state->terrain.IsEmpty() || (!dryEmpty && influence.minX >= dryInfluence.minX &&
+				influence.minZ >= dryInfluence.minZ && influence.maxX <= dryInfluence.maxX && influence.maxZ <= dryInfluence.maxZ);
+			if (!contained)
+			{
+				prepareError = "the terrain ops reach further on the base terrain than on the live terrain; rebuild again";
+				return false;
+			}
+			if (state->terrain.GetWaterMaterial() != dryWaterMaterial)
+			{
+				prepareError = "the water material of the terrain ops differs between the live and the base terrain ('"
+					+ dryWaterMaterial + "' vs '" + state->terrain.GetWaterMaterial() + "'); rebuild again";
 				return false;
 			}
 

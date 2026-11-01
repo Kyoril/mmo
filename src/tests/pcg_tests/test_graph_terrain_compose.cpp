@@ -448,6 +448,51 @@ TEST_CASE("A missing section asset or an unknown section param fails Prepare", "
 	CHECK(error.empty());
 }
 
+TEST_CASE("Section paint layers without a tile layer give one warning per op", "[graph_terrain_compose]")
+{
+	// The road paints section layers 0 and 2; layer 3 names a texture but is never painted.
+	SectionAsset road = MakeRoad();
+	road.layerTextures = { "Textures/Dirt.htex", "", "Textures/Gravel.htex", "Textures/Unused.htex" };
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", road } };
+	TerrainOpInput op = MakeOp(TerrainOpType::SectionPath, Line(0.0f, -100.0f, 0.0f, 100.0f), 7);
+	op.op.asset = "Sections/TestRoad.hsec";
+	PreparedTerrain t;
+	PrepareOk(t, { op }, kBigRegion, 10.0f, Provider(assets));
+
+	// Dirt is tile layer 1 everywhere, Gravel and Unused are no tile layer.
+	const TextureLayerLookup dirtOnly = [](float, float, const String& key) -> int8 { return key == "Textures/Dirt.htex" ? 1 : -1; };
+	TerrainEvaluateNotes notes;
+	for (float z = -50.0f; z <= 50.0f; z += 7.0f)
+	{
+		const TerrainTarget target = t.Evaluate(0.0f, z, 0.0f, dirtOnly, &notes);
+		CHECK(target.splatWeight > 0.0f);
+	}
+	// Off the painted bed nothing is noted.
+	TerrainEvaluateNotes offBed;
+	t.Evaluate(50.0f, 0.0f, 0.0f, dirtOnly, &offBed);
+	CHECK(offBed.missingSectionLayers.empty());
+
+	REQUIRE(notes.missingSectionLayers.size() == 1);
+	CHECK(notes.missingSectionLayers.begin()->second == 2);
+	std::vector<String> warnings;
+	t.DescribeNotes(notes, warnings);
+	REQUIRE(warnings.size() == 1);
+	CHECK(warnings[0].find("Sections/TestRoad.hsec") != String::npos);
+	CHECK(warnings[0].find("node 7") != String::npos);
+	CHECK(warnings[0].find("Textures/Gravel.htex") != String::npos);
+	CHECK(warnings[0].find("Textures/Unused.htex") == String::npos);
+	CHECK(warnings[0].find("Textures/Dirt.htex") == String::npos);
+
+	// Every painted layer matched: no notes.
+	const TextureLayerLookup all = [](float, float, const String& key) -> int8 { return key == "Textures/Dirt.htex" ? 1 : 2; };
+	TerrainEvaluateNotes none;
+	for (float z = -50.0f; z <= 50.0f; z += 7.0f)
+	{
+		t.Evaluate(0.0f, z, 0.0f, all, &none);
+	}
+	CHECK(none.missingSectionLayers.empty());
+}
+
 TEST_CASE("Paint uses the looked-up layer and skips with one warning where there is none", "[graph_terrain_compose]")
 {
 	const TerrainOpInput op = MakeOp(TerrainOpType::Paint, Square(0.0f, 0.0f, 50.0f), 1,

@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace mmo::pcg::graph
@@ -54,6 +55,10 @@ namespace mmo::pcg::graph
 		/// @brief Indices (in prepared op order) of Paint ops that were skipped somewhere because the tile has no
 		///        layer with their texture.
 		std::set<size_t> missingLayerOps;
+
+		/// @brief (op index, section layer 0..3) of SectionPath ops whose painted section layer names a texture the
+		///        lookup found no tile layer for at a sample the section paints (its paint was skipped there).
+		std::set<std::pair<size_t, uint8>> missingSectionLayers;
 	};
 
 	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
@@ -127,7 +132,9 @@ namespace mmo::pcg::graph
 		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
 			TerrainEvaluateNotes* notes = nullptr) const;
 
-		/// @brief Appends one warning per noted op (a Paint texture that is not a layer of some tile).
+		/// @brief Appends one warning per noted op: a Paint texture that is not a layer of some tile, or a SectionPath
+		///        op whose painted section layers name textures that are not (the warning names the section asset and
+		///        those textures).
 		void DescribeNotes(const TerrainEvaluateNotes& notes, std::vector<String>& warnings) const;
 
 		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept where the

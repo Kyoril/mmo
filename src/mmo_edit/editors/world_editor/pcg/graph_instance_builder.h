@@ -171,8 +171,9 @@ namespace mmo
 	/// @param checkTerrainOverlap If set, called with the area's bounds when the graph has terrain ops (part of the
 	///        dry run); returning false refuses the rebuild with its error (the procedural mode checks the bounds
 	///        against what oases and section paths built).
-	/// @return The report (warnings: control resolution, parameter merge, node, collection, terrain op and skipped
-	///         paint warnings).
+	/// @return The report. Warnings: control resolution, parameter merge, node and collection warnings of the run on
+	///         the base terrain, terrain op preparation and section placement warnings, and paint skipped on tiles
+	///         without the texture (Paint ops and section paint, one warning per op).
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
 		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
 		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap = {});

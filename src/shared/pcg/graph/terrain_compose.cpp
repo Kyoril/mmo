@@ -320,6 +320,10 @@ namespace mmo::pcg::graph
 		// SectionPath.
 		SectionPathShape shape;
 		bool remapLayers = false;
+		/// Section asset path (for warnings).
+		String sectionAsset;
+		/// Section layers the section paints somewhere (variant paint with coverage, or the mass paint layer).
+		std::array<bool, 4> paintedLayers{};
 	};
 
 	std::vector<TerrainOpInput> CollectTerrainOps(const Graph& graph, const EvalResult& result)
@@ -489,6 +493,30 @@ namespace mmo::pcg::graph
 				prepared->bounds = GetInfluenceRect(prepared->shape);
 				prepared->remapLayers = std::any_of(asset->layerTextures.begin(), asset->layerTextures.end(),
 					[](const String& t) { return !t.empty(); });
+				prepared->sectionAsset = op.asset;
+				for (const SectionVariant& variant : asset->variants)
+				{
+					const SectionPaint& paint = variant.paint;
+					const size_t count = std::min(paint.packed.size(), paint.coverage.size());
+					for (size_t i = 0; i < count; ++i)
+					{
+						if (paint.coverage[i] == 0)
+						{
+							continue;
+						}
+						for (size_t layer = 0; layer < 4; ++layer)
+						{
+							if (((paint.packed[i] >> (layer * 8)) & 0xFFu) != 0)
+							{
+								prepared->paintedLayers[layer] = true;
+							}
+						}
+					}
+				}
+				if (prepared->shape.params.massEnabled && prepared->shape.massLayer >= 0 && prepared->shape.massLayer <= 3)
+				{
+					prepared->paintedLayers[static_cast<size_t>(prepared->shape.massLayer)] = true;
+				}
 				break;
 			}
 			case TerrainOpType::Noise:
@@ -682,13 +710,18 @@ namespace mmo::pcg::graph
 				LayerRemapFunction remap;
 				if (op.remapLayers && layers)
 				{
-					remap = [&op, &layers](const float px, const float pz)
+					// Only called where the section paints.
+					remap = [&op, &layers, notes, opIndex](const float px, const float pz)
 					{
 						std::array<int8, 4> r{};
 						for (size_t i = 0; i < 4; ++i)
 						{
 							const String& texture = op.shape.asset.layerTextures[i];
 							r[i] = texture.empty() ? static_cast<int8>(-1) : layers(px, pz, texture);
+							if (r[i] < 0 && notes && !texture.empty() && op.paintedLayers[i])
+							{
+								notes->missingSectionLayers.emplace(opIndex, static_cast<uint8>(i));
+							}
 						}
 						return r;
 					};
@@ -827,6 +860,34 @@ namespace mmo::pcg::graph
 					+ "' is not a layer of the terrain tile, skipped there.");
 			}
 		}
+
+		// One warning per section op, listing its textures in layer order (the set is sorted by op, then layer).
+		size_t current = m_ops.size();
+		String textures;
+		const auto flush = [this, &warnings, &current, &textures]()
+		{
+			if (current < m_ops.size() && !textures.empty())
+			{
+				const PreparedOp& op = *m_ops[current];
+				warnings.push_back("SectionPath op of node " + std::to_string(op.order) + " (section asset '" + op.sectionAsset
+					+ "'): section paint with texture(s) " + textures + " skipped on tiles that have no layer with that texture.");
+			}
+			textures.clear();
+		};
+		for (const auto& [index, layer] : notes.missingSectionLayers)
+		{
+			if (index >= m_ops.size() || layer > 3)
+			{
+				continue;
+			}
+			if (index != current)
+			{
+				flush();
+				current = index;
+			}
+			textures += (textures.empty() ? "'" : ", '") + m_ops[index]->shape.asset.layerTextures[layer] + "'";
+		}
+		flush();
 	}
 
 	void PreparedTerrain::BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out,
