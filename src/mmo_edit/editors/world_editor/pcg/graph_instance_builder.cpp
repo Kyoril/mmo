@@ -2,15 +2,20 @@
 
 #include "graph_instance_builder.h"
 
+#include "editor_texture_layers.h"
+#include "section_path_builder.h"
 #include "text_parsing.h"
 
 #include "assets/asset_registry.h"
 #include "editors/world_editor/edit_modes/procedural_edit_mode.h"
 #include "editors/world_editor/edit_modes/world_edit_mode.h"
 #include "log/default_log_levels.h"
+#include "base/non_copyable.h"
 #include "pcg/graph/graph_io.h"
 #include "pcg/graph/node_util.h"
 #include "pcg/graph/node_registry.h"
+#include "pcg/graph/terrain_compose.h"
+#include "pcg/pcg_random.h"
 #include "terrain/constants.h"
 #include "terrain/terrain.h"
 
@@ -21,6 +26,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <map>
+#include <memory>
 #include <set>
 
 namespace mmo
@@ -44,19 +51,14 @@ namespace mmo
 			return String(buffer);
 		}
 
-		/// x/z bounds of the area's control points (the Catmull-Rom loop passes through them; its bulge between
-		/// points is covered by the page margin of the callers).
-		pcg::WorldRect GetAreaBounds(const PathSpline& area)
+		/// Salt of the keys of section placements, keeping them apart from the spawn keys (CollectPlacements).
+		constexpr uint64 SectionPlacementKeySalt = 0x5EC7A11Du;
+
+		/// Conservative x/z bounds of the area (pcg::graph::SplineBounds: its points and tangent handles).
+		pcg::WorldRect GetAreaRect(const PathSpline& area)
 		{
-			pcg::WorldRect rect{ area.points.front().x, area.points.front().z, area.points.front().x, area.points.front().z };
-			for (const SplinePoint& point : area.points)
-			{
-				rect.minX = std::min(rect.minX, point.x);
-				rect.minZ = std::min(rect.minZ, point.z);
-				rect.maxX = std::max(rect.maxX, point.x);
-				rect.maxZ = std::max(rect.maxZ, point.z);
-			}
-			return rect;
+			const pcg::graph::Bounds2D bounds = pcg::graph::SplineBounds(area);
+			return pcg::WorldRect{ bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ };
 		}
 
 		/// Box footprint of a volume at any yaw: the footprint's diagonal radius covers every rotation.
@@ -108,6 +110,195 @@ namespace mmo
 				}
 			}
 			return "?";
+		}
+
+		/// Section assets of one rebuild, each read once. The returned pointers stay valid as long as the cache.
+		class SectionAssetCache final : public NonCopyable
+		{
+		public:
+			/// The asset, or null with the reason in error: missing, unreadable or stale (its section world changed
+			/// since the bake; a graph rebuild refuses to lay an outdated section).
+			const pcg::SectionAsset* Get(const String& path, String& error)
+			{
+				auto it = m_entries.find(path);
+				if (it == m_entries.end())
+				{
+					Entry entry;
+					entry.asset = std::make_unique<pcg::SectionAsset>();
+					String staleWarning;
+					if (!LoadSectionAsset(path, *entry.asset, entry.error))
+					{
+						entry.asset.reset();
+					}
+					else if (IsSectionAssetStale(path, *entry.asset, staleWarning))
+					{
+						entry.error = "it is stale, its section world '" + GetSectionWorldPathForAsset(path)
+							+ "' changed since the last bake. Bake the section again.";
+						entry.asset.reset();
+					}
+					it = m_entries.emplace(path, std::move(entry)).first;
+				}
+
+				error = it->second.error;
+				return it->second.asset.get();
+			}
+
+			/// A provider for PreparedTerrain::Prepare reading through this cache, which must outlive it.
+			pcg::graph::SectionAssetProvider MakeProvider()
+			{
+				return [this](const String& path, String& error)
+				{
+					return Get(path, error);
+				};
+			}
+
+		private:
+			struct Entry
+			{
+				std::unique_ptr<pcg::SectionAsset> asset;
+				String error;
+			};
+
+			std::map<String, Entry> m_entries;
+		};
+
+		/// What content.prepare builds on the base terrain, read by the terrain and placement steps.
+		struct GraphBuildState
+		{
+			/// The terrain ops prepared on the base.
+			pcg::graph::PreparedTerrain terrain;
+
+			/// The spawned placements (inside the area), as evaluated on the base.
+			std::vector<pcg::Placement> spawns;
+
+			/// Per spawn: its height above the base ground the graph saw.
+			std::vector<float> spawnOffsets;
+
+			/// Spawned points dropped for lying outside the area.
+			size_t clipped = 0;
+
+			/// Section placements added by the last placement step.
+			size_t sectionPlacements = 0;
+
+			/// Paint layers the terrain step had to skip.
+			pcg::graph::TerrainEvaluateNotes notes;
+
+			/// Texture key to tile layer matching of the terrain step (lookup calls layers).
+			std::unique_ptr<EditorTextureLayers> layers;
+			pcg::graph::TextureLayerLookup lookup;
+
+			/// Warnings of the evaluation on the base, the terrain preparation and the placement step.
+			std::vector<String> warnings;
+		};
+
+		/// Evaluates out.graph (already read) with a freshly built context, the way EvaluateGraphInstance does.
+		bool EvaluateLoadedGraph(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
+			GraphInstanceEvaluation& out, String& error)
+		{
+			GraphInstanceContext context;
+			if (!BuildGraphInstanceContext(editor, record, controls, context, error))
+			{
+				return false;
+			}
+
+			out.warnings = context.warnings;
+			out.unresolved = context.unresolved;
+			pcg::graph::MergeParameters(out.graph.parameters, record.parameterOverrides, &out.warnings);
+
+			out.result = pcg::graph::Evaluate(out.graph, pcg::graph::NodeRegistry::Default(), context.context, nullptr);
+			if (out.result.issues.empty())
+			{
+				out.collected = pcg::graph::CollectPlacements(out.graph, out.result, record.area);
+				out.warnings.insert(out.warnings.end(), out.collected.warnings.begin(), out.collected.warnings.end());
+			}
+			return true;
+		}
+
+		/// The refusal checks of an evaluation: placed controls that may reach the area but failed to resolve,
+		/// validation issues, node errors and missing spawn assets. Fills warnings with the evaluation's warnings
+		/// and the node warnings.
+		bool CheckEvaluation(const GraphInstanceEvaluation& evaluation, const PathSpline& area, std::vector<String>& warnings, String& error)
+		{
+			// A control the evaluation had to skip silently drops out of the result, and the reconcile would delete
+			// what it produced (renaming a control type would wipe a forest). Only controls that cannot reach the area
+			// are harmless; unknown bounds count as reaching.
+			const pcg::graph::Bounds2D areaBounds = pcg::graph::SplineBounds(area);
+			String unresolved;
+			for (const UnresolvedPlacedControl& control : evaluation.unresolved)
+			{
+				const bool known = control.bounds.valid && pcg::graph::SaneBounds(control.bounds);
+				if (!known || control.bounds.Intersects(areaBounds))
+				{
+					unresolved += (unresolved.empty() ? "" : "; ") + ("'" + control.name + "' (" + FormatId(control.id) + "): " + control.reason);
+				}
+			}
+			if (!unresolved.empty())
+			{
+				error = "placed control(s) that may reach the area could not be resolved: " + unresolved
+					+ ". Restore or fix their control types (or move or delete the controls), then rebuild again.";
+				return false;
+			}
+
+			if (!evaluation.result.issues.empty())
+			{
+				error = "the graph has validation issues: " + DescribeGraphIssues(evaluation.graph, evaluation.result.issues);
+				return false;
+			}
+
+			warnings = evaluation.warnings;
+			String nodeErrors;
+			for (const auto& [nodeId, nodeResult] : evaluation.result.nodes)
+			{
+				const String prefix = "node " + std::to_string(nodeId) + " (" + FindNodeType(evaluation.graph, nodeId) + "): ";
+				if (!nodeResult.output.error.empty())
+				{
+					nodeErrors += (nodeErrors.empty() ? "" : "; ") + prefix + nodeResult.output.error;
+				}
+				for (const String& warning : nodeResult.output.warnings)
+				{
+					warnings.push_back(prefix + warning);
+				}
+			}
+			if (!nodeErrors.empty())
+			{
+				error = "the evaluation failed: " + nodeErrors;
+				return false;
+			}
+
+			// Every asset must exist: a placement that cannot be created would not be owned and be retried forever.
+			std::set<String> missingAssets;
+			for (const pcg::Placement& placement : evaluation.collected.placements)
+			{
+				if (!AssetRegistry::HasFile(placement.asset))
+				{
+					missingAssets.insert(placement.asset);
+				}
+			}
+			if (!missingAssets.empty())
+			{
+				String list;
+				for (const String& asset : missingAssets)
+				{
+					list += (list.empty() ? "" : ", ") + asset;
+				}
+				error = "missing spawn asset(s): " + list;
+				return false;
+			}
+			return true;
+		}
+
+		/// Prepares the evaluation's terrain ops (see PreparedTerrain::Prepare); the error names the node and asset.
+		bool PrepareTerrainOps(const GraphInstanceEvaluation& evaluation, const pcg::GraphInstanceRecord& record,
+			const GroundFunction& ground, SectionAssetCache& sections, pcg::graph::PreparedTerrain& out, String& error)
+		{
+			String prepareError;
+			if (!out.Prepare(pcg::graph::CollectTerrainOps(evaluation.graph, evaluation.result), ground, sections.MakeProvider(),
+				record.area, record.borderFade, prepareError))
+			{
+				error = "the terrain ops could not be prepared: " + prepareError;
+				return false;
+			}
+			return true;
 		}
 	}
 
@@ -312,27 +503,12 @@ namespace mmo
 			return false;
 		}
 
-		GraphInstanceContext context;
-		if (!BuildGraphInstanceContext(editor, record, controls, context, error))
-		{
-			return false;
-		}
-
-		out.warnings = context.warnings;
-		out.unresolved = context.unresolved;
-		pcg::graph::MergeParameters(out.graph.parameters, record.parameterOverrides, &out.warnings);
-
-		out.result = pcg::graph::Evaluate(out.graph, pcg::graph::NodeRegistry::Default(), context.context, nullptr);
-		if (out.result.issues.empty())
-		{
-			out.collected = pcg::graph::CollectPlacements(out.graph, out.result, record.area);
-			out.warnings.insert(out.warnings.end(), out.collected.warnings.begin(), out.collected.warnings.end());
-		}
-		return true;
+		return EvaluateLoadedGraph(editor, record, controls, out, error);
 	}
 
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
-		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls)
+		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
+		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap)
 	{
 		const Clock::time_point start = Clock::now();
 		GeneratorBuildReport report;
@@ -358,94 +534,135 @@ namespace mmo
 			}
 		}
 
-		GraphInstanceEvaluation evaluation;
-		if (!EvaluateGraphInstance(editor, record, controls, evaluation, error))
+		// Every refusal is decided here, before ApplyGeneratedContent changes anything: a dry run on the live
+		// terrain (which still carries the previous contribution). Neither the checks nor the section assets, the
+		// op geometry or the influence depend on the heights; content.prepare repeats the run on the base terrain
+		// and fails only on what this run cannot see (ApplyGeneratedContent then restores the old contribution).
+		GraphInstanceEvaluation dryRun;
+		if (!EvaluateGraphInstance(editor, record, controls, dryRun, error))
 		{
 			return refuse(error);
 		}
 
-		// A control the evaluation had to skip silently drops out of the result, and the reconcile would delete what
-		// it produced (renaming a control type would wipe a forest). Only controls that cannot reach the area are
-		// harmless; unknown bounds count as reaching.
-		const pcg::graph::Bounds2D areaBounds = pcg::graph::SplineBounds(record.area);
-		String unresolved;
-		for (const UnresolvedPlacedControl& control : evaluation.unresolved)
+		std::vector<String> dryWarnings;
+		if (!CheckEvaluation(dryRun, record.area, dryWarnings, error))
 		{
-			const bool known = control.bounds.valid && pcg::graph::SaneBounds(control.bounds);
-			if (!known || control.bounds.Intersects(areaBounds))
-			{
-				unresolved += (unresolved.empty() ? "" : "; ") + ("'" + control.name + "' (" + FormatId(control.id) + "): " + control.reason);
-			}
-		}
-		if (!unresolved.empty())
-		{
-			return refuse("placed control(s) that may reach the area could not be resolved: " + unresolved
-				+ ". Restore or fix their control types (or move or delete the controls), then rebuild again.");
+			return refuse(error);
 		}
 
-		if (!evaluation.result.issues.empty())
+		// EvaluateGraphInstance built the context, so the terrain exists.
+		terrain::Terrain* terrain = editor.GetTerrain();
+		const GroundFunction liveGround = [terrain](const float x, const float z)
 		{
-			return refuse("the graph has validation issues: " + DescribeGraphIssues(evaluation.graph, evaluation.result.issues));
+			return terrain->GetSmoothHeightAt(x, z);
+		};
+
+		const auto sections = std::make_shared<SectionAssetCache>();
+		pcg::graph::PreparedTerrain dryTerrain;
+		if (!PrepareTerrainOps(dryRun, record, liveGround, *sections, dryTerrain, error))
+		{
+			return refuse(error);
 		}
 
-		std::vector<String> warnings = evaluation.warnings;
-		String nodeErrors;
-		for (const auto& [nodeId, nodeResult] : evaluation.result.nodes)
+		const pcg::WorldRect areaRect = GetAreaRect(record.area);
+		if (!dryTerrain.IsEmpty() && checkTerrainOverlap && !checkTerrainOverlap(areaRect, error))
 		{
-			const String prefix = "node " + std::to_string(nodeId) + " (" + FindNodeType(evaluation.graph, nodeId) + "): ";
-			if (!nodeResult.output.error.empty())
-			{
-				nodeErrors += (nodeErrors.empty() ? "" : "; ") + prefix + nodeResult.output.error;
-			}
-			for (const String& warning : nodeResult.output.warnings)
-			{
-				warnings.push_back(prefix + warning);
-			}
-		}
-		if (!nodeErrors.empty())
-		{
-			return refuse("the evaluation failed: " + nodeErrors);
+			return refuse(error);
 		}
 
-		// Every asset must exist: a placement that cannot be created would not be owned and be retried forever.
-		std::set<String> missingAssets;
-		for (const pcg::Placement& placement : evaluation.collected.placements)
-		{
-			if (!AssetRegistry::HasFile(placement.asset))
-			{
-				missingAssets.insert(placement.asset);
-			}
-		}
-		if (!missingAssets.empty())
-		{
-			String list;
-			for (const String& asset : missingAssets)
-			{
-				list += (list.empty() ? "" : ", ") + asset;
-			}
-			return refuse("missing spawn asset(s): " + list);
-		}
+		const auto state = std::make_shared<GraphBuildState>();
+		state->layers = std::make_unique<EditorTextureLayers>(*terrain);
+		state->lookup = state->layers->MakeLookup();
 
-		// Placements only: the terrain step is skipped (no terrain target), the positions come from the graph.
 		GeneratedContent content;
-		content.influence = GetAreaBounds(record.area);
-		const std::vector<pcg::Placement>& placements = evaluation.collected.placements;
-		content.placements = [&placements](const GroundFunction&, const GroundFunction&, std::vector<pcg::Placement>& out)
+		// Writes are clipped to the area. The terrain step is always set, so the previous contribution is undone on
+		// every rebuild and a graph without terrain ops writes nothing.
+		content.influence = areaRect;
+		// Ocean pages only become terrain where an op reaches (an empty rect: nowhere).
+		content.writeRects = { dryTerrain.IsEmpty() ? pcg::WorldRect{ 1.0f, 1.0f, 0.0f, 0.0f } : dryTerrain.GetInfluence() };
+		content.waterMaterial = dryTerrain.GetWaterMaterial();
+
+		const pcg::graph::Graph& graph = dryRun.graph;
+		content.prepare = [&editor, &record, &controls, &graph, sections, state](const GroundFunction& ground, String& prepareError)
 		{
-			out = placements;
+			// The previous contribution is undone: the graph sees the base terrain.
+			GraphInstanceEvaluation base;
+			base.graph = graph;
+			std::vector<String> warnings;
+			if (!EvaluateLoadedGraph(editor, record, controls, base, prepareError) ||
+				!CheckEvaluation(base, record.area, warnings, prepareError) ||
+				!PrepareTerrainOps(base, record, ground, *sections, state->terrain, prepareError))
+			{
+				return false;
+			}
+
+			state->spawns = std::move(base.collected.placements);
+			state->clipped = base.collected.clipped;
+			state->spawnOffsets.clear();
+			for (const pcg::Placement& placement : state->spawns)
+			{
+				state->spawnOffsets.push_back(placement.position.y - ground(placement.position.x, placement.position.z));
+			}
+
+			state->warnings = std::move(warnings);
+			const std::vector<String>& terrainWarnings = state->terrain.GetWarnings();
+			state->warnings.insert(state->warnings.end(), terrainWarnings.begin(), terrainWarnings.end());
+			return true;
+		};
+
+		content.terrain = [state](const float x, const float z, const float baseHeight)
+		{
+			return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes);
+		};
+
+		content.placements = [state](const GroundFunction& ground, const GroundFunction&, std::vector<pcg::Placement>& out)
+		{
+			// Spawns keep their height above the ground, now the final one.
+			out.clear();
+			std::set<uint64> keys;
+			for (size_t i = 0; i < state->spawns.size(); ++i)
+			{
+				pcg::Placement placement = state->spawns[i];
+				placement.position.y = ground(placement.position.x, placement.position.z) + state->spawnOffsets[i];
+				keys.insert(placement.key);
+				out.push_back(std::move(placement));
+			}
+
+			std::vector<pcg::Placement> sectionPlacements;
+			state->terrain.BuildPlacements(ground, sectionPlacements, &state->warnings);
+			state->sectionPlacements = 0;
+			for (pcg::Placement& placement : sectionPlacements)
+			{
+				placement.key = pcg::Hash(placement.key, 0, 0, SectionPlacementKeySalt);
+				if (!keys.insert(placement.key).second)
+				{
+					state->warnings.push_back("a section placement (" + placement.asset + ") was dropped: its key collides with another placement");
+					continue;
+				}
+				out.push_back(std::move(placement));
+				++state->sectionPlacements;
+			}
+
+			std::sort(out.begin(), out.end(), [](const pcg::Placement& a, const pcg::Placement& b)
+			{
+				return a.key < b.key;
+			});
 		};
 
 		report = ApplyGeneratedContent(editor, content, record.content, record.id, GraphInstanceLabel);
-		report.warnings.insert(report.warnings.end(), warnings.begin(), warnings.end());
+		report.warnings.insert(report.warnings.end(), state->warnings.begin(), state->warnings.end());
+		state->terrain.DescribeNotes(state->notes, report.warnings);
 		report.milliseconds = MillisecondsSince(start);
 		if (!report.ok)
 		{
 			report.error = "Rebuild of '" + record.name + "' failed: " + report.error;
+			ELOG("PCG: " << report.error);
 		}
 		else
 		{
-			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << placements.size()
-				<< " placement(s) inside the area, " << evaluation.collected.clipped << " clipped");
+			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << state->spawns.size()
+				<< " spawn placement(s) inside the area, " << state->clipped << " clipped, " << state->sectionPlacements
+				<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written");
 		}
 		return report;
 	}

@@ -206,6 +206,69 @@ namespace mmo::pcg
 		}
 	}
 
+	TerrainContribution CaptureSamples(const ITerrainAccess& terrain, const TerrainContribution& contribution)
+	{
+		TerrainContribution captured = contribution;
+		for (auto& e : captured.outer)
+		{
+			e.written = terrain.GetOuterHeight(e.x, e.z);
+		}
+		for (auto& e : captured.inner)
+		{
+			e.written = terrain.GetInnerHeight(e.x, e.z);
+		}
+		for (auto& e : captured.waterHeights)
+		{
+			e.written = terrain.GetWaterHeight(e.x, e.z);
+		}
+		for (auto& e : captured.splat)
+		{
+			e.written = terrain.GetSplat(e.x, e.z);
+		}
+		for (auto& e : captured.waterQuads)
+		{
+			e.written = terrain.GetWaterQuad(e.x, e.z);
+		}
+		for (auto& e : captured.materials)
+		{
+			e.written = terrain.GetTileMaterial(e.x, e.z);
+		}
+		return captured;
+	}
+
+	void RestoreSamples(ITerrainAccess& terrain, const TerrainContribution& captured)
+	{
+		for (const auto& e : captured.outer)
+		{
+			terrain.SetOuterHeight(e.x, e.z, e.written);
+		}
+		for (const auto& e : captured.inner)
+		{
+			terrain.SetInnerHeight(e.x, e.z, e.written);
+		}
+		for (const auto& e : captured.waterHeights)
+		{
+			terrain.SetWaterHeight(e.x, e.z, e.written);
+		}
+		for (const auto& e : captured.splat)
+		{
+			terrain.SetSplat(e.x, e.z, e.written);
+		}
+		for (const auto& e : captured.waterQuads)
+		{
+			terrain.SetWaterQuad(e.x, e.z, e.written);
+		}
+		for (const auto& e : captured.materials)
+		{
+			terrain.SetTileMaterial(e.x, e.z, e.written);
+		}
+
+		if (!captured.IsEmpty())
+		{
+			terrain.FinishEdits(captured.touchedOuter);
+		}
+	}
+
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const TerrainTargetFunction& target,
 		const String& material, TerrainContribution& out)
 	{

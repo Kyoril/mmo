@@ -59,19 +59,25 @@ namespace mmo
 		/// @brief Optional rects (inside the influence) covering every terrain sample the build may write.
 		///        Ocean placeholder pages are turned into real terrain before writing, but only where they
 		///        overlap one of these rects (grown by 1 m for seam samples), so a long section path does
-		///        not materialise every open-ocean page of its bounding box. Empty = the whole influence.
+		///        not materialise every open-ocean page of its bounding box. Empty = the whole influence. A rect
+		///        with min > max is empty: a list of only such rects materialises nothing (a build that writes
+		///        no terrain but must still undo its previous contribution).
 		std::vector<pcg::WorldRect> writeRects;
 
 		/// @brief Optional step run after the previous contribution was undone and before the new
 		///        one is written, with the height of the ground as it is now. Generators whose shape
 		///        depends on the ground (the oasis rim) prepare it here; terrain and placements may
-		///        capture what it prepares. Returning false aborts the build with the given error
-		///        (the previous contribution is already undone then). May be empty.
+		///        capture what it prepares. Returning false aborts the build with the given error; the
+		///        previous contribution is then put back exactly (the terrain samples it recorded get the
+		///        values they had before the undo, the record keeps it) and the placements are not touched,
+		///        so the world ends as before (ocean pages materialised for writeRects stay materialised).
+		///        May be empty.
 		std::function<bool(const GroundFunction& ground, String& error)> prepare;
 
 		/// @brief What the generator wants on the terrain inside the influence. May be empty: the build
 		///        then leaves the terrain alone (no ocean pages materialised, the recorded contribution is
-		///        neither undone nor rewritten) and only reconciles the placements.
+		///        neither undone nor rewritten) and only reconciles the placements. A set function that
+		///        returns weight 0 everywhere undoes the previous contribution and writes nothing.
 		pcg::TerrainTargetFunction terrain;
 
 		/// @brief Material set on tiles where a target asks for it ("" = none).
@@ -89,7 +95,8 @@ namespace mmo
 	///        The content must have been validated by the caller. Loads the pages of the old and new
 	///        influence and of every owned placement and refuses (the world stays untouched) if a page
 	///        is not ready or the recorded contribution no longer matches the terrain. Then undoes the
-	///        previous contribution, runs content.prepare, writes the new contribution, builds the
+	///        previous contribution, runs content.prepare (a failing prepare puts the previous contribution
+	///        back and ends the call), writes the new contribution, builds the
 	///        placements and reconciles them against the owned ones (remove / update / create).
 	///        Material overrides of every placement are sorted by index before they are compared or
 	///        created. Afterwards owned holds the new influence, contribution and placements.

@@ -75,6 +75,16 @@ namespace mmo::pcg
 	/// Clears the contribution.
 	void Unapply(ITerrainAccess& terrain, TerrainContribution& contribution);
 
+	/// Reads the terrain's current value at every sample the contribution recorded. The result has the
+	/// contribution's samples, base values and touchedOuter, with `written` holding the current value.
+	/// RestoreSamples puts exactly these values back, so a build that fails after Unapply can return
+	/// the terrain to the state it had when the samples were captured.
+	TerrainContribution CaptureSamples(const ITerrainAccess& terrain, const TerrainContribution& contribution);
+
+	/// Writes the `written` value of every entry of a CaptureSamples result back into the terrain, then
+	/// calls FinishEdits with its touchedOuter (not when it is empty).
+	void RestoreSamples(ITerrainAccess& terrain, const TerrainContribution& captured);
+
 	/// Writes the target over `rect` and records base/written for every changed sample. Entries are
 	/// stored sorted by (z, x). `material` is the tile material set where target.setMaterial.
 	/// `out` is cleared first. Indices outside the terrain must not be covered by `rect`.

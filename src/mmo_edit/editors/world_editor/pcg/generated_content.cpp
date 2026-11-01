@@ -325,6 +325,11 @@ namespace mmo
 		{
 			for (const pcg::WorldRect& rect : content.writeRects)
 			{
+				if (rect.minX > rect.maxX || rect.minZ > rect.maxZ)
+				{
+					// Empty rect: nothing to write there.
+					continue;
+				}
 				terrain->MaterializeOceanPages(
 					std::max(rect.minX - WriteRectSeamMargin, content.influence.minX),
 					std::max(rect.minZ - WriteRectSeamMargin, content.influence.minZ),
@@ -336,6 +341,10 @@ namespace mmo
 		EditorTerrainAccess access(*terrain);
 		access.SetDefaultWaterMaterial(content.waterMaterial);
 
+		// The previous contribution and the terrain values under it before the undo.
+		pcg::TerrainContribution recorded;
+		pcg::TerrainContribution captured;
+
 		// 2. Undo the previous contribution (keeps hand sculpting done since as a height delta).
 		if (writesTerrain)
 		{
@@ -344,10 +353,13 @@ namespace mmo
 				report.milliseconds = MillisecondsSince(start);
 				return report;
 			}
+			// A failing prepare puts these samples back, so the old contribution and the record stay.
+			recorded = owned.terrain;
+			captured = pcg::CaptureSamples(access, owned.terrain);
 			pcg::Unapply(access, owned.terrain);
 
-			// The contribution is gone from the world now; the record must not claim it even if prepare
-			// fails below (Unapply clears it already, this keeps the invariant explicit).
+			// The contribution is gone from the world now; the record must not claim it while it is gone
+			// (Unapply clears it already, this keeps the invariant explicit).
 			owned.terrain.Clear();
 		}
 
@@ -359,6 +371,13 @@ namespace mmo
 
 		if (content.prepare && !content.prepare(groundHeight, report.error))
 		{
+			// Put the old contribution back exactly as it was (hand sculpting since included): the
+			// world and the record end as before the call.
+			if (writesTerrain)
+			{
+				pcg::RestoreSamples(access, captured);
+				owned.terrain = std::move(recorded);
+			}
 			ReportTouchedPages(access, report);
 			report.milliseconds = MillisecondsSince(start);
 			return report;

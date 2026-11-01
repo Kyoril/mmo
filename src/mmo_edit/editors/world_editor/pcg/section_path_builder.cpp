@@ -2,6 +2,7 @@
 
 #include "section_path_builder.h"
 
+#include "editor_texture_layers.h"
 #include "section_bake_job.h"
 #include "editors/world_editor/edit_modes/world_edit_mode.h"
 
@@ -9,7 +10,6 @@
 #include "binary_io/reader.h"
 #include "binary_io/stream_source.h"
 #include "log/default_log_levels.h"
-#include "terrain/page.h"
 #include "terrain/terrain.h"
 
 #include <algorithm>
@@ -31,13 +31,13 @@ namespace mmo
 		/// Skipped (tile, layer) pairs listed in a warning before the rest is only counted.
 		constexpr size_t MaxListedSkips = 24;
 
-		/// Maps section paint layers to the layers of the tile under a world position by texture key,
-		/// caching the result per tile and remembering every painted section layer a tile lacks.
+		/// Maps section paint layers to the layers of the tile under a world position by texture key
+		/// (EditorTextureLayers), caching the result per tile and remembering every painted section layer a tile lacks.
 		class TileLayerRemap final
 		{
 		public:
 			TileLayerRemap(terrain::Terrain& terrain, const pcg::SectionAsset& asset)
-				: m_terrain(terrain)
+				: m_layers(terrain)
 				, m_layerTextures(asset.layerTextures)
 			{
 				// Only layers the section actually paints can be skipped.
@@ -66,7 +66,7 @@ namespace mmo
 			std::array<int8, 4> Get(const float x, const float z)
 			{
 				int32 tileX = 0, tileZ = 0;
-				if (!m_terrain.GetTileIndexByWorldPosition(Vector3(x, 0.0f, z), tileX, tileZ))
+				if (!m_layers.GetTileIndex(x, z, tileX, tileZ))
 				{
 					return { -1, -1, -1, -1 };
 				}
@@ -78,36 +78,10 @@ namespace mmo
 					return cached->second;
 				}
 
-				std::array<String, 4> tileTextures;
-				int32 pageX = 0, pageZ = 0, localX = 0, localZ = 0;
-				if (m_terrain.GetPageIndexFromGlobalTileIndex(tileX, tileZ, pageX, pageZ) &&
-					m_terrain.GetLocalTileIndexByGlobalTileIndex(tileX, tileZ, localX, localZ))
-				{
-					if (const terrain::Page* page = m_terrain.GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ)))
-					{
-						const MaterialPtr material = page->GetTileMaterial(static_cast<uint32>(localX), static_cast<uint32>(localZ));
-						for (uint8 layer = 0; layer < 4; ++layer)
-						{
-							tileTextures[layer] = GetTerrainLayerTextureKey(material, layer);
-						}
-					}
-				}
-
 				std::array<int8, 4> map{ -1, -1, -1, -1 };
 				for (size_t layer = 0; layer < 4; ++layer)
 				{
-					if (!m_layerTextures[layer].empty())
-					{
-						for (size_t target = 0; target < 4; ++target)
-						{
-							if (pcg::TextureKeysMatch(tileTextures[target], m_layerTextures[layer]))
-							{
-								map[layer] = static_cast<int8>(target);
-								break;
-							}
-						}
-					}
-
+					map[layer] = m_layers.FindLayer(tileX, tileZ, m_layerTextures[layer]);
 					if (map[layer] < 0 && m_painted[layer])
 					{
 						m_skipped.emplace(tileX, tileZ, static_cast<uint32>(layer));
@@ -155,7 +129,7 @@ namespace mmo
 			}
 
 		private:
-			terrain::Terrain& m_terrain;
+			EditorTextureLayers m_layers;
 			std::array<String, 4> m_layerTextures;
 			std::array<bool, 4> m_painted{};
 			std::map<std::pair<int32, int32>, std::array<int8, 4>> m_cache;

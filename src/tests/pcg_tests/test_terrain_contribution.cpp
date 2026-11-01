@@ -130,6 +130,50 @@ TEST_CASE("Hand sculpt under the result is kept", "[terrain_contribution]")
 	CHECK(terrain.m_data == expected);
 }
 
+TEST_CASE("RestoreSamples undoes an Unapply exactly, hand sculpt included", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	TerrainContribution c;
+	Apply(terrain, FullRect, Bowl, "Grass", c);
+
+	REQUIRE(!c.outer.empty());
+	const auto e = c.outer[c.outer.size() / 2];
+	terrain.SetOuterHeight(e.x, e.z, terrain.GetOuterHeight(e.x, e.z) + 2.0f);
+	const FakeTerrain::Data before = terrain.m_data;
+	const TerrainContribution recorded = c;
+
+	const TerrainContribution captured = CaptureSamples(terrain, c);
+	CHECK(captured.outer.size() == c.outer.size());
+	CHECK(captured.materials.size() == c.materials.size());
+
+	Unapply(terrain, c);
+	REQUIRE_FALSE(terrain.m_data == before);
+
+	const int finishes = terrain.m_finishCount;
+	RestoreSamples(terrain, captured);
+	CHECK(terrain.m_data == before);
+	CHECK(terrain.m_finishCount == finishes + 1);
+
+	// The restored terrain carries the recorded contribution again: a later Unapply works as before.
+	c = recorded;
+	CHECK(ContributionMatchRatio(terrain, c) > kMinContributionMatchRatio);
+	Unapply(terrain, c);
+	FakeTerrain::Data expected = FakeTerrain().m_data;
+	expected.outer[e.z * FakeTerrain::N + e.x] += 2.0f;
+	CHECK(terrain.m_data == expected);
+}
+
+TEST_CASE("RestoreSamples of an empty capture changes nothing", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	const FakeTerrain::Data before = terrain.m_data;
+	const TerrainContribution captured = CaptureSamples(terrain, TerrainContribution());
+	CHECK(captured.IsEmpty());
+	RestoreSamples(terrain, captured);
+	CHECK(terrain.m_data == before);
+	CHECK(terrain.m_finishCount == 0);
+}
+
 TEST_CASE("Hand paint is kept as new base", "[terrain_contribution]")
 {
 	FakeTerrain terrain;

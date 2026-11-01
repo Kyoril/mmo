@@ -199,7 +199,8 @@ namespace mmo
 		///        Instance" button passes 0).
 		/// @param name Name of the instance; empty picks "Graph Instance <n>".
 		/// @param parameterSettings Parameter overrides as name and value text (typed by the graph's parameter
-		///        defaults, see ParseGraphParameterValue); every name must be a parameter of the graph.
+		///        defaults, see ParseGraphParameterValue); every name must be a parameter of the graph, except
+		///        GraphInstanceBorderFadeSetting ("borderFade"), which sets the record's border fade (m, >= 0).
 		/// @param id Receives the id of the new instance.
 		/// @param error Receives the reason when the call returns false (nothing is added then).
 		/// @return False on too few or non-finite points, an area overlapping another graph instance's area

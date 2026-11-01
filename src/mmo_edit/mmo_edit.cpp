@@ -1499,7 +1499,8 @@ int main(int argc, char* arg[])
 				//          [--set param=value ...]
 				// Adds a graph instance over the closed area through the points (sharp corners) with the graph, seed
 				// (default and 0: derived from the instance's id)
-				// and parameter overrides (typed by the graph's parameters). Does not build it (use --pcg-rebuild);
+				// and parameter overrides (typed by the graph's parameters; --set borderFade=M sets the instance's
+				// terrain border fade in metres instead, default 8). Does not build it (use --pcg-rebuild);
 				// saves the world and logs the new id (0 = success). An area overlapping another graph instance's
 				// area ("overlaps"), an unreadable graph or a bad --set are refused before anything is added or saved.
 				mmo::RedirectUnattendedLog("pcg_new_graph_instance");

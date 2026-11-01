@@ -33,17 +33,20 @@ namespace mmo::pcg
 		graph::AttributeSet parameterOverrides;
 		/// Maximum number of points a graph node may produce.
 		size_t pointLimit = 2'000'000;
+		/// Width (m) inside the area border over which terrain writes fade to nothing (0 = hard edge). Finite, >= 0.
+		float borderFade = 8.0f;
 		/// What the last build put into the world.
 		OwnedContent content;
 	};
 
 	/// Writes the record as binary (magic PCGG, version 1): id, a JSON text blob (name, graphPath, seed,
-	/// parameterOverrides, pointLimit), the area points, pointIds, nextPointId, then the owned content. Deterministic.
+	/// parameterOverrides, pointLimit, borderFade), the area points, pointIds, nextPointId, then the owned content.
+	/// Deterministic.
 	/// @return False if pointIds is not parallel to area.points.
 	bool WriteGraphInstanceRecord(io::Writer& writer, const GraphInstanceRecord& record);
 
-	/// Reads a record written by WriteGraphInstanceRecord. Unknown JSON keys are ignored. The area always reads as a
-	/// closed Catmull-Rom loop.
+	/// Reads a record written by WriteGraphInstanceRecord. Unknown JSON keys are ignored; a blob without borderFade
+	/// (written before it existed) reads the default 8. The area always reads as a closed Catmull-Rom loop.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadGraphInstanceRecord(io::Reader& reader, GraphInstanceRecord& out);
 

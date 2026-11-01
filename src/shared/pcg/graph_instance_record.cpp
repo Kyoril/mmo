@@ -129,6 +129,7 @@ namespace mmo::pcg
 			blob["graphPath"] = record.graphPath;
 			blob["seed"] = record.seed;
 			blob["pointLimit"] = static_cast<uint64>(record.pointLimit);
+			blob["borderFade"] = record.borderFade;
 			Json overrides = Json::object();
 			for (const auto& entry : record.parameterOverrides)
 			{
@@ -166,6 +167,13 @@ namespace mmo::pcg
 				return false;
 			}
 			out.pointLimit = static_cast<size_t>(limit);
+
+			// Optional: records written before it existed keep the default.
+			out.borderFade = GraphInstanceRecord().borderFade;
+			if (!graph::jsonutil::ReadNumber(blob, "borderFade", out.borderFade, "instance", error) || out.borderFade < 0.0f)
+			{
+				return false;
+			}
 
 			const Json* overrides = graph::jsonutil::Find(blob, "parameterOverrides");
 			if (overrides == nullptr || !overrides->is_object())

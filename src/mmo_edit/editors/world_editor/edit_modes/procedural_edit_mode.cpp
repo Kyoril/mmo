@@ -19,6 +19,7 @@
 #include "terrain/terrain.h"
 #include "editor_windows/asset_picker_widget.h"
 #include "../pcg/control_details.h"
+#include "../pcg/text_parsing.h"
 
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
@@ -1606,6 +1607,24 @@ namespace mmo
 		record.graphPath = graphPath;
 		record.seed = seed;
 
+		// borderFade is a field of the instance, not a graph parameter.
+		std::vector<std::pair<String, String>> graphSettings;
+		for (const auto& [settingName, text] : parameterSettings)
+		{
+			if (settingName != GraphInstanceBorderFadeSetting)
+			{
+				graphSettings.emplace_back(settingName, text);
+				continue;
+			}
+
+			float borderFade = 0.0f;
+			if (!ParseFloatText(text, borderFade) || borderFade < 0.0f)
+			{
+				return fail(String(GraphInstanceBorderFadeSetting) + " needs a finite number >= 0, got '" + text + "'");
+			}
+			record.borderFade = borderFade;
+		}
+
 		// Overrides are typed by the graph's parameters, so the graph must be readable when any are given.
 		if (!graphPath.empty())
 		{
@@ -1616,7 +1635,7 @@ namespace mmo
 				return fail(graphError);
 			}
 
-			for (const auto& [parameterName, text] : parameterSettings)
+			for (const auto& [parameterName, text] : graphSettings)
 			{
 				const auto parameter = std::find_if(graph.parameters.begin(), graph.parameters.end(),
 					[&parameterName](const pcg::graph::ParameterDef& def) { return def.name == parameterName; });
@@ -1634,7 +1653,7 @@ namespace mmo
 				record.parameterOverrides[parameterName] = value;
 			}
 		}
-		else if (!parameterSettings.empty())
+		else if (!graphSettings.empty())
 		{
 			return fail("Parameter overrides need a graph.");
 		}
@@ -1783,7 +1802,26 @@ namespace mmo
 		// The rebuild reads the saved graph file; the panel follows what it read.
 		m_graphs.erase(control.instance.graphPath);
 
-		const GeneratorBuildReport report = RebuildGraphInstance(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this);
+		// An instance whose graph writes terrain may write anywhere inside its area: no oasis or section path may
+		// have built there (the rebuild asks once it knows the graph has terrain ops).
+		const auto checkTerrainOverlap = [this, &control](const pcg::WorldRect& areaRect, String& overlapError)
+		{
+			if (CheckOverlap(control, { areaRect }, overlapError))
+			{
+				return true;
+			}
+
+			// The rebuild's refusal message says that already.
+			const String refused = "Rebuild refused: ";
+			if (overlapError.compare(0, refused.size(), refused) == 0)
+			{
+				overlapError.erase(0, refused.size());
+			}
+			return false;
+		};
+
+		const GeneratorBuildReport report = RebuildGraphInstance(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this,
+			checkTerrainOverlap);
 		if (!report.ok)
 		{
 			error = report.error;
@@ -1819,9 +1857,11 @@ namespace mmo
 
 	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(const Control& control)
 	{
-		// Graph instances write no terrain (yet): their placements do not get in the way of a terrain
-		// contribution. Their areas are checked against each other instead (AreasOverlap).
-		if (control.kind == ControlKind::GraphInstance || control.Content().IsEmpty())
+		// A graph instance that wrote terrain may have written anywhere inside its area: it covers its area's
+		// bounds (the recorded influence). One that only placed objects is not in the way of a terrain writer.
+		// Between graph instances the areas themselves are compared (AreasOverlap, sharing an edge is fine), see
+		// CheckOverlap.
+		if (control.Content().IsEmpty() || (control.kind == ControlKind::GraphInstance && control.Content().terrain.IsEmpty()))
 		{
 			return {};
 		}
@@ -1841,6 +1881,12 @@ namespace mmo
 		for (const Control& other : m_controls)
 		{
 			if (other.Id() == control.Id())
+			{
+				continue;
+			}
+
+			// Graph instance areas may touch each other; RebuildGraphInstance compares them exactly (AreasOverlap).
+			if (control.kind == ControlKind::GraphInstance && other.kind == ControlKind::GraphInstance)
 			{
 				continue;
 			}
@@ -2749,6 +2795,15 @@ namespace mmo
 		if (ImGui::IsItemHovered())
 		{
 			ImGui::SetTooltip("Most points one node may produce; a node over it stops with a warning.");
+		}
+
+		if (ImGui::DragFloat("Border fade (m)", &record.borderFade, 0.25f, 0.0f, 500.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp))
+		{
+			MarkChanged(control);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Terrain writes fade to nothing over this distance inside the area border (0 = hard edge).");
 		}
 
 		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))

@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "pcg/graph_instance_record.h"
+#include "pcg/graph/json_util.h"
 #include "pcg/section_path_record.h"
 #include "binary_io/memory_source.h"
 #include "binary_io/vector_sink.h"
@@ -211,6 +212,59 @@ TEST_CASE("GraphInstanceRecord ignores unknown JSON keys and rejects broken JSON
 	CHECK_FALSE(Deserialize(splice("{not json"), loaded));
 	CHECK_FALSE(Deserialize(splice("[]"), loaded));
 	CHECK_FALSE(Deserialize(splice("{}"), loaded));
+}
+
+TEST_CASE("GraphInstanceRecord keeps borderFade and defaults it for older records", "[graph_instance_record]")
+{
+	GraphInstanceRecord original = MakePopulated();
+	CHECK(original.borderFade == 8.0f);
+	original.borderFade = 3.5f;
+	const std::vector<char> bytes = Serialize(original);
+
+	GraphInstanceRecord loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(loaded.borderFade == 3.5f);
+	CHECK(Serialize(loaded) == bytes);
+
+	// Layout: magic, version, id, length-prefixed JSON, the rest.
+	uint32 length = 0;
+	std::memcpy(&length, bytes.data() + 16, sizeof(length));
+	graph::jsonutil::Json blob = graph::jsonutil::Json::parse(String(bytes.begin() + 20, bytes.begin() + 20 + length), nullptr, false);
+	REQUIRE(blob.is_object());
+	REQUIRE(blob.contains("borderFade"));
+
+	const auto splice = [&](const graph::jsonutil::Json& replacement)
+	{
+		const String text = graph::jsonutil::Dump(replacement);
+		std::vector<char> result(bytes.begin(), bytes.begin() + 16);
+		const uint32 newLength = static_cast<uint32>(text.size());
+		result.insert(result.end(), reinterpret_cast<const char*>(&newLength), reinterpret_cast<const char*>(&newLength) + sizeof(newLength));
+		result.insert(result.end(), text.begin(), text.end());
+		result.insert(result.end(), bytes.begin() + 20 + length, bytes.end());
+		return result;
+	};
+
+	// Written before the field existed: the default.
+	graph::jsonutil::Json old = blob;
+	old.erase("borderFade");
+	GraphInstanceRecord legacy;
+	legacy.borderFade = 1.0f;
+	REQUIRE(Deserialize(splice(old), legacy));
+	CHECK(legacy.borderFade == 8.0f);
+	CHECK(legacy.name == original.name);
+
+	graph::jsonutil::Json zero = blob;
+	zero["borderFade"] = 0;
+	REQUIRE(Deserialize(splice(zero), loaded));
+	CHECK(loaded.borderFade == 0.0f);
+
+	graph::jsonutil::Json negative = blob;
+	negative["borderFade"] = -1.0;
+	CHECK_FALSE(Deserialize(splice(negative), loaded));
+
+	graph::jsonutil::Json text = blob;
+	text["borderFade"] = "wide";
+	CHECK_FALSE(Deserialize(splice(text), loaded));
 }
 
 TEST_CASE("AreasOverlap separates contact from shared interior", "[graph_instance_record]")

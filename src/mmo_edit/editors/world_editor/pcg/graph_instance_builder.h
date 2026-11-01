@@ -13,6 +13,7 @@
 #include "pcg/graph/graph_output.h"
 #include "pcg/graph/node_util.h"
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,10 @@ namespace mmo
 
 	/// @brief File extension of graph assets.
 	constexpr const char* GraphAssetExtension = ".hpcgg";
+
+	/// @brief Name of the graph instance setting (ProceduralEditMode::CreateGraphInstance, --pcg-new-graph-instance --set)
+	///        that sets the record's borderFade instead of a graph parameter.
+	constexpr const char* GraphInstanceBorderFadeSetting = "borderFade";
 
 	/// @brief A placed control that could not be resolved against its control type (missing or invalid type, or
 	///        geometry that does not fit the type's shape).
@@ -145,20 +150,32 @@ namespace mmo
 	bool EvaluateGraphInstance(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
 		GraphInstanceEvaluation& out, String& error);
 
-	/// @brief Loads the saved graph file, validates it, evaluates it, collects placements and applies them through
-	///        ApplyGeneratedContent (no terrain step in phase 2). Refuses, leaving the world and record untouched, on:
-	///        missing graph, parse error, validation issues (message lists them), evaluation error, overlap with another
-	///        instance's area, missing spawn assets, or a placed control that failed to resolve (missing, renamed or
-	///        invalid type, geometry not fitting the shape) whose bounds reach the area or cannot be computed: the
-	///        evaluation would silently run without it and the reconcile would delete its content (the message names
-	///        those controls).
+	/// @brief Rebuilds a graph instance: terrain ops and placements through ApplyGeneratedContent.
+	/// @details First a dry run on the live terrain decides every refusal, leaving the world and record untouched:
+	///          missing graph, parse error, validation issues (message lists them), evaluation error, overlap with
+	///          another instance's area, missing spawn assets, a placed control that failed to resolve (missing,
+	///          renamed or invalid type, geometry not fitting the shape) whose bounds reach the area or cannot be
+	///          computed (the evaluation would silently run without it and the reconcile would delete its content; the
+	///          message names those controls), and terrain ops that cannot be prepared (missing, unreadable or stale
+	///          section asset, a section param it rejects; the message names the node and asset).
+	///          Then ApplyGeneratedContent undoes the previous contribution and, in content.prepare, the graph is
+	///          evaluated again on that base terrain, its terrain ops are prepared on it (pcg::graph::PreparedTerrain,
+	///          clipped to the area with the record's borderFade) and written; an op-free graph writes nothing. Should
+	///          that second run fail after all, the old contribution is put back (the world ends as before). Spawned
+	///          placements keep their height above the base ground on the final ground; the section placements of
+	///          the ops are added under salted keys.
 	/// @param editor The world editor to work on. Must have a terrain.
 	/// @param record The instance to rebuild; its owned content is updated.
 	/// @param otherInstances The world's other graph instances (their areas must not overlap this one's).
 	/// @param controls The procedural mode holding the world's placed controls.
-	/// @return The report (warnings: control resolution, parameter merge, node warnings and collection warnings).
+	/// @param checkTerrainOverlap If set, called with the area's bounds when the graph has terrain ops (part of the
+	///        dry run); returning false refuses the rebuild with its error (the procedural mode checks the bounds
+	///        against what oases and section paths built).
+	/// @return The report (warnings: control resolution, parameter merge, node, collection, terrain op and skipped
+	///         paint warnings).
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
-		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls);
+		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
+		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap = {});
 
 	/// @brief Removes everything a graph instance put into the world (RemoveGeneratedContent on its owned content).
 	///        Leaves the record's owned content empty (area, graph, seed and overrides are kept).
