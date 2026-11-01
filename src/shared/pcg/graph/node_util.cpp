@@ -266,8 +266,10 @@ namespace mmo::pcg::graph
 
 	namespace
 	{
-		/// Pointer to the float a reserved point name refers to, or null ("scale" maps to scale.x).
-		const float* ReservedField(const Point& p, const String& name)
+		/// Pointer to the float a reserved point name refers to, or null ("scale" maps to scale.x). PointT is Point or
+		/// const Point, so the mapping exists once for both overloads below.
+		template <typename PointT>
+		auto ReservedFieldOf(PointT& p, const String& name) -> decltype(&p.density)
 		{
 			if (name == "density")
 			{
@@ -298,6 +300,18 @@ namespace mmo::pcg::graph
 				return &p.scale.z;
 			}
 			return nullptr;
+		}
+
+		/// Writable reserved field of a point, or null.
+		float* ReservedField(Point& p, const String& name)
+		{
+			return ReservedFieldOf(p, name);
+		}
+
+		/// Read-only reserved field of a point, or null.
+		const float* ReservedField(const Point& p, const String& name)
+		{
+			return ReservedFieldOf(p, name);
 		}
 	}
 
@@ -370,9 +384,9 @@ namespace mmo::pcg::graph
 			p.scale = Vector3(value, value, value);
 			return true;
 		}
-		if (const float* field = ReservedField(p, name))
+		if (float* field = ReservedField(p, name))
 		{
-			*const_cast<float*>(field) = value;
+			*field = value;
 			return true;
 		}
 		const auto column = item.points.columns.find(name);
@@ -523,6 +537,50 @@ namespace mmo::pcg::graph
 			return false;
 		}
 		distance = static_cast<float>(best);
+		return true;
+	}
+
+	const Collection* FindInput(const std::map<String, Collection>& inputs, const char* pin)
+	{
+		const auto it = inputs.find(pin);
+		return it != inputs.end() ? &it->second : nullptr;
+	}
+
+	PinDef PointsInputPin()
+	{
+		return PinDef{ "In", { ItemKind::Points }, true, true };
+	}
+
+	bool PrepareControl(NodeOutput& out, const DataItem& item, PreparedControl& prepared)
+	{
+		const bool area = item.kind == ItemKind::Area;
+		if (!area && item.kind != ItemKind::Spline)
+		{
+			return false;
+		}
+		if (item.spline.points.size() < (area ? 3u : 1u))
+		{
+			return false;
+		}
+		const Bounds2D bounds = SplineBounds(item.spline);
+		if (!SaneBounds(bounds))
+		{
+			WarnOnce(out, "skipped an item with non-finite or out of range geometry");
+			return false;
+		}
+		const SampledPath path(item.spline, EvaluationStep(item.spline, SamplingStep));
+		if (area && !path.IsClosed())
+		{
+			WarnOnce(out, "skipped an area whose spline is not closed");
+			return false;
+		}
+		prepared.item = &item;
+		if (area)
+		{
+			const float rowHeight = std::max(1.0f, (bounds.maxZ - bounds.minZ) / 4096.0f);
+			prepared.polygon = std::make_unique<RowIndexedPolygon>(path.GetSamples(), rowHeight);
+		}
+		prepared.curve = std::make_unique<SegmentDistanceIndex>(path.GetSamples(), path.IsClosed(), ControlDistanceCell);
 		return true;
 	}
 }

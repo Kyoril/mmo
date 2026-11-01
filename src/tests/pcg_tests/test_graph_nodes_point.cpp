@@ -386,3 +386,57 @@ TEST_CASE("Copy Attributes from Control: containing area first, else nearest spl
 		CHECK(out.warnings.size() == 1);
 	}
 }
+
+TEST_CASE("Copy Attributes from Control: area edges are distance sources", "[graph_nodes_point]")
+{
+	const EvalContext ctx;
+	DataItem lake = MakeSquare(0, 0, 10);
+	lake.attributes["level"] = 4.0f;
+	DataItem river = MakeSplineItem({ { 13, 0 }, { 13, 10 } }, false);
+	river.attributes["level"] = 9.0f;
+
+	SECTION("a point 2 m outside a square area within distance 3 takes the area's attribute")
+	{
+		const NodeOutput out = ExecNode("CopyAttributesFromControl", { { "attributes", String("level") }, { "distance", 3.0f } }, { { "In", { MakePoints({ { 12, 5 } }) } }, { "Controls", { lake } } }, ctx);
+		CHECK(FloatAttr(out.pins.at("Out").at(0), 0, "level") == 4.0f);
+		const NodeOutput tooFar = ExecNode("CopyAttributesFromControl", { { "attributes", String("level") }, { "distance", 1.5f } }, { { "In", { MakePoints({ { 12, 5 } }) } }, { "Controls", { lake } } }, ctx);
+		CHECK(FloatAttr(tooFar.pins.at("Out").at(0), 0, "level") == 0.0f);
+	}
+	SECTION("a nearer spline beats a farther area edge")
+	{
+		// (12.5, 5): lake edge 2.5 m away, river 0.5 m away.
+		const NodeOutput out = ExecNode("CopyAttributesFromControl", { { "attributes", String("level") }, { "distance", 3.0f } }, { { "In", { MakePoints({ { 12.5f, 5 } }) } }, { "Controls", { lake, river } } }, ctx);
+		CHECK(FloatAttr(out.pins.at("Out").at(0), 0, "level") == 9.0f);
+	}
+	SECTION("a point inside an area takes the containing area even when a spline is closer")
+	{
+		DataItem inner = MakeSplineItem({ { 9.5f, 0 }, { 9.5f, 10 } }, false);
+		inner.attributes["level"] = 9.0f;
+		const NodeOutput out = ExecNode("CopyAttributesFromControl", { { "attributes", String("level") }, { "distance", 3.0f } }, { { "In", { MakePoints({ { 9, 5 } }) } }, { "Controls", { inner, lake } } }, ctx);
+		CHECK(FloatAttr(out.pins.at("Out").at(0), 0, "level") == 4.0f);
+	}
+	SECTION("a reserved name holding a String on the area warns and leaves the property unchanged")
+	{
+		DataItem labelled = lake;
+		labelled.attributes["density"] = String("high");
+		const NodeOutput out = ExecNode("CopyAttributesFromControl", { { "attributes", String("density, level") } }, { { "In", { MakePoints({ { 5, 5 } }) } }, { "Controls", { labelled } } }, ctx);
+		const DataItem& item = out.pins.at("Out").at(0);
+		CHECK(item.points.points[0].density == 1.0f);
+		CHECK(FloatAttr(item, 0, "level") == 4.0f);
+		REQUIRE(out.warnings.size() == 1);
+		CHECK(out.warnings[0].find("density") != String::npos);
+	}
+}
+
+TEST_CASE("Attribute Math reports a non-Float target column as such", "[graph_nodes_point]")
+{
+	DataItem pts = MakePoints({ { 0, 0 }, { 1, 0 } });
+	for (size_t i = 0; i < 2; ++i)
+	{
+		pts.points.SetAttribute(i, "label", String("a"));
+	}
+	const NodeOutput out = ExecNode("AttributeMath", { { "target", String("label") }, { "op", String("add") }, { "value", 1.0f } }, { { "In", { pts } } }, EvalContext());
+	CHECK(std::get<String>(*out.pins.at("Out").at(0).points.GetAttribute(1, "label")) == "a");
+	REQUIRE(out.warnings.size() == 1);
+	CHECK(out.warnings[0].find("target column 'label' is not Float") != String::npos);
+}

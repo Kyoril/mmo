@@ -45,7 +45,6 @@
 #include "node_util.h"
 #include "point_prune.h"
 
-#include "math/constants.h"
 #include "math/radian.h"
 #include "pcg/pcg_random.h"
 
@@ -128,29 +127,6 @@ namespace mmo::pcg::graph
 				return Quaternion::Identity;
 			}
 			return Quaternion(Radian(std::atan2(dx, dz)), Vector3::UnitY);
-		}
-
-		/// Rotation that maps local +Y onto a normal.
-		Quaternion UpTowards(Vector3 normal)
-		{
-			const float len = normal.GetLength();
-			if (!(len > 1.0e-6f) || !std::isfinite(len))
-			{
-				return Quaternion::Identity;
-			}
-			normal = normal * (1.0f / len);
-			const float d = std::clamp(Vector3::UnitY.Dot(normal), -1.0f, 1.0f);
-			if (d > 0.999999f)
-			{
-				return Quaternion::Identity;
-			}
-			if (d < -0.999999f)
-			{
-				return Quaternion(Radian(Pi), Vector3::UnitX);
-			}
-			Vector3 axis = Vector3::UnitY.Cross(normal);
-			axis.Normalize();
-			return Quaternion(Radian(std::acos(d)), axis);
 		}
 
 		/// Bounds of an item's spline, or invalid (with a warning) if they are unusable.
@@ -600,7 +576,7 @@ namespace mmo::pcg::graph
 					p.position = Vector3(x, h, z);
 					if (alignToNormal)
 					{
-						p.rotation = UpTowards(ctx.terrain->Normal(x, z));
+						p.rotation = RotationOntoNormal(ctx.terrain->Normal(x, z));
 					}
 					p.seed = Hash(nodeSeed, ix, iz, TerrainSalt);
 					points.push_back(p);

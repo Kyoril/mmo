@@ -30,7 +30,9 @@
 // CopyAttributesFromControl  inputs "In" (Points), "Controls" (Areas, Splines). settings: attributes (comma list;
 //               empty = every item attribute of any control), distance. Per point the source control is the first
 //               Area (input order) containing it, else, if distance > 0, the nearest Spline or Area edge within
-//               distance (ties: the earlier control). The source's item attributes are copied: reserved names set
+//               distance (ties: the earlier control). Area edges are distance sources on purpose: a point just
+//               outside a lake (a river end) can take the lake's attributes. Areas whose spline is not closed are
+//               skipped with a warning (PrepareControl). The source's item attributes are copied: reserved names set
 //               the point property (numeric values only, else a warning), other names a column of the
 //               attribute's type. Columns for every copied name are created up front (type of the first control
 //               holding the name; points without a source keep the type default or their previous value). A
@@ -56,7 +58,6 @@ namespace mmo::pcg::graph
 	{
 		constexpr uint64 TransformSalt = 0x7f0a3e11ull;
 		constexpr uint64 NoiseSalt = 0xd0e5e5a1ull;
-		constexpr float DistanceCell = 4.0f;
 
 		Vector3 SettingVector(const AttributeSet& settings, const String& name, const Vector3& fallback)
 		{
@@ -73,18 +74,12 @@ namespace mmo::pcg::graph
 			return *v;
 		}
 
-		const Collection* Input(const std::map<String, Collection>& inputs, const char* pin)
-		{
-			const auto it = inputs.find(pin);
-			return it != inputs.end() ? &it->second : nullptr;
-		}
-
 		/// Copies every Points item of "In" to "Out" and lets the visitor modify the copy.
 		template <typename Visitor>
 		NodeOutput ForEachPointsItem(const std::map<String, Collection>& inputs, NodeOutput out, Visitor&& visit)
 		{
 			Collection& result = out.pins["Out"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
@@ -361,6 +356,16 @@ namespace mmo::pcg::graph
 
 			return ForEachPointsItem(inputs, std::move(out), [&](NodeOutput& o, DataItem& item)
 			{
+				// A target column of another type is reported as such before any operand is read.
+				if (!IsReservedPointName(target))
+				{
+					const auto column = item.points.columns.find(target);
+					if (column != item.points.columns.end() && column->second.first != AttributeType::Float)
+					{
+						WarnOnce(o, "target column '" + target + "' is not Float; left unchanged");
+						return;
+					}
+				}
 				for (size_t i = 0; i < item.points.points.size(); ++i)
 				{
 					float b = constant;
@@ -387,24 +392,16 @@ namespace mmo::pcg::graph
 			});
 		}
 
-		/// A control prepared for Copy Attributes.
-		struct ControlTarget
-		{
-			const DataItem* item = nullptr;
-			std::unique_ptr<RowIndexedPolygon> polygon;
-			std::unique_ptr<SegmentDistanceIndex> curve;
-		};
-
 		NodeOutput ExecuteCopyAttributes(const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
 		{
 			NodeOutput out;
 			const float distance = std::max(0.0f, SettingFloat(settings, "distance", 0.0f));
-			std::vector<ControlTarget> controls;
+			std::vector<PreparedControl> controls;
 			std::vector<String> names = SplitList(SettingString(settings, "attributes", ""));
 			const bool allNames = names.empty();
 			std::set<String> nameSet;
 
-			if (const Collection* items = Input(inputs, "Controls"))
+			if (const Collection* items = FindInput(inputs, "Controls"))
 			{
 				for (const DataItem& item : *items)
 				{
@@ -413,25 +410,11 @@ namespace mmo::pcg::graph
 						WarnOnce(out, "skipped controls that are neither areas nor splines");
 						continue;
 					}
-					const size_t minPoints = item.kind == ItemKind::Area ? 3 : 1;
-					if (item.spline.points.size() < minPoints)
+					PreparedControl target;
+					if (!PrepareControl(out, item, target))
 					{
 						continue;
 					}
-					if (!SaneBounds(SplineBounds(item.spline)))
-					{
-						WarnOnce(out, "skipped a control with non-finite or out of range geometry");
-						continue;
-					}
-					const SampledPath path(item.spline, EvaluationStep(item.spline, SamplingStep));
-					ControlTarget target;
-					target.item = &item;
-					if (item.kind == ItemKind::Area && path.IsClosed())
-					{
-						const Bounds2D bounds = SplineBounds(item.spline);
-						target.polygon = std::make_unique<RowIndexedPolygon>(path.GetSamples(), std::max(1.0f, (bounds.maxZ - bounds.minZ) / 4096.0f));
-					}
-					target.curve = std::make_unique<SegmentDistanceIndex>(path.GetSamples(), path.IsClosed(), DistanceCell);
 					controls.push_back(std::move(target));
 					if (allNames)
 					{
@@ -461,7 +444,7 @@ namespace mmo::pcg::graph
 						continue;
 					}
 					const AttributeValue* first = nullptr;
-					for (const ControlTarget& control : controls)
+					for (const PreparedControl& control : controls)
 					{
 						const auto it = control.item->attributes.find(name);
 						if (it != control.item->attributes.end())
@@ -491,8 +474,8 @@ namespace mmo::pcg::graph
 				for (size_t i = 0; i < n; ++i)
 				{
 					const Vector3& pos = item.points.points[i].position;
-					const ControlTarget* source = nullptr;
-					for (const ControlTarget& control : controls)
+					const PreparedControl* source = nullptr;
+					for (const PreparedControl& control : controls)
 					{
 						if (control.polygon && control.polygon->Contains(pos.x, pos.z))
 						{
@@ -503,7 +486,7 @@ namespace mmo::pcg::graph
 					if (source == nullptr && distance > 0.0f)
 					{
 						float best = distance;
-						for (const ControlTarget& control : controls)
+						for (const PreparedControl& control : controls)
 						{
 							float d = 0.0f;
 							if (control.curve->Nearest(pos.x, pos.z, best, d) && (source == nullptr || d < best))
@@ -547,11 +530,6 @@ namespace mmo::pcg::graph
 			});
 		}
 
-		PinDef PointsIn()
-		{
-			return PinDef{ "In", { ItemKind::Points }, true, true };
-		}
-
 		PinDef PointsOut()
 		{
 			return PinDef{ "Out", { ItemKind::Points } };
@@ -565,7 +543,7 @@ namespace mmo::pcg::graph
 			def.type = "TransformPoints";
 			def.category = "Point";
 			def.title = "Transform Points";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.outputs.push_back(PointsOut());
 			def.settings.push_back(SettingDef{ "offsetMin", Vector3(0, 0, 0), 0, 0, {}, "Minimum world offset" });
 			def.settings.push_back(SettingDef{ "offsetMax", Vector3(0, 0, 0), 0, 0, {}, "Maximum world offset" });
@@ -588,7 +566,7 @@ namespace mmo::pcg::graph
 			def.type = "DensityNoise";
 			def.category = "Point";
 			def.title = "Density Noise";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.outputs.push_back(PointsOut());
 			def.settings.push_back(SettingDef{ "frequency", 0.05f, 0.0001f, 10.0f, {}, "Noise frequency (1 / metres)" });
 			def.settings.push_back(SettingDef{ "octaves", static_cast<int64>(3), 1.0f, 8.0f, {}, "Noise octaves" });
@@ -603,7 +581,7 @@ namespace mmo::pcg::graph
 			def.type = "AttributeMath";
 			def.category = "Point";
 			def.title = "Attribute Math";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.outputs.push_back(PointsOut());
 			def.settings.push_back(SettingDef{ "target", String("density"), 0, 0, {}, "Attribute or point property written (density, scale, position.y, ...)" });
 			def.settings.push_back(SettingDef{ "input", String(), 0, 0, {}, "Operand A (empty = the target)" });
@@ -624,7 +602,7 @@ namespace mmo::pcg::graph
 			def.type = "CopyAttributesFromControl";
 			def.category = "Point";
 			def.title = "Copy Attributes from Control";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.inputs.push_back(PinDef{ "Controls", { ItemKind::Area, ItemKind::Spline }, true, true });
 			def.outputs.push_back(PointsOut());
 			def.settings.push_back(SettingDef{ "attributes", String(), 0, 0, {}, "Comma list of item attributes to copy (empty = all)" });

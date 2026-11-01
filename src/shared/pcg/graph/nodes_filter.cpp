@@ -5,6 +5,8 @@
 // of the input item (tags, item attributes, sourceId, all columns) holding only its points; copies without
 // points are left out. Items of a kind a node does not process are skipped with a warning. Names of point
 // properties (density, position.x|y|z, scale, scale.x|y|z) always mean the property (see IsReservedPointName).
+// Area and Spline inputs are prepared by PrepareControl (node_util.h): geometry that is non-finite or out of
+// range, and Areas whose spline is not closed, are skipped with a warning.
 //
 // FilterByTag   input "In" (any kind). settings: tags (comma list), matchAny (false: the item needs all tags;
 //               true: any one of them), excludeTags (comma list; an item with any of them is rejected). No tags
@@ -33,7 +35,7 @@
 //               whose total radius is not positive removes nothing. Area minus Area is phase 3.
 // Intersection  inputs "In" (Points), "Areas" (Areas). Keeps points inside any area.
 // DistanceTo    inputs "In" (Points), "Target" (Areas, Splines; optional). settings: attributeName (default
-//               "distance"), maxDistance. Writes per point the signed planar distance to the nearest target:
+//               "distanceTo"), maxDistance. Writes per point the signed planar distance to the nearest target:
 //               splines give the distance to the curve, areas the distance to their edge, negative inside. With
 //               several targets the minimum wins (inside an area always beats outside). Values are clamped to
 //               [-maxDistance, maxDistance]; with no target every point gets maxDistance. The value goes into a
@@ -56,12 +58,6 @@ namespace mmo::pcg::graph
 {
 	namespace
 	{
-		/// Polyline step targets are evaluated with for distance and containment queries.
-		constexpr float TargetStep = SamplingStep;
-
-		/// Preferred grid cell of distance indices.
-		constexpr float DistanceCell = 4.0f;
-
 		/// Writes the kept and rejected points of an item to the two output collections.
 		void SplitPoints(const DataItem& item, const std::vector<uint8>& keep, Collection& kept, Collection& rejected)
 		{
@@ -86,20 +82,13 @@ namespace mmo::pcg::graph
 			}
 		}
 
-		/// Returns the input collection of a pin, or null when the pin has no link.
-		const Collection* Input(const std::map<String, Collection>& inputs, const char* pin)
-		{
-			const auto it = inputs.find(pin);
-			return it != inputs.end() ? &it->second : nullptr;
-		}
-
 		/// Applies a per-point predicate to every Points item of "In".
 		template <typename Predicate>
 		NodeOutput FilterPoints(const std::map<String, Collection>& inputs, NodeOutput out, Predicate&& keepPoint)
 		{
 			Collection& kept = out.pins["Out"];
 			Collection& rejected = out.pins["Rejected"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
@@ -121,68 +110,16 @@ namespace mmo::pcg::graph
 			return out;
 		}
 
-		bool Usable(NodeOutput& out, const DataItem& item, const size_t minPoints)
-		{
-			if (item.spline.points.size() < minPoints)
-			{
-				return false;
-			}
-			const Bounds2D bounds = SplineBounds(item.spline);
-			if (!SaneBounds(bounds))
-			{
-				WarnOnce(out, "skipped an item with non-finite or out of range geometry");
-				return false;
-			}
-			return true;
-		}
-
-		/// An area prepared for containment and edge distance queries.
-		struct AreaTarget
-		{
-			std::unique_ptr<RowIndexedPolygon> polygon;
-			std::unique_ptr<SegmentDistanceIndex> edges;
-			Bounds2D bounds;
-		};
-
-		/// A spline prepared for distance queries.
+		/// A spline prepared for distance queries, with its removal radius (Difference).
 		struct SplineTarget
 		{
-			std::unique_ptr<SegmentDistanceIndex> curve;
+			PreparedControl control;
 			float radius = 0.0f;
 		};
 
-		bool PrepareArea(NodeOutput& out, const DataItem& item, AreaTarget& target)
+		bool InsideAny(const std::vector<PreparedControl>& areas, const float x, const float z)
 		{
-			if (!Usable(out, item, 3))
-			{
-				return false;
-			}
-			const SampledPath path(item.spline, EvaluationStep(item.spline, TargetStep));
-			if (!path.IsClosed())
-			{
-				return false;
-			}
-			target.bounds = SplineBounds(item.spline);
-			const float rowHeight = std::max(1.0f, (target.bounds.maxZ - target.bounds.minZ) / 4096.0f);
-			target.polygon = std::make_unique<RowIndexedPolygon>(path.GetSamples(), rowHeight);
-			target.edges = std::make_unique<SegmentDistanceIndex>(path.GetSamples(), true, DistanceCell);
-			return true;
-		}
-
-		bool PrepareSpline(NodeOutput& out, const DataItem& item, SplineTarget& target)
-		{
-			if (!Usable(out, item, 1))
-			{
-				return false;
-			}
-			const SampledPath path(item.spline, EvaluationStep(item.spline, TargetStep));
-			target.curve = std::make_unique<SegmentDistanceIndex>(path.GetSamples(), path.IsClosed(), DistanceCell);
-			return true;
-		}
-
-		bool InsideAny(const std::vector<AreaTarget>& areas, const float x, const float z)
-		{
-			for (const AreaTarget& area : areas)
+			for (const PreparedControl& area : areas)
 			{
 				if (area.polygon->Contains(x, z))
 				{
@@ -207,7 +144,7 @@ namespace mmo::pcg::graph
 			NodeOutput out;
 			Collection& kept = out.pins["Out"];
 			Collection& rejected = out.pins["Rejected"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
@@ -314,7 +251,7 @@ namespace mmo::pcg::graph
 			NodeOutput out;
 			Collection& kept = out.pins["Out"];
 			Collection& rejected = out.pins["Rejected"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
@@ -437,7 +374,7 @@ namespace mmo::pcg::graph
 			NodeOutput out;
 			Collection& kept = out.pins["Out"];
 			Collection& rejected = out.pins["Rejected"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
@@ -511,16 +448,16 @@ namespace mmo::pcg::graph
 			const float distance = SettingFloat(settings, "distance", 0.0f);
 			const String clearanceAttribute = SettingString(settings, "clearanceAttribute", "clearance");
 
-			std::vector<AreaTarget> areas;
+			std::vector<PreparedControl> areas;
 			std::vector<SplineTarget> splines;
-			if (const Collection* subtract = Input(inputs, "Subtract"))
+			if (const Collection* subtract = FindInput(inputs, "Subtract"))
 			{
 				for (const DataItem& item : *subtract)
 				{
 					if (item.kind == ItemKind::Area)
 					{
-						AreaTarget target;
-						if (PrepareArea(out, item, target))
+						PreparedControl target;
+						if (PrepareControl(out, item, target))
 						{
 							areas.push_back(std::move(target));
 						}
@@ -529,7 +466,7 @@ namespace mmo::pcg::graph
 					{
 						const float radius = distance + ItemClearance(out, item, clearanceAttribute);
 						SplineTarget target;
-						if (radius > 0.0f && std::isfinite(radius) && PrepareSpline(out, item, target))
+						if (radius > 0.0f && std::isfinite(radius) && PrepareControl(out, item, target.control))
 						{
 							target.radius = radius;
 							splines.push_back(std::move(target));
@@ -552,7 +489,7 @@ namespace mmo::pcg::graph
 				for (const SplineTarget& spline : splines)
 				{
 					float d = 0.0f;
-					if (spline.curve->Nearest(pos.x, pos.z, spline.radius, d))
+					if (spline.control.curve->Nearest(pos.x, pos.z, spline.radius, d))
 					{
 						return false;
 					}
@@ -564,17 +501,17 @@ namespace mmo::pcg::graph
 		NodeOutput ExecuteIntersection(const EvalContext&, uint64, const AttributeSet&, const std::map<String, Collection>& inputs)
 		{
 			NodeOutput out;
-			std::vector<AreaTarget> areas;
-			if (const Collection* areaItems = Input(inputs, "Areas"))
+			std::vector<PreparedControl> areas;
+			if (const Collection* areaItems = FindInput(inputs, "Areas"))
 			{
 				for (const DataItem& item : *areaItems)
 				{
-					AreaTarget target;
+					PreparedControl target;
 					if (item.kind != ItemKind::Area)
 					{
 						WarnOnce(out, "skipped area items that are not areas");
 					}
-					else if (PrepareArea(out, item, target))
+					else if (PrepareControl(out, item, target))
 					{
 						areas.push_back(std::move(target));
 					}
@@ -591,12 +528,12 @@ namespace mmo::pcg::graph
 		{
 			NodeOutput out;
 			Collection& result = out.pins["Out"];
-			const Collection* in = Input(inputs, "In");
+			const Collection* in = FindInput(inputs, "In");
 			if (in == nullptr)
 			{
 				return out;
 			}
-			const String name = SettingString(settings, "attributeName", "distance");
+			const String name = SettingString(settings, "attributeName", "distanceTo");
 			if (name.empty())
 			{
 				out.error = "attributeName is empty";
@@ -604,16 +541,16 @@ namespace mmo::pcg::graph
 			}
 			const float maxDistance = std::max(0.0f, SettingFloat(settings, "maxDistance", 1000.0f));
 
-			std::vector<AreaTarget> areas;
+			std::vector<PreparedControl> areas;
 			std::vector<SplineTarget> splines;
-			if (const Collection* targets = Input(inputs, "Target"))
+			if (const Collection* targets = FindInput(inputs, "Target"))
 			{
 				for (const DataItem& item : *targets)
 				{
 					if (item.kind == ItemKind::Area)
 					{
-						AreaTarget target;
-						if (PrepareArea(out, item, target))
+						PreparedControl target;
+						if (PrepareControl(out, item, target))
 						{
 							areas.push_back(std::move(target));
 						}
@@ -621,7 +558,7 @@ namespace mmo::pcg::graph
 					else if (item.kind == ItemKind::Spline)
 					{
 						SplineTarget target;
-						if (PrepareSpline(out, item, target))
+						if (PrepareControl(out, item, target.control))
 						{
 							splines.push_back(std::move(target));
 						}
@@ -658,15 +595,15 @@ namespace mmo::pcg::graph
 					for (const SplineTarget& spline : splines)
 					{
 						float d = 0.0f;
-						if (spline.curve->Nearest(pos.x, pos.z, maxDistance, d))
+						if (spline.control.curve->Nearest(pos.x, pos.z, maxDistance, d))
 						{
 							value = std::min(value, d);
 						}
 					}
-					for (const AreaTarget& area : areas)
+					for (const PreparedControl& area : areas)
 					{
 						float d = maxDistance;
-						area.edges->Nearest(pos.x, pos.z, maxDistance, d);
+						area.curve->Nearest(pos.x, pos.z, maxDistance, d);
 						value = std::min(value, area.polygon->Contains(pos.x, pos.z) ? -d : d);
 					}
 					WritePointNumber(item, i, name, std::clamp(value, -maxDistance, maxDistance));
@@ -674,11 +611,6 @@ namespace mmo::pcg::graph
 				result.push_back(std::move(item));
 			}
 			return out;
-		}
-
-		PinDef PointsIn()
-		{
-			return PinDef{ "In", { ItemKind::Points }, true, true };
 		}
 
 		void AddSplitOutputs(NodeTypeDef& def, const std::vector<ItemKind>& kinds)
@@ -724,7 +656,7 @@ namespace mmo::pcg::graph
 			def.type = "FilterByTerrain";
 			def.category = "Filter";
 			def.title = "Filter by Terrain";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			AddSplitOutputs(def, { ItemKind::Points });
 			def.settings.push_back(SettingDef{ "minSlope", 0.0f, 0.0f, 90.0f, {}, "Minimum slope in degrees" });
 			def.settings.push_back(SettingDef{ "maxSlope", 90.0f, 0.0f, 90.0f, {}, "Maximum slope in degrees" });
@@ -742,7 +674,7 @@ namespace mmo::pcg::graph
 			def.type = "DensityFilter";
 			def.category = "Filter";
 			def.title = "Density Filter";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			AddSplitOutputs(def, { ItemKind::Points });
 			def.settings.push_back(SettingDef{ "minDensity", 0.0f, 0.0f, 1.0f, {}, "Lowest density kept" });
 			def.settings.push_back(SettingDef{ "maxDensity", 1.0f, 0.0f, 1.0f, {}, "Highest density kept" });
@@ -754,7 +686,7 @@ namespace mmo::pcg::graph
 			def.type = "SelfPrune";
 			def.category = "Filter";
 			def.title = "Self Prune";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			AddSplitOutputs(def, { ItemKind::Points });
 			def.settings.push_back(SettingDef{ "minSpacing", 2.0f, 0.0f, 100.0f, {}, "Minimum distance between kept points" });
 			def.settings.push_back(SettingDef{ "priority", String("density"), 0, 0, { "density", "seed" }, "Which point survives a conflict" });
@@ -767,7 +699,7 @@ namespace mmo::pcg::graph
 			def.type = "Difference";
 			def.category = "Spatial";
 			def.title = "Difference";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.inputs.push_back(PinDef{ "Subtract", { ItemKind::Area, ItemKind::Spline }, true, false });
 			AddSplitOutputs(def, { ItemKind::Points });
 			def.settings.push_back(SettingDef{ "distance", 0.0f, 0.0f, 100.0f, {}, "Removal distance around splines" });
@@ -780,7 +712,7 @@ namespace mmo::pcg::graph
 			def.type = "Intersection";
 			def.category = "Spatial";
 			def.title = "Intersection";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.inputs.push_back(PinDef{ "Areas", { ItemKind::Area }, true, true });
 			AddSplitOutputs(def, { ItemKind::Points });
 			def.execute = ExecuteIntersection;
@@ -791,10 +723,10 @@ namespace mmo::pcg::graph
 			def.type = "DistanceTo";
 			def.category = "Spatial";
 			def.title = "Distance To";
-			def.inputs.push_back(PointsIn());
+			def.inputs.push_back(PointsInputPin());
 			def.inputs.push_back(PinDef{ "Target", { ItemKind::Area, ItemKind::Spline }, true, false });
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Points } });
-			def.settings.push_back(SettingDef{ "attributeName", String("distance"), 0, 0, {}, "Attribute receiving the signed distance" });
+			def.settings.push_back(SettingDef{ "attributeName", String("distanceTo"), 0, 0, {}, "Attribute receiving the signed distance" });
 			def.settings.push_back(SettingDef{ "maxDistance", 1000.0f, 0.0f, 10000.0f, {}, "Distances are clamped to this (and used when there is no target)" });
 			def.execute = ExecuteDistanceTo;
 			registry.Register(std::move(def));

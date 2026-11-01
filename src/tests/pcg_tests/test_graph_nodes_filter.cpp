@@ -525,11 +525,53 @@ TEST_CASE("Distance To writes the signed distance to splines and area edges", "[
 		const NodeOutput none = ExecNode("DistanceTo", {}, { { "In", { pts } } }, ctx);
 		const Collection& n = none.pins.at("Out");
 		REQUIRE(n.size() == 1);
-		CHECK(FloatAttr(n[0], 0, "distance") == 1000.0f);
+		CHECK(FloatAttr(n[0], 0, "distanceTo") == 1000.0f);
+		CHECK(n[0].points.columns.count("distance") == 0);
+	}
+	SECTION("an existing column of another type is replaced with one warning")
+	{
+		DataItem typed = pts;
+		for (size_t i = 0; i < typed.points.points.size(); ++i)
+		{
+			typed.points.SetAttribute(i, "distanceToWater", static_cast<int64>(3));
+		}
+		const NodeOutput replaced = ExecNode("DistanceTo", { { "attributeName", String("distanceToWater") }, { "maxDistance", 100.0f } }, { { "In", { typed } }, { "Target", { lake, river } } }, ctx);
+		CHECK(replaced.warnings.size() == 1);
+		const DataItem& item = replaced.pins.at("Out").at(0);
+		CHECK(item.points.columns.at("distanceToWater").first == AttributeType::Float);
+		CHECK(FloatAttr(item, 0, "distanceToWater") == Approx(-5.0f).margin(1e-3));
+	}
+	SECTION("overlapping areas: the deepest containing area wins")
+	{
+		const DataItem left = MakeSquare(0, 0, 10);
+		const DataItem right = MakeSquare(5, 0, 10);
+		const DataItem probes = MakePoints({ { 7, 5 }, { 12, 5 }, { 20, 5 } });
+		const NodeOutput overlap = ExecNode("DistanceTo", {}, { { "In", { probes } }, { "Target", { left, right } } }, ctx);
+		const DataItem& item = overlap.pins.at("Out").at(0);
+		CHECK(FloatAttr(item, 0, "distanceTo") == Approx(-3.0f).margin(1e-3));
+		CHECK(FloatAttr(item, 1, "distanceTo") == Approx(-3.0f).margin(1e-3));
+		CHECK(FloatAttr(item, 2, "distanceTo") == Approx(5.0f).margin(1e-3));
 	}
 	SECTION("deterministic")
 	{
 		const NodeOutput again = ExecNode("DistanceTo", { { "attributeName", String("distanceToWater") }, { "maxDistance", 100.0f } }, { { "In", { pts } }, { "Target", { lake, river } } }, ctx);
 		CHECK(ContentHash(again.pins.at("Out")) == ContentHash(c));
 	}
+}
+
+TEST_CASE("Area inputs whose spline is not closed are skipped with a warning", "[graph_nodes_filter]")
+{
+	const EvalContext ctx;
+	const DataItem grid = MakeGrid(0, 0, 20, 20, 1.0f);
+	DataItem open = MakeSquare(2.5f, 2.5f, 5.0f);
+	open.spline.closed = false;
+	for (const char* type : { "Difference", "Intersection", "DistanceTo" })
+	{
+		INFO(type);
+		const NodeOutput out = ExecNode(type, {}, { { "In", { grid } }, { "Subtract", { open } }, { "Areas", { open } }, { "Target", { open } } }, ctx);
+		CHECK(out.error.empty());
+		REQUIRE(out.warnings.size() == 1);
+		CHECK(out.warnings[0].find("not closed") != String::npos);
+	}
+	CHECK(CountPoints(ExecNode("Difference", {}, { { "In", { grid } }, { "Subtract", { open } } }, ctx).pins.at("Out")) == 21 * 21);
 }

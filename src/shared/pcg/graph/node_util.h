@@ -9,6 +9,8 @@
 #include "math/quaternion.h"
 #include "math/vector3.h"
 
+#include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -147,4 +149,33 @@ namespace mmo::pcg::graph
 		int64 m_columns = 0;
 		int64 m_rows = 0;
 	};
+
+	/// @brief Gets the input collection of a pin, or null when the pin has no link.
+	const Collection* FindInput(const std::map<String, Collection>& inputs, const char* pin);
+
+	/// @brief The standard required, multi-link "In" pin accepting Points.
+	PinDef PointsInputPin();
+
+	/// @brief Preferred grid cell size of the distance indices built by PrepareControl.
+	constexpr float ControlDistanceCell = 4.0f;
+
+	/// @brief An Area or Spline item prepared for containment and distance queries.
+	struct PreparedControl
+	{
+		/// @brief The prepared item (not owned; must outlive this object).
+		const DataItem* item = nullptr;
+
+		/// @brief Containment index (Areas only, null for Splines).
+		std::unique_ptr<RowIndexedPolygon> polygon;
+
+		/// @brief Distance index over the spline curve, or over the area's edge (including the closing segment).
+		std::unique_ptr<SegmentDistanceIndex> curve;
+	};
+
+	/// @brief Prepares an Area (at least 3 points) or Spline (at least 1 point) item: evaluates it with
+	///        EvaluationStep(spline, SamplingStep), builds the containment index for Areas (row height
+	///        max(1, z extent / 4096)) and the distance index with ControlDistanceCell.
+	/// @return False (nothing prepared) for other kinds, too few points, non-finite or out of range geometry
+	///         (warning) and Areas whose spline is not closed (warning).
+	bool PrepareControl(NodeOutput& out, const DataItem& item, PreparedControl& prepared);
 }
