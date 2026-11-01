@@ -172,6 +172,9 @@ namespace mmo
 		constexpr double s_debugFirstRetryDelay = 2.0;
 		constexpr double s_debugMaxRetryDelay = 30.0;
 
+		/// Seconds between two checks of the cached section asset files while the evaluation stays the same.
+		constexpr double s_debugSectionCheckInterval = 1.0;
+
 		/// The path with forward slashes.
 		String NormalizePath(String path)
 		{
@@ -223,34 +226,6 @@ namespace mmo
 			});
 		}
 
-		/// Feeds the last write times of the section assets (and their section worlds) the node's own SectionPath
-		/// ops use, so a re-baked or edited section redraws the debug layer.
-		void HashSectionRevisions(pcg::graph::Hasher& hasher, const pcg::graph::NodeOutput& output, const uint32 nodeId)
-		{
-			const auto pin = output.pins.find("Terrain");
-			if (pin == output.pins.end())
-			{
-				return;
-			}
-			std::set<String> assets;
-			for (const pcg::graph::DataItem& item : pin->second)
-			{
-				if (item.kind == pcg::graph::ItemKind::Terrain && item.op.order == nodeId && item.op.type == pcg::graph::TerrainOpType::SectionPath)
-				{
-					assets.insert(item.op.asset);
-				}
-			}
-			for (const String& asset : assets)
-			{
-				hasher.Str(asset);
-				for (const String& path : { asset, GetSectionWorldPathForAsset(asset) })
-				{
-					const auto time = AssetRegistry::GetLastWriteTime(path);
-					hasher.U64(time ? static_cast<uint64>(time->time_since_epoch().count()) : 0);
-				}
-			}
-		}
-
 		/// Index of a node in the graph's node list (the node count if it is missing).
 		size_t NodeIndex(const pcg::graph::Graph& graph, const uint32 id)
 		{
@@ -273,6 +248,8 @@ namespace mmo
 			hasher.U64(pcg::graph::HashSpline(record.area));
 			hasher.U64(pcg::graph::HashAttributes(record.parameterOverrides));
 			hasher.Str(record.graphPath);
+			// The terrain ops are prepared with the border fade (the debug view's height ticks).
+			hasher.F32(record.borderFade);
 			return hasher.Result();
 		}
 
@@ -303,6 +280,7 @@ namespace mmo
 	PcgGraphEditorInstance::PcgGraphEditorInstance(EditorHost& host, PcgGraphEditor& editor, Path asset)
 		: EditorInstance(host, std::move(asset))
 		, m_editor(editor)
+		, m_debugSections(std::make_unique<SectionAssetCache>())
 	{
 		ed::Config config;
 		config.SettingsFile = nullptr;
@@ -1429,8 +1407,10 @@ namespace mmo
 		m_debugWorldSerial = worldSerial;
 		m_debugInstanceId = instanceId;
 
-		// The cache belongs to one (world, instance) pair.
+		// The caches belong to one (world, instance) pair.
 		m_debugCache.Clear();
+		m_debugSections->Clear();
+		m_debugSectionCheckKey = 0;
 		m_debugResult = pcg::graph::EvalResult();
 		m_hasDebugResult = false;
 		m_debugEvalKey = 0;
@@ -1585,21 +1565,28 @@ namespace mmo
 			m_debugResultsShown = true;
 		}
 
-		// Redraw when the evaluation or the set of debug nodes changed.
+		// The section assets of the terrain ops stay cached for the target; a re-baked or edited section (or its section
+		// world) drops its entry and redraws. Their files are checked when the evaluation changed, else once a second.
+		const double now = ImGui::GetTime();
+		if (evalKey != m_debugSectionCheckKey || now - m_debugSectionCheckTime >= s_debugSectionCheckInterval)
+		{
+			m_debugSectionCheckKey = evalKey;
+			m_debugSectionCheckTime = now;
+			m_debugSections->DropChanged();
+		}
+
+		// Redraw when the evaluation, the set of debug nodes, the border fade or a section asset changed.
 		pcg::graph::Hasher drawHasher;
 		drawHasher.U64(evalKey);
 		drawHasher.U64(m_hasDebugResult ? 1 : 0);
+		drawHasher.F32(record->borderFade);
+		drawHasher.U64(m_debugSections->GetRevision());
 		for (size_t i = 0; i < graph.nodes.size(); ++i)
 		{
 			if (graph.nodes[i].debug)
 			{
 				drawHasher.U64(graph.nodes[i].id);
 				drawHasher.U64(static_cast<uint64>(i));
-				const auto result = m_hasDebugResult ? m_debugResult.nodes.find(graph.nodes[i].id) : m_debugResult.nodes.end();
-				if (result != m_debugResult.nodes.end())
-				{
-					HashSectionRevisions(drawHasher, result->second.output, graph.nodes[i].id);
-				}
 			}
 		}
 		const uint64 drawKey = drawHasher.Result() | 1;
@@ -1702,7 +1689,7 @@ namespace mmo
 					pcg::graph::PreparedTerrain prepared;
 					String prepareError;
 					groundMisses = 0;
-					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), prepared, prepareError))
+					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), *m_debugSections, prepared, prepareError))
 					{
 						const pcg::graph::DebugGeometry geometry = pcg::graph::BuildTerrainDebugGeometry(prepared, getBaseGround(),
 							s_debugTerrainTickStep, entry.argb, ShadeArgb(entry.argb, 0.45f), lineBudget);

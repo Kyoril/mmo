@@ -121,56 +121,6 @@ namespace mmo
 			return "?";
 		}
 
-		/// Section assets of one rebuild, each read once. The returned pointers stay valid as long as the cache.
-		class SectionAssetCache final : public NonCopyable
-		{
-		public:
-			/// The asset, or null with the reason in error: missing, unreadable or stale (its section world changed
-			/// since the bake; a graph rebuild refuses to lay an outdated section).
-			const pcg::SectionAsset* Get(const String& path, String& error)
-			{
-				auto it = m_entries.find(path);
-				if (it == m_entries.end())
-				{
-					Entry entry;
-					entry.asset = std::make_unique<pcg::SectionAsset>();
-					String staleWarning;
-					if (!LoadSectionAsset(path, *entry.asset, entry.error))
-					{
-						entry.asset.reset();
-					}
-					else if (IsSectionAssetStale(path, *entry.asset, staleWarning))
-					{
-						entry.error = "it is stale, its section world '" + GetSectionWorldPathForAsset(path)
-							+ "' changed since the last bake. Bake the section again.";
-						entry.asset.reset();
-					}
-					it = m_entries.emplace(path, std::move(entry)).first;
-				}
-
-				error = it->second.error;
-				return it->second.asset.get();
-			}
-
-			/// A provider for PreparedTerrain::Prepare reading through this cache, which must outlive it.
-			pcg::graph::SectionAssetProvider MakeProvider()
-			{
-				return [this](const String& path, String& error)
-				{
-					return Get(path, error);
-				};
-			}
-
-		private:
-			struct Entry
-			{
-				std::unique_ptr<pcg::SectionAsset> asset;
-				String error;
-			};
-
-			std::map<String, Entry> m_entries;
-		};
-
 		/// What content.prepare builds on the base terrain, read by the terrain and placement steps.
 		struct GraphBuildState
 		{
@@ -313,6 +263,79 @@ namespace mmo
 			}
 			return true;
 		}
+	}
+
+	const pcg::SectionAsset* SectionAssetCache::Get(const String& path, String& error)
+	{
+		auto it = m_entries.find(path);
+		if (it == m_entries.end())
+		{
+			Entry entry;
+			// Read before the files: a write during the load shows up as a changed time later.
+			entry.assetTime = AssetRegistry::GetLastWriteTime(path);
+			entry.worldTime = AssetRegistry::GetLastWriteTime(GetSectionWorldPathForAsset(path));
+			entry.asset = std::make_unique<pcg::SectionAsset>();
+			String staleWarning;
+			if (!LoadSectionAsset(path, *entry.asset, entry.error))
+			{
+				entry.asset.reset();
+			}
+			else if (IsSectionAssetStale(path, *entry.asset, staleWarning))
+			{
+				entry.error = "it is stale, its section world '" + GetSectionWorldPathForAsset(path)
+					+ "' changed since the last bake. Bake the section again.";
+				entry.asset.reset();
+			}
+			it = m_entries.emplace(path, std::move(entry)).first;
+		}
+
+		error = it->second.error;
+		return it->second.asset.get();
+	}
+
+	pcg::graph::SectionAssetProvider SectionAssetCache::MakeProvider()
+	{
+		return [this](const String& path, String& error)
+		{
+			return Get(path, error);
+		};
+	}
+
+	bool SectionAssetCache::DropChanged()
+	{
+		bool dropped = false;
+		for (auto it = m_entries.begin(); it != m_entries.end();)
+		{
+			if (AssetRegistry::GetLastWriteTime(it->first) != it->second.assetTime ||
+				AssetRegistry::GetLastWriteTime(GetSectionWorldPathForAsset(it->first)) != it->second.worldTime)
+			{
+				it = m_entries.erase(it);
+				dropped = true;
+			}
+			else
+			{
+				++it;
+			}
+		}
+		if (dropped)
+		{
+			++m_revision;
+		}
+		return dropped;
+	}
+
+	void SectionAssetCache::Clear()
+	{
+		if (!m_entries.empty())
+		{
+			m_entries.clear();
+			++m_revision;
+		}
+	}
+
+	uint64 SectionAssetCache::GetRevision() const
+	{
+		return m_revision;
 	}
 
 	pcg::graph::Bounds2D GetPlacedControlBounds(const pcg::graph::ControlInstance& instance, const pcg::graph::ControlType* type)
@@ -542,8 +565,8 @@ namespace mmo
 	}
 
 	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, const uint32 nodeId,
-		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, pcg::graph::PreparedTerrain& out,
-		String& error)
+		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, SectionAssetCache& sections,
+		pcg::graph::PreparedTerrain& out, String& error)
 	{
 		std::vector<pcg::graph::TerrainOpInput> ops = pcg::graph::CollectTerrainOps(graph, result);
 		ops.erase(std::remove_if(ops.begin(), ops.end(), [nodeId](const pcg::graph::TerrainOpInput& op)
@@ -551,7 +574,6 @@ namespace mmo
 			return op.op.order != nodeId;
 		}), ops.end());
 
-		SectionAssetCache sections;
 		return out.Prepare(ops, ground, sections.MakeProvider(), record.area, record.borderFade, error);
 	}
 

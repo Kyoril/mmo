@@ -6,6 +6,7 @@
 #include "editor_terrain_sampler.h"
 #include "generated_content.h"
 
+#include "base/non_copyable.h"
 #include "base/typedefs.h"
 #include "pcg/graph_instance_record.h"
 #include "pcg/graph/controls.h"
@@ -14,9 +15,13 @@
 #include "pcg/graph/graph_output.h"
 #include "pcg/graph/node_util.h"
 #include "pcg/graph/terrain_compose.h"
+#include "pcg/section_asset.h"
 
+#include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace mmo
@@ -108,6 +113,44 @@ namespace mmo
 		std::vector<UnresolvedPlacedControl> unresolved;
 	};
 
+	/// @brief Section assets read through LoadSectionAsset, each once, the way a graph rebuild reads them: a missing,
+	///        unreadable or stale asset (its section world changed since the bake) is an error. The write times of the
+	///        asset and of its section world are recorded when an asset is read, so a long-lived cache (the graph
+	///        editor's debug view) can drop what changed on disk since (DropChanged). Main thread only.
+	class SectionAssetCache final : public NonCopyable
+	{
+	public:
+		/// @brief The asset, or null with the reason in error. The pointer stays valid until the entry is dropped
+		///        (DropChanged, Clear) or the cache is destroyed.
+		const pcg::SectionAsset* Get(const String& path, String& error);
+
+		/// @brief A provider for pcg::graph::PreparedTerrain::Prepare reading through this cache, which must outlive it.
+		[[nodiscard]] pcg::graph::SectionAssetProvider MakeProvider();
+
+		/// @brief Drops every entry whose asset file or section world file has another write time (or appeared or
+		///        disappeared) since it was read. Stats two files per entry, so call it sparingly.
+		/// @return True if an entry was dropped.
+		bool DropChanged();
+
+		/// @brief Drops every entry.
+		void Clear();
+
+		/// @brief Changes whenever an entry is dropped, so callers can key what they built from the assets on it.
+		[[nodiscard]] uint64 GetRevision() const;
+
+	private:
+		struct Entry
+		{
+			std::unique_ptr<pcg::SectionAsset> asset;
+			String error;
+			std::optional<std::filesystem::file_time_type> assetTime;
+			std::optional<std::filesystem::file_time_type> worldTime;
+		};
+
+		std::map<String, Entry> m_entries;
+		uint64 m_revision = 0;
+	};
+
 	/// @brief Reads and parses a graph asset (.hpcgg).
 	/// @param graphPath Asset path of the graph.
 	/// @param out Receives the graph on success.
@@ -169,18 +212,19 @@ namespace mmo
 	/// @brief Prepares the terrain ops one node of an evaluation produced (the items of the "Terrain" pins whose
 	///        op.order is the node id, see pcg::graph::CollectTerrainOps), the way a rebuild prepares them: on the
 	///        given ground, clipped to the instance's area with its borderFade, section assets read like the rebuild
-	///        reads them (a missing, unreadable or stale asset fails).
+	///        reads them (a missing, unreadable or stale asset fails), through the caller's cache.
 	/// @param graph The evaluated graph.
 	/// @param result Its evaluation result.
 	/// @param nodeId The node whose ops to prepare.
 	/// @param record The instance.
 	/// @param ground Base ground height at a world position.
+	/// @param sections Supplies the section assets (kept across calls by the caller).
 	/// @param out Receives the prepared ops.
 	/// @param error Receives the reason (naming the node and asset) when the call returns false.
 	/// @return False if the ops could not be prepared.
 	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, uint32 nodeId,
-		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, pcg::graph::PreparedTerrain& out,
-		String& error);
+		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, SectionAssetCache& sections,
+		pcg::graph::PreparedTerrain& out, String& error);
 
 	/// @brief Reads the instance's saved graph, builds its context and evaluates it, without changing the world. When the
 	///        graph validates, the spawned points are collected and clipped to the area.

@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -21,6 +22,7 @@ namespace ax::NodeEditor
 namespace mmo
 {
 	class PcgGraphEditor;
+	class SectionAssetCache;
 
 	/// @brief Editor instance for one PCG graph asset (.hpcgg): a dockspace with the graph canvas, a node
 	///        palette, the selected node's details and the graph parameters. Every edit goes through a
@@ -199,6 +201,13 @@ namespace mmo
 
 		/// @brief Evaluation cache of the debug target; cleared when the target changes.
 		pcg::graph::GraphCache m_debugCache;
+
+		/// @brief Section assets of the debug target's terrain ops; cleared when the target changes, entries dropped
+		///        when their files change (checked when m_debugSectionCheckKey differs from the evaluation key, else at
+		///        most once a second, at m_debugSectionCheckTime in ImGui time).
+		std::unique_ptr<SectionAssetCache> m_debugSections;
+		uint64 m_debugSectionCheckKey { 0 };
+		double m_debugSectionCheckTime { 0 };
 
 		/// @brief Last debug evaluation and the key of its inputs (0 = none yet).
 		pcg::graph::EvalResult m_debugResult;
