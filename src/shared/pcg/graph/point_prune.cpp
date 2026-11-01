@@ -56,7 +56,9 @@ namespace mmo::pcg::graph
 			priorities = nullptr;
 		}
 
-		// Sorted grid of cell size r: conflicting points are at most one cell apart on each axis.
+		// Sorted grid of cell size r: conflicting points are at most one cell apart on each axis. Neighbours are
+		// found on the fly from the grid, so memory stays O(n) however many neighbours a point has.
+		constexpr uint32 NoCell = 0xFFFFFFFFu;
 		std::vector<CellEntry> grid;
 		grid.reserve(n);
 		for (size_t i = 0; i < n; ++i)
@@ -69,49 +71,49 @@ namespace mmo::pcg::graph
 		}
 		std::sort(grid.begin(), grid.end());
 
-		// Conflict adjacency in compressed form, each list sorted by index.
-		const float r2 = r * r;
-		std::vector<size_t> offsets(n + 1, 0);
-		std::vector<uint32> neighbours;
+		// Position of each point's entry in the grid (NoCell for non-finite points, which never conflict).
+		std::vector<uint32> gridPos(n, NoCell);
+		for (size_t k = 0; k < grid.size(); ++k)
 		{
-			std::vector<std::vector<uint32>> lists(n);
-			for (const CellEntry& e : grid)
+			gridPos[grid[k].index] = static_cast<uint32>(k);
+		}
+
+		const float r2 = r * r;
+
+		// Calls visit(j) for every point j that conflicts with point i until visit returns true; returns whether it
+		// did. The order of the neighbours does not matter to any caller.
+		const auto anyNeighbour = [&](const uint32 i, const auto& visit)
+		{
+			if (gridPos[i] == NoCell)
 			{
-				const Vector3& a = points[e.index].position;
-				for (int64 dz = -1; dz <= 1; ++dz)
+				return false;
+			}
+			const CellEntry& e = grid[gridPos[i]];
+			const Vector3& a = points[i].position;
+			for (int64 dz = -1; dz <= 1; ++dz)
+			{
+				for (int64 dx = -1; dx <= 1; ++dx)
 				{
-					for (int64 dx = -1; dx <= 1; ++dx)
+					const CellEntry lo{ e.cz + dz, e.cx + dx, 0 };
+					for (auto it = std::lower_bound(grid.begin(), grid.end(), lo); it != grid.end() && it->cz == lo.cz && it->cx == lo.cx; ++it)
 					{
-						const CellEntry lo{ e.cz + dz, e.cx + dx, 0 };
-						for (auto it = std::lower_bound(grid.begin(), grid.end(), lo); it != grid.end() && it->cz == lo.cz && it->cx == lo.cx; ++it)
+						if (it->index == i)
 						{
-							if (it->index == e.index)
-							{
-								continue;
-							}
-							const Vector3& b = points[it->index].position;
-							const float ddx = a.x - b.x;
-							const float ddz = a.z - b.z;
-							const float ddy = options.planar ? 0.0f : a.y - b.y;
-							if (ddx * ddx + ddy * ddy + ddz * ddz < r2)
-							{
-								lists[e.index].push_back(it->index);
-							}
+							continue;
+						}
+						const Vector3& b = points[it->index].position;
+						const float ddx = a.x - b.x;
+						const float ddz = a.z - b.z;
+						const float ddy = options.planar ? 0.0f : a.y - b.y;
+						if (ddx * ddx + ddy * ddy + ddz * ddz < r2 && visit(it->index))
+						{
+							return true;
 						}
 					}
 				}
 			}
-			for (size_t i = 0; i < n; ++i)
-			{
-				std::sort(lists[i].begin(), lists[i].end());
-				offsets[i + 1] = offsets[i] + lists[i].size();
-			}
-			neighbours.reserve(offsets[n]);
-			for (size_t i = 0; i < n; ++i)
-			{
-				neighbours.insert(neighbours.end(), lists[i].begin(), lists[i].end());
-			}
-		}
+			return false;
+		};
 
 		const auto outranks = [&](const uint32 a, const uint32 b)
 		{
@@ -137,17 +139,11 @@ namespace mmo::pcg::graph
 				{
 					continue;
 				}
-				bool best = true;
-				for (size_t k = offsets[i]; k < offsets[i + 1]; ++k)
+				const bool beaten = anyNeighbour(i, [&](const uint32 j)
 				{
-					const uint32 j = neighbours[k];
-					if (state[j] == State::Undecided && outranks(j, i))
-					{
-						best = false;
-						break;
-					}
-				}
-				if (best)
+					return state[j] == State::Undecided && outranks(j, i);
+				});
+				if (!beaten)
 				{
 					chosen.push_back(i);
 				}
@@ -162,17 +158,18 @@ namespace mmo::pcg::graph
 			}
 			for (const uint32 i : chosen)
 			{
-				for (size_t k = offsets[i]; k < offsets[i + 1]; ++k)
+				anyNeighbour(i, [&](const uint32 j)
 				{
-					if (state[neighbours[k]] == State::Undecided)
+					if (state[j] == State::Undecided)
 					{
-						state[neighbours[k]] = State::Removed;
+						state[j] = State::Removed;
 					}
-				}
+					return false;
+				});
 			}
 		}
 
-		// Final pass on a snapshot of the states.
+		// Final pass; it reads the states and only writes the keep mask.
 		for (uint32 i = 0; i < n; ++i)
 		{
 			if (state[i] == State::Kept)
@@ -184,14 +181,13 @@ namespace mmo::pcg::graph
 				keep[i] = 0;
 				continue;
 			}
-			for (size_t k = offsets[i]; k < offsets[i + 1]; ++k)
+			const bool beaten = anyNeighbour(i, [&](const uint32 j)
 			{
-				const uint32 j = neighbours[k];
-				if (state[j] == State::Kept || (state[j] == State::Undecided && outranks(j, i)))
-				{
-					keep[i] = 0;
-					break;
-				}
+				return state[j] == State::Kept || (state[j] == State::Undecided && outranks(j, i));
+			});
+			if (beaten)
+			{
+				keep[i] = 0;
 			}
 		}
 		return keep;

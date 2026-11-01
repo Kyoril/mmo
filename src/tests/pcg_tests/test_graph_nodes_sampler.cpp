@@ -9,6 +9,7 @@
 #include "pcg/graph/point_prune.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <set>
 #include <tuple>
@@ -390,6 +391,32 @@ TEST_CASE("Sample Area honours the minimum spacing", "[graph_nodes_sampler]")
 	const NodeOutput out = Exec("SampleArea", { { "cellSize", 1.0f }, { "minSpacing", minSpacing } }, { { "In", { Square(0, 0, 40) } } }, ctx);
 	const auto& pts = out.pins.at("Out").at(0).points.points;
 	REQUIRE(pts.size() > 200);
+	for (size_t i = 0; i < pts.size(); ++i)
+	{
+		for (size_t j = i + 1; j < pts.size(); ++j)
+		{
+			const float dx = pts[i].position.x - pts[j].position.x;
+			const float dz = pts[i].position.z - pts[j].position.z;
+			if (std::sqrt(dx * dx + dz * dz) < minSpacing * 0.999f)
+			{
+				FAIL("points " << i << " and " << j << " are closer than the minimum spacing");
+			}
+		}
+	}
+}
+
+TEST_CASE("Sample Area with a minimum spacing far above the cell size stays fast and spaced", "[graph_nodes_sampler]")
+{
+	// Every candidate has about pi * 20^2 = 1250 conflicting neighbours: the prune must not store them per point.
+	const EvalContext ctx;
+	const float minSpacing = 20.0f;
+	const auto start = std::chrono::steady_clock::now();
+	const NodeOutput out = Exec("SampleArea", { { "cellSize", 1.0f }, { "minSpacing", minSpacing } }, { { "In", { Square(0, 0, 120) } } }, ctx);
+	const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+	CHECK(seconds < 20.0);
+	REQUIRE(out.pins.at("Out").size() == 1);
+	const auto& pts = out.pins.at("Out").at(0).points.points;
+	REQUIRE(pts.size() >= 9);
 	for (size_t i = 0; i < pts.size(); ++i)
 	{
 		for (size_t j = i + 1; j < pts.size(); ++j)
