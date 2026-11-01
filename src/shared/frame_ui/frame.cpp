@@ -62,6 +62,51 @@ namespace mmo
 		other.m_onMouseWheel = m_onMouseWheel;
 	}
 
+	void Frame::CopyVisuals(Frame& other) const
+	{
+		if (this == &other)
+		{
+			return;
+		}
+
+		// Layers reference sections, so discard layers before replacing their storage.
+		other.m_stateImageriesByName.clear();
+		other.m_sectionsByName.clear();
+
+		// Add section reference
+		for (const auto& pair : m_sectionsByName)
+		{
+			auto& added = (other.m_sectionsByName[pair.first] = pair.second);
+			added.SetComponentFrame(other);
+		}
+
+		// Add state imagery reference
+		for (const auto& pair : m_stateImageriesByName)
+		{
+			auto& added = (other.m_stateImageriesByName[pair.first] = pair.second);
+
+			added.m_layers.clear();
+
+			for (const auto& layer : pair.second.m_layers)
+			{
+				FrameLayer newLayer;
+
+				for (const auto& section : layer.m_sections)
+				{
+					auto* otherSection = other.GetImagerySectionByName(section->GetName());
+					if (otherSection)
+					{
+						newLayer.AddSection(*otherSection);
+					}
+				}
+
+				added.AddLayer(newLayer);
+			}
+		}
+
+		other.Invalidate(false);
+	}
+
 	void Frame::Copy(Frame & other)
 	{
 		if (m_renderer)
@@ -91,7 +136,7 @@ namespace mmo
 		other.m_dragEnabled = m_dragEnabled;
 		other.m_dropEnabled = m_dropEnabled;
 		other.RemoveAllChildren();
-		
+
 		// Set all properties
 		for (const auto& pair : m_propertiesByName)
 		{
@@ -109,36 +154,7 @@ namespace mmo
 			otherProp->Set(pair.second.GetValue());
 		}
 
-		// Add section reference
-		for (const auto& pair : m_sectionsByName)
-		{
-			auto& added = (other.m_sectionsByName[pair.first] = pair.second);
-			added.SetComponentFrame(other);
-		}
-
-		// Add state imagery reference
-		for (const auto& pair : m_stateImageriesByName)
-		{
-			auto& added = (other.m_stateImageriesByName[pair.first] = pair.second);
-			
-			added.m_layers.clear();
-
-			for (const auto& layer : pair.second.m_layers)
-			{
-				FrameLayer newLayer;
-				
-				for (const auto& section : layer.m_sections)
-				{
-					auto* otherSection = other.GetImagerySectionByName(section->GetName());
-					if (otherSection)
-					{
-						newLayer.AddSection(*otherSection);
-					}
-				}
-
-				added.AddLayer(newLayer);
-			}
-		}
+		CopyVisuals(other);
 
 		// Copy all children and their children
 		for (const auto& child : m_children)

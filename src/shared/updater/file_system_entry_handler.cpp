@@ -111,6 +111,10 @@ namespace mmo::updating
 						const auto previousDigest = mmo::sha1(previousFile);
 						if (previousDigest == sha1)
 						{
+							// Launchers before 1.0.3 wrote bundle executables without the
+							// execute bit; an up-to-date file is repaired here, not downloaded.
+							previousFile.close();
+							MarkBundleExecutable(destination);
 							break;
 						}
 					}

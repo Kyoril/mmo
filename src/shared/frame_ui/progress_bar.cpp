@@ -1,5 +1,7 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "progress_bar.h"
+#include "frame_mgr.h"
 
 #include <string>
 #include <stdexcept>
@@ -11,6 +13,7 @@ namespace mmo
 	{
 		m_propConnections += AddProperty("Progress", "0.0").Changed.connect(this, &ProgressBar::OnProgressChanged);
 		m_propConnections += AddProperty("ProgressColor", "FFFFFFFF").Changed.connect(this, &ProgressBar::OnProgressColorChanged);
+		m_propConnections += AddProperty("ProgressInset", "0").Changed.connect(this, &ProgressBar::OnProgressInsetChanged);
 	}
 
 	ProgressBar::~ProgressBar()
@@ -67,9 +70,18 @@ namespace mmo
 			const auto* progressImagery = GetStateImageryByName("Progress");
 			if (progressImagery)
 			{
-				// Adjust the width
-				frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
-				progressImagery->Render(frameRect, m_progressColor);
+				// Inset before scaling, so small fills never acquire a negative
+				// width or extend outside their housing. Zero preserves Legacy.
+				const auto scale = FrameManager::Get().GetUIScale();
+				frameRect.left += m_progressInset * scale.x;
+				frameRect.right -= m_progressInset * scale.x;
+				frameRect.top += m_progressInset * scale.y;
+				frameRect.bottom -= m_progressInset * scale.y;
+				if (frameRect.GetWidth() > 0.0f && frameRect.GetHeight() > 0.0f)
+				{
+					frameRect.SetWidth(frameRect.GetWidth() * std::min(1.0f, m_progress));
+					progressImagery->Render(frameRect, m_progressColor);
+				}
 			}
 		}
 
@@ -105,6 +117,20 @@ namespace mmo
 
 		m_progressColor = argb;
 
+		Invalidate(false);
+	}
+
+	void ProgressBar::OnProgressInsetChanged(const Property& property)
+	{
+		try
+		{
+			m_progressInset = std::max(0.0f, std::stof(property.GetValue()));
+		}
+		catch (const std::invalid_argument&)
+		{
+			WLOG("Invalid progress inset: '" << property.GetValue() << "'");
+			m_progressInset = 0.0f;
+		}
 		Invalidate(false);
 	}
 }
