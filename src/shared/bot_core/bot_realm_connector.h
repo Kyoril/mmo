@@ -18,6 +18,7 @@
 #include "game/bug_report.h"
 #include "game/mail.h"
 #include "game/subsystem.h"
+#include "game/pet_packets.h"
 
 #include "binary_io/reader.h"
 
@@ -377,6 +378,15 @@ namespace mmo
 		/// Result of the last GuildCommandResult received (game::guild_command_result), or -1 for none.
 		int32 m_lastGuildCommandResult = -1;
 
+		/// The summoned persistent pet as the last PetSpells described it (petGuid 0 = none).
+		game::PetSpellsData m_petSpells;
+
+		/// Number of PetSpells packets received, so a scenario can wait for the next one.
+		uint32 m_petSpellsPackets = 0;
+
+		/// Result of the last PetResult received (pet_result), or -1 for none.
+		int32 m_lastPetResult = -1;
+
 		/// Last spell visualization the server told us to play, if any.
 		struct SpellVisual
 		{
@@ -525,6 +535,24 @@ namespace mmo
 
 		/// Forgets the last guild command result.
 		void ClearLastGuildCommandResult() { m_lastGuildCommandResult = -1; }
+
+		/// The summoned persistent pet as the last PetSpells described it; petGuid is 0 if there is none.
+		[[nodiscard]] const game::PetSpellsData& GetPetSpells() const { return m_petSpells; }
+
+		/// Number of PetSpells packets received in this session.
+		[[nodiscard]] uint32 GetPetSpellsPacketCount() const { return m_petSpellsPackets; }
+
+		/// Result of the last pet action that failed (pet_result), or -1 for none.
+		[[nodiscard]] int32 GetLastPetResult() const { return m_lastPetResult; }
+
+		/// Forgets the last pet result.
+		void ClearLastPetResult() { m_lastPetResult = -1; }
+
+		/// Gives a command (pet_command) to all pets of the character.
+		void PetCommand(uint8 command, uint64 target, uint32 param);
+
+		/// Renames the summoned persistent pet.
+		void PetRename(const String& name);
 
 		/// Invites a character to the own guild by name.
 		void GuildInvite(const String& name);
@@ -1052,6 +1080,10 @@ namespace mmo
 		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
 
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
+
+		PacketParseResult OnPetSpells(game::IncomingPacket& packet);
+		PacketParseResult OnPetResult(game::IncomingPacket& packet);
+		PacketParseResult OnPetNameQueryResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);

@@ -136,6 +136,9 @@ namespace mmo
 			m_lastFriendCommandResult = -1;
 			m_friendListUpdates = 0;
 			m_lastGuildCommandResult = -1;
+			m_petSpells = game::PetSpellsData();
+			m_petSpellsPackets = 0;
+			m_lastPetResult = -1;
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -680,6 +683,14 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnGameTimeInfo);
 		RegisterPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &BotRealmConnector::OnShutdownCountdown);
+
+		// Pet packets. Experience and learned-spell notices are followed by a PetSpells that carries
+		// what the bot needs.
+		RegisterPacketHandler(game::realm_client_packet::PetSpells, *this, &BotRealmConnector::OnPetSpells);
+		RegisterPacketHandler(game::realm_client_packet::PetResult, *this, &BotRealmConnector::OnPetResult);
+		RegisterPacketHandler(game::realm_client_packet::PetNameQueryResult, *this, &BotRealmConnector::OnPetNameQueryResult);
+		RegisterPacketHandler(game::realm_client_packet::PetXp, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::PetLearnedSpell, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
 
 		// Combat packet handlers
@@ -3260,6 +3271,67 @@ namespace mmo
 			packet.Start(game::client_realm_packet::CheatPetMake);
 			packet.Finish();
 			});
+	}
+
+	void BotRealmConnector::PetCommand(const uint8 command, const uint64 target, const uint32 param)
+	{
+		game::PetCommandRequest request;
+		request.command = command;
+		request.target = target;
+		request.param = param;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCommand);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::PetRename(const String& name)
+	{
+		game::PetRenameRequest request;
+		request.name = name;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetRename);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnPetSpells(game::IncomingPacket& packet)
+	{
+		game::PetSpellsData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_petSpells = std::move(data);
+		++m_petSpellsPackets;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPetResult(game::IncomingPacket& packet)
+	{
+		game::PetResultData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastPetResult = data.result;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPetNameQueryResult(game::IncomingPacket& packet)
+	{
+		game::PetNameQueryResultData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Sent to every client in sight of a renamed pet. Pet names are not mirrored by the bot.
+		return PacketParseResult::Pass;
 	}
 
 	void BotRealmConnector::SendEmote(const uint32 emoteId, const uint64 targetGuid)

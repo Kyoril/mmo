@@ -10,6 +10,7 @@
 #include "game/time_of_day.h"
 #include "game/shutdown_countdown.h"
 #include "game/bug_report_compression.h"
+#include "game/pet_defines.h"
 #include "log/default_log_levels.h"
 #include "mmo_client/luabind_lambda.h"
 
@@ -945,6 +946,121 @@ namespace mmo
 			return count;
 		}
 
+		/// Guid of a unit's owner (object_fields::Owner): "0x0" for a unit without one, "" for an
+		/// unknown unit. A pet, summon or totem has its summoner as owner.
+		std::string luaGetOwner(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? guidToString(unit->GetOwnerGuid()) : std::string();
+		}
+
+		/// Guid of the unit's current target (object_fields::TargetUnit): "0x0" for none, "" for an
+		/// unknown unit. A creature targets what it attacks.
+		std::string luaGetTarget(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? guidToString(unit->GetTargetGuid()) : std::string();
+		}
+
+		/// Calls fn for every living creature the client knows that is owned by ownerGuid and, unless
+		/// entry is 0, has that entry.
+		template <typename F>
+		void forEachOwnedCreature(const std::string& ownerGuid, const uint32 entry, F&& fn)
+		{
+			const uint64 owner = guidFromString(ownerGuid);
+			g_runtime->session->GetContext().GetObjectManager().ForEachCreature([owner, entry, &fn](const BotUnit& unit)
+				{
+					if (owner != 0 && unit.GetOwnerGuid() == owner && unit.IsAlive() && (entry == 0 || unit.GetEntry() == entry))
+					{
+						fn(unit);
+					}
+				});
+		}
+
+		/// Counts the living creatures the client knows that the unit owns (its pets and summons).
+		uint32 luaCountUnitsOwnedBy(const std::string& ownerGuid, const uint32 entry)
+		{
+			uint32 count = 0;
+			forEachOwnedCreature(ownerGuid, entry, [&count](const BotUnit&) { ++count; });
+			return count;
+		}
+
+		/// The index-th (0-based) living creature owned by the unit, in the client's object order, or "".
+		std::string luaGetOwnedUnit(const std::string& ownerGuid, const uint32 entry, const uint32 index)
+		{
+			std::string result;
+			uint32 current = 0;
+			forEachOwnedCreature(ownerGuid, entry, [&result, &current, index](const BotUnit& unit)
+				{
+					if (current++ == index)
+					{
+						result = guidToString(unit.GetGuid());
+					}
+				});
+			return result;
+		}
+
+		/// Guid of the summoned persistent pet as the last PetSpells described it, or "" for none.
+		std::string luaGetPet()
+		{
+			const uint64 petGuid = g_runtime->session->GetRealm().GetPetSpells().petGuid;
+			return petGuid != 0 ? guidToString(petGuid) : std::string();
+		}
+
+		std::string luaGetPetName()
+		{
+			return g_runtime->session->GetRealm().GetPetSpells().name;
+		}
+
+		uint32 luaGetPetEntry()
+		{
+			return g_runtime->session->GetRealm().GetPetSpells().petEntry;
+		}
+
+		bool luaPetKnowsSpell(const uint32 spellId)
+		{
+			const auto& spells = g_runtime->session->GetRealm().GetPetSpells().spells;
+			return std::find(spells.begin(), spells.end(), spellId) != spells.end();
+		}
+
+		uint32 luaPetSpellsCount()
+		{
+			return g_runtime->session->GetRealm().GetPetSpellsPacketCount();
+		}
+
+		int32 luaLastPetResult()
+		{
+			return g_runtime->session->GetRealm().GetLastPetResult();
+		}
+
+		void luaClearLastPetResult()
+		{
+			g_runtime->session->GetRealm().ClearLastPetResult();
+		}
+
+		void luaPetCommand(const uint32 command, const std::string& targetGuid, const uint32 param)
+		{
+			if (command > pet_command::Dismiss)
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "PetCommand: unknown command " + std::to_string(command));
+			}
+
+			g_runtime->session->GetRealm().PetCommand(static_cast<uint8>(command), guidFromString(targetGuid), param);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("PetCommand", { { "command", command }, { "target", targetGuid }, { "param", param } });
+			}
+		}
+
+		void luaPetRename(const std::string& name)
+		{
+			g_runtime->session->GetRealm().PetRename(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("PetRename", { { "name", name } });
+			}
+		}
+
 		std::string luaFindUnitByName(const std::string& name)
 		{
 			std::string result;
@@ -1878,6 +1994,19 @@ namespace mmo
 				luabind::def_lambda("FindNearestObjectByEntryImpl", &luaFindNearestObjectByEntry),
 				luabind::def_lambda("GetObjectState", &luaGetObjectState),
 				luabind::def_lambda("GetUnitFlags", &luaGetUnitFlags),
+				luabind::def_lambda("GetOwner", &luaGetOwner),
+				luabind::def_lambda("GetTarget", &luaGetTarget),
+				luabind::def_lambda("CountUnitsOwnedByImpl", &luaCountUnitsOwnedBy),
+				luabind::def_lambda("GetOwnedUnitImpl", &luaGetOwnedUnit),
+				luabind::def_lambda("GetPetImpl", &luaGetPet),
+				luabind::def_lambda("GetPetName", &luaGetPetName),
+				luabind::def_lambda("GetPetEntry", &luaGetPetEntry),
+				luabind::def_lambda("PetKnowsSpell", &luaPetKnowsSpell),
+				luabind::def_lambda("PetSpellsCount", &luaPetSpellsCount),
+				luabind::def_lambda("LastPetResult", &luaLastPetResult),
+				luabind::def_lambda("ClearLastPetResult", &luaClearLastPetResult),
+				luabind::def_lambda("PetCommandImpl", &luaPetCommand),
+				luabind::def_lambda("PetRename", &luaPetRename),
 				luabind::def_lambda("LootUnit", &luaLootUnit),
 				luabind::def_lambda("ReleaseLoot", &luaReleaseLoot),
 
@@ -1969,6 +2098,33 @@ namespace mmo
 			function CountUnitsByEntry(entry, includeDead)
 				return CountUnitsByEntryImpl(entry, not includeDead)
 			end
+
+			function CountUnitsOwnedBy(owner, entry)
+				return CountUnitsOwnedByImpl(owner, entry or 0)
+			end
+
+			function GetOwnedUnits(owner, entry)
+				local units = {}
+				local count = CountUnitsOwnedByImpl(owner, entry or 0)
+				for i = 0, count - 1 do
+					local guid = GetOwnedUnitImpl(owner, entry or 0, i)
+					if guid ~= "" then units[#units + 1] = guid end
+				end
+				return units
+			end
+
+			function GetPet()
+				local guid = GetPetImpl()
+				if guid == "" then return nil end
+				return guid
+			end
+
+			-- pet_command: 0 Attack, 1 Follow, 2 Stay, 3 SetStrategy, 4 Dismiss
+			function PetAttack(target) PetCommandImpl(0, target, 0) end
+			function PetFollow() PetCommandImpl(1, "", 0) end
+			function PetStay() PetCommandImpl(2, "", 0) end
+			function PetSetStrategy(strategy) PetCommandImpl(3, "", strategy) end
+			function PetDismiss() PetCommandImpl(4, "", 0) end
 
 			function FindUnitByName(name)
 				local guid = FindUnitByNameImpl(name)

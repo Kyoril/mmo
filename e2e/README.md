@@ -106,6 +106,18 @@ cooldown is not tracked),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 
+Pets (see [docs/pets.md](../docs/pets.md)):
+`GetOwner(g)` (the unit's Owner field: `"0x0"` for none, `""` for an unknown unit),
+`GetTarget(g)` (the unit's TargetUnit field, same conventions; a creature targets what it attacks),
+`CountUnitsOwnedBy(owner [, entry])` / `GetOwnedUnits(owner [, entry]) -> { g, ... }` (living
+creatures the client knows that `owner` owns, optionally of one entry: pets, summons),
+`GetPet() -> g|nil`, `GetPetName()`, `GetPetEntry()`, `PetKnowsSpell(spellId)` (the summoned
+persistent pet as the last `PetSpells` described it; temporary pets have no such state),
+`PetSpellsCount()` (`PetSpells` packets received this session), `LastPetResult()` /
+`ClearLastPetResult()` (the last `PetResult`, a `pet_result` value, -1 for none),
+`PetAttack(g)`, `PetFollow()`, `PetStay()`, `PetSetStrategy(strategy)` (0 Assist, 1 Passive),
+`PetDismiss()` (commands to all own pets), `PetRename(name)`
+
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
