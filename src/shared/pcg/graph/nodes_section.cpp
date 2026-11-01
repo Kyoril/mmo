@@ -18,7 +18,14 @@
 // `section`), and one setting per section parameter. An item attribute named like a section parameter overrides
 // the setting for that item. Reads nothing from the context.
 //
-// StampSectionAtPoints   In: Points items. One Terrain item per point, in point order: a two point linear spline\n//                        of length metres along the point's facing (rotation applied to +Z, flattened), centred on\n//                        the point or starting at it (nchor), at the point's y; pointIds = Hash(point seed, 0|1).\n//                        Length 0 = the section's own length, which only the terrain stage knows: the op then carries\n//                        StampLengthParam / StampAnchorParam (terrain_op.h) and PreparedTerrain lays the ends out.\n//                        heightMode defaults to followSpline.\n//\n// Errors (node errors, found at execute time): an empty section path, or a parameter value that
+// StampSectionAtPoints   In: Points items. One Terrain item per point, in point order: a two point linear spline
+//                        of `length` metres along the point's facing (rotation applied to +Z, flattened), centred on
+//                        the point or starting at it (`anchor`), at the point's y; pointIds = Hash(point seed, 0|1).
+//                        Length 0 = the section's own length, which only the terrain stage knows: the op then carries
+//                        StampLengthParam / StampAnchorParam (terrain_op.h) and PreparedTerrain lays the ends out.
+//                        heightMode defaults to followSpline.
+//
+// Errors (node errors, found at execute time): an empty section path, or a parameter value that
 // SetSectionPathParam rejects. Whether the asset exists is checked when the terrain is prepared.
 
 #include "builtin_nodes.h"
@@ -389,6 +396,7 @@ namespace mmo::pcg::graph
 			};
 			registry.Register(std::move(def));
 		}
+
 		void RegisterLaySection(NodeRegistry& registry, const bool loop)
 		{
 			NodeTypeDef def;
