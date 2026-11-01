@@ -558,7 +558,13 @@ TEST_CASE("Sample Area band-wise prune equals a prune of the whole item", "[grap
 		std::vector<Point> all = Exec("SampleArea", { { "cellSize", 0.5f } }, { { "In", { area } } }, ctx).pins.at("Out").at(0).points.points;
 		PruneOptions options;
 		options.minSpacing = minSpacing;
-		const std::vector<uint8> keep = PruneByDistance(all, options);
+		// Sample Area keeps the lower seed; PruneByDistance keeps the higher one, so rank by inverted seeds.
+		std::vector<Point> ranked = all;
+		for (Point& p : ranked)
+		{
+			p.seed = ~p.seed;
+		}
+		const std::vector<uint8> keep = PruneByDistance(ranked, options);
 		std::vector<std::tuple<uint64, float, float>> expected;
 		for (size_t i = 0; i < all.size(); ++i)
 		{
@@ -771,4 +777,43 @@ TEST_CASE("Samplers re-run through the evaluator when the terrain changes", "[gr
 	const EvalResult b = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
 	CHECK_FALSE(b.nodes.at(2).fromCache);
 	CHECK(b.nodes.at(2).output.pins.at("Out").at(0).points.points.at(0).position.y == Approx(20.0f));
+}
+
+TEST_CASE("Sample Spline does not turn item attributes named like point properties into columns", "[graph_nodes_sampler]")
+{
+	const EvalContext ctx;
+	DataItem spline = SplineItem({ { 0, 0 }, { 10, 0 } }, false);
+	spline.attributes["density"] = 0.25f;
+	spline.attributes["scale.x"] = 2.0f;
+	spline.attributes["kind"] = String("road");
+	const NodeOutput out = Exec("SampleSpline", { { "spacing", 5.0f } }, { { "In", { spline } } }, ctx);
+	REQUIRE(out.pins.at("Out").size() == 1);
+	const PointSet& set = out.pins.at("Out")[0].points;
+	CHECK(set.columns.count("density") == 0);
+	CHECK(set.columns.count("scale.x") == 0);
+	CHECK(set.columns.count("kind") == 1);
+	CHECK(set.points[0].density == 1.0f);
+	CHECK(std::count_if(out.warnings.begin(), out.warnings.end(), [](const String& w) { return w.find("point properties") != String::npos; }) == 1);
+}
+
+TEST_CASE("Sample Area's prune keeps the lower seed, as Self Prune with priority seed", "[graph_nodes_sampler]")
+{
+	const EvalContext ctx;
+	const float minSpacing = 2.5f;
+	const Collection area{ Square(0, 0, 30) };
+	const NodeOutput pruned = Exec("SampleArea", { { "cellSize", 1.0f }, { "minSpacing", minSpacing } }, { { "In", area } }, ctx);
+	const NodeOutput all = Exec("SampleArea", { { "cellSize", 1.0f } }, { { "In", area } }, ctx);
+	const NodeOutput selfPruned = Exec("SelfPrune", { { "minSpacing", minSpacing }, { "priority", String("seed") } }, { { "In", all.pins.at("Out") } }, ctx);
+	REQUIRE(pruned.pins.at("Out").size() == 1);
+	REQUIRE(selfPruned.pins.at("Out").size() == 1);
+	const auto& a = pruned.pins.at("Out")[0].points.points;
+	const auto& b = selfPruned.pins.at("Out")[0].points.points;
+	REQUIRE(a.size() == b.size());
+	REQUIRE(a.size() > 20);
+	for (size_t i = 0; i < a.size(); ++i)
+	{
+		CHECK(a[i].seed == b[i].seed);
+		CHECK(a[i].position.x == b[i].position.x);
+		CHECK(a[i].position.z == b[i].position.z);
+	}
 }

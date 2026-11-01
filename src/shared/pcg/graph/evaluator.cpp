@@ -6,6 +6,7 @@
 
 #include "pcg/pcg_random.h"
 
+#include <algorithm>
 #include <chrono>
 #include <set>
 
@@ -111,6 +112,12 @@ namespace mmo::pcg::graph
 					return settings;
 				}
 				it->second = parameter->second;
+				const String* value = std::get_if<String>(&it->second);
+				if (value != nullptr && !setting.enumValues.empty() && std::find(setting.enumValues.begin(), setting.enumValues.end(), *value) == setting.enumValues.end())
+				{
+					error = "setting '" + setting.name + "' got the unknown value '" + *value + "' from parameter '" + parameterName + "'";
+					return settings;
+				}
 			}
 			return settings;
 		}

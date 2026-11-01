@@ -73,7 +73,8 @@ namespace mmo::pcg::graph
 		float min = 0;
 		float max = 0;
 
-		/// @brief Allowed values for an enum-like String setting (empty = free text).
+		/// @brief Allowed values for an enum-like String setting (empty = free text). Any other value is a
+		///        validation issue, and a node error when it reaches the node through a parameter override.
 		std::vector<String> enumValues;
 
 		String description;
@@ -156,11 +157,12 @@ namespace mmo::pcg::graph
 		String message;
 	};
 
-	/// @brief Validates a graph against a registry: invalid or duplicate node ids, unknown node types,
-	///        dangling links, unknown pins, pin kind mismatches, several links into a single-link pin,
-	///        cycles, missing required inputs, setting type mismatches (declared settings must hold the
-	///        default value's type exactly; undeclared settings are ignored) and parameter bindings to a
-	///        parameter the graph does not declare or that has another type than the setting.
+	/// @brief Validates a graph against a registry: invalid (0 or above MaxNodeId) or duplicate node ids,
+	///        unknown node types, dangling links, unknown pins, pin kind mismatches, several links into a
+	///        single-link pin, cycles, missing required inputs, setting type mismatches (declared settings
+	///        must hold the default value's type exactly; undeclared settings are ignored), String values
+	///        outside a setting's enumValues (for a binding: the parameter's default) and parameter bindings
+	///        to a parameter the graph does not declare or that has another type than the setting.
 	/// @return The issues in a deterministic order; empty if the graph is valid.
 	std::vector<GraphIssue> ValidateGraph(const Graph& g, const NodeRegistry& r);
 }

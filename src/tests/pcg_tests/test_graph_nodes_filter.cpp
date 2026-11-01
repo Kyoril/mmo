@@ -577,3 +577,47 @@ TEST_CASE("Area inputs whose spline is not closed are skipped with a warning", "
 	}
 	CHECK(CountPoints(ExecNode("Difference", {}, { { "In", { grid } }, { "Subtract", { open } } }, ctx).pins.at("Out")) == 21 * 21);
 }
+
+TEST_CASE("Unknown enum setting values are node errors and validation issues", "[graph_nodes_filter]")
+{
+	const EvalContext ctx;
+	const Collection points{ MakePoints({ { 0.0f, 0.0f }, { 1.0f, 0.0f } }) };
+	CHECK_FALSE(ExecNode("FilterByAttribute", { { "attribute", String("density") }, { "scope", String("items") } }, { { "In", points } }, ctx).error.empty());
+	CHECK_FALSE(ExecNode("SelfPrune", { { "priority", String("random") } }, { { "In", points } }, ctx).error.empty());
+	CHECK(ExecNode("SelfPrune", { { "priority", String("seed") } }, { { "In", points } }, ctx).error.empty());
+
+	// Region -> Sample Area -> Self Prune, so the only possible issues are the settings.
+	Graph g;
+	for (const auto& [id, type] : { std::pair<uint32, const char*>{ 1, "GetRegion" }, { 2, "SampleArea" }, { 3, "SelfPrune" } })
+	{
+		NodeInstance node;
+		node.id = id;
+		node.type = type;
+		g.nodes.push_back(node);
+	}
+	g.links.push_back(Link{ 1, "Out", 2, "In" });
+	g.links.push_back(Link{ 2, "Out", 3, "In" });
+	g.nextNodeId = 4;
+	REQUIRE(ValidateGraph(g, NodeRegistry::Default()).empty());
+
+	g.nodes[2].settings["priority"] = String("random");
+	std::vector<GraphIssue> issues = ValidateGraph(g, NodeRegistry::Default());
+	REQUIRE(issues.size() == 1);
+	CHECK(issues[0].node == 3);
+	CHECK(issues[0].message.find("'random'") != String::npos);
+
+	// Through a binding the parameter's default is checked, and an override outside the list fails the node.
+	g.nodes[2].settings["priority"] = String("$prio");
+	g.parameters.push_back(ParameterDef{ "prio", String("random"), "" });
+	issues = ValidateGraph(g, NodeRegistry::Default());
+	REQUIRE(issues.size() == 1);
+	CHECK(issues[0].message.find("'prio'") != String::npos);
+
+	g.parameters[0].defaultValue = String("seed");
+	CHECK(ValidateGraph(g, NodeRegistry::Default()).empty());
+	EvalContext overridden;
+	overridden.parameters["prio"] = String("random");
+	const EvalResult result = Evaluate(g, NodeRegistry::Default(), overridden, nullptr);
+	REQUIRE(result.ok);
+	CHECK(result.nodes.at(3).output.error.find("'random'") != String::npos);
+}

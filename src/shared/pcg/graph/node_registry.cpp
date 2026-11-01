@@ -121,6 +121,23 @@ namespace mmo::pcg::graph
 			return nullptr;
 		}
 
+		/// Whether a value is allowed by a setting's enumValues (always true for free settings and non-Strings).
+		bool EnumAllows(const SettingDef& setting, const AttributeValue& value)
+		{
+			const String* s = std::get_if<String>(&value);
+			return setting.enumValues.empty() || s == nullptr || std::find(setting.enumValues.begin(), setting.enumValues.end(), *s) != setting.enumValues.end();
+		}
+
+		String EnumIssue(const SettingDef& setting, const AttributeValue& value)
+		{
+			String allowed;
+			for (const String& v : setting.enumValues)
+			{
+				allowed += (allowed.empty() ? "" : ", ") + v;
+			}
+			return "setting '" + setting.name + "' has the unknown value '" + std::get<String>(value) + "' (allowed: " + allowed + ")";
+		}
+
 		String LinkText(const Link& link)
 		{
 			return std::to_string(link.fromNode) + "." + link.fromPin + " -> " + std::to_string(link.toNode) + "." + link.toPin;
@@ -157,9 +174,9 @@ namespace mmo::pcg::graph
 		std::map<uint32, const NodeTypeDef*> defs;
 		for (const NodeInstance& node : g.nodes)
 		{
-			if (node.id == 0)
+			if (node.id == 0 || node.id > MaxNodeId)
 			{
-				issues.push_back({ 0, "node of type '" + node.type + "' has the invalid id 0" });
+				issues.push_back({ 0, "node of type '" + node.type + "' has the invalid id " + std::to_string(node.id) });
 				continue;
 			}
 			if (nodes.count(node.id) != 0)
@@ -198,12 +215,20 @@ namespace mmo::pcg::graph
 						issues.push_back({ node.id, "setting '" + setting.name + "' must be " + TypeName(wanted) + ", but parameter '" + parameterName +
 							"' is " + TypeName(TypeOf(parameter->defaultValue)) });
 					}
+					else if (!EnumAllows(setting, parameter->defaultValue))
+					{
+						issues.push_back({ node.id, EnumIssue(setting, parameter->defaultValue) + " via parameter '" + parameterName + "'" });
+					}
 					continue;
 				}
 				const AttributeValue value = UnescapeSettingValue(it->second);
 				if (TypeOf(value) != wanted)
 				{
 					issues.push_back({ node.id, "setting '" + setting.name + "' must be " + TypeName(wanted) + ", not " + TypeName(TypeOf(value)) });
+				}
+				else if (!EnumAllows(setting, value))
+				{
+					issues.push_back({ node.id, EnumIssue(setting, value) });
 				}
 			}
 		}

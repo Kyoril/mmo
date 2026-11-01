@@ -37,8 +37,8 @@ namespace
 			def.category = "Test";
 			def.title = "Source";
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Points } });
-			def.settings.push_back(SettingDef{ "count", int64(2) });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "count", int64(2), 0, 0, {}, "" });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
 			def.execute = [record](const EvalContext&, const uint64 seed, const AttributeSet& settings, const std::map<String, Collection>&)
 			{
 				record(settings);
@@ -67,8 +67,8 @@ namespace
 			def.title = "Offset";
 			def.inputs.push_back(PinDef{ "In", { ItemKind::Points }, true, true });
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Points } });
-			def.settings.push_back(SettingDef{ "dx", 1.0f });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "dx", 1.0f, 0, 0, {}, "" });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
 			def.execute = [record](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
 			{
 				record(settings);
@@ -107,7 +107,7 @@ namespace
 			def.category = "Test";
 			def.title = paramType.title;
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Params } });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
 			def.contextDeps = paramType.deps;
 			def.execute = [record](const EvalContext& ctx, uint64, const AttributeSet& settings, const std::map<String, Collection>&)
 			{
@@ -130,8 +130,8 @@ namespace
 			def.title = "Combine";
 			def.inputs.push_back(PinDef{ "In", {} });
 			def.outputs.push_back(PinDef{ "Out", {} });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
-			def.settings.push_back(SettingDef{ "label", String() });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
+			def.settings.push_back(SettingDef{ "label", String(), 0, 0, {}, "" });
 			def.execute = [record](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
 			{
 				record(settings);
@@ -155,7 +155,7 @@ namespace
 			def.category = "Test";
 			def.title = "Spline";
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Spline } });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
 			def.execute = [record](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>&)
 			{
 				record(settings);
@@ -176,7 +176,7 @@ namespace
 			def.title = "Fail";
 			def.inputs.push_back(PinDef{ "In", {} });
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Points } });
-			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "id", int64(0), 0, 0, {}, "" });
 			def.execute = [record](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>&)
 			{
 				record(settings);

@@ -443,3 +443,18 @@ TEST_CASE("Attribute Math reports a non-Float target column as such", "[graph_no
 	REQUIRE(out.warnings.size() == 1);
 	CHECK(out.warnings[0].find("target column 'label' is not Float") != String::npos);
 }
+
+TEST_CASE("Attribute Math creates its target column even when every point is skipped", "[graph_nodes_point]")
+{
+	const EvalContext ctx;
+	const NodeOutput out = ExecNode("AttributeMath", { { "target", String("height") }, { "input", String("missing") }, { "op", String("add") } }, { { "In", { MakePoints({ { 0.0f, 0.0f }, { 1.0f, 0.0f } }) } } }, ctx);
+	REQUIRE(out.error.empty());
+	REQUIRE(out.pins.at("Out").size() == 1);
+	const PointSet& set = out.pins.at("Out")[0].points;
+	const auto column = set.columns.find("height");
+	REQUIRE(column != set.columns.end());
+	CHECK(column->second.first == AttributeType::Float);
+	REQUIRE(column->second.second.size() == 2);
+	CHECK(std::get<float>(column->second.second[0]) == 0.0f);
+	CHECK(std::get<float>(column->second.second[1]) == 0.0f);
+}

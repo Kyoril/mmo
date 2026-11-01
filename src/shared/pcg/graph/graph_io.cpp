@@ -34,7 +34,7 @@ namespace mmo::pcg::graph
 			{
 				return false;
 			}
-			if (node.id == 0 || node.id == 0xFFFFFFFFu)
+			if (node.id == 0 || node.id > MaxNodeId)
 			{
 				error = context + ": node id " + std::to_string(node.id) + " is invalid";
 				return false;
@@ -152,6 +152,11 @@ namespace mmo::pcg::graph
 				{
 					return false;
 				}
+				if (link.fromNode == 0 || link.fromNode > MaxNodeId || link.toNode == 0 || link.toNode > MaxNodeId)
+				{
+					error = context + ": node ids must be between 1 and " + std::to_string(MaxNodeId);
+					return false;
+				}
 				graph.links.push_back(std::move(link));
 			}
 		}
@@ -193,7 +198,7 @@ namespace mmo::pcg::graph
 			}
 		}
 
-		graph.nextNodeId = maxId + 1;
+		graph.nextNodeId = maxId + 1;   // maxId <= MaxNodeId, so this cannot wrap
 		if (const Json* next = Find(root, "nextNodeId"))
 		{
 			if (!IsInt64(*next) || next->get<int64_t>() < 1 || next->get<int64_t>() > 0xFFFFFFFFll)

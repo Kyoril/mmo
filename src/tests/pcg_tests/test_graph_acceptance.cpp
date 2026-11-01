@@ -16,6 +16,8 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <set>
+#include <vector>
 
 using namespace mmo;
 using namespace mmo::pcg::graph;
@@ -359,7 +361,8 @@ TEST_CASE("Forest graph: exclusions, road clearance, slope, spacing, density, de
 
 	SECTION("the denser forest has about twice the points per area")
 	{
-		// Equal windows clear of the exclusion, the road and the band.
+		// Equal windows clear of the exclusion, the road and the band. The accepted band is empirical: it depends
+		// on the samplers' seed hashing, so re-check it whenever that hash (or the prune ranking) changes.
 		const size_t dense = CountIn(points, 0, 140, 240, 340);
 		const size_t sparse = CountIn(points, 500, 140, 740, 340);
 		INFO("dense " << dense << ", sparse " << sparse);
@@ -383,14 +386,14 @@ TEST_CASE("Forest graph: exclusions, road clearance, slope, spacing, density, de
 
 	SECTION("moving the exclusion changes only points near it")
 	{
-		constexpr float Move = 20.0f;
-		const ForestScene moved(40.0f + Move);
+		constexpr float moveDistance = 20.0f;
+		const ForestScene moved(40.0f + moveDistance);
 		const EvalContext movedCtx = moved.Context(terrain);
 		REQUIRE(movedCtx.controlsRevision != ctx.controlsRevision);
 		const std::vector<Point> after = Evaluated(graph, movedCtx, 6);
 
 		// Self Prune's locality radius (3 * minSpacing, point_prune.h) plus the move distance.
-		const float radius = 3.0f * ForestSpacing + Move;
+		const float radius = 3.0f * ForestSpacing + moveDistance;
 		const auto farFromBoth = [&](const Point& p)
 		{
 			return scene.ExclusionDistance(p.position.x, p.position.z) > radius && moved.ExclusionDistance(p.position.x, p.position.z) > radius;
@@ -430,7 +433,7 @@ TEST_CASE("Forest graph: exclusions, road clearance, slope, spacing, density, de
 		{
 			CHECK(moved.ExclusionDistance(p.position.x, p.position.z) > 0.0f);
 		}
-		CHECK(CountIn(after, 40, 40, 40 + Move - 0.01f, 120) > 0);
+		CHECK(CountIn(after, 40, 40, 40 + moveDistance - 0.01f, 120) > 0);
 	}
 }
 
@@ -492,10 +495,10 @@ TEST_CASE("Forest graph performance over 1.6 square kilometres with 4 m cells", 
 {
 	// The forest scene scaled so that the two forests cover 1.6 km^2 together (two 894 m squares); the exclusion
 	// and the road scale along, the steep band stays.
-	const float Scale = std::sqrt(1.6e6f / (2.0f * 400.0f * 400.0f));
+	const float scale = std::sqrt(1.6e6f / (2.0f * 400.0f * 400.0f));
 	const Graph graph = LoadGraph(ForestGraphJson(4.0f));
 	const SteepBandTerrain terrain;
-	const ForestScene scene(40.0f, Scale);
+	const ForestScene scene(40.0f, scale);
 	const EvalContext ctx = scene.Context(terrain);
 
 	GraphCache cache;

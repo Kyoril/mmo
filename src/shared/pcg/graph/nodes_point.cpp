@@ -25,8 +25,8 @@
 //               attribute) and must be numeric (Float, Int, Bool). With target scale and input empty or scale the
 //               op runs per axis; a scalar written to scale sets all three axes. Rules (one warning each per
 //               node): a missing or non-numeric operand leaves the point unchanged; division by zero and
-//               non-finite results write 0; a target column of a non-Float type is left unchanged. New target
-//               columns are Float, 0 for points that were skipped.
+//               non-finite results write 0; a target column of a non-Float type is left unchanged. A missing
+//               target column is always created (Float, 0 for points that were skipped, even if all were).
 // CopyAttributesFromControl  inputs "In" (Points), "Controls" (Areas, Splines). settings: attributes (comma list;
 //               empty = every item attribute of any control), distance. Per point the source control is the first
 //               Area (input order) containing it, else, if distance > 0, the nearest Spline or Area edge within
@@ -388,6 +388,13 @@ namespace mmo::pcg::graph
 					{
 						WarnOnce(o, "target column '" + target + "' is not Float; left unchanged");
 					}
+				}
+
+				// The column exists even when every point was skipped (created after the loop, so a missing column
+				// does not hide an item attribute of the same name from the operands).
+				if (!IsReservedPointName(target) && item.points.columns.count(target) == 0)
+				{
+					item.points.columns[target] = { AttributeType::Float, std::vector<AttributeValue>(item.points.points.size(), AttributeValue(0.0f)) };
 				}
 			});
 		}

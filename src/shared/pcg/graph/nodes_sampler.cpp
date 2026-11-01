@@ -15,8 +15,8 @@
 //               endsOnly (emit only the two end points of open splines; closed splines emit nothing). Points
 //               lie at arc distances 0, spacing, 2*spacing, ... (open: up to and including the length; closed:
 //               below the length), at the curve's height. Columns: "distance" (Float, arc distance) plus one
-//               column per item attribute holding the item's value (an item attribute named "distance" is
-//               dropped with a warning). Seed: Hash(nodeSeed, cellX, cellZ, Hash(Hash(salt, item key), distance
+//               column per item attribute holding the item's value (an item attribute named "distance" or
+//               like a point property, see IsReservedPointName, is dropped with a warning). Seed: Hash(nodeSeed, cellX, cellZ, Hash(Hash(salt, item key), distance
 //               in cm)) with the position quantized to 1 cm cells; the item key is the sourceId, or the item's
 //               input index when sourceId is 0. Output order: path order (ascending distance) per item.
 // SampleArea    input "In" (Areas). settings: cellSize, minSpacing, jitter (0-1), densityAttribute. World-anchored
@@ -26,8 +26,10 @@
 //               density and it lies inside the area (even-odd, as SampledPath::Contains). density is the item
 //               attribute named by densityAttribute (Float or Int, clamped to [0,1]; missing or non-numeric:
 //               warning, density 1) or 1; it is also stored as the point's density. If minSpacing > 0 the
-//               candidates are pruned with PruneByDistance (planar, 1 round), in bands of cell rows that are
-//               extended by the prune's locality radius 3 * minSpacing on both sides, so the result equals a
+//               candidates are pruned with PruneByDistance (planar, 1 round), ranked as Self Prune with priority
+//               seed ranks them (the lower seed wins a conflict), so the result equals Self Prune (planar,
+//               priority seed, same spacing) of the unpruned candidates. The prune runs in bands of cell rows
+//               that are extended by its locality radius 3 * minSpacing on both sides, so the result equals a
 //               prune of the whole item while memory stays bounded. The point limit counts the points that
 //               survive the prune. y is ctx.terrain->Height at the point; without a terrain y = 0, and where the
 //               terrain has no height the point is kept at y = 0 with a warning. Output order: by (cellZ, cellX).
@@ -266,6 +268,11 @@ namespace mmo::pcg::graph
 						WarnOnce(out, "item attribute 'distance' is shadowed by the distance column");
 						continue;
 					}
+					if (IsReservedPointName(name))
+					{
+						WarnOnce(out, "item attributes named like point properties (density, position.*, scale*) were not turned into columns");
+						continue;
+					}
 					item.points.columns[name] = { TypeOf(value), std::vector<AttributeValue>(n, value) };
 				}
 				result.push_back(std::move(item));
@@ -454,7 +461,7 @@ namespace mmo::pcg::graph
 							Point p;
 							p.position = Vector3(x, 0.0f, z);
 							p.density = density;
-							p.seed = h;
+							p.seed = ~h;   // inverted until the prune: PruneByDistance keeps the higher seed, the node the lower
 							candidates.push_back(p);
 							ownRow.push_back(iz >= band && iz <= bandEnd ? 1 : 0);
 						}
@@ -474,6 +481,7 @@ namespace mmo::pcg::graph
 						}
 						--budget.pointsLeft;
 						points.push_back(candidates[i]);
+						points.back().seed = ~points.back().seed;
 					}
 				}
 

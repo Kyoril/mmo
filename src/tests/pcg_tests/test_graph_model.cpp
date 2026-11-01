@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "pcg/graph/graph_io.h"
+#include "pcg/graph/node_registry.h"
 
 #include <limits>
 
@@ -201,4 +202,30 @@ TEST_CASE("Out-of-range numbers are refused", "[graph_model]")
 	error.clear();
 	CHECK_FALSE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 1, \"type\": \"A\", \"editorX\": 1e300}]}", out, error));
 	CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("Node ids stop at MaxNodeId so nextNodeId cannot wrap", "[graph_model]")
+{
+	Graph out;
+	String error;
+	REQUIRE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 4294967294, \"type\": \"A\"}]}", out, error));
+	CHECK(out.nextNodeId == 0xFFFFFFFFu);
+	CHECK(out.nextNodeId != 0);
+
+	error.clear();
+	CHECK_FALSE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 1, \"type\": \"A\"}], \"links\": [{\"fromNode\": 1, \"fromPin\": \"Out\", \"toNode\": 4294967295, \"toPin\": \"In\"}]}", out, error));
+	CHECK_FALSE(error.empty());
+
+	error.clear();
+	CHECK_FALSE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 1, \"type\": \"A\"}], \"links\": [{\"fromNode\": 0, \"fromPin\": \"Out\", \"toNode\": 1, \"toPin\": \"In\"}]}", out, error));
+	CHECK_FALSE(error.empty());
+
+	Graph g;
+	NodeInstance node;
+	node.id = 0xFFFFFFFFu;
+	node.type = "GetRegion";
+	g.nodes.push_back(node);
+	const std::vector<GraphIssue> issues = ValidateGraph(g, NodeRegistry::Default());
+	REQUIRE(issues.size() == 1);
+	CHECK(issues[0].message.find("invalid id") != String::npos);
 }

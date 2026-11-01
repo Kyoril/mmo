@@ -8,10 +8,14 @@
 
 namespace mmo::pcg::graph
 {
+	/// @brief Highest valid node id. Valid ids are 1..MaxNodeId; 0xFFFFFFFF is reserved so that "highest id + 1"
+	///        (Graph::nextNodeId) never wraps to 0.
+	constexpr uint32 MaxNodeId = 0xFFFFFFFEu;
+
 	/// @brief One node placed in a graph.
 	struct NodeInstance
 	{
-		/// @brief Unique id within the graph (0 is invalid).
+		/// @brief Unique id within the graph, 1..MaxNodeId.
 		uint32 id = 0;
 
 		/// @brief Node type name, resolved by the registry.
@@ -56,7 +60,7 @@ namespace mmo::pcg::graph
 		std::vector<Link> links;
 		std::vector<ParameterDef> parameters;
 
-		/// @brief Next id handed out to a new node.
+		/// @brief Next id handed out to a new node. MaxNodeId + 1 means no id is left.
 		uint32 nextNodeId = 1;
 	};
 }

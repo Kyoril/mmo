@@ -268,7 +268,13 @@ namespace mmo::pcg::graph
 				out.error = "unknown op '" + SettingString(settings, "op", "") + "'";
 				return out;
 			}
-			const bool itemScope = SettingString(settings, "scope", "auto") == "item";
+			const String scope = SettingString(settings, "scope", "auto");
+			if (scope != "auto" && scope != "item")
+			{
+				out.error = "unknown scope '" + scope + "'";
+				return out;
+			}
+			const bool itemScope = scope == "item";
 
 			for (const DataItem& item : *in)
 			{
@@ -384,7 +390,13 @@ namespace mmo::pcg::graph
 			options.minSpacing = std::max(0.0f, SettingFloat(settings, "minSpacing", 2.0f));
 			options.planar = SettingBool(settings, "planar", true);
 			options.rounds = 1;
-			const bool byDensity = SettingString(settings, "priority", "density") != "seed";
+			const String priority = SettingString(settings, "priority", "density");
+			if (priority != "density" && priority != "seed")
+			{
+				out.error = "unknown priority '" + priority + "'";
+				return out;
+			}
+			const bool byDensity = priority == "density";
 
 			// All items are pruned together. PruneByDistance ranks the higher seed first; the node ranks the lower
 			// seed first, so the seeds are inverted for the prune only.
