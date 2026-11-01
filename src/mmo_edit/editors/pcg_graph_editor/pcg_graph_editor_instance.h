@@ -209,6 +209,10 @@ namespace mmo
 		uint64 m_debugSectionCheckKey { 0 };
 		double m_debugSectionCheckTime { 0 };
 
+		/// @brief Areas of the touching terrain-writing instances (the seams of the debug view), refreshed together with the
+		///        section check (the evaluation key changed, else at most once a second): collecting reads graph files.
+		std::vector<PathSpline> m_debugSeamNeighbours;
+
 		/// @brief Last debug evaluation and the key of its inputs (0 = none yet).
 		pcg::graph::EvalResult m_debugResult;
 		bool m_hasDebugResult { false };

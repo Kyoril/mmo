@@ -1411,6 +1411,7 @@ namespace mmo
 		m_debugCache.Clear();
 		m_debugSections->Clear();
 		m_debugSectionCheckKey = 0;
+		m_debugSeamNeighbours.clear();
 		m_debugResult = pcg::graph::EvalResult();
 		m_hasDebugResult = false;
 		m_debugEvalKey = 0;
@@ -1573,14 +1574,17 @@ namespace mmo
 			m_debugSectionCheckKey = evalKey;
 			m_debugSectionCheckTime = now;
 			m_debugSections->DropChanged();
+
+			// The seams with touching terrain-writing instances (no border fade there), as a rebuild prepares them.
+			// Collecting them reads graph files, so it follows this check instead of running every frame.
+			m_debugSeamNeighbours.clear();
+			if (GraphHasTerrainOps(graph))
+			{
+				CollectSeamNeighbours(*record, mode->GetGraphInstances(), m_debugSeamNeighbours);
+			}
 		}
 
-		// The seams with touching terrain-writing instances (no border fade there), as a rebuild prepares them.
-		std::vector<PathSpline> seamNeighbours;
-		if (GraphHasTerrainOps(graph))
-		{
-			CollectSeamNeighbours(*record, mode->GetGraphInstances(), seamNeighbours);
-		}
+		const std::vector<PathSpline>& seamNeighbours = m_debugSeamNeighbours;
 
 		// Redraw when the evaluation, the set of debug nodes, the border fade or a section asset changed.
 		pcg::graph::Hasher drawHasher;

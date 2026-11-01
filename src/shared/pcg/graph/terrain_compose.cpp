@@ -436,10 +436,9 @@ namespace mmo::pcg::graph
 					continue;
 				}
 
-				const Bounds2D regionBounds = SplineBounds(region);
 				constexpr float reach = 1.0f;
-				if (otherBounds.maxX + reach < regionBounds.minX || otherBounds.minX - reach > regionBounds.maxX ||
-					otherBounds.maxZ + reach < regionBounds.minZ || otherBounds.minZ - reach > regionBounds.maxZ)
+				if (otherBounds.maxX + reach < bounds.minX || otherBounds.minX - reach > bounds.maxX ||
+					otherBounds.maxZ + reach < bounds.minZ || otherBounds.minZ - reach > bounds.maxZ)
 				{
 					continue;
 				}

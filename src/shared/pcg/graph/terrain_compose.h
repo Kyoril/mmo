@@ -163,8 +163,9 @@ namespace mmo::pcg::graph
 		/// @param error Receives a message naming the node and asset for a missing asset, a rejected section param
 		///        or a degenerate section path, or the problem with the region.
 		/// @param neighbours Areas of the other graph instances in the world that contain terrain nodes (closed loops).
-		///        A region edge segment is a seam where it lies on a neighbour edge (both end points within 0.05 m of
-		///        that edge, collinear within 0.05 m); the border fade ignores seam edges, so terrain does not fade
+		///        A region edge segment is a seam where it lies on a neighbour border: nine points along it (both end
+		///        points and the eighths between) are all within 0.05 m of the neighbour loop. A segment that only ends at a
+		///        neighbour corner or cuts across it is not. The border fade ignores seam edges, so terrain does not fade
 		///        there. Writes still stop at the region edge. Loops that are not usable are ignored.
 		/// @return False on such an error (the object is then empty).
 		bool Prepare(const std::vector<TerrainOpInput>& ops, const std::function<float(float, float)>& baseGround,
