@@ -1,0 +1,142 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+
+#pragma once
+
+#include "evaluator.h"
+#include "graph.h"
+#include "graph_data.h"
+#include "terrain_op.h"
+
+#include "pcg/placement.h"
+#include "pcg/section_asset.h"
+#include "pcg/terrain_contribution.h"
+
+#include <functional>
+#include <memory>
+#include <vector>
+
+namespace mmo::pcg::graph
+{
+	/// @brief Supplies section assets by path (the editor loads them through the asset registry; tests pass
+	///        in-memory assets). Returns null with a message in `error` if the asset cannot be supplied.
+	using SectionAssetProvider = std::function<const SectionAsset*(const String& path, String& error)>;
+
+	/// @brief Maps a texture key to the tile's layer index at (x, z), -1 if the tile has no layer with that texture.
+	using TextureLayerLookup = std::function<int8(float x, float z, const String& textureKey)>;
+
+	/// @brief One terrain op with the geometry of the item that carried it.
+	struct TerrainOpInput
+	{
+		/// @brief The op descriptor.
+		TerrainOp op;
+
+		/// @brief The item's spline (Area: closed loop).
+		PathSpline spline;
+
+		/// @brief Stable point ids of the spline (may be empty for generated splines).
+		std::vector<uint64> pointIds;
+
+		/// @brief The item's points.
+		PointSet points;
+
+		/// @brief Producing control id (0 = generated).
+		uint64 sourceId = 0;
+	};
+
+	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
+	///        sorted by (op.order, node id, item index). Items of other kinds on that pin are ignored.
+	std::vector<TerrainOpInput> CollectTerrainOps(const Graph& graph, const EvalResult& result);
+
+	/// @brief Terrain ops prepared on the base terrain and composed into one terrain target.
+	///
+	/// Composition: the running height h starts at the base height. Every op that touches (x, z) returns
+	/// (target, weight), then h = lerp(h, target, weight x fade), in op order. fade is the region fade: 1 inside the
+	/// region, smoothstep to 0 over borderFade metres at the border, 0 outside. Op semantics (params by name, missing
+	/// ones take the defaults in brackets):
+	/// - SectionPath (op.asset = .hsec path, op.params = SetSectionPathParam names): EvaluateSectionTerrain on h, its
+	///   paint remapped to tile layers through the lookup over the asset's layerTextures (identity if the asset names
+	///   no textures).
+	/// - Noise (closed area; amplitude 1.5, wavelength 24, octaves 3, falloff 8): target = h + amplitude x
+	///   FractalNoise (world-anchored, [-1, 1]); weight smoothstep from 0 at the area edge to 1 at falloff inside.
+	/// - Raise (spline; width 40, falloffPower 2): peak = max(0, spline y - base ground under the spline) per spline
+	///   sample (base sampled in Prepare), interpolated at the nearest point; target = h + peak x
+	///   smoothstep(1 - d / width)^falloffPower, d = distance to the spline.
+	/// - Carve (spline; width 4, depth 1.5, bank 3): profile 1 within width / 2 of the spline, falling (smoothstep)
+	///   to 0 over bank metres beyond; target = h - depth x profile.
+	/// - Paint (texture = texture key, weight 1, width 4, falloff 2): a closed spline paints inside the area, an open
+	///   one within width of the spline, both fading (smoothstep) from 0 at the edge to full over falloff metres
+	///   inwards; the splat is the layer the lookup gives for the texture at (x, z), at `weight`. Skipped where the
+	///   lookup gives -1 (one warning per op).
+	/// - WaterArea (closed area; level 0, levelOffset 0, margin 4, op.asset = water material): waterType 1 and
+	///   waterHeight = level + levelOffset inside the area and up to margin metres outside its edge.
+	/// Splat targets are composited in op order (each op's layer weights over the previous ones at its weight x
+	/// fade); water is last writer wins inside the region. Heights are only written where an op touches: the result
+	/// is then (final h, weight 1), else weight 0. Splat and water do not depend on the base height. Like all ops,
+	/// Raise, Carve and Noise are relative to the running height and therefore commute with each other; SectionPath
+	/// targets an absolute height, so its place in the order matters.
+	///
+	/// Evaluate records the Paint warnings, so it is not safe to call concurrently.
+	class PreparedTerrain final
+	{
+	public:
+		PreparedTerrain();
+		~PreparedTerrain();
+		PreparedTerrain(PreparedTerrain&&) noexcept;
+		PreparedTerrain& operator=(PreparedTerrain&&) noexcept;
+		PreparedTerrain(const PreparedTerrain&) = delete;
+		PreparedTerrain& operator=(const PreparedTerrain&) = delete;
+
+		/// @brief Prepares every op on the given base ground (called after Unapply). Ops with unusable geometry or
+		///        settings are skipped with a warning.
+		/// @param ops The ops in composition order (see CollectTerrainOps).
+		/// @param baseGround Base terrain height at a world position (may be empty: 0).
+		/// @param sections Supplies the section assets of SectionPath ops.
+		/// @param region The region loop (closed, at least 3 points); writes are clipped to it.
+		/// @param borderFade Width (m) of the fade inside the region border; 0 = no fade.
+		/// @param error Receives a message naming the node and asset for a missing asset, a rejected section param
+		///        or a degenerate section path, or the problem with the region.
+		/// @return False on such an error (the object is then empty).
+		bool Prepare(const std::vector<TerrainOpInput>& ops, const std::function<float(float, float)>& baseGround,
+			const SectionAssetProvider& sections, const PathSpline& region, float borderFade, String& error);
+
+		/// @brief Union of op influences clipped to the region bounds; empty (all 0) if there are no ops.
+		WorldRect GetInfluence() const;
+
+		/// @brief True if no op was prepared.
+		bool IsEmpty() const;
+
+		/// @brief Stacks all ops on `baseHeight` in order (see the class comment).
+		/// @param layers Texture key to tile layer lookup; empty = Paint ops are skipped and sections paint their
+		///        layers unmapped.
+		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers) const;
+
+		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept if inside
+		///        the region, sorted by key (a duplicate key is dropped with a warning).
+		/// @param ground Final ground, passed to BuildSectionPlacements.
+		/// @param out Cleared, then receives the placements.
+		void BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out) const;
+
+		/// @brief First non-empty WaterArea material (a warning is recorded if several differ).
+		const String& GetWaterMaterial() const;
+
+		/// @brief Warnings of Prepare, Evaluate and BuildPlacements, each text once.
+		const std::vector<String>& GetWarnings() const;
+
+	private:
+		struct PreparedOp;
+
+		/// @brief Region fade at a position: 1 inside, smoothstep to 0 over the border fade, 0 outside.
+		float RegionFade(float x, float z) const;
+
+		/// @brief Adds a warning unless the same text is already recorded.
+		void Warn(const String& message) const;
+
+	private:
+		std::vector<std::unique_ptr<PreparedOp>> m_ops;
+		std::unique_ptr<PreparedOp> m_region;
+		float m_borderFade = 0.0f;
+		WorldRect m_influence;
+		String m_waterMaterial;
+		mutable std::vector<String> m_warnings;
+	};
+}
