@@ -74,9 +74,10 @@ namespace mmo
 		/// node's last one after a disconnect) is still written, but removes no pets.
 		void ForgetPets(uint64 characterGuid);
 
-		/// Saves the stored pets a world node reported (PetData). Only pets that changed are written.
-		/// A pet the node no longer reports is deleted, unless it was created after the node got its
-		/// list (it may not have heard of it yet).
+		/// Saves the stored pets a world node reported (PetData). Only pets that differ from what the
+		/// database is confirmed to hold are written, so a write that failed is repeated by the next
+		/// save. A pet the node no longer reports is deleted, unless it was created after the node got
+		/// its list (it may not have heard of it yet).
 		void SavePets(uint64 characterGuid, std::vector<PersistentPetData> pets);
 
 		/// Creates a stored pet (CreatePet). The request is refused (answered with id 0) when the
@@ -92,7 +93,18 @@ namespace mmo
 		/// The last known stored pets of a character in the world.
 		struct CharacterPets
 		{
+			/// The latest state: what the world node reported last, plus pets created since. This is
+			/// what a world node gets with the next join.
 			std::vector<PersistentPetData> pets;
+
+			/// What the database is confirmed to hold, by pet id: loaded, created, or written by a
+			/// save that succeeded. Saves are compared with this, never with the latest state, so a
+			/// failed write is not mistaken for an unchanged pet. Results arrive in request order (one
+			/// key), so this never runs ahead of the database.
+			std::map<uint64, PersistentPetData> confirmed;
+
+			/// Tells this session's requests from those of an earlier one of the same character.
+			uint32 generation = 0;
 
 			/// Pets created since the world node got its list, which it may not know about yet. A
 			/// save that leaves them out does not remove them.
@@ -102,5 +114,6 @@ namespace mmo
 	private:
 		AsyncPetDatabase& m_database;
 		std::map<uint64, CharacterPets> m_characters;
+		uint32 m_nextGeneration = 0;
 	};
 }

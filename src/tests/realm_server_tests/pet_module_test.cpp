@@ -41,7 +41,8 @@ namespace
 		return std::any_of(pets.begin(), pets.end(), [dbId](const PersistentPetData& pet) { return pet.dbId == dbId; });
 	}
 
-	/// A pet module whose database work runs inline against a mock.
+	/// A pet module whose database work runs inline against a mock, or is queued while
+	/// deferWork is set (requests in flight) until RunQueuedWork.
 	struct PetModuleFixture
 	{
 		MockPetDatabase database;
@@ -49,11 +50,29 @@ namespace
 			[this](uint64 key, std::function<void(IPetDatabase&)> work)
 			{
 				keys.push_back(key);
+				if (deferWork)
+				{
+					queuedWork.push_back(std::move(work));
+					return;
+				}
 				work(database);
 			},
 			SyncResult };
 		PetModule module{ asyncDatabase };
 		std::vector<uint64> keys;
+		bool deferWork = false;
+		std::vector<std::function<void(IPetDatabase&)>> queuedWork;
+
+		/// Runs the queued requests in order (one key, one FIFO queue), with their results.
+		void RunQueuedWork()
+		{
+			auto work = std::move(queuedWork);
+			queuedWork.clear();
+			for (auto& item : work)
+			{
+				item(database);
+			}
+		}
 
 		/// Loads the character's pets, as on entering the world, and hands them to a world node.
 		void EnterWorld(const uint64 characterGuid = CharacterGuid)
@@ -279,4 +298,133 @@ TEST_CASE_METHOD(PetModuleFixture, "a save after the character left still writes
 	CHECK(database.saves[0].pets[0] == dismissed);
 	CHECK(database.saves[0].removedPetIds.empty());
 	CHECK_FALSE(module.GetPetsForJoin(CharacterGuid));
+}
+
+TEST_CASE_METHOD(PetModuleFixture, "a failed save is written again by the next identical save", "[pets][pet_module]")
+{
+	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3) };
+	EnterWorld();
+
+	PersistentPetData leveled = MakePet(1, 3);
+	leveled.level = 4;
+	database.failingSaves = { 0 };
+	module.SavePets(CharacterGuid, { leveled });
+	REQUIRE(database.saves.size() == 1);
+
+	// The same state again (the logout save, say) is not "unchanged": the database never got it.
+	module.SavePets(CharacterGuid, { leveled });
+	REQUIRE(database.saves.size() == 2);
+	REQUIRE(database.saves[1].pets.size() == 1);
+	CHECK(database.saves[1].pets[0] == leveled);
+
+	// Once written, it is unchanged.
+	module.SavePets(CharacterGuid, { leveled });
+	CHECK(database.saves.size() == 2);
+}
+
+TEST_CASE_METHOD(PetModuleFixture, "a failed removal is retried by the next save", "[pets][pet_module]")
+{
+	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3), MakePet(2, 4) };
+	EnterWorld();
+
+	database.failingSaves = { 0 };
+	module.SavePets(CharacterGuid, { MakePet(1, 3) });
+	REQUIRE(database.saves.size() == 1);
+	CHECK(database.saves[0].removedPetIds == std::vector<uint64>{ 2 });
+
+	module.SavePets(CharacterGuid, { MakePet(1, 3) });
+	REQUIRE(database.saves.size() == 2);
+	CHECK(database.saves[1].pets.empty());
+	CHECK(database.saves[1].removedPetIds == std::vector<uint64>{ 2 });
+
+	// The world node's list is what it hands over on the next join, failed write or not.
+	const std::vector<PersistentPetData>* pets = module.FindPets(CharacterGuid);
+	REQUIRE(pets);
+	CHECK_FALSE(ContainsPet(*pets, 2));
+
+	module.SavePets(CharacterGuid, { MakePet(1, 3) });
+	CHECK(database.saves.size() == 2);
+}
+
+TEST_CASE_METHOD(PetModuleFixture, "two saves in flight never make the cache claim more than the database has", "[pets][pet_module]")
+{
+	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3) };
+	EnterWorld();
+
+	PersistentPetData level4 = MakePet(1, 3);
+	level4.level = 4;
+	PersistentPetData level5 = MakePet(1, 3);
+	level5.level = 5;
+
+	SECTION("the older save succeeds, the newer one fails")
+	{
+		deferWork = true;
+		module.SavePets(CharacterGuid, { level4 });
+		module.SavePets(CharacterGuid, { level5 });
+		database.failingSaves = { 1 };
+		deferWork = false;
+		RunQueuedWork();
+
+		// The database has level 4, so level 5 must be written again.
+		module.SavePets(CharacterGuid, { level5 });
+		REQUIRE(database.saves.size() == 3);
+		REQUIRE(database.saves[2].pets.size() == 1);
+		CHECK(database.saves[2].pets[0] == level5);
+	}
+
+	SECTION("the older save fails, the newer one succeeds")
+	{
+		deferWork = true;
+		module.SavePets(CharacterGuid, { level4 });
+		module.SavePets(CharacterGuid, { level5 });
+		database.failingSaves = { 0 };
+		deferWork = false;
+		RunQueuedWork();
+
+		// The newer save wrote level 5 (it was compared with the confirmed level 3).
+		REQUIRE(database.saves.size() == 2);
+		REQUIRE(database.saves[1].pets.size() == 1);
+		CHECK(database.saves[1].pets[0] == level5);
+
+		module.SavePets(CharacterGuid, { level5 });
+		CHECK(database.saves.size() == 2);
+	}
+
+	SECTION("both succeed")
+	{
+		deferWork = true;
+		module.SavePets(CharacterGuid, { level4 });
+		module.SavePets(CharacterGuid, { level5 });
+		deferWork = false;
+		RunQueuedWork();
+
+		module.SavePets(CharacterGuid, { level5 });
+		CHECK(database.saves.size() == 2);
+	}
+}
+
+TEST_CASE_METHOD(PetModuleFixture, "a save confirmed after the character logged in again does not touch the new session", "[pets][pet_module]")
+{
+	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3) };
+	EnterWorld();
+
+	PersistentPetData leveled = MakePet(1, 3);
+	leveled.level = 4;
+	deferWork = true;
+	module.SavePets(CharacterGuid, { leveled });
+
+	// Logout and login again before the save finished: the new load comes after it (same key).
+	module.ForgetPets(CharacterGuid);
+	bool loaded = false;
+	module.LoadPets(CharacterGuid, [&loaded]() { loaded = true; });
+	database.failingSaves = { 0 };
+	deferWork = false;
+	RunQueuedWork();
+	REQUIRE(loaded);
+
+	// The new session loaded level 3 (the failed save never reached the database), and the stale
+	// failure changed nothing about that: level 4 is written when reported.
+	module.SavePets(CharacterGuid, { leveled });
+	REQUIRE(database.saves.size() == 2);
+	CHECK(database.saves[1].pets[0] == leveled);
 }

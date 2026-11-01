@@ -9,6 +9,8 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <set>
+#include <stdexcept>
 
 namespace mmo
 {
@@ -208,6 +210,10 @@ struct MockPetDatabase : IPetDatabase
         std::vector<uint64> removedPetIds;
     };
     std::vector<SaveCall> saves;
+
+    /// Indices (0-based, in call order) of SaveCharacterPets calls that fail. A failing call is
+    /// recorded in saves and then throws, as a failed transaction does.
+    std::set<size_t> failingSaves;
     std::vector<std::pair<uint64, PersistentPetData>> creations;
     std::vector<uint64> deletedCharacters;
 
@@ -225,6 +231,10 @@ struct MockPetDatabase : IPetDatabase
     void SaveCharacterPets(uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds) override
     {
         saves.push_back({ characterId, pets, removedPetIds });
+        if (failingSaves.count(saves.size() - 1) != 0)
+        {
+            throw std::runtime_error("save failed");
+        }
     }
 
     uint64 CreateCharacterPet(uint64 characterId, const PersistentPetData& pet) override

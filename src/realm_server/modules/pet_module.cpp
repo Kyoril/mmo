@@ -51,7 +51,13 @@ namespace mmo
 		{
 			if (pets)
 			{
-				m_characters[characterGuid].pets = *pets;
+				CharacterPets& known = m_characters[characterGuid];
+				known.generation = ++m_nextGeneration;
+				known.pets = *pets;
+				for (const auto& pet : *pets)
+				{
+					known.confirmed[pet.dbId] = pet;
+				}
 			}
 			else
 			{
@@ -91,6 +97,7 @@ namespace mmo
 	{
 		std::vector<PersistentPetData> changed;
 		std::vector<uint64> removed;
+		std::optional<uint32> generation;
 
 		const auto it = m_characters.find(characterGuid);
 		if (it == m_characters.end())
@@ -102,44 +109,44 @@ namespace mmo
 		else
 		{
 			CharacterPets& known = it->second;
+			generation = known.generation;
 			const auto findIn = [](const std::vector<PersistentPetData>& list, const uint64 dbId)
 			{
 				return std::find_if(list.begin(), list.end(), [dbId](const PersistentPetData& pet) { return pet.dbId == dbId; });
 			};
 
-			// Pets the node reports: write those that changed. A reported pet is known to the node.
-			for (const auto& pet : pets)
+			// The new latest state: the reported pets, plus those the node may not know yet. A
+			// reported pet is known to the node; the others it no longer reports were removed there.
+			std::vector<PersistentPetData> latest = std::move(pets);
+			for (const auto& pet : latest)
 			{
 				known.unknownToWorld.erase(pet.dbId);
+			}
+			for (auto& pet : known.pets)
+			{
+				if (findIn(latest, pet.dbId) == latest.end() && known.unknownToWorld.count(pet.dbId) != 0)
+				{
+					latest.push_back(std::move(pet));
+				}
+			}
+			known.pets = std::move(latest);
 
-				const auto previous = findIn(known.pets, pet.dbId);
-				if (previous == known.pets.end() || *previous != pet)
+			// Written is what the database does not hold yet, deleted is what it holds and should not.
+			for (const auto& pet : known.pets)
+			{
+				const auto confirmed = known.confirmed.find(pet.dbId);
+				if (confirmed == known.confirmed.end() || confirmed->second != pet)
 				{
 					changed.push_back(pet);
 				}
 			}
-
-			// Pets the node no longer reports were removed there, unless it may not know them yet.
-			std::vector<PersistentPetData> kept;
-			for (auto& pet : known.pets)
+			for (const auto& [dbId, pet] : known.confirmed)
 			{
-				if (findIn(pets, pet.dbId) != pets.end())
+				if (findIn(known.pets, dbId) == known.pets.end())
 				{
-					continue;
-				}
-
-				if (known.unknownToWorld.count(pet.dbId) != 0)
-				{
-					kept.push_back(std::move(pet));
-				}
-				else
-				{
-					removed.push_back(pet.dbId);
+					removed.push_back(dbId);
 				}
 			}
-
-			known.pets = std::move(pets);
-			std::move(kept.begin(), kept.end(), std::back_inserter(known.pets));
 		}
 
 		if (changed.empty() && removed.empty())
@@ -147,11 +154,30 @@ namespace mmo
 			return;
 		}
 
-		auto handler = [characterGuid](const bool success)
+		// Only a write that succeeded is recorded as what the database holds; a failed one is
+		// repeated by the next save, the logout save included.
+		auto handler = [this, characterGuid, generation, written = changed, deleted = removed](const bool success)
 		{
 			if (!success)
 			{
-				ELOG("Failed to save the stored pets of character " << log_hex_digit(characterGuid));
+				ELOG("Failed to save the stored pets of character " << log_hex_digit(characterGuid) << "; the next save writes them again");
+				return;
+			}
+
+			const auto known = m_characters.find(characterGuid);
+			if (!generation || known == m_characters.end() || known->second.generation != *generation)
+			{
+				// Saved for a session that is over; the current one loaded after this write.
+				return;
+			}
+
+			for (const auto& pet : written)
+			{
+				known->second.confirmed[pet.dbId] = pet;
+			}
+			for (const uint64 dbId : deleted)
+			{
+				known->second.confirmed.erase(dbId);
 			}
 		};
 		m_database.asyncRequestKeyed(characterGuid, std::move(handler), &IPetDatabase::SaveCharacterPets, characterGuid, std::move(changed), std::move(removed));
@@ -191,6 +217,7 @@ namespace mmo
 					// As the world node will store it: not summoned yet (it summons a tamed pet itself).
 					PersistentPetData stored = pet;
 					stored.wasSummoned = false;
+					it->second.confirmed[petId] = stored;
 					it->second.pets.push_back(std::move(stored));
 					it->second.unknownToWorld.insert(petId);
 				}
