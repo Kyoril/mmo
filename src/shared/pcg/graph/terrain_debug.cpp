@@ -54,7 +54,7 @@ namespace mmo::pcg::graph
 		/// Height a rebuild writes at (x, z) on the given base.
 		float ComposedHeight(const PreparedTerrain& prepared, const float x, const float z, const float baseHeight)
 		{
-			const TerrainTarget target = prepared.Evaluate(x, z, baseHeight, {});
+			const TerrainTarget target = prepared.Evaluate(x, z, baseHeight, {}, nullptr, terrain_channel::Heights);
 			if (target.heightWeight <= 0.0f)
 			{
 				return baseHeight;

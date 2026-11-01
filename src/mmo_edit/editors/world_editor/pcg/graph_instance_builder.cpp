@@ -696,9 +696,10 @@ namespace mmo
 			return true;
 		};
 
-		content.terrain = [state](const float x, const float z, const float baseHeight)
+		// Each Apply pass asks only for its channel, so the splat and water passes skip the height ops.
+		content.terrain = [state](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
 		{
-			return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes);
+			return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes, channels);
 		};
 
 		content.placements = [state](const GroundFunction& ground, const GroundFunction&, std::vector<pcg::Placement>& out)

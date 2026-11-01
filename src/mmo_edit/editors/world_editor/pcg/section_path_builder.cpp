@@ -320,7 +320,7 @@ namespace mmo
 		{
 			return pcg::PrepareSectionPath(record.spline, record.pointIds, asset, record.params, ground, *shape, error);
 		};
-		content.terrain = [shape, remapFunction](const float x, const float z, const float baseHeight)
+		content.terrain = [shape, remapFunction](const float x, const float z, const float baseHeight, pcg::terrain_channel::Type)
 		{
 			return pcg::EvaluateSectionTerrain(*shape, x, z, baseHeight, remapFunction);
 		};

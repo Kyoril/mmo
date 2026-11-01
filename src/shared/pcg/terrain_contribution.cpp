@@ -272,6 +272,16 @@ namespace mmo::pcg
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const TerrainTargetFunction& target,
 		const String& material, TerrainContribution& out)
 	{
+		const ChannelTerrainTargetFunction everyChannel = [&target](const float x, const float z, const float baseHeight, terrain_channel::Type)
+		{
+			return target(x, z, baseHeight);
+		};
+		Apply(terrain, rect, everyChannel, material, out);
+	}
+
+	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const ChannelTerrainTargetFunction& target,
+		const String& material, TerrainContribution& out)
+	{
 		out.Clear();
 
 		const GridLayout& l = terrain.GetLayout();
@@ -303,7 +313,7 @@ namespace mmo::pcg
 					const float base = pass == 0 ? terrain.GetOuterHeight(x, z) : terrain.GetInnerHeight(x, z);
 					const double wx = l.originX + (x + offset) * vs;
 					const double wz = l.originZ + (z + offset) * vs;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), base);
+					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), base, terrain_channel::Heights);
 					if (t.heightWeight <= 0.0f)
 					{
 						continue;
@@ -337,7 +347,7 @@ namespace mmo::pcg
 				{
 					const double wx = l.originX + x * l.pixelSpacing;
 					const double wz = l.originZ + z * l.pixelSpacing;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f);
+					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Splat);
 					if (t.splatWeight <= 0.0f)
 					{
 						continue;
@@ -373,7 +383,7 @@ namespace mmo::pcg
 				{
 					const double wx = l.originX + (x + 0.5) * quadSize;
 					const double wz = l.originZ + (z + 0.5) * quadSize;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f);
+					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Water);
 					if (t.waterType == 0)
 					{
 						continue;
@@ -417,7 +427,7 @@ namespace mmo::pcg
 				{
 					const double wx = l.originX + (x + 0.5) * tileSize;
 					const double wz = l.originZ + (z + 0.5) * tileSize;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f);
+					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Material);
 					if (!t.setMaterial)
 					{
 						continue;

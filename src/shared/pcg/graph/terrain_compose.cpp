@@ -525,10 +525,13 @@ namespace mmo::pcg::graph
 	}
 
 	TerrainTarget PreparedTerrain::Evaluate(const float x, const float z, const float baseHeight, const TextureLayerLookup& layers,
-		TerrainEvaluateNotes* notes) const
+		TerrainEvaluateNotes* notes, const terrain_channel::Type channels) const
 	{
 		TerrainTarget out;
-		if (m_ops.empty() || !Contains(m_influence, x, z))
+		const bool wantHeights = (channels & terrain_channel::Heights) != 0;
+		const bool wantSplat = (channels & terrain_channel::Splat) != 0;
+		const bool wantWater = (channels & terrain_channel::Water) != 0;
+		if (m_ops.empty() || !(wantHeights || wantSplat || wantWater) || !Contains(m_influence, x, z))
 		{
 			return out;
 		}
@@ -542,6 +545,40 @@ namespace mmo::pcg::graph
 		bool touched = false;
 		std::array<double, 4> paint{};
 		double paintAlpha = 0.0;
+
+		// Section layer to tile layer mapping of the SectionPath op being evaluated. The remap function captures only a
+		// reference to this state, so it fits std::function's small buffer (no allocation per call).
+		struct SectionRemapState
+		{
+			const TextureLayerLookup* layers = nullptr;
+			TerrainEvaluateNotes* notes = nullptr;
+			const PreparedOp* op = nullptr;
+			size_t opIndex = 0;
+		};
+		SectionRemapState remapState;
+		remapState.layers = &layers;
+		remapState.notes = notes;
+		LayerRemapFunction remap;
+		if (wantSplat && layers)
+		{
+			remap = [&remapState](const float px, const float pz)
+			{
+				// Only called where the section paints.
+				const PreparedOp& op = *remapState.op;
+				std::array<int8, 4> r{};
+				for (size_t i = 0; i < 4; ++i)
+				{
+					const String& texture = op.shape.asset.layerTextures[i];
+					r[i] = texture.empty() ? static_cast<int8>(-1) : (*remapState.layers)(px, pz, texture);
+					if (r[i] < 0 && remapState.notes && !texture.empty() && op.paintedLayers[i])
+					{
+						remapState.notes->missingSectionLayers.emplace(remapState.opIndex, static_cast<uint8>(i));
+					}
+				}
+				return r;
+			};
+		}
+		const LayerRemapFunction noRemap;
 		auto blendHeight = [&h, &touched, fade](const float target, const float weight)
 		{
 			const float w = std::min(1.0f, weight) * fade;
@@ -564,31 +601,20 @@ namespace mmo::pcg::graph
 			{
 			case TerrainOpType::SectionPath:
 			{
-				LayerRemapFunction remap;
-				if (op.remapLayers && layers)
+				if (!wantHeights && !wantSplat)
 				{
-					// Only called where the section paints.
-					remap = [&op, &layers, notes, opIndex](const float px, const float pz)
-					{
-						std::array<int8, 4> r{};
-						for (size_t i = 0; i < 4; ++i)
-						{
-							const String& texture = op.shape.asset.layerTextures[i];
-							r[i] = texture.empty() ? static_cast<int8>(-1) : layers(px, pz, texture);
-							if (r[i] < 0 && notes && !texture.empty() && op.paintedLayers[i])
-							{
-								notes->missingSectionLayers.emplace(opIndex, static_cast<uint8>(i));
-							}
-						}
-						return r;
-					};
+					break;
 				}
-				const TerrainTarget t = EvaluateSectionTerrain(op.shape, x, z, h, remap);
-				if (t.heightWeight > 0.0f)
+				// The section's paint does not depend on the running height, so a splat-only pass, which leaves h at the
+				// base, paints the same.
+				remapState.op = &op;
+				remapState.opIndex = opIndex;
+				const TerrainTarget t = EvaluateSectionTerrain(op.shape, x, z, h, op.remapLayers ? remap : noRemap);
+				if (wantHeights && t.heightWeight > 0.0f)
 				{
 					blendHeight(t.height, t.heightWeight);
 				}
-				if (t.splatWeight > 0.0f)
+				if (wantSplat && t.splatWeight > 0.0f)
 				{
 					CompositeSplat(paint, paintAlpha, t.splat, std::min(1.0f, t.splatWeight) * fade);
 				}
@@ -596,7 +622,7 @@ namespace mmo::pcg::graph
 			}
 			case TerrainOpType::Noise:
 			{
-				if (!op.polygon->Contains(x, z))
+				if (!wantHeights || !op.polygon->Contains(x, z))
 				{
 					break;
 				}
@@ -612,7 +638,7 @@ namespace mmo::pcg::graph
 			case TerrainOpType::Raise:
 			{
 				NearestHit hit;
-				if (!op.edge.Nearest(x, z, hit))
+				if (!wantHeights || !op.edge.Nearest(x, z, hit))
 				{
 					break;
 				}
@@ -627,7 +653,7 @@ namespace mmo::pcg::graph
 			case TerrainOpType::Carve:
 			{
 				NearestHit hit;
-				if (!op.edge.Nearest(x, z, hit))
+				if (!wantHeights || !op.edge.Nearest(x, z, hit))
 				{
 					break;
 				}
@@ -644,6 +670,10 @@ namespace mmo::pcg::graph
 			}
 			case TerrainOpType::Paint:
 			{
+				if (!wantSplat)
+				{
+					break;
+				}
 				float weight = 0.0f;
 				NearestHit hit;
 				if (op.area)
@@ -679,7 +709,7 @@ namespace mmo::pcg::graph
 			case TerrainOpType::WaterArea:
 			{
 				NearestHit hit;
-				if (op.polygon->Contains(x, z) || op.edge.Nearest(x, z, hit))
+				if (wantWater && (op.polygon->Contains(x, z) || op.edge.Nearest(x, z, hit)))
 				{
 					out.waterType = 1;
 					out.waterHeight = op.level;

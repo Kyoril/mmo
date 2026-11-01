@@ -148,12 +148,16 @@ namespace mmo::pcg::graph
 		/// @param layers Texture key to tile layer lookup; empty = Paint ops are skipped and sections paint their
 		///        layers unmapped.
 		/// @param notes If not null, receives what was skipped (see DescribeNotes); owned by the caller.
+		/// @param channels The channels the caller reads (pcg::terrain_channel flags). Those are filled exactly as with
+		///        terrain_channel::All; the others stay at their defaults, and the ops only they need are skipped: a
+		///        splat-only or water-only call runs no Noise, Raise or Carve and lays no section heights, a
+		///        heights-only call does no texture lookups. Tile materials are never set.
 		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
-			TerrainEvaluateNotes* notes = nullptr) const;
+			TerrainEvaluateNotes* notes = nullptr, terrain_channel::Type channels = terrain_channel::All) const;
 
 		/// @brief Appends one warning per noted op: a Paint texture that is not a layer of some tile, or a SectionPath
 		///        op whose painted section layers name textures that are not (the warning names the section asset and
-		///        those textures).
+		///        those textures, whose paint may have been skipped there).
 		void DescribeNotes(const TerrainEvaluateNotes& notes, std::vector<String>& warnings) const;
 
 		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept where the

@@ -553,6 +553,88 @@ TEST_CASE("Water fills the area up to the margin past the shore", "[graph_terrai
 	CHECK(t.Evaluate(25.0f, 25.0f, 17.0f, {}).waterHeight == Approx(3.5f));
 }
 
+TEST_CASE("Channel modes fill their channels exactly as All does", "[graph_terrain_compose]")
+{
+	// Every op type at once: noise, raise and carve under a section with mass and remapped paint, a paint op and water.
+	SectionAsset road = MakeRoad();
+	road.layerTextures = { "Textures/Dirt.htex", "", "Textures/Gravel.htex", "" };
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", road } };
+	TerrainOpInput section = MakeOp(TerrainOpType::SectionPath, Line(0.0f, -60.0f, 0.0f, 60.0f, 4.0f), 4, { { "massEnabled", true } });
+	section.op.asset = "Sections/TestRoad.hsec";
+	TerrainOpInput water = MakeOp(TerrainOpType::WaterArea, Square(20.0f, -20.0f, 30.0f), 6, { { "level", 2.0f } });
+	water.op.asset = "Materials/Water.hmat";
+	const std::vector<TerrainOpInput> ops{
+		MakeOp(TerrainOpType::Noise, Square(-60.0f, -60.0f, 120.0f), 1, { { "amplitude", 2.0f } }),
+		MakeOp(TerrainOpType::Raise, Line(-40.0f, 0.0f, 40.0f, 0.0f, 6.0f), 2),
+		MakeOp(TerrainOpType::Carve, Line(-40.0f, 20.0f, 40.0f, 20.0f), 3),
+		section,
+		MakeOp(TerrainOpType::Paint, Square(-30.0f, -30.0f, 25.0f), 5, { { "texture", String("Textures/Sand.htex") }, { "weight", 0.7f } }),
+		water,
+	};
+	PreparedTerrain t;
+	PrepareOk(t, ops, Square(-55.0f, -55.0f, 110.0f), 8.0f, Provider(assets));
+
+	// Gravel is missing west of x = 0, so the notes must match too.
+	const TextureLayerLookup lookup = [](const float x, float, const String& key) -> int8
+	{
+		if (key == "Textures/Dirt.htex")
+		{
+			return 1;
+		}
+		if (key == "Textures/Sand.htex")
+		{
+			return 3;
+		}
+		return key == "Textures/Gravel.htex" && x >= 0.0f ? 2 : -1;
+	};
+
+	size_t splatSamples = 0;
+	size_t waterSamples = 0;
+	size_t heightSamples = 0;
+	TerrainEvaluateNotes allNotes;
+	TerrainEvaluateNotes splatNotes;
+	for (float z = -58.0f; z <= 58.0f; z += 1.7f)
+	{
+		for (float x = -58.0f; x <= 58.0f; x += 1.3f)
+		{
+			const float base = 0.25f * x - 0.1f * z;
+			const TerrainTarget all = t.Evaluate(x, z, base, lookup, &allNotes);
+			const TerrainTarget heights = t.Evaluate(x, z, base, lookup, nullptr, terrain_channel::Heights);
+			const TerrainTarget splat = t.Evaluate(x, z, 0.0f, lookup, &splatNotes, terrain_channel::Splat);
+			const TerrainTarget waterOnly = t.Evaluate(x, z, 0.0f, lookup, nullptr, terrain_channel::Water);
+			const TerrainTarget none = t.Evaluate(x, z, base, lookup, nullptr, terrain_channel::Material);
+
+			REQUIRE(heights.heightWeight == all.heightWeight);
+			REQUIRE(heights.height == all.height);
+			REQUIRE(splat.splatWeight == all.splatWeight);
+			REQUIRE(splat.splat == all.splat);
+			REQUIRE(waterOnly.waterType == all.waterType);
+			REQUIRE(waterOnly.waterHeight == all.waterHeight);
+
+			// The other channels stay at their defaults.
+			CHECK(heights.splatWeight == 0.0f);
+			CHECK(heights.waterType == 0);
+			CHECK(splat.heightWeight == 0.0f);
+			CHECK(splat.waterType == 0);
+			CHECK(waterOnly.heightWeight == 0.0f);
+			CHECK(waterOnly.splatWeight == 0.0f);
+			CHECK(none.heightWeight == 0.0f);
+			CHECK(none.splatWeight == 0.0f);
+			CHECK(none.waterType == 0);
+
+			splatSamples += all.splatWeight > 0.0f ? 1 : 0;
+			waterSamples += all.waterType != 0 ? 1 : 0;
+			heightSamples += all.heightWeight > 0.0f ? 1 : 0;
+		}
+	}
+	CHECK(splatSamples > 100);
+	CHECK(waterSamples > 100);
+	CHECK(heightSamples > 1000);
+	CHECK(!allNotes.missingSectionLayers.empty());
+	CHECK(splatNotes.missingSectionLayers == allNotes.missingSectionLayers);
+	CHECK(splatNotes.missingLayerOps == allNotes.missingLayerOps);
+}
+
 TEST_CASE("CollectTerrainOps gathers Terrain pins in op order", "[graph_terrain_compose]")
 {
 	Graph graph;

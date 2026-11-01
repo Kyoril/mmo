@@ -35,6 +35,28 @@ namespace mmo::pcg
 
 	using TerrainTargetFunction = std::function<TerrainTarget(float x, float z, float baseHeight)>;
 
+	/// The channels of a TerrainTarget a caller reads (bit flags).
+	namespace terrain_channel
+	{
+		enum Type : uint8
+		{
+			/// height and heightWeight.
+			Heights = 1,
+			/// splat and splatWeight.
+			Splat = 2,
+			/// waterType and waterHeight.
+			Water = 4,
+			/// setMaterial.
+			Material = 8,
+			/// Every channel.
+			All = Heights | Splat | Water | Material
+		};
+	}
+
+	/// A TerrainTargetFunction that is told which channels the caller reads. It must fill those channels exactly as
+	/// it would for terrain_channel::All; the others may be left at their defaults (so it can skip work only they need).
+	using ChannelTerrainTargetFunction = std::function<TerrainTarget(float x, float z, float baseHeight, terrain_channel::Type channels)>;
+
 	/// Everything a generator wrote, with the value that was there before.
 	struct TerrainContribution
 	{
@@ -89,5 +111,11 @@ namespace mmo::pcg
 	/// stored sorted by (z, x). `material` is the tile material set where target.setMaterial.
 	/// `out` is cleared first. Indices outside the terrain must not be covered by `rect`.
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const TerrainTargetFunction& target,
+		const String& material, TerrainContribution& out);
+
+	/// Apply with a target that is told the channel each pass reads: the height passes ask for
+	/// terrain_channel::Heights, the splat pass for Splat, the water pass for Water and the tile material pass for
+	/// Material. Writes the same as Apply with a target that fills every channel the same way.
+	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const ChannelTerrainTargetFunction& target,
 		const String& material, TerrainContribution& out);
 }

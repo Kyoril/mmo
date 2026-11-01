@@ -6,6 +6,7 @@
 #include "pcg/terrain_contribution.h"
 
 #include <cmath>
+#include <map>
 
 using namespace mmo;
 using namespace mmo::pcg;
@@ -55,6 +56,62 @@ TEST_CASE("Apply then Unapply restores exactly", "[terrain_contribution]")
 	Unapply(terrain, c);
 	CHECK(terrain.m_data == original);
 	CHECK(c.IsEmpty());
+}
+
+TEST_CASE("A channel target writes what the plain target writes, one channel per pass", "[terrain_contribution]")
+{
+	FakeTerrain plainTerrain;
+	TerrainContribution plain;
+	Apply(plainTerrain, FullRect, Bowl, "Grass", plain);
+
+	// Fills only the asked channel, and counts the calls per channel.
+	std::map<uint8, size_t> calls;
+	const ChannelTerrainTargetFunction channelBowl = [&calls](const float x, const float z, const float baseHeight, const terrain_channel::Type channels)
+	{
+		++calls[static_cast<uint8>(channels)];
+		const TerrainTarget full = Bowl(x, z, baseHeight);
+		TerrainTarget t;
+		if (channels == terrain_channel::Heights)
+		{
+			t.height = full.height;
+			t.heightWeight = full.heightWeight;
+		}
+		else if (channels == terrain_channel::Splat)
+		{
+			t.splat = full.splat;
+			t.splatWeight = full.splatWeight;
+		}
+		else if (channels == terrain_channel::Water)
+		{
+			t.waterType = full.waterType;
+			t.waterHeight = full.waterHeight;
+		}
+		else if (channels == terrain_channel::Material)
+		{
+			t.setMaterial = full.setMaterial;
+		}
+		return t;
+	};
+	FakeTerrain channelTerrain;
+	TerrainContribution channel;
+	Apply(channelTerrain, FullRect, channelBowl, "Grass", channel);
+
+	CHECK(channelTerrain.m_data == plainTerrain.m_data);
+	CHECK(channel.outer.size() == plain.outer.size());
+	CHECK(channel.inner.size() == plain.inner.size());
+	CHECK(channel.splat.size() == plain.splat.size());
+	CHECK(channel.waterQuads.size() == plain.waterQuads.size());
+	CHECK(channel.waterHeights.size() == plain.waterHeights.size());
+	CHECK(channel.materials.size() == plain.materials.size());
+	CHECK(channel.touchedOuter.minX == plain.touchedOuter.minX);
+	CHECK(channel.touchedOuter.maxZ == plain.touchedOuter.maxZ);
+
+	// Only the four single channels were asked for, each at least once.
+	CHECK(calls.size() == 4);
+	CHECK(calls[terrain_channel::Heights] > 0);
+	CHECK(calls[terrain_channel::Splat] > 0);
+	CHECK(calls[terrain_channel::Water] > 0);
+	CHECK(calls[terrain_channel::Material] > 0);
 }
 
 TEST_CASE("Rebuild twice is identical", "[terrain_contribution]")

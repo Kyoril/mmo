@@ -66,7 +66,7 @@ namespace mmo
 			}
 			return true;
 		};
-		content.terrain = [shape](const float x, const float z, const float baseHeight)
+		content.terrain = [shape](const float x, const float z, const float baseHeight, pcg::terrain_channel::Type)
 		{
 			return pcg::EvaluateTerrain(*shape, x, z, baseHeight);
 		};

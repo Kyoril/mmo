@@ -21,31 +21,57 @@ namespace mmo
 		return m_terrain.GetTileIndexByWorldPosition(Vector3(x, 0.0f, z), tileX, tileZ);
 	}
 
-	const std::array<String, 4>& EditorTextureLayers::GetTileTextures(const int32 tileX, const int32 tileZ)
+	const EditorTextureLayers::TileTextures& EditorTextureLayers::GetTile(const int32 tileX, const int32 tileZ)
 	{
-		const auto key = std::make_pair(tileX, tileZ);
-		const auto cached = m_tileTextures.find(key);
-		if (cached != m_tileTextures.end())
+		if (m_lastTile != nullptr && m_lastTileX == tileX && m_lastTileZ == tileZ)
 		{
-			return cached->second;
+			return *m_lastTile;
 		}
 
-		std::array<String, 4> textures;
-		int32 pageX = 0, pageZ = 0, localX = 0, localZ = 0;
-		if (m_terrain.GetPageIndexFromGlobalTileIndex(tileX, tileZ, pageX, pageZ) &&
-			m_terrain.GetLocalTileIndexByGlobalTileIndex(tileX, tileZ, localX, localZ))
+		const auto key = std::make_pair(tileX, tileZ);
+		auto cached = m_tiles.find(key);
+		if (cached == m_tiles.end())
 		{
-			if (const terrain::Page* page = m_terrain.GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ)))
+			TileTextures textures;
+			int32 pageX = 0, pageZ = 0, localX = 0, localZ = 0;
+			if (m_terrain.GetPageIndexFromGlobalTileIndex(tileX, tileZ, pageX, pageZ) &&
+				m_terrain.GetLocalTileIndexByGlobalTileIndex(tileX, tileZ, localX, localZ))
 			{
-				const MaterialPtr material = page->GetTileMaterial(static_cast<uint32>(localX), static_cast<uint32>(localZ));
-				for (uint8 layer = 0; layer < 4; ++layer)
+				if (const terrain::Page* page = m_terrain.GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ)))
 				{
-					textures[layer] = GetTerrainLayerTextureKey(material, layer);
+					const MaterialPtr material = page->GetTileMaterial(static_cast<uint32>(localX), static_cast<uint32>(localZ));
+					for (uint8 layer = 0; layer < 4; ++layer)
+					{
+						textures.keys[layer] = GetTerrainLayerTextureKey(material, layer);
+						textures.normalized[layer] = pcg::NormalizeTextureKey(textures.keys[layer]);
+					}
 				}
 			}
+			cached = m_tiles.emplace(key, std::move(textures)).first;
 		}
 
-		return m_tileTextures.emplace(key, std::move(textures)).first->second;
+		m_lastTileX = tileX;
+		m_lastTileZ = tileZ;
+		m_lastTile = &cached->second;
+		return cached->second;
+	}
+
+	const String& EditorTextureLayers::NormalizeQuery(const String& textureKey)
+	{
+		for (const auto& query : m_queries)
+		{
+			if (query.first == textureKey)
+			{
+				return query.second;
+			}
+		}
+		m_queries.emplace_back(textureKey, pcg::NormalizeTextureKey(textureKey));
+		return m_queries.back().second;
+	}
+
+	const std::array<String, 4>& EditorTextureLayers::GetTileTextures(const int32 tileX, const int32 tileZ)
+	{
+		return GetTile(tileX, tileZ).keys;
 	}
 
 	int8 EditorTextureLayers::FindLayer(const int32 tileX, const int32 tileZ, const String& textureKey)
@@ -55,10 +81,12 @@ namespace mmo
 			return -1;
 		}
 
-		const std::array<String, 4>& textures = GetTileTextures(tileX, tileZ);
-		for (size_t layer = 0; layer < textures.size(); ++layer)
+		// Equal normalised keys is what pcg::TextureKeysMatch tests (normalising keeps the length).
+		const String& wanted = NormalizeQuery(textureKey);
+		const TileTextures& tile = GetTile(tileX, tileZ);
+		for (size_t layer = 0; layer < tile.normalized.size(); ++layer)
 		{
-			if (pcg::TextureKeysMatch(textures[layer], textureKey))
+			if (tile.normalized[layer] == wanted)
 			{
 				return static_cast<int8>(layer);
 			}

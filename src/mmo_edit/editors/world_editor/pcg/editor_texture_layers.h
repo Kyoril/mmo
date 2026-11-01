@@ -9,6 +9,7 @@
 #include <array>
 #include <map>
 #include <utility>
+#include <vector>
 
 namespace mmo
 {
@@ -20,9 +21,9 @@ namespace mmo
 	/// @brief Finds the paint layer of the terrain tile under a world position that carries a texture, the way
 	///        section paint is matched: the texture key of each tile layer (GetTerrainLayerTextureKey: layer binding,
 	///        Albedo0N fallback) compared with pcg::TextureKeysMatch, first matching layer wins.
-	/// @details Caches the four layer textures per tile for its lifetime, so it must not outlive a change of tile
-	///          materials it should see (one build). Main thread only (the terrain is not thread safe, the cache is
-	///          not synchronised).
+	/// @details Caches the four layer textures per tile (raw and normalised) and the normalised form of every
+	///          queried key for its lifetime, so it must not outlive a change of tile materials it should see (one
+	///          build). Main thread only (the terrain is not thread safe, the cache is not synchronised).
 	class EditorTextureLayers final : public NonCopyable
 	{
 	public:
@@ -50,9 +51,31 @@ namespace mmo
 		[[nodiscard]] pcg::graph::TextureLayerLookup MakeLookup();
 
 	private:
+		/// The layer texture keys of one tile, as read and normalised (pcg::NormalizeTextureKey).
+		struct TileTextures
+		{
+			std::array<String, 4> keys;
+			std::array<String, 4> normalized;
+		};
+
+		/// The cached textures of a tile, read on first use.
+		const TileTextures& GetTile(int32 tileX, int32 tileZ);
+
+		/// The normalised form of a queried texture key, cached (callers query a handful of keys many times).
+		const String& NormalizeQuery(const String& textureKey);
+
+	private:
 		terrain::Terrain& m_terrain;
 
-		/// Layer textures by global tile index.
-		std::map<std::pair<int32, int32>, std::array<String, 4>> m_tileTextures;
+		/// Layer textures by global tile index (map nodes are stable, so m_lastTile stays valid).
+		std::map<std::pair<int32, int32>, TileTextures> m_tiles;
+
+		/// The tile of the last lookup (consecutive lookups mostly hit the same tile).
+		int32 m_lastTileX = 0;
+		int32 m_lastTileZ = 0;
+		const TileTextures* m_lastTile = nullptr;
+
+		/// Queried keys and their normalised form.
+		std::vector<std::pair<String, String>> m_queries;
 	};
 }
