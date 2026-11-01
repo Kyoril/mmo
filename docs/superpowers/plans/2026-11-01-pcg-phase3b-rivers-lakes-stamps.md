@@ -51,7 +51,7 @@ Phase 3a's plan (`docs/superpowers/plans/2026-11-01-pcg-phase3a-terrain-sections
 
 ## Review Focus
 
-1. **A hand-drawn river (`.hflow`) shares pages with a generated river.** Rebuilding or deleting the graph instance keeps the hand river's flow, and editing the hand river in Water mode keeps the generated flow. (Task 5 flag checks; Task 5 water-mode unit of `CollectFlowPaths`.)
+1. **A hand-drawn river (`.hflow`) shares pages with a generated river.** Rebuilding or deleting the graph instance keeps the hand river's flow, and editing the hand river in Water mode keeps the generated flow. (Task 5 flag check (c); the Water-mode half goes on the user's UI checklist.)
 2. **A river spline that climbs downstream, or one drawn upstream-first.** The water surface never rises downstream: it is clamped, and a warning names the control and the climb. No water sheet hangs above the banks. (Task 4 composition test.)
 3. **Rebuild twice with a river, a basin and stamps.** Pages, including their WFLW flow chunks, foliage, entities and the record are byte-identical. (Task 4 determinism test; Task 5 and Task 7 flag checks.)
 4. **A lake whose base rim is lower than its level.** The water would spill past the margin as a floating sheet. Prepare warns with the control named and the lowest rim height; the basin still carves. (Task 2 test.)
@@ -100,13 +100,13 @@ int32 stackOrder = 0;   // composition order across nodes; ties fall back to op.
 
 **Interfaces:**
 - `WaterArea` gains `depth` (Float, 0 = no basin, 0..200) and `shoreWidth` (Float, 6, 0.5..200).
-- **Composition with `depth` > 0.** Let `d` be the inward distance from the area edge and `s = smoothstep(0, shoreWidth, d)`. Inside the area, target = `min(h, level + levelOffset − depth × s)` at weight 1. Outside the edge the heights are untouched. Water is as in 3a. With `depth` 0 the op writes no heights, exactly as before.
+- **Composition with `depth` > 0.** Let `d` be the inward distance from the area edge and `s = smoothstep(0, shoreWidth, d)`. Inside the area, target = `min(h, h + (level + levelOffset − depth − h) × s)` at weight 1, so the shore starts at the running height and the bed reaches `level + levelOffset − depth` after `shoreWidth`. Outside the edge the heights are untouched. Water is as in 3a. With `depth` 0 the op writes no heights, exactly as before.
 - **Rim check.** `Prepare` samples the base ground every 2 m along the area outline. If any sample is below `level + levelOffset`, it records one warning: `WaterArea (node <id>, control <sourceId>): base rim drops to <min> m, below the water level <level> m; water will show past the shore`.
 - **Channels.** A heights-only `Evaluate` runs the basin; a water-only one does not.
 - **Outline.** The basin's outline carries the area points and draws in the debug view as the shore loop plus one "depth" tick at the area's centroid.
 
 - [ ] **Step 1: Write failing tests** `[terrain_compose]`, `[graph_nodes_terrain]`:
-  - On a flat base at 25 m with level 21.5, depth 3, shoreWidth 6: height 18.5 at 10 m inside, 25 at the edge, ≤ 21.5 from about 3.5 m inside; water height 21.5 inside.
+  - On a flat base at 25 m with level 21.5, depth 3, shoreWidth 6: height 25 at the edge, 21.75 at 3 m inside (s = 0.5), 18.5 at 10 m inside; water height 21.5 inside.
   - A hand bump of +2 m at 10 m inside is still clamped to 18.5 (the basin owns the bed). A hand bump outside the area survives.
   - `depth` 0 gives the same `TerrainTarget` as before the change at 50 samples.
   - Rim lower than the level → exactly one warning with the documented text; a rim above → none.
@@ -250,7 +250,7 @@ std::vector<terrain_io::water_flow::FlowPath> CollectGeneratedFlowPaths() const;
 - [ ] **Step 5: Flag checks** on a scratch copy of world 2 inside the worktree (`Worlds/Collision`; restore with `git checkout` in `data/client` afterwards). Use a temporary River control through `--pcg-new-control` and a scratch graph `Editor/Pcg/Biomes/FalwynForest/Graphs/RiverScratch.hpcgg` (deleted afterwards):
   - (a) Rebuild: pages under the river gain a WFLW chunk; the record lists the paths.
   - (b) Rebuild again: no file changes.
-  - (c) Add a hand river to `Worlds/Collision.hflow` (scratch, written with `WriteFlowPathsFile` through a temporary test-only flag or by hand JSON) crossing a generated-river page. Rebuild, then delete the instance: the hand river's pages keep their flow, and the pages only the generated river reached lose theirs.
+  - (c) Add a hand river to `Worlds/Collision.hflow` (scratch, hand-written JSON in the `.hflow` format that `WriteFlowPathsFile` writes) crossing a generated-river page. Rebuild, then delete the instance: the hand river's pages keep their flow, and the pages only the generated river reached lose theirs.
   - (d) A rebuild refused by a missing section leaves every WFLW chunk byte-identical.
   - Record the commands and hashes in the report.
 - [ ] **Step 6: Commit** `feat(pcg-editor): generated river flow shares the world's flow with hand rivers`
