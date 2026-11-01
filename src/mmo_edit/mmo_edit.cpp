@@ -1400,6 +1400,130 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-new-control")
+			{
+				// mmo_edit --pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]
+				// Places a control of a control type (.hctl): a loop through at least three points, a spline through
+				// at least two, a volume or point at exactly one (heights from the terrain). --set overrides a property
+				// of the type (typed by its definition; colours as r,g,b). Saves the world and logs the new id
+				// (0 = success). A missing or invalid type, points that do not fit its shape or a bad --set are refused
+				// before anything is added or saved.
+				mmo::RedirectUnattendedLog("pcg_new_control");
+
+				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				const auto parseFloat = [](const std::string& text, float& out)
+				{
+					char* end = nullptr;
+					out = std::strtof(text.c_str(), &end);
+					return !text.empty() && end == text.c_str() + text.size() && std::isfinite(out);
+				};
+
+				// "x,z;x,z;..." -> points (at least one).
+				const auto parsePoints = [&parseFloat](const std::string& text, std::vector<std::pair<float, float>>& out)
+				{
+					out.clear();
+					size_t start = 0;
+					while (start <= text.size())
+					{
+						const size_t end = std::min(text.find(';', start), text.size());
+						const std::string pair = text.substr(start, end - start);
+						const size_t comma = pair.find(',');
+						float x = 0.0f, z = 0.0f;
+						if (comma == std::string::npos || !parseFloat(pair.substr(0, comma), x) || !parseFloat(pair.substr(comma + 1), z))
+						{
+							return false;
+						}
+						out.emplace_back(x, z);
+						start = end + 1;
+					}
+					return !out.empty();
+				};
+
+				std::vector<std::pair<float, float>> points;
+				std::string typePath;
+				std::string name;
+				std::vector<std::pair<std::string, std::string>> settings;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = parsePoints(args[++j], points);
+					}
+					else if (option == "--type" && j + 1 < argCount)
+					{
+						typePath = args[++j];
+						argumentsValid = !typePath.empty();
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked against the type once the world is open (the type is read there).
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						argumentsValid = equals != std::string::npos && equals > 0;
+						if (argumentsValid)
+						{
+							settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-control: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || typePath.empty()))
+				{
+					ELOG("--pcg-new-control: --type and --points are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-control", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error))
+					{
+						// The world is not saved: a refused run leaves no record behind.
+						ELOG("--pcg-new-control: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-control: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-control: created control " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--pcg-delete")
 			{
 				// mmo_edit --pcg-delete <world.hwld> --oasis|--id <id hex>

@@ -11,8 +11,11 @@
 #include "pcg/oasis_record.h"
 #include "pcg/section_asset.h"
 #include "pcg/section_path_record.h"
+#include "pcg/graph/controls.h"
+#include "../selected_control_transform.h"
 #include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
+#include "../pcg/control_library.h"
 #include "../pcg/oasis_builder.h"
 #include "../pcg/section_path_builder.h"
 
@@ -27,14 +30,19 @@ namespace mmo
 {
 	class Camera;
 
-	/// @brief Edit mode for procedurally generated content. Two kinds of control objects:
+	/// @brief Edit mode for procedurally generated content. Three kinds of control objects:
 	///        - an oasis: a closed spline, a seed and parameters (terrain, paint, water and objects);
-	///        - a section path: an open 3D spline that lays a baked section asset (.hsec) along it.
-	///        Rebuilding writes the generated content into the world; every control's record is
-	///        persisted next to the world as .hpcg (the record kind is peeked from the file).
+	///        - a section path: an open 3D spline that lays a baked section asset (.hsec) along it;
+	///        - a placed control: a loop, spline, volume or point of a data-driven control type (.hctl of a
+	///          biome) with extra tags and property overrides. It generates nothing itself; graph instances
+	///          read it (ResolvePlacedControls).
+	///        Rebuilding writes the generated content into the world; oasis and section path records are
+	///        persisted next to the world as .hpcg (the record kind is peeked from the file), placed
+	///        controls as .hpcgc (JSON) in the same folder.
 	///        A clicked spline point becomes the editor selection (SelectedSplinePoint), so the transform
-	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport.
-	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner
+	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport. A
+	///        placed volume or point becomes the editor selection as a SelectedControlTransform.
+	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner, public IControlTransformOwner
 	{
 	public:
 		/// @brief Creates the mode.
@@ -79,10 +87,11 @@ namespace mmo
 		/// @brief Whether a spline point is being dragged (the camera must not rotate then).
 		bool IsDragging() const { return m_splineEditor.IsDragging(); }
 
-		/// @brief Loads every *.hpcg record of the folder (oases and section paths) and the shared
-		///        oasis recipe (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to
-		///        OasisParams defaults and empty asset lists, and oasis rebuilds are refused until a
-		///        valid recipe is loaded. Replaces the current controls.
+		/// @brief Loads every *.hpcg record of the folder (oases and section paths), every *.hpcgc placed
+		///        control (kept also when its control type is missing) and the shared oasis recipe
+		///        (Editor/Pcg/OasisRecipe.json). A missing or invalid recipe falls back to OasisParams
+		///        defaults and empty asset lists, and oasis rebuilds are refused until a valid recipe is
+		///        loaded. Replaces the current controls.
 		/// @param pcgFolder Asset path of the world's folder, e.g. Editor/Pcg/Worlds/Development.
 		void Load(const std::filesystem::path& pcgFolder);
 
@@ -107,7 +116,8 @@ namespace mmo
 
 		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
 		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
-		///        are refused if their influence overlaps another built control.
+		///        are refused if their influence overlaps another built control. A placed control has
+		///        nothing to build (graph instances read it); the call succeeds without changes.
 		/// @param controlId Id of the control.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
@@ -140,8 +150,54 @@ namespace mmo
 		bool CreateSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset, const NewSectionPathOptions& options,
 			const String& name, uint64& id, String& error);
 
+		/// @brief Adds a placed control of a control type. Does not build anything. Loops get a closed and
+		///        splines an open Catmull-Rom spline through the points (heights from the terrain, which is
+		///        loaded under the points first), one point id per point; volumes (half extents 16 m) and
+		///        points sit at the single point, on the ground. The "New Control" menu uses this with the
+		///        viewport centre (loop: 4 point square of 32 m; spline: 2 points 32 m apart along the view;
+		///        volume and point: the centre).
+		/// @param typePath Asset path of the control type (.hctl).
+		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume or
+		///        point exactly one.
+		/// @param name Name of the control; empty picks "<type name> <n>".
+		/// @param id Receives the id of the new control.
+		/// @param error Receives the reason when the call returns false (e.g. "control type '...' not found").
+		/// @return True if the control was added.
+		bool CreatePlacedControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name, uint64& id, String& error);
+
+		/// @brief Checks property settings against a control type without changing anything.
+		/// @param typePath Asset path of the control type.
+		/// @param settings Property names and value texts (see ParseControlPropertyValue).
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the type exists and every setting names one of its properties with a valid value.
+		bool CheckPlacedControlSettings(const String& typePath, const std::vector<std::pair<String, String>>& settings, String& error);
+
+		/// @brief Sets property overrides of a placed control from text.
+		/// @param id Id of the placed control.
+		/// @param settings Property names and value texts, applied in order.
+		/// @param error Receives the reason when the call returns false (nothing is changed then).
+		/// @return True if every setting was applied.
+		bool SetPlacedControlProperties(uint64 id, const std::vector<std::pair<String, String>>& settings, String& error);
+
+		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides,
+		///        creation, deletion, load) or of a control type in the library.
+		[[nodiscard]] uint64 GetControlsRevision() const { return m_placedRevision + m_controlLibrary.Revision(); }
+
+		/// @brief Resolves every placed control against its control type, in list order. Controls whose
+		///        type is missing or invalid, or whose geometry does not fit the type's shape, are skipped
+		///        with a warning. The resolved controls point into this mode's controls and library; they
+		///        are valid until the next change of either (see GetControlsRevision).
+		/// @param out Receives the resolved controls (cleared first).
+		/// @param warnings Receives one message per problem (appended).
+		void ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings);
+
+		/// @brief The control types this world's placed controls use (the control type editor invalidates
+		///        types here when it saves).
+		[[nodiscard]] ControlLibrary& GetControlLibrary() { return m_controlLibrary; }
+
 		/// @brief Removes the control's content from the world and the control from the list (its
-		///        record file is removed on the next save). The "Delete" button uses this.
+		///        record file is removed on the next save). The "Delete" button uses this. A placed control
+		///        has no content; it is only removed from the list.
 		/// @param id Id of the control.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if the control was deleted.
@@ -153,7 +209,7 @@ namespace mmo
 		/// @brief Number of oases in the world.
 		size_t GetOasisCount() const;
 
-		/// @brief Number of controls (oases and section paths) in the world.
+		/// @brief Number of controls (oases, section paths and placed controls) in the world.
 		size_t GetControlCount() const { return m_controls.size(); }
 
 		/// @brief One-line summary of the last operation, for logs.
@@ -176,12 +232,23 @@ namespace mmo
 		/// @brief Drops the point selection when the editor selection drops the point.
 		void OnSplinePointDeselected(const SelectedSplinePoint& selectable) override;
 
+	public:
+		/// @brief Gets the placed volume or point control with the id, or null.
+		pcg::graph::ControlInstance* FindTransformControl(uint64 controlId) override;
+
+		/// @brief Marks the control changed.
+		void OnControlTransformEdited(uint64 controlId) override;
+
+		/// @brief Drops the transform selection when the editor selection drops it.
+		void OnControlTransformDeselected(const SelectedControlTransform& selectable) override;
+
 	private:
 		/// @brief Kind of a control object.
 		enum class ControlKind : uint8
 		{
 			Oasis,
-			SectionPath
+			SectionPath,
+			Placed
 		};
 
 		/// @brief A control in the list and whether it must be written on the next save.
@@ -192,6 +259,8 @@ namespace mmo
 			pcg::OasisRecord oasis;
 			/// Used when kind is SectionPath.
 			pcg::SectionPathRecord path;
+			/// Used when kind is Placed.
+			pcg::graph::ControlInstance placed;
 			bool dirty = false;
 			/// Failed attempts to load the terrain under a loop without heights (see EnsureHeights).
 			uint32 heightAttempts = 0;
@@ -199,17 +268,27 @@ namespace mmo
 			uint64 nextHeightAttemptFrame = 0;
 
 			/// @brief Id of the control.
-			uint64 Id() const { return kind == ControlKind::Oasis ? oasis.id : path.id; }
+			uint64 Id() const { return kind == ControlKind::Oasis ? oasis.id : (kind == ControlKind::SectionPath ? path.id : placed.id); }
 			/// @brief Display name.
-			const String& Name() const { return kind == ControlKind::Oasis ? oasis.name : path.name; }
+			const String& Name() const { return kind == ControlKind::Oasis ? oasis.name : (kind == ControlKind::SectionPath ? path.name : placed.name); }
 			/// @brief Display name.
-			String& Name() { return kind == ControlKind::Oasis ? oasis.name : path.name; }
-			/// @brief The edited spline (oasis loop or section path).
-			PathSpline& Spline() { return kind == ControlKind::Oasis ? oasis.loop : path.spline; }
-			/// @brief The edited spline (oasis loop or section path).
-			const PathSpline& Spline() const { return kind == ControlKind::Oasis ? oasis.loop : path.spline; }
-			/// @brief What the control has in the world.
-			const pcg::OwnedContent& Content() const { return kind == ControlKind::Oasis ? oasis.content : path.content; }
+			String& Name() { return kind == ControlKind::Oasis ? oasis.name : (kind == ControlKind::SectionPath ? path.name : placed.name); }
+			/// @brief The edited spline (oasis loop, section path, placed loop or spline; empty for a placed
+			///        volume or point).
+			PathSpline& Spline() { return kind == ControlKind::Oasis ? oasis.loop : (kind == ControlKind::SectionPath ? path.spline : placed.spline); }
+			/// @brief The edited spline (see above).
+			const PathSpline& Spline() const { return kind == ControlKind::Oasis ? oasis.loop : (kind == ControlKind::SectionPath ? path.spline : placed.spline); }
+			/// @brief Stable point ids of the spline (section paths and placed controls), or null for an oasis.
+			std::vector<uint64>* PointIds() { return kind == ControlKind::SectionPath ? &path.pointIds : (kind == ControlKind::Placed ? &placed.pointIds : nullptr); }
+			/// @brief Next point id to hand out (section paths and placed controls), or null for an oasis.
+			uint64* NextPointId() { return kind == ControlKind::SectionPath ? &path.nextPointId : (kind == ControlKind::Placed ? &placed.nextPointId : nullptr); }
+			/// @brief What the control has in the world (always empty for a placed control).
+			const pcg::OwnedContent& Content() const { return kind == ControlKind::Oasis ? oasis.content : (kind == ControlKind::SectionPath ? path.content : NoContent()); }
+			/// @brief Whether this is a placed volume or point (no spline; edited through a SelectedControlTransform).
+			bool HasTransform() const { return kind == ControlKind::Placed && placed.spline.points.empty(); }
+
+			/// @brief Shared empty content of placed controls.
+			static const pcg::OwnedContent& NoContent();
 		};
 
 		/// @brief A section asset as read for the details panel, with the read error.
@@ -230,6 +309,43 @@ namespace mmo
 
 		/// @brief Asset path of the file of a control: "<folder>/<id as 16 hex digits>.hpcg".
 		static String MakeFileName(const std::filesystem::path& folder, uint64 id);
+
+		/// @brief Asset path of the file of a placed control: "<folder>/<id as 16 hex digits>.hpcgc".
+		static String MakePlacedFileName(const std::filesystem::path& folder, uint64 id);
+
+		/// @brief Marks a control changed (written on the next save; a placed control also bumps the
+		///        controls revision).
+		void MarkChanged(Control& control);
+
+		/// @brief Whether a placed control without a spline is a volume (its type says so; also when the
+		///        type is missing, so its box stays visible and editable) rather than a point.
+		bool IsPlacedVolume(const Control& control);
+
+		/// @brief "An oasis loop", "A section path" or "A placed control", for messages.
+		static const char* DescribeKind(const Control& control);
+
+		/// @brief Adds a placed control of the type at the viewport's ground hit (see CreatePlacedControl).
+		void CreatePlacedControlAtViewportCentre(const String& typePath);
+
+		/// @brief Draws the biome combo and the "New Control" menu of the active biome's control types.
+		void DrawNewControlMenu();
+
+		/// @brief Draws the details of a selected placed control.
+		void DrawPlacedControlDetails(Control& control);
+
+		/// @brief Makes a placed volume or point the editor selection (replacing whatever was selected).
+		/// @param controlIndex Index of the control in the list.
+		void SelectTransformInEditor(int32 controlIndex);
+
+		/// @brief Drops the transform selection from the editor selection if it holds it.
+		void ClearTransformSelection();
+
+		/// @brief Hit-tests the handles of placed volumes and points in the viewport.
+		/// @return Index of the control under the cursor, or -1.
+		int32 HitTestTransformControl(float screenX, float screenY) const;
+
+		/// @brief Draws placed volumes (rotated boxes) and points (marker with a yaw arrow).
+		void DrawPlacedTransforms(ImDrawList& drawList);
 
 		/// @brief Index of the control with the id or -1.
 		int32 FindControl(uint64 id) const;
@@ -282,7 +398,7 @@ namespace mmo
 		/// @return True if the selection changed.
 		bool DrawSectionAssetCombo(const char* label, String& assetPath);
 
-		/// @brief Minimum number of control points of a control (3 for an oasis or a section loop).
+		/// @brief Minimum number of control points of a control (3 for an oasis or any closed spline, else 2).
 		static uint32 GetMinPoints(const Control& control);
 
 		/// @brief Describes a report for the status line.
@@ -347,6 +463,25 @@ namespace mmo
 		/// The selected point's handle while the editor selection holds it (owned by the selection;
 		/// reset through OnSplinePointDeselected when the selection drops it).
 		SelectedSplinePoint* m_pointSelectable = nullptr;
+
+		/// The selected volume's or point's handle while the editor selection holds it (owned by the
+		/// selection; reset through OnControlTransformDeselected when the selection drops it).
+		SelectedControlTransform* m_transformSelectable = nullptr;
+
+		/// Control types of the placed controls, and the types the "New Control" menu offers.
+		ControlLibrary m_controlLibrary;
+
+		/// Biome whose control types the "New Control" menu offers (empty: the first biome).
+		String m_activeBiome;
+
+		/// Bumped on every placed-control change (see GetControlsRevision).
+		uint64 m_placedRevision = 0;
+
+		/// Text of the extra tags field while it is being edited (applied when the edit ends).
+		String m_tagsBuffer;
+		/// Control whose tags m_tagsBuffer holds, and whether the field was active last frame.
+		uint64 m_tagsControlId = 0;
+		bool m_tagsEditing = false;
 
 		/// Stand-in for loops that cannot be edited yet (GetEditableSplines). Never has points.
 		PathSpline m_lockedSpline;

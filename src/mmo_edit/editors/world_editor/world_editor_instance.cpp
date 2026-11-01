@@ -14,6 +14,7 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "selected_kit_prop.h"
+#include "selected_control_transform.h"
 #include "selected_spline_point.h"
 #include "editors/world_model_editor/panels/world_model_properties_panel.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
@@ -1137,6 +1138,30 @@ namespace mmo
 		return m_proceduralEditMode->Rebuild(id, error);
 	}
 
+	bool WorldEditorInstance::CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
+		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Settings are checked against the type first, so a refused run leaves nothing behind.
+		if (!m_proceduralEditMode->CheckPlacedControlSettings(typePath, settings, error))
+		{
+			return false;
+		}
+
+		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->SetPlacedControlProperties(id, settings, error);
+	}
+
 	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
 	{
 		id = 0;
@@ -2042,6 +2067,7 @@ namespace mmo
 			void Visit(SelectedAreaTrigger&) override {}
 			void Visit(SelectedFogVolume&) override {}
 			void Visit(SelectedSplinePoint&) override {}
+			void Visit(SelectedControlTransform&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -4699,6 +4725,20 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		ImGui::Text("Type: Spline Point #%zu", selectable.GetPointIndex());
 		ImGui::TextDisabled("Translate moves it (height too), Rotate tilts and turns its tangents (yaw and pitch). Tangent tools are in the mode panel.");
+	}
+
+	void WorldEditorInstance::Visit(SelectedControlTransform &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected control no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Placed %s Control", selectable.IsVolume() ? "Volume" : "Point");
+		ImGui::TextDisabled(selectable.IsVolume()
+			? "Translate moves it (height too), Rotate turns it around up, Scale sets its half extents. Properties are in the mode panel."
+			: "Translate moves it (height too), Rotate turns it around up. Properties are in the mode panel.");
 	}
 
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)

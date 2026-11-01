@@ -303,6 +303,7 @@ namespace mmo
 
 	class SelectedKitProp;
 	class SelectedSplinePoint;
+	class SelectedControlTransform;
 	class SectionPanel;
 
 	class SelectableVisitor
@@ -327,6 +328,9 @@ namespace mmo
 
 		/// @brief Visits a control point of an editor spline (e.g. an oasis loop).
 		virtual void Visit(SelectedSplinePoint &selectable) = 0;
+
+		/// @brief Visits the transform of a placed procedural volume or point control.
+		virtual void Visit(SelectedControlTransform &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -405,6 +409,8 @@ namespace mmo
 
 		/// @brief Draws the details of a selected spline point.
 		void Visit(SelectedSplinePoint &selectable) override;
+
+		void Visit(SelectedControlTransform &selectable) override;
 
 	private:
 		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
@@ -784,6 +790,24 @@ namespace mmo
 		/// @return True if the path was added and built.
 		bool CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
 			const NewSectionPathOptions& options, const String& name, uint64& id, String& error);
+
+		/// @brief Adds a placed control of a control type through the given x/z points (at terrain height)
+		///        and sets property overrides, for unattended runs. The world is not saved. Refused before
+		///        anything is added if the type is missing or invalid, the points do not fit its shape, or a
+		///        setting names no property of the type or has an invalid value.
+		/// @param typePath Asset path of the control type (.hctl).
+		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume or
+		///        point exactly one (its centre).
+		/// @param name Name of the control; empty picks the default name.
+		/// @param settings Property overrides as name and value text, applied in order.
+		/// @param id Receives the id of the new control.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the control was added.
+		bool CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
+			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
+
+		/// @brief Gets the procedural edit mode of this world (placed controls, control library), or null.
+		[[nodiscard]] ProceduralEditMode* GetProceduralEditMode() const { return m_proceduralEditMode.get(); }
 
 		/// @brief Deletes a procedural control (oasis or section path) and everything it generated like
 		///        the "Delete" button does, for unattended runs. The world is not saved.

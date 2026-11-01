@@ -16,6 +16,9 @@
 #include "pcg/terrain_contribution.h"
 #include "scene_graph/camera.h"
 #include "terrain/terrain.h"
+#include "../pcg/control_details.h"
+
+#include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include <algorithm>
 #include <cmath>
@@ -34,6 +37,18 @@ namespace mmo
 
 		/// Extension of control record files.
 		const char* const RecordExtension = ".hpcg";
+
+		/// Extension of placed control files (JSON).
+		const char* const PlacedRecordExtension = ".hpcgc";
+
+		/// Side of the square of a new placed loop, and the length of a new placed spline, in metres.
+		constexpr float NewControlSize = 32.0f;
+
+		/// Half extents of a new placed volume, in metres.
+		constexpr float NewVolumeHalfExtent = 16.0f;
+
+		/// Screen radius of the handle of a placed volume or point, in pixels.
+		constexpr float TransformHandleRadius = 9.0f;
 
 		constexpr float PiValue = 3.14159265358979f;
 		constexpr float DefaultRadius = 40.0f;
@@ -156,6 +171,60 @@ namespace mmo
 			char buffer[32];
 			std::snprintf(buffer, sizeof(buffer), "%016llx", static_cast<unsigned long long>(id));
 			return String(buffer);
+		}
+
+		/// Tags as "a, b, c".
+		String JoinTags(const std::set<String>& tags)
+		{
+			String text;
+			for (const String& tag : tags)
+			{
+				text += (text.empty() ? "" : ", ") + tag;
+			}
+			return text;
+		}
+
+		/// "a, b ,c" -> { a, b, c } (trimmed, empty entries dropped).
+		std::set<String> SplitTags(const String& text)
+		{
+			std::set<String> tags;
+			size_t start = 0;
+			while (start <= text.size())
+			{
+				const size_t end = std::min(text.find(',', start), text.size());
+				String tag = text.substr(start, end - start);
+				const size_t first = tag.find_first_not_of(" \t");
+				const size_t last = tag.find_last_not_of(" \t");
+				if (first != String::npos)
+				{
+					tags.insert(tag.substr(first, last - first + 1));
+				}
+				start = end + 1;
+			}
+			return tags;
+		}
+
+		/// Display name of a control shape.
+		const char* ShapeName(const pcg::graph::ControlShape shape)
+		{
+			switch (shape)
+			{
+			case pcg::graph::ControlShape::ClosedLoop:
+				return "Loop";
+			case pcg::graph::ControlShape::OpenSpline:
+				return "Spline";
+			case pcg::graph::ControlShape::Volume:
+				return "Volume";
+			case pcg::graph::ControlShape::Point:
+				return "Point";
+			}
+			return "?";
+		}
+
+		/// File name without folder and extension.
+		String FileStem(const String& path)
+		{
+			return std::filesystem::path(path).stem().string();
 		}
 
 		/// A float parameter row of the details panel.
@@ -291,9 +360,49 @@ namespace mmo
 		return ToAssetPath(folder) + "/" + FormatId(id) + RecordExtension;
 	}
 
+	String ProceduralEditMode::MakePlacedFileName(const std::filesystem::path& folder, const uint64 id)
+	{
+		return ToAssetPath(folder) + "/" + FormatId(id) + PlacedRecordExtension;
+	}
+
+	const pcg::OwnedContent& ProceduralEditMode::Control::NoContent()
+	{
+		static const pcg::OwnedContent s_none;
+		return s_none;
+	}
+
+	void ProceduralEditMode::MarkChanged(Control& control)
+	{
+		control.dirty = true;
+		if (control.kind == ControlKind::Placed)
+		{
+			++m_placedRevision;
+		}
+	}
+
+	bool ProceduralEditMode::IsPlacedVolume(const Control& control)
+	{
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(control.placed.typePath);
+		return !type || type->shape != pcg::graph::ControlShape::Point;
+	}
+
+	const char* ProceduralEditMode::DescribeKind(const Control& control)
+	{
+		switch (control.kind)
+		{
+		case ControlKind::Oasis:
+			return "An oasis loop";
+		case ControlKind::SectionPath:
+			return "A section path";
+		case ControlKind::Placed:
+			return "A placed control";
+		}
+		return "A control";
+	}
+
 	uint32 ProceduralEditMode::GetMinPoints(const Control& control)
 	{
-		return (control.kind == ControlKind::Oasis || control.path.spline.closed) ? MinLoopPoints : MinPathPoints;
+		return (control.kind == ControlKind::Oasis || control.Spline().closed) ? MinLoopPoints : MinPathPoints;
 	}
 
 	void ProceduralEditMode::SetStatus(const String& text, const StatusLevel level)
@@ -326,16 +435,80 @@ namespace mmo
 		m_selected = index;
 		m_splineEditor.CancelDrag();
 		ClearPointSelection();
+		ClearTransformSelection();
 		m_splineEditor.Select(index, -1);
+
+		// A volume or point has no spline to click; the gizmo edits it as soon as it is picked.
+		if (index >= 0 && index < static_cast<int32>(m_controls.size()) && m_controls[index].HasTransform())
+		{
+			SelectTransformInEditor(index);
+		}
 	}
 
 	void ProceduralEditMode::OnDeactivate()
 	{
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
-		// A point selection is meaningless outside this mode (no handles, no overlay).
+		// A point or transform selection is meaningless outside this mode (no handles, no overlay).
 		ClearPointSelection();
+		ClearTransformSelection();
 		m_brushPositionValid = false;
+	}
+
+	void ProceduralEditMode::SelectTransformInEditor(const int32 controlIndex)
+	{
+		// Forget the old handles first: their Deselect() must not reset what was just picked.
+		m_pointSelectable = nullptr;
+		m_transformSelectable = nullptr;
+		m_worldEditor.ClearSelection();
+		m_splineEditor.Select(controlIndex, -1);
+
+		if (controlIndex < 0 || controlIndex >= static_cast<int32>(m_controls.size()) || !m_controls[controlIndex].HasTransform())
+		{
+			return;
+		}
+
+		const Control& control = m_controls[controlIndex];
+		auto selectable = std::make_unique<SelectedControlTransform>(*this, control.Id(), IsPlacedVolume(control));
+		m_transformSelectable = selectable.get();
+		m_worldEditor.AddToSelection(std::move(selectable));
+	}
+
+	void ProceduralEditMode::ClearTransformSelection()
+	{
+		if (m_transformSelectable)
+		{
+			m_transformSelectable = nullptr;
+			m_worldEditor.ClearSelection();
+		}
+	}
+
+	pcg::graph::ControlInstance* ProceduralEditMode::FindTransformControl(const uint64 controlId)
+	{
+		const int32 index = FindControl(controlId);
+		if (index < 0 || !m_controls[index].HasTransform())
+		{
+			return nullptr;
+		}
+
+		return &m_controls[index].placed;
+	}
+
+	void ProceduralEditMode::OnControlTransformEdited(const uint64 controlId)
+	{
+		const int32 index = FindControl(controlId);
+		if (index >= 0)
+		{
+			MarkChanged(m_controls[index]);
+		}
+	}
+
+	void ProceduralEditMode::OnControlTransformDeselected(const SelectedControlTransform& selectable)
+	{
+		if (&selectable == m_transformSelectable)
+		{
+			m_transformSelectable = nullptr;
+		}
 	}
 
 	void ProceduralEditMode::SelectPointInEditor(const int32 controlIndex, const int32 pointIndex)
@@ -484,7 +657,7 @@ namespace mmo
 		const int32 index = FindControl(splineId);
 		if (index >= 0)
 		{
-			m_controls[index].dirty = true;
+			MarkChanged(m_controls[index]);
 		}
 	}
 
@@ -506,18 +679,18 @@ namespace mmo
 		const uint32 minPoints = GetMinPoints(control);
 		if (points.size() <= minPoints)
 		{
-			SetStatus(String(control.kind == ControlKind::Oasis ? "An oasis loop" : "A section path") + " keeps at least "
-				+ std::to_string(minPoints) + " points.", StatusLevel::Error);
+			SetStatus(String(DescribeKind(control)) + " keeps at least " + std::to_string(minPoints) + " points.", StatusLevel::Error);
 			return false;
 		}
 
 		points.erase(points.begin() + static_cast<std::ptrdiff_t>(pointIndex));
-		if (control.kind == ControlKind::SectionPath && pointIndex < control.path.pointIds.size())
+		std::vector<uint64>* pointIds = control.PointIds();
+		if (pointIds && pointIndex < pointIds->size())
 		{
 			// The id leaves with its point and is never handed out again.
-			control.path.pointIds.erase(control.path.pointIds.begin() + static_cast<std::ptrdiff_t>(pointIndex));
+			pointIds->erase(pointIds->begin() + static_cast<std::ptrdiff_t>(pointIndex));
 		}
-		control.dirty = true;
+		MarkChanged(control);
 		m_splineEditor.CancelDrag();
 		if (m_splineEditor.GetSelectedSpline() == index)
 		{
@@ -552,6 +725,8 @@ namespace mmo
 	void ProceduralEditMode::Load(const std::filesystem::path& pcgFolder)
 	{
 		ClearPointSelection();
+		ClearTransformSelection();
+		++m_placedRevision;
 		m_controls.clear();
 		m_deletedIds.clear();
 		m_sectionAssets.clear();
@@ -624,6 +799,36 @@ namespace mmo
 			m_controls.push_back(std::move(control));
 		}
 
+		// Placed controls are kept whatever state their control type is in (resolution skips them then).
+		std::vector<String> placedFiles = AssetRegistry::ListFiles(folder, PlacedRecordExtension);
+		std::sort(placedFiles.begin(), placedFiles.end());
+		for (const String& fileName : placedFiles)
+		{
+			const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(fileName);
+			if (!file)
+			{
+				WLOG("Cannot open placed control " << fileName);
+				continue;
+			}
+
+			const String text((std::istreambuf_iterator<char>(*file)), std::istreambuf_iterator<char>());
+			Control control;
+			control.kind = ControlKind::Placed;
+			String error;
+			if (!pcg::graph::ParseControlInstance(text, control.placed, error))
+			{
+				ELOG("Placed control " << fileName << " is invalid, skipping it: " << error);
+				continue;
+			}
+			if (control.placed.id == 0 || FindControl(control.placed.id) >= 0)
+			{
+				ELOG("Placed control " << fileName << " has a missing or duplicate id, skipping it");
+				continue;
+			}
+
+			m_controls.push_back(std::move(control));
+		}
+
 		std::stable_sort(m_controls.begin(), m_controls.end(), [](const Control& a, const Control& b) { return a.Id() < b.Id(); });
 
 		DLOG("Loaded " << m_controls.size() << " procedural record(s) from " << folder);
@@ -636,12 +841,15 @@ namespace mmo
 		bool deletionsFailed = false;
 		for (const uint64 id : m_deletedIds)
 		{
-			const String fileName = MakeFileName(pcgFolder, id);
-			if (AssetRegistry::HasFile(fileName) && !AssetRegistry::RemoveFile(fileName))
+			// Ids are unique across kinds; whichever file the control had goes.
+			for (const String& fileName : { MakeFileName(pcgFolder, id), MakePlacedFileName(pcgFolder, id) })
 			{
-				ELOG("Failed to remove procedural record " << fileName);
-				deletionsFailed = true;
-				success = false;
+				if (AssetRegistry::HasFile(fileName) && !AssetRegistry::RemoveFile(fileName))
+				{
+					ELOG("Failed to remove procedural record " << fileName);
+					deletionsFailed = true;
+					success = false;
+				}
 			}
 		}
 
@@ -654,6 +862,32 @@ namespace mmo
 		{
 			if (!control.dirty)
 			{
+				continue;
+			}
+
+			if (control.kind == ControlKind::Placed)
+			{
+				const String placedFileName = MakePlacedFileName(pcgFolder, control.Id());
+				const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(placedFileName);
+				if (!file)
+				{
+					SetStatus("Could not save '" + control.Name() + "': cannot create " + placedFileName + ".", StatusLevel::Error);
+					ELOG(m_status);
+					success = false;
+					continue;
+				}
+
+				const String text = pcg::graph::WriteControlInstance(control.placed);
+				file->write(text.data(), static_cast<std::streamsize>(text.size()));
+				file->flush();
+				if (!*file)
+				{
+					SetStatus("Could not save '" + control.Name() + "': writing " + placedFileName + " failed.", StatusLevel::Error);
+					ELOG(m_status);
+					success = false;
+					continue;
+				}
+				control.dirty = false;
 				continue;
 			}
 
@@ -818,7 +1052,7 @@ namespace mmo
 
 		Control control;
 		control.kind = ControlKind::Oasis;
-		control.dirty = true;
+		MarkChanged(control);
 		pcg::OasisRecord& record = control.oasis;
 		record.id = m_worldEditor.GenerateEntityUniqueId();
 		record.name = name.empty() ? "Oasis " + std::to_string(GetOasisCount() + 1) : name;
@@ -876,7 +1110,7 @@ namespace mmo
 
 		Control control;
 		control.kind = ControlKind::SectionPath;
-		control.dirty = true;
+		MarkChanged(control);
 		pcg::SectionPathRecord& record = control.path;
 		record.id = m_worldEditor.GenerateEntityUniqueId();
 		record.name = name.empty() ? String(closed ? "Section Loop " : "Section Path ") + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
@@ -942,6 +1176,284 @@ namespace mmo
 			ILOG(m_status);
 		}
 		return true;
+	}
+
+	void ProceduralEditMode::CreatePlacedControlAtViewportCentre(const String& typePath)
+	{
+		if (!m_worldEditor.HasTerrain())
+		{
+			SetStatus("This world has no terrain.", StatusLevel::Error);
+			return;
+		}
+
+		String error;
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(typePath, &error);
+		if (!type)
+		{
+			SetStatus(error, StatusLevel::Error);
+			return;
+		}
+
+		const Ray ray = m_camera.GetCameraToViewportRay(0.5f, 0.5f, 50000.0f);
+		const auto hit = m_worldEditor.GetTerrain()->RayIntersects(ray);
+		if (!hit.first)
+		{
+			SetStatus("No ground under the viewport centre. Look at the terrain and try again.", StatusLevel::Error);
+			return;
+		}
+
+		const float x = hit.second.position.x;
+		const float z = hit.second.position.z;
+		std::vector<std::pair<float, float>> points;
+		switch (type->shape)
+		{
+		case pcg::graph::ControlShape::ClosedLoop:
+		{
+			const float half = NewControlSize * 0.5f;
+			points = { { x - half, z - half }, { x + half, z - half }, { x + half, z + half }, { x - half, z + half } };
+			break;
+		}
+
+		case pcg::graph::ControlShape::OpenSpline:
+		{
+			// Along the camera's forward direction on the ground (straight down: along +Z).
+			const Vector3 direction = m_camera.GetDerivedDirection();
+			float forwardX = direction.x;
+			float forwardZ = direction.z;
+			const float length = std::sqrt(forwardX * forwardX + forwardZ * forwardZ);
+			if (length > 1e-4f)
+			{
+				forwardX /= length;
+				forwardZ /= length;
+			}
+			else
+			{
+				forwardX = 0.0f;
+				forwardZ = 1.0f;
+			}
+			points = { { x, z }, { x + forwardX * NewControlSize, z + forwardZ * NewControlSize } };
+			break;
+		}
+
+		case pcg::graph::ControlShape::Volume:
+		case pcg::graph::ControlShape::Point:
+			points = { { x, z } };
+			break;
+		}
+
+		uint64 id = 0;
+		CreatePlacedControl(typePath, points, "", id, error);
+	}
+
+	bool ProceduralEditMode::CreatePlacedControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
+		uint64& id, String& error)
+	{
+		id = 0;
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(typePath, &error);
+		if (!type)
+		{
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		const bool splineShape = type->shape == pcg::graph::ControlShape::ClosedLoop || type->shape == pcg::graph::ControlShape::OpenSpline;
+		const bool closed = type->shape == pcg::graph::ControlShape::ClosedLoop;
+		if (splineShape)
+		{
+			const uint32 minPoints = closed ? MinLoopPoints : MinPathPoints;
+			if (points.size() < minPoints)
+			{
+				error = "A " + String(closed ? "loop" : "spline") + " control needs at least " + std::to_string(minPoints) + " points.";
+				SetStatus(error, StatusLevel::Error);
+				return false;
+			}
+		}
+		else if (points.size() != 1)
+		{
+			error = "A " + String(type->shape == pcg::graph::ControlShape::Volume ? "volume" : "point") + " control needs exactly one point (its centre).";
+			SetStatus(error, StatusLevel::Error);
+			return false;
+		}
+
+		for (const auto& [x, z] : points)
+		{
+			if (!std::isfinite(x) || !std::isfinite(z))
+			{
+				error = "Control points must be finite.";
+				SetStatus(error, StatusLevel::Error);
+				return false;
+			}
+		}
+
+		Control control;
+		control.kind = ControlKind::Placed;
+		pcg::graph::ControlInstance& instance = control.placed;
+		instance.id = m_worldEditor.GenerateEntityUniqueId();
+		instance.typePath = typePath;
+		const size_t sameType = static_cast<size_t>(std::count_if(m_controls.begin(), m_controls.end(),
+			[&typePath](const Control& c) { return c.kind == ControlKind::Placed && c.placed.typePath == typePath; }));
+		instance.name = name.empty() ? (type->name.empty() ? FileStem(typePath) : type->name) + " " + std::to_string(sameType + 1) : name;
+
+		// Points on the ground: load the terrain under them first.
+		pcg::WorldRect bounds{ points.front().first, points.front().second, points.front().first, points.front().second };
+		for (const auto& [x, z] : points)
+		{
+			bounds.minX = std::min(bounds.minX, x);
+			bounds.minZ = std::min(bounds.minZ, z);
+			bounds.maxX = std::max(bounds.maxX, x);
+			bounds.maxZ = std::max(bounds.maxZ, z);
+		}
+		String loadError;
+		const bool loaded = !m_worldEditor.HasTerrain() || m_worldEditor.EnsurePagesLoaded(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, loadError);
+
+		size_t missing = 0;
+		const auto groundAt = [this, &missing](const float x, const float z)
+		{
+			float height = 0.0f;
+			if (!m_worldEditor.HasTerrain() || !m_worldEditor.GetTerrain()->TryGetSmoothHeightAt(x, z, height))
+			{
+				++missing;
+				return 0.0f;
+			}
+			return height;
+		};
+
+		if (splineShape)
+		{
+			instance.spline.closed = closed;
+			instance.spline.interpolation = SplineInterpolation::CatmullRom;
+			for (const auto& [x, z] : points)
+			{
+				SplinePoint point;
+				point.x = x;
+				point.z = z;
+				point.y = groundAt(x, z);
+				instance.spline.points.push_back(point);
+				instance.pointIds.push_back(instance.nextPointId++);
+			}
+		}
+		else
+		{
+			instance.position = Vector3(points.front().first, groundAt(points.front().first, points.front().second), points.front().second);
+			instance.rotation = Quaternion::Identity;
+			if (type->shape == pcg::graph::ControlShape::Volume)
+			{
+				instance.halfExtents = Vector3(NewVolumeHalfExtent, NewVolumeHalfExtent, NewVolumeHalfExtent);
+			}
+		}
+
+		MarkChanged(control);
+		id = instance.id;
+		m_controls.push_back(std::move(control));
+		SelectControl(static_cast<int32>(m_controls.size()) - 1);
+		if (missing > 0 || !loaded)
+		{
+			SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + "), but the terrain under it could not be loaded: "
+				+ std::to_string(missing) + " point(s) were put at height 0.", StatusLevel::Warning);
+			WLOG(m_status);
+		}
+		else
+		{
+			SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + ").", StatusLevel::Ok);
+			ILOG(m_status);
+		}
+		return true;
+	}
+
+	bool ProceduralEditMode::CheckPlacedControlSettings(const String& typePath, const std::vector<std::pair<String, String>>& settings, String& error)
+	{
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(typePath, &error);
+		if (!type)
+		{
+			return false;
+		}
+
+		for (const auto& [propertyName, text] : settings)
+		{
+			const pcg::graph::PropertyDef* property = FindControlProperty(*type, propertyName);
+			if (!property)
+			{
+				error = "control type '" + typePath + "' has no property '" + propertyName + "'";
+				return false;
+			}
+
+			pcg::graph::AttributeValue value;
+			if (!ParseControlPropertyValue(*property, text, value, error))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ProceduralEditMode::SetPlacedControlProperties(const uint64 id, const std::vector<std::pair<String, String>>& settings, String& error)
+	{
+		const int32 index = FindControl(id);
+		if (index < 0 || m_controls[index].kind != ControlKind::Placed)
+		{
+			error = "No placed control with id " + FormatId(id);
+			return false;
+		}
+
+		Control& control = m_controls[index];
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(control.placed.typePath, &error);
+		if (!type)
+		{
+			return false;
+		}
+
+		// Parsed first, so a bad setting changes nothing.
+		pcg::graph::AttributeSet overrides = control.placed.overrides;
+		for (const auto& [propertyName, text] : settings)
+		{
+			const pcg::graph::PropertyDef* property = FindControlProperty(*type, propertyName);
+			if (!property)
+			{
+				error = "control type '" + control.placed.typePath + "' has no property '" + propertyName + "'";
+				return false;
+			}
+
+			pcg::graph::AttributeValue value;
+			if (!ParseControlPropertyValue(*property, text, value, error))
+			{
+				return false;
+			}
+			overrides[propertyName] = value;
+		}
+
+		if (!settings.empty())
+		{
+			control.placed.overrides = std::move(overrides);
+			MarkChanged(control);
+		}
+		return true;
+	}
+
+	void ProceduralEditMode::ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings)
+	{
+		out.clear();
+		for (const Control& control : m_controls)
+		{
+			if (control.kind != ControlKind::Placed)
+			{
+				continue;
+			}
+
+			String error;
+			const pcg::graph::ControlType* type = m_controlLibrary.Find(control.placed.typePath, &error);
+			if (!type)
+			{
+				warnings.push_back("placed control '" + control.Name() + "' (" + FormatId(control.Id()) + ") skipped: " + error);
+				continue;
+			}
+
+			pcg::graph::ResolvedControl resolved;
+			if (pcg::graph::ResolveControl(*type, control.placed, resolved, warnings))
+			{
+				out.push_back(std::move(resolved));
+			}
+		}
 	}
 
 	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(const Control& control)
@@ -1028,6 +1540,13 @@ namespace mmo
 		}
 
 		Control& control = m_controls[index];
+		if (control.kind == ControlKind::Placed)
+		{
+			// Placed controls generate nothing themselves; graph instances read them.
+			SetStatus("'" + control.Name() + "' is a placed control; graph instances over it build its content.", StatusLevel::Ok);
+			return true;
+		}
+
 		return control.kind == ControlKind::Oasis ? RebuildOasisControl(control, error) : RebuildSectionPathControl(control, error);
 	}
 
@@ -1061,7 +1580,7 @@ namespace mmo
 			return false;
 		}
 
-		control.dirty = true;
+		MarkChanged(control);
 		SetStatus(DescribeReport(report, "Rebuilt '" + record.name + "'"), StatusLevel::Ok);
 		ILOG(m_status);
 		return true;
@@ -1119,7 +1638,7 @@ namespace mmo
 
 		// Persisted with the record: the overlap check of other controls uses what this build covers.
 		record.builtRects = record.content.IsEmpty() ? std::vector<pcg::WorldRect>() : rects;
-		control.dirty = true;
+		MarkChanged(control);
 		warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
 
 		String text = DescribeReport(report, "Rebuilt '" + record.name + "'") + " Layout: " + DescribeSectionLayout(probe) + ".";
@@ -1186,18 +1705,28 @@ namespace mmo
 		}
 
 		Control& control = m_controls[index];
-		const OasisBuildReport report = control.kind == ControlKind::Oasis
-			? DeleteOasisContent(m_worldEditor, control.oasis)
-			: DeleteSectionPathContent(m_worldEditor, control.path);
-		if (!report.ok)
+		if (control.kind == ControlKind::Placed)
 		{
-			error = "Delete of '" + control.Name() + "' failed: " + report.error;
-			SetStatus(error, StatusLevel::Error);
-			return false;
+			// Nothing in the world belongs to a placed control.
+			SetStatus("Deleted '" + control.Name() + "'.", StatusLevel::Ok);
+			ILOG(m_status);
+			++m_placedRevision;
 		}
+		else
+		{
+			const OasisBuildReport report = control.kind == ControlKind::Oasis
+				? DeleteOasisContent(m_worldEditor, control.oasis)
+				: DeleteSectionPathContent(m_worldEditor, control.path);
+			if (!report.ok)
+			{
+				error = "Delete of '" + control.Name() + "' failed: " + report.error;
+				SetStatus(error, StatusLevel::Error);
+				return false;
+			}
 
-		SetStatus(DescribeReport(report, "Deleted '" + control.Name() + "'"), StatusLevel::Ok);
-		ILOG(m_status);
+			SetStatus(DescribeReport(report, "Deleted '" + control.Name() + "'"), StatusLevel::Ok);
+			ILOG(m_status);
+		}
 
 		m_deletedIds.push_back(id);
 		m_controls.erase(m_controls.begin() + index);
@@ -1282,6 +1811,8 @@ namespace mmo
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		DrawSectionAssetCombo("##newPathAsset", m_newPathAsset);
 
+		DrawNewControlMenu();
+
 		if (!m_status.empty())
 		{
 			const ImVec4& color = m_statusLevel == StatusLevel::Error ? StatusErrorColor
@@ -1310,13 +1841,33 @@ namespace mmo
 				ImGui::PushID(static_cast<int>(i));
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
+
+				// A placed control whose type is missing or invalid is listed in red (kept, skipped by resolution).
+				const pcg::graph::ControlType* placedType = control.kind == ControlKind::Placed ? m_controlLibrary.Find(control.placed.typePath) : nullptr;
+				const bool typeMissing = control.kind == ControlKind::Placed && !placedType;
+				if (typeMissing)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+				}
 				const String label = control.Name() + (control.dirty ? " *" : "");
 				if (ImGui::Selectable(label.c_str(), static_cast<int32>(i) == m_selected, ImGuiSelectableFlags_SpanAllColumns))
 				{
 					SelectControl(static_cast<int32>(i));
 				}
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(control.kind == ControlKind::Oasis ? "Oasis" : "Section Path");
+				if (control.kind == ControlKind::Placed)
+				{
+					ImGui::TextUnformatted(placedType ? (placedType->name.empty() ? FileStem(control.placed.typePath).c_str() : placedType->name.c_str())
+						: (FileStem(control.placed.typePath) + " (missing)").c_str());
+				}
+				else
+				{
+					ImGui::TextUnformatted(control.kind == ControlKind::Oasis ? "Oasis" : "Section Path");
+				}
+				if (typeMissing)
+				{
+					ImGui::PopStyleColor();
+				}
 				ImGui::TableNextColumn();
 				ImGui::TextDisabled("%s", FormatId(control.Id()).c_str());
 				ImGui::PopID();
@@ -1331,12 +1882,16 @@ namespace mmo
 
 		ImGui::Separator();
 
-		if (ImGui::Button("Rebuild"))
+		// Placed controls build nothing themselves.
+		if (m_controls[m_selected].kind != ControlKind::Placed)
 		{
-			String error;
-			Rebuild(m_controls[m_selected].Id(), error);
+			if (ImGui::Button("Rebuild"))
+			{
+				String error;
+				Rebuild(m_controls[m_selected].Id(), error);
+			}
+			ImGui::SameLine();
 		}
-		ImGui::SameLine();
 		if (ImGui::Button("Delete"))
 		{
 			m_pendingDeleteId = m_controls[m_selected].Id();
@@ -1346,8 +1901,15 @@ namespace mmo
 		if (ImGui::BeginPopupModal("Delete Control?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			const int32 pending = FindControl(m_pendingDeleteId);
-			ImGui::Text("Remove '%s' and everything it generated\n(terrain changes, paint, water, objects)?",
-				pending >= 0 ? m_controls[pending].Name().c_str() : "?");
+			if (pending >= 0 && m_controls[pending].kind == ControlKind::Placed)
+			{
+				ImGui::Text("Remove the placed control '%s'?\n(Graph instances over it change on their next rebuild.)", m_controls[pending].Name().c_str());
+			}
+			else
+			{
+				ImGui::Text("Remove '%s' and everything it generated\n(terrain changes, paint, water, objects)?",
+					pending >= 0 ? m_controls[pending].Name().c_str() : "?");
+			}
 			if (ImGui::Button("Delete"))
 			{
 				String error;
@@ -1378,7 +1940,13 @@ namespace mmo
 		if (ImGui::InputText("Name", nameBuffer, sizeof(nameBuffer)))
 		{
 			current.Name() = nameBuffer;
-			current.dirty = true;
+			MarkChanged(current);
+		}
+
+		if (current.kind == ControlKind::Placed)
+		{
+			DrawPlacedControlDetails(current);
+			return;
 		}
 
 		uint64& seedRef = current.kind == ControlKind::Oasis ? current.oasis.seed : current.path.params.seed;
@@ -1386,13 +1954,13 @@ namespace mmo
 		if (ImGui::InputScalar("Seed", ImGuiDataType_U64, &seed))
 		{
 			seedRef = seed;
-			current.dirty = true;
+			MarkChanged(current);
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Randomize"))
 		{
 			seedRef = RandomSeed();
-			current.dirty = true;
+			MarkChanged(current);
 		}
 
 		if (current.kind == ControlKind::Oasis)
@@ -1402,6 +1970,206 @@ namespace mmo
 		else
 		{
 			DrawSectionPathDetails(current);
+		}
+	}
+
+	void ProceduralEditMode::DrawNewControlMenu()
+	{
+		if (m_activeBiome.empty())
+		{
+			const std::vector<String> biomes = m_controlLibrary.ListBiomes();
+			if (!biomes.empty())
+			{
+				m_activeBiome = biomes.front();
+			}
+		}
+
+		ImGui::BeginDisabled(m_activeBiome.empty());
+		if (ImGui::Button("New Control"))
+		{
+			ImGui::OpenPopup("##newControlMenu");
+		}
+		ImGui::EndDisabled();
+		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		{
+			ImGui::SetTooltip("Places a control of one of the active biome's types at the viewport centre:\n"
+				"a loop as a %.0f m square, a spline as %.0f m along the view, a volume (half extents %.0f m) or a point.",
+				NewControlSize, NewControlSize, NewVolumeHalfExtent);
+		}
+
+		if (ImGui::BeginPopup("##newControlMenu"))
+		{
+			// Listed only while the menu is open (the registry is scanned).
+			const std::vector<String> types = m_controlLibrary.ListControlTypes(m_activeBiome);
+			if (types.empty())
+			{
+				ImGui::TextDisabled("No control types in %s%s/Controls", ControlLibrary::BiomesFolder, m_activeBiome.c_str());
+			}
+			for (const String& typePath : types)
+			{
+				String error;
+				const pcg::graph::ControlType* type = m_controlLibrary.Find(typePath, &error);
+				if (!type)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+					ImGui::BeginDisabled();
+					ImGui::MenuItem(FileStem(typePath).c_str());
+					ImGui::EndDisabled();
+					ImGui::PopStyleColor();
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					{
+						ImGui::SetTooltip("%s", error.c_str());
+					}
+					continue;
+				}
+
+				const String label = (type->name.empty() ? FileStem(typePath) : type->name) + "##" + typePath;
+				if (ImGui::MenuItem(label.c_str(), ShapeName(type->shape)))
+				{
+					CreatePlacedControlAtViewportCentre(typePath);
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("%s", typePath.c_str());
+				}
+			}
+			ImGui::EndPopup();
+		}
+
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(160.0f);
+		if (ImGui::BeginCombo("Biome##activeBiome", m_activeBiome.empty() ? "(none)" : m_activeBiome.c_str()))
+		{
+			const std::vector<String> biomes = m_controlLibrary.ListBiomes();
+			if (biomes.empty())
+			{
+				ImGui::TextDisabled("No biomes in %s", ControlLibrary::BiomesFolder);
+			}
+			for (const String& biome : biomes)
+			{
+				if (ImGui::Selectable(biome.c_str(), biome == m_activeBiome))
+				{
+					m_activeBiome = biome;
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Reload Types"))
+		{
+			m_controlLibrary.InvalidateAll();
+			SetStatus("Control types will be read again.", StatusLevel::Ok);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Reads every control type again (after editing .hctl files outside the editor).");
+		}
+	}
+
+	void ProceduralEditMode::DrawPlacedControlDetails(Control& control)
+	{
+		pcg::graph::ControlInstance& instance = control.placed;
+
+		String typeError;
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(instance.typePath, &typeError);
+		ImGui::Text("Type: %s", instance.typePath.c_str());
+		if (type)
+		{
+			ImGui::SameLine();
+			ImGui::TextDisabled("(%s, %s)", type->name.c_str(), ShapeName(type->shape));
+		}
+		else
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, StatusErrorColor);
+			ImGui::TextWrapped("%s. The control is kept and skipped by graph instances until its type exists again.", typeError.c_str());
+			ImGui::PopStyleColor();
+		}
+
+		// Tags: applied when the field loses focus, so typing "a, " is not reformatted on the way.
+		if (!m_tagsEditing || m_tagsControlId != instance.id)
+		{
+			m_tagsBuffer = JoinTags(instance.extraTags);
+		}
+		ImGui::InputText("Extra tags", &m_tagsBuffer);
+		m_tagsEditing = ImGui::IsItemActive();
+		m_tagsControlId = instance.id;
+		if (ImGui::IsItemDeactivatedAfterEdit())
+		{
+			std::set<String> tags = SplitTags(m_tagsBuffer);
+			if (tags != instance.extraTags)
+			{
+				instance.extraTags = std::move(tags);
+				MarkChanged(control);
+			}
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Comma-separated tags added to the type's default tags. Graphs find controls by tag.");
+		}
+		if (type && !type->defaultTags.empty())
+		{
+			ImGui::TextDisabled("Default tags: %s", JoinTags(type->defaultTags).c_str());
+		}
+
+		if (control.HasTransform())
+		{
+			const bool volume = IsPlacedVolume(control);
+			ImGui::TextWrapped(volume
+				? "Volume: the gizmo moves it, Rotate turns it around up, Scale sets its half extents. Click its centre marker in the viewport to select it."
+				: "Point: the gizmo moves it and Rotate turns it around up. Click its marker in the viewport to select it.");
+
+			bool changed = false;
+			float position[3] = { instance.position.x, instance.position.y, instance.position.z };
+			if (ImGui::DragFloat3("Position", position, 0.1f, 0.0f, 0.0f, "%.2f"))
+			{
+				instance.position = Vector3(position[0], position[1], position[2]);
+				changed = true;
+			}
+
+			float yawDegrees = SelectedControlTransform::ExtractYaw(instance.rotation) * 180.0f / PiValue;
+			if (ImGui::DragFloat("Yaw (deg)", &yawDegrees, 0.5f, -360.0f, 360.0f, "%.1f"))
+			{
+				instance.rotation = SelectedControlTransform::FromYaw(yawDegrees * PiValue / 180.0f);
+				changed = true;
+			}
+
+			if (volume)
+			{
+				float extents[3] = { instance.halfExtents.x, instance.halfExtents.y, instance.halfExtents.z };
+				if (ImGui::DragFloat3("Half extents", extents, 0.1f, SelectedControlTransform::MinHalfExtent, 10000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+				{
+					instance.halfExtents = Vector3(extents[0], extents[1], extents[2]);
+					changed = true;
+				}
+			}
+
+			if (changed)
+			{
+				MarkChanged(control);
+				if (m_transformSelectable && m_transformSelectable->GetControlId() == instance.id)
+				{
+					m_transformSelectable->NotifyTransformChanged();
+				}
+			}
+		}
+		else
+		{
+			ImGui::TextWrapped("%s: %d points. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
+				instance.spline.closed ? "Loop" : "Spline", static_cast<int>(instance.spline.points.size()), GetMinPoints(control));
+			DrawPointDetails(control);
+		}
+
+		if (type)
+		{
+			if (type->groups.empty())
+			{
+				ImGui::TextDisabled("The type has no properties.");
+			}
+			else if (DrawControlProperties(*type, instance))
+			{
+				MarkChanged(control);
+			}
 		}
 	}
 
@@ -1418,7 +2186,7 @@ namespace mmo
 		{
 			// Only the parameters; the world is not touched until Rebuild.
 			rec.params = m_defaultParams;
-			control.dirty = true;
+			MarkChanged(control);
 		}
 
 		if (ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1458,7 +2226,7 @@ namespace mmo
 
 			if (changed)
 			{
-				control.dirty = true;
+				MarkChanged(control);
 			}
 		}
 	}
@@ -1469,7 +2237,7 @@ namespace mmo
 
 		if (DrawSectionAssetCombo("Section", rec.sectionAsset))
 		{
-			control.dirty = true;
+			MarkChanged(control);
 		}
 
 		const CachedSectionAsset& cached = GetCachedSectionAsset(rec.sectionAsset);
@@ -1548,7 +2316,7 @@ namespace mmo
 		if (ImGui::Checkbox("Closed loop##sectionClosed", &closed))
 		{
 			rec.spline.closed = closed;
-			control.dirty = true;
+			MarkChanged(control);
 		}
 		ImGui::EndDisabled();
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -1618,7 +2386,7 @@ namespace mmo
 
 			if (changed)
 			{
-				control.dirty = true;
+				MarkChanged(control);
 			}
 		}
 	}
@@ -1646,7 +2414,7 @@ namespace mmo
 			ImGui::BeginDisabled(isAuto);
 			if (ImGui::Button("Reset tangents to auto") && SplineEditController::ResetTangents(loop, static_cast<size_t>(point)))
 			{
-				control.dirty = true;
+				MarkChanged(control);
 				NotifyPointRotated();
 			}
 			ImGui::EndDisabled();
@@ -1657,7 +2425,7 @@ namespace mmo
 		ImGui::BeginDisabled(!anyManual);
 		if (ImGui::Button("Reset all tangents") && SplineEditController::ResetAllTangents(loop))
 		{
-			control.dirty = true;
+			MarkChanged(control);
 			NotifyPointRotated();
 		}
 		ImGui::EndDisabled();
@@ -1762,7 +2530,21 @@ namespace mmo
 			return;
 		}
 
-		// Point counts before the click, to find a point the click inserts (it needs an id on a section path).
+		// A click on the marker of a placed volume or point selects it for the gizmo.
+		if (!io.KeyCtrl && !io.KeyAlt)
+		{
+			const int32 transformIndex = HitTestTransformControl(io.MousePos.x, io.MousePos.y);
+			if (transformIndex >= 0)
+			{
+				m_splineEditor.CancelDrag();
+				m_selected = transformIndex;
+				SelectTransformInEditor(transformIndex);
+				return;
+			}
+		}
+
+		// Point counts before the click, to find a point the click inserts (it needs an id on a section path
+		// or placed control).
 		std::vector<size_t> pointCounts;
 		pointCounts.reserve(m_controls.size());
 		for (const Control& control : m_controls)
@@ -1778,17 +2560,19 @@ namespace mmo
 			{
 				Control& control = m_controls[m_selected];
 				const int32 inserted = m_splineEditor.GetSelectedPoint();
-				if (control.kind == ControlKind::SectionPath && control.Spline().points.size() == pointCounts[m_selected] + 1 &&
-					inserted >= 0 && static_cast<size_t>(inserted) <= control.path.pointIds.size())
+				std::vector<uint64>* pointIds = control.PointIds();
+				uint64* nextPointId = control.NextPointId();
+				if (pointIds && nextPointId && control.Spline().points.size() == pointCounts[m_selected] + 1 &&
+					inserted >= 0 && static_cast<size_t>(inserted) <= pointIds->size())
 				{
 					// A new point gets a new id; ids are never reused.
-					control.path.pointIds.insert(control.path.pointIds.begin() + inserted, control.path.nextPointId++);
+					pointIds->insert(pointIds->begin() + inserted, (*nextPointId)++);
 				}
 
 				if (m_splineEditor.DragMoved())
 				{
 					// An inserted point is a change right away.
-					control.dirty = true;
+					MarkChanged(control);
 				}
 			}
 
@@ -1808,6 +2592,11 @@ namespace mmo
 			// A click next to the spline deselects the point (the control stays selected).
 			ClearPointSelection();
 		}
+		else if (m_transformSelectable)
+		{
+			// A click elsewhere drops the gizmo of a volume or point (the control stays selected).
+			ClearTransformSelection();
+		}
 	}
 
 	void ProceduralEditMode::OnMouseHold(const float deltaSeconds)
@@ -1826,7 +2615,7 @@ namespace mmo
 			const int32 selected = m_splineEditor.GetSelectedSpline();
 			if (selected >= 0 && selected < static_cast<int32>(m_controls.size()))
 			{
-				m_controls[selected].dirty = true;
+				MarkChanged(m_controls[selected]);
 			}
 
 			// The transform widget follows a dragged point, and (in local space) the out tangent's yaw.
@@ -1862,7 +2651,7 @@ namespace mmo
 			const int32 selected = m_splineEditor.GetSelectedSpline();
 			if (moved && selected >= 0 && selected < static_cast<int32>(m_controls.size()))
 			{
-				m_controls[selected].dirty = true;
+				MarkChanged(m_controls[selected]);
 			}
 		}
 	}
@@ -1881,18 +2670,18 @@ namespace mmo
 		const uint32 minPoints = GetMinPoints(control);
 		if (!m_splineEditor.DeleteSelectedPoint(splines, minPoints))
 		{
-			SetStatus(String(control.kind == ControlKind::Oasis ? "An oasis loop" : "A section path") + " keeps at least "
-				+ std::to_string(minPoints) + " points.", StatusLevel::Error);
+			SetStatus(String(DescribeKind(control)) + " keeps at least " + std::to_string(minPoints) + " points.", StatusLevel::Error);
 			return;
 		}
 
-		if (control.kind == ControlKind::SectionPath && static_cast<size_t>(point) < control.path.pointIds.size())
+		std::vector<uint64>* pointIds = control.PointIds();
+		if (pointIds && static_cast<size_t>(point) < pointIds->size())
 		{
 			// The id leaves with its point and is never handed out again.
-			control.path.pointIds.erase(control.path.pointIds.begin() + point);
+			pointIds->erase(pointIds->begin() + point);
 		}
 
-		control.dirty = true;
+		MarkChanged(control);
 		// Indices behind the deleted point shifted; nothing stays selected. This also keeps the same
 		// Delete key press, which the viewport applies to the editor selection, from deleting again.
 		ClearPointSelection();
@@ -1909,6 +2698,89 @@ namespace mmo
 		screenPosition.x = m_overlayViewportMin.x + (clip.x / clip.w * 0.5f + 0.5f) * m_overlayViewportSize.x;
 		screenPosition.y = m_overlayViewportMin.y + (1.0f - (clip.y / clip.w * 0.5f + 0.5f)) * m_overlayViewportSize.y;
 		return true;
+	}
+
+	int32 ProceduralEditMode::HitTestTransformControl(const float screenX, const float screenY) const
+	{
+		int32 best = -1;
+		float bestDistanceSq = TransformHandleRadius * TransformHandleRadius;
+		for (size_t i = 0; i < m_controls.size(); ++i)
+		{
+			const Control& control = m_controls[i];
+			ImVec2 screen;
+			if (!control.HasTransform() || !ProjectToScreen(control.placed.position, screen))
+			{
+				continue;
+			}
+
+			const float dx = screen.x - screenX;
+			const float dy = screen.y - screenY;
+			const float distanceSq = dx * dx + dy * dy;
+			if (distanceSq <= bestDistanceSq)
+			{
+				best = static_cast<int32>(i);
+				bestDistanceSq = distanceSq;
+			}
+		}
+		return best;
+	}
+
+	void ProceduralEditMode::DrawPlacedTransforms(ImDrawList& drawList)
+	{
+		for (size_t i = 0; i < m_controls.size(); ++i)
+		{
+			const Control& control = m_controls[i];
+			if (!control.HasTransform())
+			{
+				continue;
+			}
+
+			const pcg::graph::ControlInstance& instance = control.placed;
+			const bool selected = static_cast<int32>(i) == m_selected;
+			const bool missingType = m_controlLibrary.Find(instance.typePath) == nullptr;
+			const ImU32 color = missingType ? IM_COL32(255, 90, 80, 220) : (selected ? IM_COL32(190, 255, 160, 255) : IM_COL32(130, 230, 110, 200));
+			const float yaw = SelectedControlTransform::ExtractYaw(instance.rotation);
+			const Quaternion rotation = SelectedControlTransform::FromYaw(yaw);
+
+			// The volume's box: rotated around up, half extents around the position.
+			if (IsPlacedVolume(control))
+			{
+				const Vector3& e = instance.halfExtents;
+				Vector3 corners[8];
+				for (int c = 0; c < 8; ++c)
+				{
+					const Vector3 local((c & 1) ? e.x : -e.x, (c & 2) ? e.y : -e.y, (c & 4) ? e.z : -e.z);
+					corners[c] = instance.position + rotation * local;
+				}
+
+				static const int edges[12][2] = { { 0, 1 }, { 2, 3 }, { 4, 5 }, { 6, 7 }, { 0, 2 }, { 1, 3 }, { 4, 6 }, { 5, 7 }, { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 } };
+				for (const auto& edge : edges)
+				{
+					ImVec2 a, b;
+					if (ProjectToScreen(corners[edge[0]], a) && ProjectToScreen(corners[edge[1]], b))
+					{
+						drawList.AddLine(a, b, color, selected ? 2.0f : 1.0f);
+					}
+				}
+			}
+
+			// Centre marker with a yaw arrow (+X of the control), and the name.
+			ImVec2 centre;
+			if (!ProjectToScreen(instance.position, centre))
+			{
+				continue;
+			}
+
+			ImVec2 arrowTip;
+			const float arrowLength = IsPlacedVolume(control) ? std::max(instance.halfExtents.x, 2.0f) : 4.0f;
+			if (ProjectToScreen(instance.position + rotation * Vector3(arrowLength, 0.0f, 0.0f), arrowTip))
+			{
+				drawList.AddLine(centre, arrowTip, color, 2.0f);
+			}
+			drawList.AddCircleFilled(centre, TransformHandleRadius * 0.7f, color);
+			drawList.AddCircle(centre, TransformHandleRadius * 0.7f, IM_COL32(20, 20, 20, 255));
+			drawList.AddText(ImVec2(centre.x + TransformHandleRadius, centre.y - TransformHandleRadius * 1.5f), IM_COL32(255, 255, 255, 230), control.Name().c_str());
+		}
 	}
 
 	void ProceduralEditMode::DrawViewportOverlay(ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
@@ -1943,6 +2815,10 @@ namespace mmo
 		{
 			ClearPointSelection();
 		}
+		if (m_transformSelectable && !m_transformSelectable->IsValid())
+		{
+			ClearTransformSelection();
+		}
 
 		drawList->PushClipRect(viewportMin, ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y), true);
 
@@ -1970,7 +2846,7 @@ namespace mmo
 
 				DrawRect(*drawList, rect, selected ? IM_COL32(120, 200, 255, 90) : IM_COL32(120, 200, 255, 45), project, height);
 			}
-			else if (!control.path.content.IsEmpty())
+			else if (control.kind == ControlKind::SectionPath && !control.path.content.IsEmpty())
 			{
 				const ImU32 color = selected ? IM_COL32(255, 190, 110, 90) : IM_COL32(255, 190, 110, 45);
 				if (control.path.builtRects.empty())
@@ -1996,6 +2872,11 @@ namespace mmo
 				style.lineColor = IM_COL32(80, 200, 255, 200);
 				style.selectedColor = IM_COL32(120, 240, 255, 255);
 			}
+			else if (control.kind == ControlKind::Placed)
+			{
+				style.lineColor = IM_COL32(130, 230, 110, 200);
+				style.selectedColor = IM_COL32(190, 255, 160, 255);
+			}
 			else
 			{
 				style.lineColor = IM_COL32(255, 170, 70, 200);
@@ -2008,6 +2889,7 @@ namespace mmo
 			styles.push_back(std::move(style));
 		}
 		m_splineEditor.Draw(*drawList, viewportMin, viewportSize, splines, styles);
+		DrawPlacedTransforms(*drawList);
 
 		// The corner piece chosen at each control point of the selected section path (laid like a build, flat ground).
 		if (m_selected >= 0 && m_selected < static_cast<int32>(m_controls.size()) && m_controls[m_selected].kind == ControlKind::SectionPath)
