@@ -111,10 +111,10 @@ namespace mmo
 		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" },
 		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" },
 		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" },
-		{ "Summon Persistent Pet", "Summon", "Summons a persistent pet from the pet entry given by Misc Value A" },
-		{ "Summon Temporary Pet", "Summon", "Summons a temporary pet creature" },
+		{ "Summon Persistent Pet", "Summon", "Summons the caster's stored pet of PetEntry Misc Value A (0 = most recently summoned)" },
+		{ "Grant Persistent Pet", "Utility", "Adds a stored persistent pet of PetEntry Misc Value A to the caster if it has none yet" },
 		{ "Dismiss Pet", "Utility", "Dismisses the caster's pets of the given pet group" },
-		{ "Revive Pet", "Healing", "Revives the caster's dead persistent pet" }
+		{ "Revive Pet", "Healing", "Revives a dead stored pet at base points % health" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -177,7 +177,7 @@ namespace mmo
 		"Change Class",
 		"Teach Emote",
 		"Summon Persistent Pet",
-		"Summon Temporary Pet",
+		"Grant Persistent Pet",
 		"Dismiss Pet",
 		"Revive Pet"
 	};

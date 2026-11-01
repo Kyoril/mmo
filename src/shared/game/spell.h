@@ -745,13 +745,13 @@ namespace mmo
 			ChangeClass             = 56,
 			/// Unlocks the emote identified by miscvaluea for the player target (emote scrolls).
 			TeachEmote              = 57,
-			/// Summons a persistent pet from the pet entry given by miscvaluea (pet_group, pet_max_count, pet_limit_policy, pet_level_source apply).
+			/// Summons the caster's stored pet of PetEntry miscvaluea (0 = most recently summoned). pet_group, pet_max_count, pet_limit_policy and pet_level_source apply.
 			SummonPersistentPet     = 58,
-			/// Summons a temporary pet creature given by summonunit.
-			SummonTemporaryPet      = 59,
+			/// Adds a stored persistent pet of PetEntry miscvaluea to the caster if it does not have one yet (learn-style grant); the summon spell is separate.
+			GrantPersistentPet      = 59,
 			/// Dismisses the caster's pets of the group given by pet_group (0 = all).
 			DismissPet              = 60,
-			/// Revives the caster's dead persistent pet.
+			/// Revives a dead stored pet of the caster at basepoints % health.
 			RevivePet               = 61,
 
 			// Add new spell effect types HERE (append only — never insert above an existing entry).
