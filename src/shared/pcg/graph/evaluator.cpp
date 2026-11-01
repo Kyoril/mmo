@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "evaluator.h"
+#include "hashing.h"
 
 #include "pcg/pcg_random.h"
 
@@ -21,41 +22,15 @@ namespace mmo::pcg::graph
 
 	namespace
 	{
-		/// FNV-1a over a string; platform independent.
-		uint64 StringHash(const String& s)
-		{
-			uint64 h = 14695981039346656037ull;
-			for (const char c : s)
-			{
-				h ^= static_cast<uint8>(c);
-				h *= 1099511628211ull;
-			}
-			return h;
-		}
-
 		/// Folds a value into a running hash.
 		uint64 Mix(const uint64 h, const uint64 a, const uint64 b = 0)
 		{
 			return Hash(h, static_cast<int64>(a), static_cast<int64>(b));
 		}
 
-		uint64 AttributesHash(const AttributeSet& attributes)
-		{
-			Collection c(1);
-			c[0].attributes = attributes;
-			return ContentHash(c);
-		}
-
-		uint64 SplineHash(const PathSpline& spline)
-		{
-			Collection c(1);
-			c[0].spline = spline;
-			return ContentHash(c);
-		}
-
 		uint64 ContextHash(const EvalContext& ctx)
 		{
-			uint64 h = Mix(0x9e3779b97f4a7c15ull, AttributesHash(ctx.parameters), SplineHash(ctx.region));
+			uint64 h = Mix(0x9e3779b97f4a7c15ull, HashAttributes(ctx.parameters), HashSpline(ctx.region));
 			h = Mix(h, ctx.controlsRevision, ctx.terrain != nullptr ? ctx.terrain->Revision() : 0);
 			h = Mix(h, ctx.terrain != nullptr ? 1 : 0, static_cast<uint64>(ctx.pointLimit));
 			for (const String& warning : ctx.parameterWarnings)
@@ -214,7 +189,7 @@ namespace mmo::pcg::graph
 			const uint64 nodeSeed = Hash(ctx.instanceSeed, id);
 
 			uint64 key = Mix(0x2545f4914f6cdd1dull, id, StringHash(node.type));
-			key = Mix(key, AttributesHash(settings), nodeSeed);
+			key = Mix(key, HashAttributes(settings), nodeSeed);
 			for (const Link* link : links)
 			{
 				key = Mix(key, StringHash(link->toPin), pinHashes[link->fromNode][link->fromPin]);

@@ -1,8 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "graph_data.h"
-
-#include <cstring>
+#include "hashing.h"
 
 namespace mmo::pcg::graph
 {
@@ -138,94 +137,19 @@ namespace mmo::pcg::graph
 
 	namespace
 	{
-		/// FNV-1a style accumulator over raw bytes; platform independent for the types fed in.
-		class Hasher
-		{
-		public:
-			void Bytes(const void* data, const size_t size)
-			{
-				const uint8* p = static_cast<const uint8*>(data);
-				for (size_t i = 0; i < size; ++i)
-				{
-					m_state ^= p[i];
-					m_state *= 1099511628211ull;
-				}
-			}
-
-			void U64(const uint64 v)
-			{
-				for (int i = 0; i < 8; ++i)
-				{
-					const uint8 b = static_cast<uint8>((v >> (i * 8)) & 0xFF);
-					Bytes(&b, 1);
-				}
-			}
-
-			void F32(const float v)
-			{
-				uint32 bits = 0;
-				std::memcpy(&bits, &v, sizeof(bits));
-				U64(bits);
-			}
-
-			void Vec(const Vector3& v)
-			{
-				F32(v.x);
-				F32(v.y);
-				F32(v.z);
-			}
-
-			void Str(const String& s)
-			{
-				U64(s.size());
-				Bytes(s.data(), s.size());
-			}
-
-			void Value(const AttributeValue& v)
-			{
-				U64(v.index());
-				switch (TypeOf(v))
-				{
-				case AttributeType::Float: F32(std::get<float>(v)); break;
-				case AttributeType::Int: U64(static_cast<uint64>(std::get<int64>(v))); break;
-				case AttributeType::Bool: U64(std::get<bool>(v) ? 1 : 0); break;
-				case AttributeType::Vector3: Vec(std::get<Vector3>(v)); break;
-				case AttributeType::String: Str(std::get<String>(v)); break;
-				}
-			}
-
-			uint64 Result() const { return m_state; }
-
-		private:
-			uint64 m_state = 14695981039346656037ull;
-		};
-
 		void HashItem(Hasher& h, const DataItem& item)
 		{
 			h.U64(static_cast<uint64>(item.kind));
 			h.U64(item.sourceId);
 
-			h.U64(item.tags.size());
-			for (const String& tag : item.tags)
-			{
-				h.Str(tag);
-			}
-
-			h.U64(item.attributes.size());
-			for (const auto& entry : item.attributes)
-			{
-				h.Str(entry.first);
-				h.Value(entry.second);
-			}
+			h.Tags(item.tags);
+			h.Attributes(item.attributes);
 
 			h.U64(item.points.points.size());
 			for (const Point& p : item.points.points)
 			{
 				h.Vec(p.position);
-				h.F32(p.rotation.w);
-				h.F32(p.rotation.x);
-				h.F32(p.rotation.y);
-				h.F32(p.rotation.z);
+				h.Quat(p.rotation);
 				h.Vec(p.scale);
 				h.F32(p.density);
 				h.U64(p.seed);
@@ -245,23 +169,7 @@ namespace mmo::pcg::graph
 				}
 			}
 
-			h.U64(item.spline.closed ? 1 : 0);
-			h.U64(static_cast<uint64>(item.spline.interpolation));
-			h.U64(item.spline.points.size());
-			for (const SplinePoint& sp : item.spline.points)
-			{
-				h.F32(sp.x);
-				h.F32(sp.z);
-				h.F32(sp.width);
-				h.F32(sp.y);
-				h.U64(sp.autoTangents ? 1 : 0);
-				h.F32(sp.inX);
-				h.F32(sp.inZ);
-				h.F32(sp.outX);
-				h.F32(sp.outZ);
-				h.F32(sp.inY);
-				h.F32(sp.outY);
-			}
+			h.Spline(item.spline);
 		}
 	}
 

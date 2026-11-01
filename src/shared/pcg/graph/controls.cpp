@@ -1,11 +1,11 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "controls.h"
+#include "hashing.h"
 #include "json_util.h"
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 namespace mmo::pcg::graph
 {
@@ -363,80 +363,6 @@ namespace mmo::pcg::graph
 
 		// ---- hashing ----
 
-		class Hasher
-		{
-		public:
-			void U64(const uint64 v)
-			{
-				for (int i = 0; i < 8; ++i)
-				{
-					m_state ^= static_cast<uint8>((v >> (i * 8)) & 0xFF);
-					m_state *= 1099511628211ull;
-				}
-			}
-
-			void F32(const float v)
-			{
-				uint32 bits = 0;
-				std::memcpy(&bits, &v, sizeof(bits));
-				U64(bits);
-			}
-
-			void Vec(const Vector3& v)
-			{
-				F32(v.x);
-				F32(v.y);
-				F32(v.z);
-			}
-
-			void Str(const String& s)
-			{
-				U64(s.size());
-				for (const char c : s)
-				{
-					m_state ^= static_cast<uint8>(c);
-					m_state *= 1099511628211ull;
-				}
-			}
-
-			void Tags(const std::set<String>& tags)
-			{
-				U64(tags.size());
-				for (const String& t : tags)
-				{
-					Str(t);
-				}
-			}
-
-			void Value(const AttributeValue& v)
-			{
-				U64(v.index());
-				switch (TypeOf(v))
-				{
-				case AttributeType::Float: F32(std::get<float>(v)); break;
-				case AttributeType::Int: U64(static_cast<uint64>(std::get<int64>(v))); break;
-				case AttributeType::Bool: U64(std::get<bool>(v) ? 1 : 0); break;
-				case AttributeType::Vector3: Vec(std::get<Vector3>(v)); break;
-				case AttributeType::String: Str(std::get<String>(v)); break;
-				}
-			}
-
-			void Attributes(const AttributeSet& set)
-			{
-				U64(set.size());
-				for (const auto& entry : set)
-				{
-					Str(entry.first);
-					Value(entry.second);
-				}
-			}
-
-			uint64 Result() const { return m_state; }
-
-		private:
-			uint64 m_state = 14695981039346656037ull;
-		};
-
 		void HashType(Hasher& h, const ControlType& t)
 		{
 			h.Str(t.name);
@@ -471,23 +397,7 @@ namespace mmo::pcg::graph
 			h.Str(i.name);
 			h.Tags(i.extraTags);
 
-			h.U64(i.spline.closed ? 1 : 0);
-			h.U64(static_cast<uint64>(i.spline.interpolation));
-			h.U64(i.spline.points.size());
-			for (const SplinePoint& p : i.spline.points)
-			{
-				h.F32(p.x);
-				h.F32(p.z);
-				h.F32(p.width);
-				h.F32(p.y);
-				h.U64(p.autoTangents ? 1 : 0);
-				h.F32(p.inX);
-				h.F32(p.inZ);
-				h.F32(p.outX);
-				h.F32(p.outZ);
-				h.F32(p.inY);
-				h.F32(p.outY);
-			}
+			h.Spline(i.spline);
 			h.U64(i.pointIds.size());
 			for (const uint64 id : i.pointIds)
 			{
@@ -496,10 +406,7 @@ namespace mmo::pcg::graph
 			h.U64(i.nextPointId);
 
 			h.Vec(i.position);
-			h.F32(i.rotation.w);
-			h.F32(i.rotation.x);
-			h.F32(i.rotation.y);
-			h.F32(i.rotation.z);
+			h.Quat(i.rotation);
 			h.Vec(i.halfExtents);
 			h.Attributes(i.overrides);
 		}
