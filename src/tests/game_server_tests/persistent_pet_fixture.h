@@ -255,7 +255,7 @@ namespace mmo::pet_tests
 		void AddTameSpell()
 		{
 			auto* spell = project.spells.add(TameSpellId);
-			spell->set_name("Tame Beast");
+			spell->set_name("Bind Beast");
 			spell->add_attributes(0);
 			spell->add_attributes(0);
 			auto* effect = spell->add_effects();
@@ -267,7 +267,7 @@ namespace mmo::pet_tests
 		void AddCallPetSpell()
 		{
 			auto* spell = project.spells.add(CallPetSpellId);
-			spell->set_name("Call Pet");
+			spell->set_name("Summon Companion");
 			spell->add_attributes(0);
 			spell->add_attributes(0);
 			auto* effect = spell->add_effects();
