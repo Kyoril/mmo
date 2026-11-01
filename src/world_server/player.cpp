@@ -888,6 +888,18 @@ namespace mmo
 		case game::client_realm_packet::CheatFollowMe:
 			OnCheatFollowMe(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatPetAdd:
+			OnCheatPetAdd(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetRemove:
+			OnCheatPetRemove(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetTame:
+			OnCheatPetTame(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetMake:
+			OnCheatPetMake(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
@@ -1039,10 +1051,6 @@ namespace mmo
 		case game::client_realm_packet::PetNameQuery:
 			OnPetNameQuery(opCode, buffer.size(), reader);
 			break;
-
-		// TODO(pets, Task 12): CheatPetAdd, CheatPetRemove, CheatPetTame and CheatPetMake are
-		// proxied by the realm (GM level checked there) but have no world handler yet: they are
-		// not dispatched and do nothing until the GM pet commands are implemented.
 
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);

@@ -336,6 +336,31 @@ namespace mmo
 			});
 	}
 
+	pet_result::Type MakeGmPet(GameUnitS& owner, GameCreatureS& target)
+	{
+		if (!target.IsAlive() || target.IsPet() || target.GetOwnerGuid() != 0 || !owner.GetWorldInstance())
+		{
+			return pet_result::NotTamable;
+		}
+
+		// The creature stops whatever it was doing; the pet state takes over.
+		target.GetMover().StopMovement();
+
+		target.SetGrantsKillRewards(false);
+		target.SetSummonOwner(std::static_pointer_cast<GameUnitS>(owner.shared_from_this()));
+		target.SetOwnerGuid(owner.GetGuid());
+		target.SetPetGroup(GmPetGroup);
+
+		owner.GetPets().AddTemporaryPet(target, GmPetGroup, GmPetGroup, pet_limit_policy::ReplaceOldest);
+
+		if (CreatureAI* ai = target.GetAI())
+		{
+			ai->EnterPetMode(owner);
+		}
+
+		return pet_result::Ok;
+	}
+
 	uint32 ResolvePetLevel(const pet_level_source::Type source, const GameUnitS& owner, const proto::UnitEntry& entry)
 	{
 		switch (source)

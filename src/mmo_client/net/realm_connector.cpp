@@ -595,6 +595,40 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::PetAdd(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetAdd);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetRemove(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetRemove);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetTame()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetTame);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetMake()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetMake);
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::LearnEmote(uint32 emoteId)
 	{
 		sendSinglePacket([emoteId](game::OutgoingPacket& packet) {

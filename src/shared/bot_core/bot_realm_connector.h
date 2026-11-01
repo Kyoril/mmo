@@ -791,6 +791,18 @@ namespace mmo
 		/// GAME MASTER only. Unlocks the given emote.
 		void CheatLearnEmote(uint32 emoteId);
 
+		/// GAME MASTER only. Grants the selected player (the sender if none) a stored pet.
+		void CheatPetAdd(uint32 petEntry);
+
+		/// GAME MASTER only. Removes a stored pet from the selected player (the sender if none).
+		void CheatPetRemove(uint32 petEntry);
+
+		/// GAME MASTER only. Tames the selected creature, ignoring the level check.
+		void CheatPetTame();
+
+		/// GAME MASTER only. Makes the selected creature the sender's temporary pet.
+		void CheatPetMake();
+
 		/// Performs an animated emote (one-shot, pose or mood).
 		void SendEmote(uint32 emoteId, uint64 targetGuid);
 

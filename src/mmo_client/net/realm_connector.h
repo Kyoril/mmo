@@ -289,6 +289,20 @@ namespace mmo
 		///	@param spellId The id of the spell to learn.
 		void LearnSpell(uint32 spellId);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Grants the selected player (or the controlled player if no player is selected) a stored pet.
+		/// @param petEntry The id of the pet entry.
+		void PetAdd(uint32 petEntry);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Removes the stored pet of an entry from the selected player (or the controlled player if no player is selected).
+		/// @param petEntry The id of the pet entry.
+		void PetRemove(uint32 petEntry);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Tames the selected creature, ignoring the level check.
+		void PetTame();
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Makes the selected creature a temporary pet of the controlled player.
+		void PetMake();
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Unlocks a specific emote for the selected player (or the controlled player if no player is selected).
 		///	@param emoteId The id of the emote to unlock.
 		void LearnEmote(uint32 emoteId);

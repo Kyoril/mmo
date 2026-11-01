@@ -2236,6 +2236,14 @@ namespace mmo
 								 { Command_LearnEmote(cmd, args); }, ConsoleCommandCategory::Gm, "Unlocks a given emote for the selected player.");
 		Console::RegisterCommand("followme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
+		Console::RegisterCommand("petadd", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetAdd(cmd, args); }, ConsoleCommandCategory::Gm, "Grants the selected player (or yourself) a stored pet: petadd <petEntry>.");
+		Console::RegisterCommand("petremove", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetRemove(cmd, args); }, ConsoleCommandCategory::Gm, "Removes a stored pet from the selected player (or yourself): petremove <petEntry>.");
+		Console::RegisterCommand("pettame", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetTame(cmd, args); }, ConsoleCommandCategory::Gm, "Tames the selected creature, ignoring the level check.");
+		Console::RegisterCommand("petmake", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetMake(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature your temporary pet without a duration.");
 		Console::RegisterCommand("faceme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 		Console::RegisterCommand("level", [this](const std::string &cmd, const std::string &args)
@@ -2298,6 +2306,10 @@ namespace mmo
 		Console::UnregisterCommand("learnemote");
 		Console::UnregisterCommand("followme");
 		Console::UnregisterCommand("faceme");
+		Console::UnregisterCommand("petadd");
+		Console::UnregisterCommand("petremove");
+		Console::UnregisterCommand("pettame");
+		Console::UnregisterCommand("petmake");
 		Console::UnregisterCommand("level");
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");

@@ -131,6 +131,10 @@ server validates the player's position, so walk inside the area first)
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LearnEmote(emoteId)`, `GM.LevelUp(levels)`,
 `GM.ClassLevelUp(levels)` (levels the active class, not the character),
+`GM.PetAdd(petEntry)` / `GM.PetRemove(petEntry)` (grant / delete a stored pet of the selected
+player, else the test character), `GM.PetTame()` (tames the selected creature, ignoring the
+level check) and `GM.PetMake()` (the selected creature becomes a temporary pet without a
+duration), the latter two act on the current selection (`SetTarget`),
 `GM.GiveMoney(copper)`, `GM.CreateMonster(entry) -> g` (waits for the spawn),
 `GM.DestroyMonster(g)`, `GM.CreateObject(entry [, state]) -> g` (spawns a temporary
 world object at the player's position facing the player's direction; waits for the

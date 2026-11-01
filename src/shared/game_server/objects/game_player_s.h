@@ -544,8 +544,9 @@ namespace mmo
 		/// Checks whether TameCreature would succeed, without changing anything or telling the
 		/// client (spell cast validation).
 		/// @param target The creature to tame.
+		/// @param ignoreLevel Whether the creature may be above the character's level (GM command).
 		/// @return Ok or the result TameCreature would fail with.
-		[[nodiscard]] pet_result::Type CanTameCreature(const GameCreatureS& target) const;
+		[[nodiscard]] pet_result::Type CanTameCreature(const GameCreatureS& target, bool ignoreLevel = false) const;
 
 		/// Checks whether GrantPersistentPet would succeed, without changing anything or telling the
 		/// client (spell cast validation).
@@ -598,8 +599,16 @@ namespace mmo
 		/// Tames a creature: it leaves the world and becomes a stored pet of the active class, which
 		/// is summoned once the realm created it.
 		/// @param target The creature to tame.
+		/// @param ignoreLevel Whether the creature may be above the character's level (GM command).
 		/// @return Ok, NotTamable, TooHighLevel or NoFreeSlot.
-		pet_result::Type TameCreature(GameCreatureS& target);
+		pet_result::Type TameCreature(GameCreatureS& target, bool ignoreLevel = false);
+
+		/// Removes the stored pet of a pet entry for good (GM command): a summoned pet is dismissed
+		/// first, then the pet leaves the stored list and the change is saved, which makes the realm
+		/// delete it. Not reported to the client.
+		/// @param petEntry Id of the pet entry.
+		/// @return Ok, or NoPet if the character has no stored pet of that entry.
+		pet_result::Type RemoveStoredPet(uint32 petEntry);
 
 		/// Grants the character a stored pet of a pet entry for the active class (not summoned).
 		/// @param petEntry Id of the pet entry.

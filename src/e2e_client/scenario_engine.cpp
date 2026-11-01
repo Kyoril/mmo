@@ -1267,6 +1267,42 @@ namespace mmo
 			}
 		}
 
+		void luaGmPetAdd(const uint32 petEntry)
+		{
+			g_runtime->session->GetRealm().CheatPetAdd(petEntry);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetAdd", { { "pet_entry", petEntry } });
+			}
+		}
+
+		void luaGmPetRemove(const uint32 petEntry)
+		{
+			g_runtime->session->GetRealm().CheatPetRemove(petEntry);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetRemove", { { "pet_entry", petEntry } });
+			}
+		}
+
+		void luaGmPetTame()
+		{
+			g_runtime->session->GetRealm().CheatPetTame();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetTame", {});
+			}
+		}
+
+		void luaGmPetMake()
+		{
+			g_runtime->session->GetRealm().CheatPetMake();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetMake", {});
+			}
+		}
+
 		void luaGmLevelUp(const uint32 levels)
 		{
 			g_runtime->session->GetRealm().CheatLevelUp(static_cast<uint8>(levels));
@@ -1875,6 +1911,10 @@ namespace mmo
 				luabind::def_lambda("GM_AddItem", &luaGmAddItem),
 				luabind::def_lambda("GM_LearnSpell", &luaGmLearnSpell),
 				luabind::def_lambda("GM_LearnEmote", &luaGmLearnEmote),
+				luabind::def_lambda("GM_PetAdd", &luaGmPetAdd),
+				luabind::def_lambda("GM_PetRemove", &luaGmPetRemove),
+				luabind::def_lambda("GM_PetTame", &luaGmPetTame),
+				luabind::def_lambda("GM_PetMake", &luaGmPetMake),
 				luabind::def_lambda("GM_LevelUp", &luaGmLevelUp),
 				luabind::def_lambda("GM_ClassLevelUp", &luaGmClassLevelUp),
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
@@ -1952,6 +1992,10 @@ namespace mmo
 				AddItem = GM_AddItem,
 				LearnSpell = GM_LearnSpell,
 				LearnEmote = GM_LearnEmote,
+				PetAdd = GM_PetAdd,
+				PetRemove = GM_PetRemove,
+				PetTame = GM_PetTame,
+				PetMake = GM_PetMake,
 				LevelUp = GM_LevelUp,
 				ClassLevelUp = GM_ClassLevelUp,
 				GiveMoney = GM_GiveMoney,

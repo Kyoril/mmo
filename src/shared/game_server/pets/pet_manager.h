@@ -148,6 +148,19 @@ namespace mmo
 	/// @param attackerGuid Guid of the attacking unit.
 	void NotifyPetOwnerOfAttacker(GameUnitS& pet, uint64 attackerGuid);
 
+	/// The pet group (and group cap) of the temporary pets GMs make with MakeGmPet.
+	constexpr uint32 GmPetGroup = 0xFFFFFFFFu;
+
+	/// GM command: makes an existing creature a temporary pet of a unit, without a duration and
+	/// without a group cap. The creature keeps its place in the world and its spawner (a creature of
+	/// a spawner stays a pet until it dies and its corpse despawns, or it is removed; the spawner then
+	/// respawns the original after its normal respawn delay). It becomes friendly to the owner and
+	/// follows it (CreatureAI::EnterPetMode).
+	/// @param owner The new owner.
+	/// @param target The creature to make a pet.
+	/// @return Ok, or NotTamable for a dead creature or a creature that already is somebody's pet.
+	pet_result::Type MakeGmPet(GameUnitS& owner, GameCreatureS& target);
+
 	/// Resolves the level of a pet.
 	/// @param source Where the level comes from.
 	/// @param owner The pet's owner.

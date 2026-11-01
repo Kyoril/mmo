@@ -12,6 +12,7 @@
 #include "game_server/world/world_instance.h"
 #include "proto_data/project.h"
 #include "game/loot.h"
+#include "game_server/pets/pet_manager.h"
 
 namespace mmo
 {
@@ -221,6 +222,104 @@ namespace mmo
 
 		// TODO
 		DLOG("TODO");
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	GamePlayerS& Player::GetCheatPetTargetPlayer() const
+	{
+		const uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		if (targetGuid != 0)
+		{
+			if (auto* target = m_worldInstance->FindByGuid<GamePlayerS>(targetGuid))
+			{
+				return *target;
+			}
+		}
+
+		return *m_character;
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatPetAdd(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 petEntry;
+		if (!(contentReader >> io::read<uint32>(petEntry)))
+		{
+			ELOG("Missing pet entry to add a pet");
+			return;
+		}
+
+		GamePlayerS& target = GetCheatPetTargetPlayer();
+		DLOG("Granting pet " << petEntry << " to " << target.GetName());
+
+		// The target is told about a failure; the GM only if it is somebody else.
+		const pet_result::Type result = target.GrantPersistentPet(petEntry);
+		if (result != pet_result::Ok && &target != m_character.get())
+		{
+			SendPetResult(result);
+		}
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatPetRemove(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		uint32 petEntry;
+		if (!(contentReader >> io::read<uint32>(petEntry)))
+		{
+			ELOG("Missing pet entry to remove a pet");
+			return;
+		}
+
+		GamePlayerS& target = GetCheatPetTargetPlayer();
+		DLOG("Removing pet " << petEntry << " from " << target.GetName());
+
+		const pet_result::Type result = target.RemoveStoredPet(petEntry);
+		if (result != pet_result::Ok)
+		{
+			SendPetResult(result);
+		}
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatPetTame(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		const uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		auto* creature = targetGuid != 0 ? m_worldInstance->FindByGuid<GameCreatureS>(targetGuid) : nullptr;
+		if (!creature)
+		{
+			SendPetResult(pet_result::NotTamable);
+			return;
+		}
+
+		DLOG("Taming creature " << log_hex_digit(targetGuid) << " (GM)");
+
+		// Failures are reported to the GM by TameCreature itself.
+		m_character->TameCreature(*creature, true);
+	}
+#endif
+
+#if MMO_WITH_DEV_COMMANDS
+	void Player::OnCheatPetMake(uint16 opCode, uint32 size, io::Reader& contentReader)
+	{
+		const uint64 targetGuid = m_character->Get<uint64>(object_fields::TargetUnit);
+		auto* creature = targetGuid != 0 ? m_worldInstance->FindByGuid<GameCreatureS>(targetGuid) : nullptr;
+		if (!creature)
+		{
+			SendPetResult(pet_result::NotTamable);
+			return;
+		}
+
+		DLOG("Making creature " << log_hex_digit(targetGuid) << " a pet (GM)");
+
+		const pet_result::Type result = MakeGmPet(*m_character, *creature);
+		if (result != pet_result::Ok)
+		{
+			SendPetResult(result);
+		}
 	}
 #endif
 

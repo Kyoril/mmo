@@ -732,6 +732,34 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnCheatFollowMe(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// GM command: grants the selected player (or the sender) a stored pet of a pet entry.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (uint32 petEntry).
+		void OnCheatPetAdd(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: removes the stored pet of a pet entry from the selected player (or the sender).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (uint32 petEntry).
+		void OnCheatPetRemove(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: tames the selected creature, ignoring the level check.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (none).
+		void OnCheatPetTame(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// GM command: makes the selected creature the sender's temporary pet.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes (none).
+		void OnCheatPetMake(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// @return The player a GM pet command acts on: the sender's selected unit if it is a
+		///	        player, else the sender.
+		GamePlayerS& GetCheatPetTargetPlayer() const;
+
 		/// Handles the client's request to make a selected unit face the player.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.

@@ -603,7 +603,7 @@ namespace mmo
 		}
 	}
 
-	pet_result::Type GamePlayerS::CanTameCreature(const GameCreatureS& target) const
+	pet_result::Type GamePlayerS::CanTameCreature(const GameCreatureS& target, const bool ignoreLevel) const
 	{
 		if (!ArePetsAvailable())
 		{
@@ -620,7 +620,7 @@ namespace mmo
 			return pet_result::NotTamable;
 		}
 
-		if (target.GetLevel() > GetLevel())
+		if (!ignoreLevel && target.GetLevel() > GetLevel())
 		{
 			return pet_result::TooHighLevel;
 		}
@@ -633,9 +633,9 @@ namespace mmo
 		return pet_result::Ok;
 	}
 
-	pet_result::Type GamePlayerS::TameCreature(GameCreatureS& target)
+	pet_result::Type GamePlayerS::TameCreature(GameCreatureS& target, const bool ignoreLevel)
 	{
-		if (const pet_result::Type check = CanTameCreature(target); check != pet_result::Ok)
+		if (const pet_result::Type check = CanTameCreature(target, ignoreLevel); check != pet_result::Ok)
 		{
 			return PetActionFailed(check);
 		}
@@ -660,6 +660,39 @@ namespace mmo
 		}
 
 		RequestPetCreation(pet);
+		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::RemoveStoredPet(const uint32 petEntry)
+	{
+		const PersistentPetData* stored = FindStoredPet(petEntry);
+		if (!stored)
+		{
+			return pet_result::NoPet;
+		}
+
+		const uint64 dbId = stored->dbId;
+
+		// A summoned pet leaves the world first. This does not change the list.
+		if (m_summonedPetDbId == dbId)
+		{
+			DismissPersistentPet(false);
+		}
+
+		const auto it = std::find_if(m_storedPets.begin(), m_storedPets.end(), [dbId](const PersistentPetData& pet)
+			{
+				return pet.dbId == dbId;
+			});
+		ASSERT(it != m_storedPets.end());
+		m_storedPets.erase(it);
+
+		if (m_lastSummonedPetDbId == dbId)
+		{
+			m_lastSummonedPetDbId = 0;
+		}
+
+		// The realm diffs the saved list against what it knows and deletes the missing pet.
+		storedPetsChanged();
 		return pet_result::Ok;
 	}
 
