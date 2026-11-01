@@ -315,3 +315,17 @@ section) and is the acceptance example for the node set's expressiveness.
 - **Phase 2 notes from the final review:** outputs should be shared rather than copied before the
   editor keeps per-node debug output; Evaluate needs cancellation and progress hooks; terrain-writing
   nodes (phase 3) need an output item kind, because the terrain sampler is read-only.
+
+## Carried into phase 3 (from the phase 2 final review)
+
+- **Evaluate on the base terrain.** Rebuild evaluates the graph before `ApplyGeneratedContent` undoes the
+  instance's previous terrain contribution. Once graphs write terrain, terrain nodes would sample their own
+  earlier output and heights would compound on every rebuild. Evaluate after Unapply (inside `prepare`) or
+  against a base-terrain view, and ground placements on the terrain after the new write.
+- **Terrain overlap for graph instances.** Graph instances are left out of the oasis/section terrain overlap
+  check while they write no terrain (ruling R16). Add them once they do.
+- **Explicit "undo, write nothing".** Today an empty `content.terrain` keeps a recorded contribution, so a graph
+  that drops its terrain nodes would leave terrain behind until Delete. `ApplyGeneratedContent` needs an explicit
+  mode that undoes the old contribution and writes nothing.
+- **Order of Rebuild All.** Graph instances are rebuilt after terrain writers. Keep that order when graph instances
+  start writing terrain themselves, and decide how instances that both read and write terrain are ordered.
