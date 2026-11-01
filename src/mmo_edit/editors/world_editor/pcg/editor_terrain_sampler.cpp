@@ -28,26 +28,40 @@ namespace mmo
 		return m_terrain.GetSmoothNormalAt(x, z);
 	}
 
-	float EditorTerrainSampler::SplatWeight(const String& textureKey, const float x, const float z) const
+	uint8 EditorTerrainSampler::GetMatchingLayers(const String& textureKey, const float x, const float z) const
 	{
 		if (textureKey.empty())
 		{
-			return 0.0f;
+			return 0;
 		}
 
 		int32 tileX = 0, tileZ = 0;
 		if (!m_terrain.GetTileIndexByWorldPosition(Vector3(x, 0.0f, z), tileX, tileZ))
 		{
-			return 0.0f;
+			return 0;
 		}
 
 		const String key = pcg::NormalizeTextureKey(textureKey);
 		const std::array<String, 4>& tileKeys = GetTileTextureKeys(tileX, tileZ);
 
-		float weight = 0.0f;
+		uint8 mask = 0;
 		for (uint8 layer = 0; layer < 4; ++layer)
 		{
 			if (!tileKeys[layer].empty() && tileKeys[layer] == key)
+			{
+				mask |= static_cast<uint8>(1u << layer);
+			}
+		}
+		return mask;
+	}
+
+	float EditorTerrainSampler::SplatWeight(const String& textureKey, const float x, const float z) const
+	{
+		const uint8 mask = GetMatchingLayers(textureKey, x, z);
+		float weight = 0.0f;
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			if ((mask & (1u << layer)) != 0)
 			{
 				weight += m_terrain.GetLayerValueAt(x, z, layer);
 			}

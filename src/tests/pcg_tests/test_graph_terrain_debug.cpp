@@ -117,19 +117,46 @@ TEST_CASE("Terrain debug respects the line budget", "[graph_terrain_debug]")
 	const DebugGeometry full = BuildTerrainDebugGeometry(t, Flat2, 4.0f, kRaise, kLower, 500'000);
 	REQUIRE(full.linesTotal > 100);
 
-	const DebugGeometry limited = BuildTerrainDebugGeometry(t, Flat2, 4.0f, kRaise, kLower, 100);
-	CHECK(limited.lines.size() <= 100);
+	size_t fullOutlines = 0;
+	for (const DebugLine& line : full.lines)
+	{
+		fullOutlines += IsTick(line) ? 0 : 1;
+	}
+	// 0..100 on a 4 m grid.
+	const size_t gridSamples = 26 * 26;
+
+	// Once the budget is spent, the rest is estimated: every remaining grid sample counts as a tick.
+	const DebugGeometry limited = BuildTerrainDebugGeometry(t, Flat2, 4.0f, kRaise, kLower, fullOutlines + 100);
+	CHECK(limited.lines.size() == fullOutlines + 100);
 	CHECK(limited.linesDrawn == limited.lines.size());
-	CHECK(limited.linesTotal == full.linesTotal);
+	CHECK(limited.linesTotal >= full.linesTotal);
+	CHECK(limited.linesTotal <= fullOutlines + gridSamples);
 	for (size_t i = 0; i < limited.lines.size(); ++i)
 	{
 		CHECK(limited.lines[i].a == full.lines[i].a);
 		CHECK(limited.lines[i].b == full.lines[i].b);
 	}
 
-	const DebugGeometry none = BuildTerrainDebugGeometry(t, Flat2, 4.0f, kRaise, kLower, 0);
+	// Cut inside the outline: still a prefix.
+	const DebugGeometry cut = BuildTerrainDebugGeometry(t, Flat2, 4.0f, kRaise, kLower, 10);
+	REQUIRE(cut.lines.size() == 10);
+	for (size_t i = 0; i < cut.lines.size(); ++i)
+	{
+		CHECK(cut.lines[i].a == full.lines[i].a);
+	}
+	CHECK(cut.linesTotal == fullOutlines + gridSamples);
+
+	// A spent budget evaluates nothing: the base terrain is never read.
+	size_t baseReads = 0;
+	const auto countingBase = [&baseReads](const float, const float)
+	{
+		++baseReads;
+		return 2.0f;
+	};
+	const DebugGeometry none = BuildTerrainDebugGeometry(t, countingBase, 4.0f, kRaise, kLower, 0);
 	CHECK(none.lines.empty());
-	CHECK(none.linesTotal == full.linesTotal);
+	CHECK(none.linesTotal == fullOutlines + gridSamples);
+	CHECK(baseReads == 0);
 }
 
 TEST_CASE("Empty prepared terrain gives no lines", "[graph_terrain_debug]")

@@ -509,16 +509,15 @@ namespace mmo
 	}
 
 	std::unique_ptr<BaseTerrainSampler> MakeBaseTerrainSampler(IWorldEditor& editor, const pcg::GraphInstanceRecord& record,
-		const pcg::graph::ITerrainSampler& live)
+		const EditorTerrainSampler& live)
 	{
 		terrain::Terrain* terrain = editor.GetTerrain();
-		if (!terrain || record.content.terrain.outer.empty())
+		if (!terrain || record.content.terrain.IsEmpty())
 		{
 			return nullptr;
 		}
 
-		const EditorTerrainAccess access(*terrain);
-		return std::make_unique<BaseTerrainSampler>(live, record.content.terrain, access.GetLayout());
+		return std::make_unique<BaseTerrainSampler>(live, *terrain, record.content.terrain);
 	}
 
 	bool UseBaseTerrain(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, GraphInstanceContext& context)
@@ -535,6 +534,10 @@ namespace mmo
 		}
 
 		context.context.terrain = context.baseSampler.get();
+		if (context.baseSampler->HasMaterialChanges())
+		{
+			context.warnings.push_back(BaseTerrainMaterialWarning);
+		}
 		return true;
 	}
 

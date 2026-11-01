@@ -19,6 +19,7 @@
 #include "pcg/graph_instance_record.h"
 #include "editors/world_editor/world_editor_instance.h"
 #include "editors/world_editor/pcg/graph_instance_builder.h"
+#include "editors/world_editor/pcg/section_path_builder.h"
 
 #include <imgui_internal.h>
 #include <imgui_node_editor.h>
@@ -30,6 +31,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <set>
 #include <utility>
 
 namespace ed = ax::NodeEditor;
@@ -219,6 +221,34 @@ namespace mmo
 			{
 				return item.kind == pcg::graph::ItemKind::Terrain && item.op.order == nodeId;
 			});
+		}
+
+		/// Feeds the last write times of the section assets (and their section worlds) the node's own SectionPath
+		/// ops use, so a re-baked or edited section redraws the debug layer.
+		void HashSectionRevisions(pcg::graph::Hasher& hasher, const pcg::graph::NodeOutput& output, const uint32 nodeId)
+		{
+			const auto pin = output.pins.find("Terrain");
+			if (pin == output.pins.end())
+			{
+				return;
+			}
+			std::set<String> assets;
+			for (const pcg::graph::DataItem& item : pin->second)
+			{
+				if (item.kind == pcg::graph::ItemKind::Terrain && item.op.order == nodeId && item.op.type == pcg::graph::TerrainOpType::SectionPath)
+				{
+					assets.insert(item.op.asset);
+				}
+			}
+			for (const String& asset : assets)
+			{
+				hasher.Str(asset);
+				for (const String& path : { asset, GetSectionWorldPathForAsset(asset) })
+				{
+					const auto time = AssetRegistry::GetLastWriteTime(path);
+					hasher.U64(time ? static_cast<uint64>(time->time_since_epoch().count()) : 0);
+				}
+			}
 		}
 
 		/// Index of a node in the graph's node list (the node count if it is missing).
@@ -1483,12 +1513,17 @@ namespace mmo
 		const pcg::TerrainContribution& contribution = record->content.terrain;
 		pcg::graph::Hasher contributionKey;
 		contributionKey.U64(static_cast<uint64>(reinterpret_cast<uintptr_t>(contribution.outer.data())));
+		contributionKey.U64(static_cast<uint64>(reinterpret_cast<uintptr_t>(contribution.splat.data())));
 		contributionKey.U64(contribution.outer.size());
+		contributionKey.U64(contribution.splat.size());
+		contributionKey.U64(contribution.waterQuads.size());
+		contributionKey.U64(contribution.waterHeights.size());
+		contributionKey.U64(contribution.materials.size());
 		contributionKey.U64(world->GetTerrainRevision());
 		if (contributionKey.Result() != m_debugContributionKey)
 		{
 			m_debugContributionKey = contributionKey.Result();
-			m_debugContributionHash = BaseTerrainSampler::HashContribution(contribution);
+			m_debugContributionHash = pcg::graph::BaseTerrainView::HashContribution(contribution);
 		}
 
 		// Re-evaluate when anything the evaluation reads changed (not on node moves, comments or debug toggles).
@@ -1560,6 +1595,11 @@ namespace mmo
 			{
 				drawHasher.U64(graph.nodes[i].id);
 				drawHasher.U64(static_cast<uint64>(i));
+				const auto result = m_hasDebugResult ? m_debugResult.nodes.find(graph.nodes[i].id) : m_debugResult.nodes.end();
+				if (result != m_debugResult.nodes.end())
+				{
+					HashSectionRevisions(drawHasher, result->second.output, graph.nodes[i].id);
+				}
 			}
 		}
 		const uint64 drawKey = drawHasher.Result() | 1;
@@ -1582,6 +1622,8 @@ namespace mmo
 		std::unique_ptr<EditorTerrainSampler> liveTerrain;
 		std::unique_ptr<BaseTerrainSampler> baseTerrain;
 		std::function<float(float, float)> baseGround;
+		// Samples without terrain read as 0; counted per node so the node can warn.
+		size_t groundMisses = 0;
 		const auto getBaseGround = [&]() -> const std::function<float(float, float)>&
 		{
 			if (!baseGround)
@@ -1593,10 +1635,15 @@ namespace mmo
 					baseTerrain = MakeBaseTerrainSampler(*world, *record, *liveTerrain);
 					sampler = baseTerrain ? static_cast<const pcg::graph::ITerrainSampler*>(baseTerrain.get()) : liveTerrain.get();
 				}
-				baseGround = [sampler](const float x, const float z)
+				baseGround = [sampler, &groundMisses](const float x, const float z)
 				{
 					float h = 0.0f;
-					return sampler != nullptr && sampler->Height(x, z, h) ? h : 0.0f;
+					if (sampler != nullptr && sampler->Height(x, z, h))
+					{
+						return h;
+					}
+					++groundMisses;
+					return 0.0f;
 				};
 			}
 			return baseGround;
@@ -1654,6 +1701,7 @@ namespace mmo
 				{
 					pcg::graph::PreparedTerrain prepared;
 					String prepareError;
+					groundMisses = 0;
 					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), prepared, prepareError))
 					{
 						const pcg::graph::DebugGeometry geometry = pcg::graph::BuildTerrainDebugGeometry(prepared, getBaseGround(),
@@ -1666,6 +1714,11 @@ namespace mmo
 						for (const String& warning : prepared.GetWarnings())
 						{
 							info.warnings.push_back("Terrain ops: " + warning);
+						}
+						if (groundMisses > 0)
+						{
+							info.warnings.push_back("Terrain ops: no terrain height at " + std::to_string(groundMisses)
+								+ " sample(s) of the preview (unloaded pages or open ocean); 0 was used there");
 						}
 					}
 					else

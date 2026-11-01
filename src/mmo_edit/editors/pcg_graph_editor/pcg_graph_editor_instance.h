@@ -206,7 +206,7 @@ namespace mmo
 		uint64 m_debugEvalKey { 0 };
 		double m_debugEvalMilliseconds { 0 };
 
-		/// @brief Hash of the target instance's terrain contribution (BaseTerrainSampler::HashContribution), part of the
+		/// @brief Hash of the target instance's terrain contribution (pcg::graph::BaseTerrainView::HashContribution), part of the
 		///        evaluation key, and the key it was computed for (contribution storage, size and terrain revision; a
 		///        rebuild changes them), so it is only recomputed when the contribution may have changed.
 		uint64 m_debugContributionHash { 0 };

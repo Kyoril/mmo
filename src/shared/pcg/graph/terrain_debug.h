@@ -25,8 +25,9 @@ namespace mmo::pcg::graph
 	///          height is what a rebuild writes: base + (target - base) x min(1, weight) of PreparedTerrain::Evaluate
 	///          (no texture lookup: only heights are drawn). At most `lineLimit` lines are produced: lines are added
 	///          in that order until one does not fit (a tick is all or nothing, a polyline is cut at the limit), after
-	///          which nothing more is drawn but linesTotal keeps counting. Points are not used (the point counts stay
-	///          0). Deterministic.
+	///          which nothing more is drawn or evaluated: linesTotal keeps counting outline and rect segments exactly
+	///          and then adds every remaining grid sample as a tick, so once the budget is spent it is an upper-bound
+	///          estimate. Points are not used (the point counts stay 0). Deterministic.
 	/// @param prepared The prepared ops.
 	/// @param base Base terrain height at a world position.
 	/// @param step Grid spacing of the height ticks (m); no ticks if not positive.

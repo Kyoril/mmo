@@ -32,6 +32,19 @@ namespace mmo::pcg::graph
 				m_geometry.lines.push_back(line);
 			}
 
+			/// True once nothing more can be drawn: callers then only count, without evaluating anything.
+			bool Full() const
+			{
+				return !m_budgetLeft || m_geometry.lines.size() >= m_limit;
+			}
+
+			/// Counts lines that are not drawn.
+			void Skip(const size_t count)
+			{
+				m_budgetLeft = false;
+				m_geometry.linesTotal += count;
+			}
+
 		private:
 			DebugGeometry& m_geometry;
 			size_t m_limit;
@@ -47,6 +60,11 @@ namespace mmo::pcg::graph
 				return baseHeight;
 			}
 			return baseHeight + (target.height - baseHeight) * std::min(1.0f, target.heightWeight);
+		}
+
+		bool IsVertical(const Vector3& a, const Vector3& b)
+		{
+			return a.x == b.x && a.z == b.z;
 		}
 	}
 
@@ -78,21 +96,33 @@ namespace mmo::pcg::graph
 			const size_t count = outline.points.size();
 			if (count >= 2)
 			{
-				std::vector<Vector3> ground;
-				ground.reserve(count);
-				for (const Vector3& p : outline.points)
-				{
-					ground.push_back(groundPoint(p.x, p.z));
-				}
 				const size_t segments = count - 1 + (outline.closed && count >= 3 ? 1 : 0);
-				for (size_t i = 0; i < segments; ++i)
+				if (sink.Full())
 				{
-					const Vector3& a = ground[i];
-					const Vector3& b = ground[(i + 1) % count];
-					// A vertical segment would read as a tick.
-					if (a.x != b.x || a.z != b.z)
+					// A vertical segment would read as a tick, so it is never drawn.
+					size_t drawable = 0;
+					for (size_t i = 0; i < segments; ++i)
 					{
-						sink.Add(DebugLine{ a, b, argbRaise });
+						drawable += IsVertical(outline.points[i], outline.points[(i + 1) % count]) ? 0 : 1;
+					}
+					sink.Skip(drawable);
+				}
+				else
+				{
+					std::vector<Vector3> ground;
+					ground.reserve(count);
+					for (const Vector3& p : outline.points)
+					{
+						ground.push_back(groundPoint(p.x, p.z));
+					}
+					for (size_t i = 0; i < segments; ++i)
+					{
+						const Vector3& a = ground[i];
+						const Vector3& b = ground[(i + 1) % count];
+						if (!IsVertical(a, b))
+						{
+							sink.Add(DebugLine{ a, b, argbRaise });
+						}
 					}
 				}
 			}
@@ -115,6 +145,12 @@ namespace mmo::pcg::graph
 						continue;
 					}
 					const int pieces = step > 0.0f ? static_cast<int>(std::min(4096.0f, std::max(1.0f, std::ceil(length / step)))) : 1;
+					if (sink.Full())
+					{
+						sink.Skip(static_cast<size_t>(pieces));
+						continue;
+					}
+
 					std::vector<Vector3> ground;
 					ground.reserve(static_cast<size_t>(pieces) + 1);
 					for (int i = 0; i <= pieces; ++i)
@@ -141,11 +177,21 @@ namespace mmo::pcg::graph
 			const double lastX = std::floor(static_cast<double>(influence.maxX) / step);
 			const double firstZ = std::ceil(static_cast<double>(influence.minZ) / step);
 			const double lastZ = std::floor(static_cast<double>(influence.maxZ) / step);
+			const double columns = std::max(0.0, lastX - firstX + 1.0);
 			for (double iz = firstZ; iz <= lastZ; iz += 1.0)
 			{
 				const float z = static_cast<float>(iz * step);
 				for (double ix = firstX; ix <= lastX; ix += 1.0)
 				{
+					if (sink.Full())
+					{
+						// Every remaining grid sample counts as a tick (an upper bound, nothing is evaluated).
+						const double remaining = (lastX - ix + 1.0) + (lastZ - iz) * columns;
+						sink.Skip(static_cast<size_t>(remaining));
+						geometry.linesDrawn = geometry.lines.size();
+						return geometry;
+					}
+
 					const float x = static_cast<float>(ix * step);
 					const float baseHeight = baseAt(x, z);
 					const float composed = ComposedHeight(prepared, x, z, baseHeight);

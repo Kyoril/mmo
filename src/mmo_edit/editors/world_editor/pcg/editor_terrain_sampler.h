@@ -42,6 +42,10 @@ namespace mmo
 		///        layers add up (clamped to 1). 0 if no layer matches or no page is loaded there.
 		float SplatWeight(const String& textureKey, float x, float z) const override;
 
+		/// @brief The paint layers of the tile under the position that SplatWeight sums for textureKey: bit i set =
+		///        layer i matches. 0 for an empty key, outside the terrain or where no page is loaded.
+		uint8 GetMatchingLayers(const String& textureKey, float x, float z) const;
+
 		/// @brief Water surface height (Terrain::GetWaterHeightAtWorldPos). False where there is no water
 		///        (Terrain::HasWaterAtWorldPos).
 		bool WaterLevel(float x, float z, float& level) const override;

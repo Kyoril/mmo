@@ -1713,7 +1713,9 @@ int main(int argc, char* arg[])
 							if (base)
 							{
 								ILOG("--pcg-eval-graph: evaluated on the base terrain (the instance's contribution of "
-									<< record->content.terrain.outer.size() << " outer height(s) undone)");
+									<< record->content.terrain.outer.size() << " outer height(s), " << record->content.terrain.splat.size()
+									<< " splat pixel(s), " << record->content.terrain.waterQuads.size() << " water quad(s) and "
+									<< record->content.terrain.waterHeights.size() << " water height(s) undone)");
 							}
 							for (size_t p = 0; terrain && p < inside && p < 3; ++p)
 							{

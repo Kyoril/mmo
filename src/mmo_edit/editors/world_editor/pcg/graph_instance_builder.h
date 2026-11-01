@@ -148,13 +148,18 @@ namespace mmo
 	/// @param editor The world editor of the instance. Must have a terrain.
 	/// @param record The instance.
 	/// @param live The live terrain sampler. Must outlive the result.
-	/// @return Null if the record owns no outer height entries (the live terrain is the base then).
+	/// @return Null if the record owns no terrain contribution (the live terrain is the base then).
 	std::unique_ptr<BaseTerrainSampler> MakeBaseTerrainSampler(IWorldEditor& editor, const pcg::GraphInstanceRecord& record,
-		const pcg::graph::ITerrainSampler& live);
+		const EditorTerrainSampler& live);
+
+	/// @brief Warning UseBaseTerrain adds when the contribution changed tile materials (not undone by the base view).
+	constexpr const char* BaseTerrainMaterialWarning =
+		"the instance's own tile material changes are not reflected in the preview (the base terrain view keeps them)";
 
 	/// @brief Makes a built context evaluate on the base terrain (see MakeBaseTerrainSampler): sets context.baseSampler
-	///        and points context.context.terrain at it. Leaves the context on the live terrain if the record owns no
-	///        terrain heights.
+	///        and points context.context.terrain at it, and adds BaseTerrainMaterialWarning to context.warnings when the
+	///        contribution changed tile materials. Leaves the context on the live terrain if the record owns no
+	///        terrain contribution.
 	/// @param editor The world editor the context was built for.
 	/// @param record The instance the context was built for.
 	/// @param context A context built by BuildGraphInstanceContext.
