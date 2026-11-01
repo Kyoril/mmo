@@ -18,7 +18,7 @@
 // `section`), and one setting per section parameter. An item attribute named like a section parameter overrides
 // the setting for that item. Reads nothing from the context.
 //
-// Errors (node errors, found at execute time): an empty section path, or a parameter value that
+// StampSectionAtPoints   In: Points items. One Terrain item per point, in point order: a two point linear spline\n//                        of length metres along the point's facing (rotation applied to +Z, flattened), centred on\n//                        the point or starting at it (nchor), at the point's y; pointIds = Hash(point seed, 0|1).\n//                        Length 0 = the section's own length, which only the terrain stage knows: the op then carries\n//                        StampLengthParam / StampAnchorParam (terrain_op.h) and PreparedTerrain lays the ends out.\n//                        heightMode defaults to followSpline.\n//\n// Errors (node errors, found at execute time): an empty section path, or a parameter value that
 // SetSectionPathParam rejects. Whether the asset exists is checked when the terrain is prepared.
 
 #include "builtin_nodes.h"
@@ -26,6 +26,7 @@
 #include "node_registry.h"
 #include "node_util.h"
 
+#include "pcg/pcg_random.h"
 #include "pcg/section_path.h"
 
 #include <cmath>
@@ -122,6 +123,76 @@ namespace mmo::pcg::graph
 			return value;
 		}
 
+		/// Resolves every section parameter of one item into `params`: the item attribute of that name wins over the
+		/// setting, which wins over the default (`heightModeDefault` is the default of heightMode). On a rejected
+		/// value sets out.error, clears the pins and returns false.
+		bool ResolveSectionParams(NodeOutput& out, const DataItem& source, const AttributeSet& settings, const char* heightModeDefault, AttributeSet& params)
+		{
+			SectionPathParams scratch;
+			for (const ParamDef& param : SectionParams())
+			{
+				AttributeValue value = param.defaultValue;
+				if (String(param.name) == "heightMode")
+				{
+					value = String(heightModeDefault);
+				}
+				const char* origin = "setting";
+				const auto fromItem = source.attributes.find(param.name);
+				if (fromItem != source.attributes.end())
+				{
+					value = fromItem->second;
+					origin = "item attribute";
+				}
+				else
+				{
+					const auto fromSettings = settings.find(param.name);
+					if (fromSettings != settings.end())
+					{
+						value = fromSettings->second;
+					}
+				}
+				value = Normalize(param.kind, value);
+
+				String text;
+				String error;
+				if (!SectionParamText(value, text))
+				{
+					out.error = String("invalid ") + origin + " '" + param.name + "': the value has an unsupported type";
+					out.pins.clear();
+					return false;
+				}
+				if (!SetSectionPathParam(scratch, param.name, text, error))
+				{
+					out.error = String("invalid ") + origin + " '" + param.name + "': " + error;
+					out.pins.clear();
+					return false;
+				}
+				params[param.name] = std::move(value);
+			}
+			return true;
+		}
+
+		/// Adds one setting per section parameter (floorInside only when `withFloorInside`), heightMode defaulting to
+		/// `heightModeDefault`.
+		void AddSectionParamSettings(NodeTypeDef& def, const bool withFloorInside, const char* heightModeDefault)
+		{
+			for (const ParamDef& param : SectionParams())
+			{
+				const String name = param.name;
+				if (name == "floorInside" && !withFloorInside)
+				{
+					continue;
+				}
+				SettingDef setting{ name, param.defaultValue, 0, 0, {}, param.description };
+				if (name == "heightMode")
+				{
+					setting.defaultValue = String(heightModeDefault);
+					setting.enumValues = { "followSpline", "followGround", "smoothedGround" };
+				}
+				def.settings.push_back(std::move(setting));
+			}
+		}
+
 		NodeOutput ExecuteLaySection(const bool loop, const AttributeSet& settings, const std::map<String, Collection>& inputs)
 		{
 			NodeOutput out;
@@ -186,42 +257,9 @@ namespace mmo::pcg::graph
 				}
 				item.op.asset = section;
 
-				SectionPathParams scratch;
-				for (const ParamDef& param : SectionParams())
+				if (!ResolveSectionParams(out, source, settings, "smoothedGround", item.op.params))
 				{
-					AttributeValue value = param.defaultValue;
-					const char* origin = "setting";
-					const auto fromItem = source.attributes.find(param.name);
-					if (fromItem != source.attributes.end())
-					{
-						value = fromItem->second;
-						origin = "item attribute";
-					}
-					else
-					{
-						const auto fromSettings = settings.find(param.name);
-						if (fromSettings != settings.end())
-						{
-							value = fromSettings->second;
-						}
-					}
-					value = Normalize(param.kind, value);
-
-					String text;
-					String error;
-					if (!SectionParamText(value, text))
-					{
-						out.error = String("invalid ") + origin + " '" + param.name + "': the value has an unsupported type";
-						out.pins.clear();
-						return out;
-					}
-					if (!SetSectionPathParam(scratch, param.name, text, error))
-					{
-						out.error = String("invalid ") + origin + " '" + param.name + "': " + error;
-						out.pins.clear();
-						return out;
-					}
-					item.op.params[param.name] = std::move(value);
+					return out;
 				}
 
 				terrain.push_back(std::move(item));
@@ -229,6 +267,128 @@ namespace mmo::pcg::graph
 			return out;
 		}
 
+		NodeOutput ExecuteStamp(const AttributeSet& settings, const std::map<String, Collection>& inputs)
+		{
+			NodeOutput out;
+			Collection& terrain = out.pins["Terrain"];
+
+			const String section = SettingString(settings, "section", String());
+			if (section.empty())
+			{
+				out.error = "no section: the 'section' setting is empty";
+				out.pins.clear();
+				return out;
+			}
+			const Collection* in = FindInput(inputs, "In");
+			if (in == nullptr)
+			{
+				return out;
+			}
+			const String anchor = SettingString(settings, "anchor", "center");
+			if (anchor != "center" && anchor != "start")
+			{
+				out.error = "invalid setting 'anchor': expected center or start";
+				out.pins.clear();
+				return out;
+			}
+			const bool centered = anchor == "center";
+			const float length = SettingFloat(settings, "length", 0.0f);
+			if (length < 0.0f)
+			{
+				out.error = "invalid setting 'length': must not be negative";
+				out.pins.clear();
+				return out;
+			}
+			// Length 0 means the asset's length, which only the terrain stage knows: the spline is then laid out for
+			// a unit length and the terrain stage stretches it (see terrain_compose.cpp, kStampLength).
+			const bool assetLength = length <= 0.0f;
+			const float span = assetLength ? 1.0f : length;
+
+			for (const DataItem& source : *in)
+			{
+				if (source.kind != ItemKind::Points)
+				{
+					WarnOnce(out, "skipped items that are not points");
+					continue;
+				}
+
+				for (const Point& point : source.points.points)
+				{
+					Vector3 forward = point.rotation * Vector3(0.0f, 0.0f, 1.0f);
+					const float flat = std::hypot(forward.x, forward.z);
+					if (!(flat > 1e-4f))
+					{
+						WarnOnce(out, "a point points straight up or down: its stamp lies along +Z");
+						forward = Vector3(0.0f, 0.0f, 1.0f);
+					}
+					else
+					{
+						forward = Vector3(forward.x / flat, 0.0f, forward.z / flat);
+					}
+
+					const float from = centered ? -span * 0.5f : 0.0f;
+					SplinePoint a;
+					a.x = point.position.x + forward.x * from;
+					a.z = point.position.z + forward.z * from;
+					a.y = point.position.y;
+					SplinePoint b;
+					b.x = point.position.x + forward.x * (from + span);
+					b.z = point.position.z + forward.z * (from + span);
+					b.y = point.position.y;
+
+					DataItem item;
+					item.kind = ItemKind::Terrain;
+					item.tags = source.tags;
+					item.sourceId = source.sourceId;
+					item.spline.closed = false;
+					item.spline.interpolation = SplineInterpolation::Linear;
+					item.spline.points = { a, b };
+					item.pointIds = { Hash(point.seed, 0), Hash(point.seed, 1) };
+					item.op.type = TerrainOpType::SectionPath;
+					item.op.asset = section;
+					item.op.stackOrder = ResolveStackOrder(out, source, settings);
+					if (!ResolveSectionParams(out, source, settings, "followSpline", item.op.params))
+					{
+						return out;
+					}
+					if (assetLength)
+					{
+						item.op.params[StampLengthParam] = 0.0f;
+						item.op.params[StampAnchorParam] = anchor;
+					}
+					terrain.push_back(std::move(item));
+				}
+			}
+			return out;
+		}
+
+		void RegisterStamp(NodeRegistry& registry)
+		{
+			NodeTypeDef def;
+			def.type = "StampSectionAtPoints";
+			def.category = "Spawners";
+			def.title = "Stamp Section at Points";
+			def.inputs.push_back(PinDef{ "In", { ItemKind::Points }, true, true });
+			def.outputs.push_back(PinDef{ "Terrain", { ItemKind::Terrain } });
+
+			SettingDef section{ "section", String(), 0, 0, {}, "Section asset (.hsec) stamped at every point" };
+			section.widget = "asset:.hsec";
+			def.settings.push_back(std::move(section));
+			SettingDef anchor{ "anchor", String("center"), 0, 0, {}, "Whether the point is the middle or the start of the stamp" };
+			anchor.enumValues = { "center", "start" };
+			def.settings.push_back(std::move(anchor));
+			def.settings.push_back(SettingDef{ "length", 0.0f, 0, 1000, {}, "Length (m) of the stamp along the point's facing; 0 = the section's own length" });
+
+			AddSectionParamSettings(def, false, "followSpline");
+			def.settings.push_back(StackOrderSetting());
+
+			def.contextDeps = context_dep::None;
+			def.execute = [](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
+			{
+				return ExecuteStamp(settings, inputs);
+			};
+			registry.Register(std::move(def));
+		}
 		void RegisterLaySection(NodeRegistry& registry, const bool loop)
 		{
 			NodeTypeDef def;
@@ -243,20 +403,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(std::move(section));
 			def.settings.push_back(SettingDef{ "sectionAttribute", String("section"), 0, 0, {}, "Item attribute whose String value overrides the section (empty = off)" });
 
-			for (const ParamDef& param : SectionParams())
-			{
-				const String name = param.name;
-				if (name == "floorInside" && !loop)
-				{
-					continue;
-				}
-				SettingDef setting{ name, param.defaultValue, 0, 0, {}, param.description };
-				if (name == "heightMode")
-				{
-					setting.enumValues = { "followSpline", "followGround", "smoothedGround" };
-				}
-				def.settings.push_back(std::move(setting));
-			}
+			AddSectionParamSettings(def, loop, "smoothedGround");
 			def.settings.push_back(StackOrderSetting());
 
 			def.contextDeps = context_dep::None;
@@ -272,5 +419,6 @@ namespace mmo::pcg::graph
 	{
 		RegisterLaySection(registry, false);
 		RegisterLaySection(registry, true);
+		RegisterStamp(registry);
 	}
 }

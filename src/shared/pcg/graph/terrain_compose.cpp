@@ -360,6 +360,10 @@ namespace mmo::pcg::graph
 				SectionPathParams params;
 				for (const auto& [name, value] : op.params)
 				{
+					if (name == StampLengthParam || name == StampAnchorParam)
+					{
+						continue;
+					}
 					String text;
 					String paramError;
 					if (!SectionParamText(value, text))
@@ -372,18 +376,41 @@ namespace mmo::pcg::graph
 					}
 				}
 
+				// A stamp with length 0 is laid out for the asset's length now that the asset is known (see StampLengthParam).
+				PathSpline spline = in.spline;
+				if (SettingFloat(op.params, StampLengthParam, -1.0f) == 0.0f && spline.points.size() == 2)
+				{
+					const SplinePoint first = spline.points[0];
+					const SplinePoint last = spline.points[1];
+					const float dx = last.x - first.x;
+					const float dz = last.z - first.z;
+					const float chord = std::hypot(dx, dz);
+					if (chord > 1e-6f && asset->length > 0.0f)
+					{
+						const bool centered = SettingString(op.params, StampAnchorParam, "center") != "start";
+						const float ux = dx / chord;
+						const float uz = dz / chord;
+						const float startX = centered ? (first.x + last.x) * 0.5f - ux * asset->length * 0.5f : first.x;
+						const float startZ = centered ? (first.z + last.z) * 0.5f - uz * asset->length * 0.5f : first.z;
+						spline.points[0].x = startX;
+						spline.points[0].z = startZ;
+						spline.points[1].x = startX + ux * asset->length;
+						spline.points[1].z = startZ + uz * asset->length;
+					}
+				}
+
 				std::vector<uint64> ids = in.pointIds;
-				if (ids.size() != in.spline.points.size())
+				if (ids.size() != spline.points.size())
 				{
 					ids.clear();
-					for (size_t i = 0; i < in.spline.points.size(); ++i)
+					for (size_t i = 0; i < spline.points.size(); ++i)
 					{
 						ids.push_back(Hash(in.sourceId, static_cast<int64>(in.itemIndex), static_cast<int64>(i), 0x5ec7));
 					}
 				}
 
 				String shapeError;
-				if (!PrepareSectionPath(in.spline, ids, *asset, params, ground, prepared->shape, shapeError))
+				if (!PrepareSectionPath(spline, ids, *asset, params, ground, prepared->shape, shapeError))
 				{
 					return fail(label + " (section asset '" + op.asset + "'): " + shapeError);
 				}

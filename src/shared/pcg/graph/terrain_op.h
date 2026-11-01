@@ -39,6 +39,14 @@ namespace mmo::pcg::graph
 		int32 stackOrder = 0;
 	};
 
+	/// @brief Params of a SectionPath op made by Stamp Section at Points with length 0 (= the section asset's length).
+	///        The terrain stage reads them, does not pass them on to the section parameters, and lays the op's two
+	///        spline points out again for the asset's length: StampLengthParam (Float, 0) marks such an op, and
+	///        StampAnchorParam (String, "center" or "start") says whether the first-to-last chord is centred on or
+	///        starts at the stamp point. The spline then only carries the stamp direction and point.
+	inline constexpr const char* StampLengthParam = "stampLength";
+	inline constexpr const char* StampAnchorParam = "stampAnchor";
+
 	/// @brief Feeds every field of an op into a hasher.
 	void HashTerrainOp(Hasher& h, const TerrainOp& op);
 
