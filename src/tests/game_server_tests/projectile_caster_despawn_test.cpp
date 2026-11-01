@@ -248,8 +248,12 @@ TEST_CASE_METHOD(ProjectileFixture, "A projectile spell's cooldown is measured f
 
 	// The bolt lands after about four seconds; the cooldown is over after five, counted from the
 	// cast. Restarting it on impact would hold the spell back until nine seconds had passed.
-	RunFor(std::chrono::milliseconds(5600));
-	REQUIRE(victim->GetHealth() < victim->GetMaxHealth());
+	// Waiting for the impact instead of a fixed time keeps a slow machine from failing the test.
+	REQUIRE(RunUntil([&]() { return victim->GetHealth() < victim->GetMaxHealth(); }, std::chrono::milliseconds(10000)));
+
+	// Past the five seconds the cooldown runs from the cast - the impact is never earlier than
+	// four seconds in, so this leaves the cooldown expired however slowly the loop above ran.
+	RunFor(std::chrono::milliseconds(1600));
 
 	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
 }
