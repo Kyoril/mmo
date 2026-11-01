@@ -28,4 +28,8 @@ namespace mmo::pcg::graph
 	/// @brief Registers the section nodes: LaySectionAlongSpline and LaySectionAlongLoop (nodes_section.cpp). They
 	///        emit SectionPath terrain ops on a "Terrain" pin.
 	void RegisterSectionNodes(NodeRegistry& registry);
+
+	/// @brief Registers the terrain shape nodes: TerrainNoise, RaiseAlongSpline, CarveAlongSpline, PaintSplat and
+	///        WaterArea (nodes_terrain.cpp). They emit terrain ops on a "Terrain" pin.
+	void RegisterTerrainNodes(NodeRegistry& registry);
 }
