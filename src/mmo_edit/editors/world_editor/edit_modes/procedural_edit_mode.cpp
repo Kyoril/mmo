@@ -1757,6 +1757,36 @@ namespace mmo
 		return instances;
 	}
 
+	std::vector<terrain_io::water_flow::FlowPath> ProceduralEditMode::CollectGeneratedFlowPaths() const
+	{
+		return CollectFlowPathsReplacing(0, nullptr);
+	}
+
+	std::vector<terrain_io::water_flow::FlowPath> ProceduralEditMode::CollectGeneratedFlowPaths(const uint64 replaceId,
+		const std::vector<terrain_io::water_flow::FlowPath>& replacement) const
+	{
+		return CollectFlowPathsReplacing(replaceId, &replacement);
+	}
+
+	std::vector<terrain_io::water_flow::FlowPath> ProceduralEditMode::CollectFlowPathsReplacing(const uint64 replaceId,
+		const std::vector<terrain_io::water_flow::FlowPath>* replacement) const
+	{
+		std::vector<const pcg::GraphInstanceRecord*> instances = GetGraphInstances();
+		std::sort(instances.begin(), instances.end(), [](const pcg::GraphInstanceRecord* a, const pcg::GraphInstanceRecord* b)
+		{
+			return a->id < b->id;
+		});
+
+		std::vector<terrain_io::water_flow::FlowPath> paths;
+		for (const pcg::GraphInstanceRecord* instance : instances)
+		{
+			const std::vector<terrain_io::water_flow::FlowPath>& own =
+				replacement != nullptr && instance->id == replaceId ? *replacement : instance->flowPaths;
+			paths.insert(paths.end(), own.begin(), own.end());
+		}
+		return paths;
+	}
+
 	std::vector<const pcg::GraphInstanceRecord*> ProceduralEditMode::GetOtherGraphInstances(const uint64 id) const
 	{
 		std::vector<const pcg::GraphInstanceRecord*> others;
@@ -2208,7 +2238,7 @@ namespace mmo
 				report = DeleteSectionPathContent(m_worldEditor, control.path);
 				break;
 			case ControlKind::GraphInstance:
-				report = DeleteGraphInstanceContent(m_worldEditor, control.instance);
+				report = DeleteGraphInstanceContent(m_worldEditor, control.instance, *this);
 				break;
 			case ControlKind::Placed:
 				break;

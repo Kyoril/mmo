@@ -6,6 +6,7 @@
 #include "editor_texture_layers.h"
 #include "section_path_builder.h"
 #include "text_parsing.h"
+#include "editors/world_editor/flow_paths_file.h"
 
 #include "assets/asset_registry.h"
 #include "editors/world_editor/edit_modes/procedural_edit_mode.h"
@@ -26,6 +27,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -264,6 +266,75 @@ namespace mmo
 				error = "the terrain ops could not be prepared: " + prepareError;
 				return false;
 			}
+			return true;
+		}
+
+		static_assert(sizeof(terrain_io::water_flow::FlowPoint) == 3 * sizeof(float), "FlowPoint must be three packed floats");
+
+		/// Whether two path sets are bit-identical.
+		bool SameFlowPaths(const std::vector<terrain_io::water_flow::FlowPath>& a, const std::vector<terrain_io::water_flow::FlowPath>& b)
+		{
+			if (a.size() != b.size())
+			{
+				return false;
+			}
+			for (size_t i = 0; i < a.size(); ++i)
+			{
+				if (a[i].size() != b[i].size() ||
+					(!a[i].empty() && std::memcmp(a[i].data(), b[i].data(), a[i].size() * sizeof(terrain_io::water_flow::FlowPoint)) != 0))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/// Makes the instance's river paths newPaths: recomputes the world's river flow from the hand rivers (the world's
+		/// .hflow, in file order) followed by every graph instance's paths (this one's replaced by newPaths), with this
+		/// instance's old paths as the previous set, then stores newPaths in the record. Bit-identical paths change
+		/// nothing. Call it only after the terrain write (or removal) succeeded.
+		/// @return False (with a warning, the record and the flow left as they were) if the .hflow file cannot be read.
+		bool ApplyInstanceFlow(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const ProceduralEditMode& controls,
+			std::vector<terrain_io::water_flow::FlowPath> newPaths, std::vector<String>& warnings)
+		{
+			if (SameFlowPaths(record.flowPaths, newPaths))
+			{
+				return true;
+			}
+
+			terrain::Terrain* terrain = editor.GetTerrain();
+			if (!terrain)
+			{
+				// No pages, no flow to write.
+				record.flowPaths = std::move(newPaths);
+				return true;
+			}
+
+			FlowPathsFile handRivers;
+			String error;
+			if (!ReadFlowPathsFile(editor.GetFlowPathsFileName(), handRivers, error))
+			{
+				warnings.push_back("the river flow was not updated: " + error);
+				WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << warnings.back());
+				return false;
+			}
+
+			std::vector<terrain_io::water_flow::FlowPath> paths;
+			for (const auto& river : handRivers.rivers)
+			{
+				if (river.second.points.size() >= 2)
+				{
+					paths.push_back(terrain_io::water_flow::FromSpline(river.second));
+				}
+			}
+			const std::vector<terrain_io::water_flow::FlowPath> generated = controls.CollectGeneratedFlowPaths(record.id, newPaths);
+			paths.insert(paths.end(), generated.begin(), generated.end());
+
+			const terrain::Terrain::WaterFlowResult result = terrain->ApplyWaterFlow(paths, handRivers.settings, record.flowPaths,
+				handRivers.settings, newPaths.empty() ? String() : String(RiverWaterMaterial));
+			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): river flow written to "
+				<< result.pagesWritten << " page(s), cleared on " << result.pagesCleared);
+			record.flowPaths = std::move(newPaths);
 			return true;
 		}
 	}
@@ -800,6 +871,12 @@ namespace mmo
 		}
 		else
 		{
+			// The terrain write succeeded: the river paths of the terrain that was actually applied join the world's flow.
+			std::vector<terrain_io::water_flow::FlowPath> flowPaths;
+			state->terrain.GetFlowPaths(flowPaths);
+			ApplyInstanceFlow(editor, record, controls, std::move(flowPaths), report.warnings);
+			report.milliseconds = MillisecondsSince(start);
+
 			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << state->spawns.size()
 				<< " spawn placement(s) inside the area, " << state->clipped << " clipped, " << state->sectionPlacements
 				<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written"
@@ -808,8 +885,13 @@ namespace mmo
 		return report;
 	}
 
-	GeneratorBuildReport DeleteGraphInstanceContent(IWorldEditor& editor, pcg::GraphInstanceRecord& record)
+	GeneratorBuildReport DeleteGraphInstanceContent(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const ProceduralEditMode& controls)
 	{
-		return RemoveGeneratedContent(editor, record.content);
+		GeneratorBuildReport report = RemoveGeneratedContent(editor, record.content);
+		if (report.ok)
+		{
+			ApplyInstanceFlow(editor, record, controls, {}, report.warnings);
+		}
+		return report;
 	}
 }

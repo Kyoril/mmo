@@ -238,6 +238,10 @@ namespace mmo
 		///        change it. Hooked at Page::MarkChanged through terrain::Terrain::GetDataRevision.
 		/// @return The revision, or 0 if the world has no terrain.
 		virtual uint64 GetTerrainRevision() const = 0;
+
+		/// @brief Asset path of the world's hand-drawn river paths (.hflow next to the world file), read with
+		///        ReadFlowPathsFile.
+		[[nodiscard]] virtual String GetFlowPathsFileName() const = 0;
 	};
 
 	class WorldEditMode : public NonCopyable

@@ -223,6 +223,17 @@ namespace mmo
 		///        list changes (GetControlsRevision changes then); do not keep them across frames.
 		[[nodiscard]] std::vector<const pcg::GraphInstanceRecord*> GetGraphInstances() const;
 
+		/// @brief Flow paths of every graph instance of the world (what their last builds wrote), instances ordered by
+		///        id, each instance's paths in op order.
+		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectGeneratedFlowPaths() const;
+
+		/// @brief Like CollectGeneratedFlowPaths, with the paths of one instance replaced (a rebuild or delete computes
+		///        the world's flow before it updates the record).
+		/// @param replaceId Id of the instance whose recorded paths are replaced.
+		/// @param replacement Its new paths.
+		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectGeneratedFlowPaths(uint64 replaceId,
+			const std::vector<terrain_io::water_flow::FlowPath>& replacement) const;
+
 		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides), on every
 		///        structural change of the control list of any kind (creation, deletion, load) and on any
 		///        change of a control type in the library.
@@ -508,6 +519,10 @@ namespace mmo
 
 		/// @brief The records of every graph instance except the one with the id.
 		std::vector<const pcg::GraphInstanceRecord*> GetOtherGraphInstances(uint64 id) const;
+
+		/// @brief Implements CollectGeneratedFlowPaths: replacement (if not null) stands in for the paths of replaceId.
+		std::vector<terrain_io::water_flow::FlowPath> CollectFlowPathsReplacing(uint64 replaceId,
+			const std::vector<terrain_io::water_flow::FlowPath>* replacement) const;
 
 		/// @brief Makes a placed volume or point the editor selection (replacing whatever was selected).
 		/// @param controlIndex Index of the control in the list.

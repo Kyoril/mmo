@@ -5,6 +5,7 @@
 #include "owned_content.h"
 #include "graph/graph_data.h"
 #include "math/path_spline.h"
+#include "terrain_io/water_flow.h"
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
@@ -37,16 +38,20 @@ namespace mmo::pcg
 		float borderFade = 8.0f;
 		/// What the last build put into the world.
 		OwnedContent content;
+		/// River paths written by the last build, in op order. They take part in the world's river flow.
+		std::vector<terrain_io::water_flow::FlowPath> flowPaths;
 	};
 
-	/// Writes the record as binary (magic PCGG, version 1): id, a JSON text blob (name, graphPath, seed,
-	/// parameterOverrides, pointLimit, borderFade), the area points, pointIds, nextPointId, then the owned content.
-	/// Deterministic.
+	/// Writes the record as binary (magic PCGG, version 2): id, a JSON text blob (name, graphPath, seed,
+	/// parameterOverrides, pointLimit, borderFade), the area points, pointIds, nextPointId, the owned content, then
+	/// the flow paths (path count, then per path a point count and x, z, halfWidth floats per point).
+	/// Deterministic. A record without flow paths still writes version 2.
 	/// @return False if pointIds is not parallel to area.points.
 	bool WriteGraphInstanceRecord(io::Writer& writer, const GraphInstanceRecord& record);
 
 	/// Reads a record written by WriteGraphInstanceRecord. Unknown JSON keys are ignored; a blob without borderFade
 	/// (written before it existed) reads the default 8. The area always reads as a closed Catmull-Rom loop.
+	/// Version 1 (before flow paths) reads with no flow paths.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.
 	bool ReadGraphInstanceRecord(io::Reader& reader, GraphInstanceRecord& out);
 

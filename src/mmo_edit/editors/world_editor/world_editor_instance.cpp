@@ -461,6 +461,11 @@ namespace mmo
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
 		m_proceduralEditMode = std::make_unique<ProceduralEditMode>(*this, *m_camera);
+		// Generated rivers share the world's flow with the hand-drawn ones; Water mode recollects them on every apply.
+		m_waterEditMode->SetGeneratedFlowPathsProvider([this]()
+		{
+			return m_proceduralEditMode ? m_proceduralEditMode->CollectGeneratedFlowPaths() : std::vector<terrain_io::water_flow::FlowPath>();
+		});
 
 		// Brush-based authoring for the instanced foliage created above (m_foliage).
 		m_foliageEditMode = std::make_unique<FoliageEditMode>(*this, *m_foliage, m_terrain.get(), *m_camera);

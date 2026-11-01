@@ -356,7 +356,7 @@ namespace mmo
 		bool Save() override;
 
 		/// Asset path of the world's river flow paths (.hflow next to the world file).
-		[[nodiscard]] String GetFlowPathsFileName() const;
+		[[nodiscard]] String GetFlowPathsFileName() const override;
 
 		/// @brief Asset path of the folder holding this world's procedural records (.hpcg).
 		[[nodiscard]] String GetPcgFolderName() const;

@@ -19,7 +19,12 @@ namespace mmo::pcg
 		/// PCGG as little endian characters.
 		constexpr uint32 MagicPcgg = 0x47474350;
 		/// 1: initial layout. Placements use the oasis record's version 4 layout.
-		constexpr uint32 FormatVersion = 1;
+		/// 2: flow paths after the owned content.
+		constexpr uint32 FormatVersion = 2;
+		/// Oldest version that still reads.
+		constexpr uint32 OldestVersion = 1;
+		/// Bytes per flow point: x, z, halfWidth.
+		constexpr size_t FlowPointBytes = 3 * sizeof(float);
 		/// Placement layout version shared with the oasis record.
 		constexpr uint32 PlacementVersion = 4;
 		/// How far probe points are nudged off an edge into the polygon.
@@ -213,6 +218,18 @@ namespace mmo::pcg
 		}
 		Put(writer, record.nextPointId);
 		PutOwnedContent(writer, record.content);
+
+		Put<uint32>(writer, static_cast<uint32>(record.flowPaths.size()));
+		for (const terrain_io::water_flow::FlowPath& path : record.flowPaths)
+		{
+			Put<uint32>(writer, static_cast<uint32>(path.size()));
+			for (const terrain_io::water_flow::FlowPoint& point : path)
+			{
+				Put(writer, point.x);
+				Put(writer, point.z);
+				Put(writer, point.halfWidth);
+			}
+		}
 		return true;
 	}
 
@@ -220,7 +237,7 @@ namespace mmo::pcg
 	{
 		uint32 magic = 0;
 		uint32 version = 0;
-		if (!Get(reader, magic) || magic != MagicPcgg || !Get(reader, version) || version != FormatVersion)
+		if (!Get(reader, magic) || magic != MagicPcgg || !Get(reader, version) || version < OldestVersion || version > FormatVersion)
 		{
 			return false;
 		}
@@ -260,7 +277,38 @@ namespace mmo::pcg
 			}
 		}
 
-		return GetOwnedContent(reader, out.content, PlacementVersion);
+		if (!GetOwnedContent(reader, out.content, PlacementVersion))
+		{
+			return false;
+		}
+		if (version < 2)
+		{
+			return true;
+		}
+
+		uint32 pathCount = 0;
+		if (!GetCount(reader, pathCount, sizeof(uint32)))
+		{
+			return false;
+		}
+		out.flowPaths.resize(pathCount);
+		for (terrain_io::water_flow::FlowPath& path : out.flowPaths)
+		{
+			uint32 pointCount = 0;
+			if (!GetCount(reader, pointCount, FlowPointBytes))
+			{
+				return false;
+			}
+			path.resize(pointCount);
+			for (terrain_io::water_flow::FlowPoint& point : path)
+			{
+				if (!Get(reader, point.x) || !Get(reader, point.z) || !Get(reader, point.halfWidth))
+				{
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 
 	bool AreasOverlap(const PathSpline& a, const PathSpline& b)

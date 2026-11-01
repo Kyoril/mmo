@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "water_edit_mode.h"
+#include "editors/world_editor/flow_paths_file.h"
 #include "terrain/terrain.h"
 #include "terrain/page.h"
 #include "terrain/constants.h"
@@ -16,8 +17,6 @@
 #include "math/matrix4.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
-
-#include "nlohmann/json.hpp"
 
 #include <cstdio>
 #include <iterator>
@@ -37,9 +36,6 @@ namespace mmo
 
 	namespace
 	{
-		/// Water material that reads the flow data. Pages that receive flow get it assigned.
-		constexpr const char* RiverWaterMaterial = "Worlds/Water_River.hmat";
-
 		/// Delay between the last flow edit and the recompute, in seconds.
 		constexpr float FlowApplyDelay = 0.35f;
 
@@ -857,7 +853,7 @@ namespace mmo
 		}
 	}
 
-	std::vector<terrain_io::water_flow::FlowPath> WaterEditMode::CollectFlowPaths() const
+	std::vector<terrain_io::water_flow::FlowPath> WaterEditMode::CollectHandFlowPaths() const
 	{
 		std::vector<terrain_io::water_flow::FlowPath> paths;
 		for (const River& river : m_rivers)
@@ -870,14 +866,42 @@ namespace mmo
 		return paths;
 	}
 
+	std::vector<terrain_io::water_flow::FlowPath> WaterEditMode::CollectGeneratedFlowPaths() const
+	{
+		return m_generatedFlowPaths ? m_generatedFlowPaths() : std::vector<terrain_io::water_flow::FlowPath>();
+	}
+
+	std::vector<terrain_io::water_flow::FlowPath> WaterEditMode::CollectFlowPaths() const
+	{
+		std::vector<terrain_io::water_flow::FlowPath> paths = CollectHandFlowPaths();
+		std::vector<terrain_io::water_flow::FlowPath> generated = CollectGeneratedFlowPaths();
+		paths.insert(paths.end(), std::make_move_iterator(generated.begin()), std::make_move_iterator(generated.end()));
+		return paths;
+	}
+
+	void WaterEditMode::SetGeneratedFlowPathsProvider(GeneratedFlowPathsProvider provider)
+	{
+		m_generatedFlowPaths = std::move(provider);
+	}
+
 	void WaterEditMode::ApplyFlow()
 	{
 		m_flowApplyCountdown = -1.0f;
 
-		std::vector<terrain_io::water_flow::FlowPath> paths = CollectFlowPaths();
-		const auto result = m_terrain.ApplyWaterFlow(paths, m_flowSettings, m_appliedFlowPaths, m_appliedFlowSettings,
+		// The generated paths are taken as they are now for both sets: a graph instance rebuild already wrote their
+		// pages (and cleared what its old paths alone reached), so they are part of what is on the pages. Being in the
+		// current set keeps their pages flowing; being in the previous set as well means only hand edits can clear a
+		// page here.
+		std::vector<terrain_io::water_flow::FlowPath> handPaths = CollectHandFlowPaths();
+		const std::vector<terrain_io::water_flow::FlowPath> generated = CollectGeneratedFlowPaths();
+		std::vector<terrain_io::water_flow::FlowPath> paths = handPaths;
+		paths.insert(paths.end(), generated.begin(), generated.end());
+		std::vector<terrain_io::water_flow::FlowPath> previous = m_appliedFlowPaths;
+		previous.insert(previous.end(), generated.begin(), generated.end());
+
+		const auto result = m_terrain.ApplyWaterFlow(paths, m_flowSettings, previous, m_appliedFlowSettings,
 			m_flowAssignRiverMaterial ? String(RiverWaterMaterial) : String());
-		m_appliedFlowPaths = std::move(paths);
+		m_appliedFlowPaths = std::move(handPaths);
 		m_appliedFlowSettings = m_flowSettings;
 
 		std::ostringstream status;
@@ -1017,6 +1041,55 @@ namespace mmo
 			}
 		}
 
+		// Generated river paths (graph instances): read-only, so a grey centre line with direction arrows and no
+		// handles. They are not part of the spline editor, so they cannot be selected.
+		{
+			const ImU32 generatedColor = IM_COL32(170, 170, 170, 200);
+			for (const terrain_io::water_flow::FlowPath& path : CollectGeneratedFlowPaths())
+			{
+				for (size_t i = 0; i + 1 < path.size(); ++i)
+				{
+					const terrain_io::water_flow::FlowPoint& a = path[i];
+					const terrain_io::water_flow::FlowPoint& b = path[i + 1];
+					const float dx = b.x - a.x;
+					const float dz = b.z - a.z;
+					const float length = std::hypot(dx, dz);
+					if (length <= 0.0f)
+					{
+						continue;
+					}
+
+					ImVec2 sa, sb;
+					if (ProjectToScreen(Vector3(a.x, GetFlowPointHeight(a.x, a.z), a.z), sa) &&
+						ProjectToScreen(Vector3(b.x, GetFlowPointHeight(b.x, b.z), b.z), sb))
+					{
+						drawList.AddLine(sa, sb, generatedColor, 2.0f);
+					}
+
+					// An arrow head about every 15 m, pointing downstream.
+					const float fx = dx / length;
+					const float fz = dz / length;
+					const int32 arrows = std::max(1, static_cast<int32>(length / 15.0f));
+					for (int32 c = 0; c < arrows; ++c)
+					{
+						const float t = (static_cast<float>(c) + 0.5f) / static_cast<float>(arrows);
+						const float cx = a.x + dx * t;
+						const float cz = a.z + dz * t;
+						const float size = 3.0f;
+						const float y = GetFlowPointHeight(cx, cz);
+						ImVec2 sTip, sLeft, sRight;
+						if (ProjectToScreen(Vector3(cx + fx * size, y, cz + fz * size), sTip) &&
+							ProjectToScreen(Vector3(cx - fx * size - fz * size, y, cz - fz * size + fx * size), sLeft) &&
+							ProjectToScreen(Vector3(cx - fx * size + fz * size, y, cz - fz * size - fx * size), sRight))
+						{
+							drawList.AddLine(sLeft, sTip, generatedColor, 2.0f);
+							drawList.AddLine(sRight, sTip, generatedColor, 2.0f);
+						}
+					}
+				}
+			}
+		}
+
 		// River paths: centre line with banks and direction chevrons, and a handle per point.
 		{
 			std::vector<const PathSpline*> splines;
@@ -1065,51 +1138,23 @@ namespace mmo
 		m_splineEditor.CancelDrag();
 		m_flowFileDirty = false;
 
-		if (const std::unique_ptr<std::istream> file = AssetRegistry::OpenFile(fileName))
+		FlowPathsFile file;
+		String error;
+		if (!ReadFlowPathsFile(fileName, file, error))
 		{
-			const std::string text((std::istreambuf_iterator<char>(*file)), std::istreambuf_iterator<char>());
-			const nlohmann::json json = nlohmann::json::parse(text, nullptr, false);
-			if (json.is_discarded() || !json.is_object())
-			{
-				WLOG("Failed to parse river flow file '" << fileName << "', starting without rivers");
-			}
-			else
-			{
-				m_flowSettings.uvScale = json.value("uvScale", m_flowSettings.uvScale);
-				m_flowSettings.falloff = json.value("falloff", m_flowSettings.falloff);
-				m_flowSettings.minSpeed = json.value("minSpeed", m_flowSettings.minSpeed);
-				if (const auto rivers = json.find("rivers"); rivers != json.end() && rivers->is_array())
-				{
-					for (const auto& entry : *rivers)
-					{
-						River river;
-						terrain_io::water_flow::FlowPath flowPath;
-						river.name = entry.value("name", "River " + std::to_string(m_rivers.size() + 1));
-						if (const auto path = entry.find("path"); path != entry.end() && path->is_array())
-						{
-							for (const auto& point : *path)
-							{
-								if (!point.is_array() || point.size() < 2)
-								{
-									continue;
-								}
-
-								terrain_io::water_flow::FlowPoint flowPoint;
-								flowPoint.x = point[0].get<float>();
-								flowPoint.z = point[1].get<float>();
-								flowPoint.halfWidth = point.size() > 2 ? point[2].get<float>() : m_newRiverHalfWidth;
-								flowPath.push_back(flowPoint);
-							}
-						}
-						river.path = terrain_io::water_flow::ToSpline(flowPath);
-						m_rivers.push_back(std::move(river));
-					}
-				}
-			}
+			WLOG("Failed to read river flow file: " << error << ", starting without rivers");
+		}
+		m_flowSettings = file.settings;
+		for (auto& entry : file.rivers)
+		{
+			River river;
+			river.name = std::move(entry.first);
+			river.path = std::move(entry.second);
+			m_rivers.push_back(std::move(river));
 		}
 
 		// The loaded paths wrote the flow that is on disk, so they own the pages they reach.
-		m_appliedFlowPaths = CollectFlowPaths();
+		m_appliedFlowPaths = CollectHandFlowPaths();
 		m_appliedFlowSettings = m_flowSettings;
 		DLOG("Loaded " << m_rivers.size() << " river flow path(s) from " << fileName);
 	}
@@ -1127,40 +1172,20 @@ namespace mmo
 			return;
 		}
 
-		if (m_rivers.empty())
-		{
-			if (AssetRegistry::HasFile(fileName))
-			{
-				AssetRegistry::RemoveFile(fileName);
-			}
-			m_flowFileDirty = false;
-			return;
-		}
-
-		nlohmann::json json;
-		json["uvScale"] = m_flowSettings.uvScale;
-		json["falloff"] = m_flowSettings.falloff;
-		json["minSpeed"] = m_flowSettings.minSpeed;
-		nlohmann::json rivers = nlohmann::json::array();
+		// Only the hand-drawn rivers: generated paths belong to their graph instances.
+		FlowPathsFile file;
+		file.settings = m_flowSettings;
 		for (const River& river : m_rivers)
 		{
-			nlohmann::json path = nlohmann::json::array();
-			for (const auto& point : river.path.points)
-			{
-				path.push_back({ point.x, point.z, point.width });
-			}
-			rivers.push_back({ { "name", river.name }, { "path", std::move(path) } });
+			file.rivers.emplace_back(river.name, river.path);
 		}
-		json["rivers"] = std::move(rivers);
 
-		const std::unique_ptr<std::ostream> file = AssetRegistry::CreateNewFile(fileName);
-		if (!file)
+		String error;
+		if (!WriteFlowPathsFile(fileName, file, error))
 		{
-			ELOG("Failed to write river flow file " << fileName);
+			ELOG("Failed to write river flow file: " << error);
 			return;
 		}
-
-		*file << json.dump(1, '\t');
 		m_flowFileDirty = false;
 	}
 }

@@ -174,7 +174,7 @@ TEST_CASE("GraphInstanceRecord rejects truncated data and a wrong version", "[gr
 	}
 
 	std::vector<char> wrongVersion = bytes;
-	wrongVersion[4] = 2;
+	wrongVersion[4] = 3;
 	CHECK_FALSE(Deserialize(wrongVersion, out));
 
 	std::vector<char> wrongMagic = bytes;
@@ -265,6 +265,103 @@ TEST_CASE("GraphInstanceRecord keeps borderFade and defaults it for older record
 	graph::jsonutil::Json text = blob;
 	text["borderFade"] = "wide";
 	CHECK_FALSE(Deserialize(splice(text), loaded));
+}
+
+namespace
+{
+	terrain_io::water_flow::FlowPath MakeFlowPath(const float x0, const float z0, const size_t count)
+	{
+		terrain_io::water_flow::FlowPath path;
+		for (size_t i = 0; i < count; ++i)
+		{
+			terrain_io::water_flow::FlowPoint p;
+			p.x = x0 + static_cast<float>(i) * 12.5f;
+			p.z = z0 - static_cast<float>(i) * 3.25f;
+			p.halfWidth = 4.0f + static_cast<float>(i) * 0.5f;
+			path.push_back(p);
+		}
+		return path;
+	}
+
+	bool SamePaths(const std::vector<terrain_io::water_flow::FlowPath>& a, const std::vector<terrain_io::water_flow::FlowPath>& b)
+	{
+		if (a.size() != b.size())
+		{
+			return false;
+		}
+		for (size_t i = 0; i < a.size(); ++i)
+		{
+			if (a[i].size() != b[i].size())
+			{
+				return false;
+			}
+			for (size_t j = 0; j < a[i].size(); ++j)
+			{
+				if (a[i][j].x != b[i][j].x || a[i][j].z != b[i][j].z || a[i][j].halfWidth != b[i][j].halfWidth)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+}
+
+TEST_CASE("GraphInstanceRecord round-trips flow paths", "[graph_instance_record]")
+{
+	GraphInstanceRecord original = MakePopulated();
+	original.flowPaths.push_back(MakeFlowPath(10.0f, 20.0f, 3));
+	original.flowPaths.push_back(MakeFlowPath(-40.0f, 5.5f, 5));
+	const std::vector<char> bytes = Serialize(original);
+	CHECK(bytes[4] == 2);
+
+	GraphInstanceRecord loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(SamePaths(loaded.flowPaths, original.flowPaths));
+	CHECK(loaded.content.placements.size() == 1);
+	CHECK(Serialize(loaded) == bytes);
+
+	// Truncated inside the paths.
+	const std::vector<char> truncated(bytes.begin(), bytes.end() - 4);
+	CHECK_FALSE(Deserialize(truncated, loaded));
+}
+
+TEST_CASE("GraphInstanceRecord writes deterministic bytes with flow paths", "[graph_instance_record]")
+{
+	GraphInstanceRecord a = MakePopulated();
+	a.flowPaths.push_back(MakeFlowPath(1.0f, 2.0f, 4));
+	GraphInstanceRecord b = MakePopulated();
+	b.flowPaths.push_back(MakeFlowPath(1.0f, 2.0f, 4));
+	const std::vector<char> bytesA = Serialize(a);
+	CHECK(bytesA == Serialize(b));
+	CHECK(bytesA == Serialize(a));
+
+	// Without paths the record still writes version 2, ending in a zero path count.
+	const std::vector<char> empty = Serialize(MakePopulated());
+	REQUIRE(empty.size() >= 8);
+	CHECK(empty[4] == 2);
+	uint32 trailing = 0xFFFFFFFFu;
+	std::memcpy(&trailing, empty.data() + empty.size() - 4, sizeof(trailing));
+	CHECK(trailing == 0);
+	// Layout: one path count already present, then per path a point count and three floats per point.
+	CHECK(bytesA.size() == empty.size() + 4 + 4 * 3 * sizeof(float));
+}
+
+TEST_CASE("GraphInstanceRecord version 1 reads with no flow paths", "[graph_instance_record]")
+{
+	// A version 1 blob is version 2 without the trailing path count.
+	const std::vector<char> v2 = Serialize(MakePopulated());
+	std::vector<char> v1(v2.begin(), v2.end() - 4);
+	v1[4] = 1;
+
+	GraphInstanceRecord loaded;
+	loaded.flowPaths.push_back(MakeFlowPath(0.0f, 0.0f, 2));
+	REQUIRE(Deserialize(v1, loaded));
+	CHECK(loaded.flowPaths.empty());
+	CHECK(loaded.name == "Forest \"North\"");
+	CHECK(loaded.content.placements.size() == 1);
+	// Written again, it upgrades to version 2.
+	CHECK(Serialize(loaded) == v2);
 }
 
 TEST_CASE("AreasOverlap separates contact from shared interior", "[graph_instance_record]")

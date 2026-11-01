@@ -255,9 +255,13 @@ namespace mmo
 	///          instead, unless the terrain revision changed in between (an ocean page was materialised). Should
 	///          that second run fail after all, the old contribution is put back (the world ends as before). Spawned
 	///          placements keep their height above the base ground on the final ground; the section placements of
-	///          the ops are added under salted keys.
+	///          the ops are added under salted keys. After a successful write the river paths of the applied terrain
+	///          (PreparedTerrain::GetFlowPaths) join the world's river flow: Terrain::ApplyWaterFlow over the hand rivers
+	///          of the world's .hflow followed by every instance's paths (ProceduralEditMode::CollectGeneratedFlowPaths,
+	///          this one's new), with this instance's old paths as the previous set; they are then stored in
+	///          record.flowPaths. Bit-identical paths skip that step. A refused or failed rebuild touches no flow.
 	/// @param editor The world editor to work on. Must have a terrain.
-	/// @param record The instance to rebuild; its owned content is updated.
+	/// @param record The instance to rebuild; its owned content and flow paths are updated.
 	/// @param otherInstances The world's other graph instances (their areas must not overlap this one's).
 	/// @param controls The procedural mode holding the world's placed controls.
 	/// @param checkTerrainOverlap If set, called with the area's bounds when the graph has terrain ops (part of the
@@ -270,10 +274,12 @@ namespace mmo
 		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
 		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap = {});
 
-	/// @brief Removes everything a graph instance put into the world (RemoveGeneratedContent on its owned content).
-	///        Leaves the record's owned content empty (area, graph, seed and overrides are kept).
+	/// @brief Removes everything a graph instance put into the world (RemoveGeneratedContent on its owned content),
+	///        then its river paths from the world's flow (as a rebuild with no paths does, see RebuildGraphInstance).
+	///        Leaves the record's owned content and flow paths empty (area, graph, seed and overrides are kept).
 	/// @param editor The world editor to work on.
 	/// @param record The instance whose content to delete.
+	/// @param controls The procedural mode holding the world's graph instances (for the other instances' paths).
 	/// @return The report (removed = number of owned objects deleted).
-	GeneratorBuildReport DeleteGraphInstanceContent(IWorldEditor& editor, pcg::GraphInstanceRecord& record);
+	GeneratorBuildReport DeleteGraphInstanceContent(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const ProceduralEditMode& controls);
 }
