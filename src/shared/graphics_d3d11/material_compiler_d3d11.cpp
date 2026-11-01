@@ -817,8 +817,11 @@ namespace mmo
 		}
 		else
 		{
+			// N, not input.normal: only lit, non-UI variants carry a normal in VertexOut, while N is
+			// declared in every variant (and is still the interpolated vertex normal here, since
+			// expressions are emitted before the normal map is applied).
 			outputStream << "expr_" << baseReflectFraction << " + (1.0 - expr_" << baseReflectFraction
-				<< ") * pow(1.0 - saturate(dot(normalize(input.normal), V)), expr_" << exponent << ")";
+				<< ") * pow(1.0 - saturate(dot(N, V)), expr_" << exponent << ")";
 		}
 		outputStream.flush();
 
@@ -1522,8 +1525,10 @@ namespace mmo
 			// transforms, though, and every variant emits every expression - without this, any
 			// material using a Tangent-space Transform Vector node fails its UI compile, and an
 			// unlit one fails every variant. Treat tangent space as world space here: it is the only
-			// basis these variants can honestly offer.
+			// basis these variants can honestly offer. The same holds for N, which the Vertex
+			// Normal, Reflection Vector and Fresnel nodes read.
 			m_pixelShaderStream
+				<< "\tfloat3 N = float3(0.0, 0.0, 1.0);\n"
 				<< "\tstatic const float3x3 TBN = float3x3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);\n";
 		}
 
@@ -1564,10 +1569,6 @@ namespace mmo
 					m_pixelShaderStream
 						<< "\tN = GetWorldNormal(N, input.normal, input.tangent, input.binormal);\n";
 				}
-			}
-			else
-			{
-				m_pixelShaderStream << "\tfloat3 N = float3(0.0, 0.0, 1.0);\n\n";
 			}
 
 			// Specular
