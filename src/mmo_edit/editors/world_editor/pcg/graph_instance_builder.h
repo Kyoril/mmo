@@ -11,6 +11,7 @@
 #include "pcg/graph/evaluator.h"
 #include "pcg/graph/graph.h"
 #include "pcg/graph/graph_output.h"
+#include "pcg/graph/node_util.h"
 
 #include <memory>
 #include <vector>
@@ -22,6 +23,32 @@ namespace mmo
 
 	/// @brief File extension of graph assets.
 	constexpr const char* GraphAssetExtension = ".hpcgg";
+
+	/// @brief A placed control that could not be resolved against its control type (missing or invalid type, or
+	///        geometry that does not fit the type's shape).
+	struct UnresolvedPlacedControl
+	{
+		/// @brief Id of the placed control.
+		uint64 id = 0;
+
+		/// @brief Name of the placed control.
+		String name;
+
+		/// @brief Why it could not be resolved.
+		String reason;
+
+		/// @brief Conservative x/z bounds of its geometry (see GetPlacedControlBounds); invalid when they cannot be
+		///        computed.
+		pcg::graph::Bounds2D bounds;
+	};
+
+	/// @brief Conservative x/z bounds of a placed control. With a type: its spline (loops and splines), its box
+	///        footprint at any yaw (volumes) or its position (points). Without a type (missing or invalid) the shape is
+	///        unknown: the spline's bounds if it has points, else the box footprint around the position.
+	/// @param instance The placed control.
+	/// @param type Its control type, or null if unknown.
+	/// @return The bounds; invalid if a spline shape has no points.
+	pcg::graph::Bounds2D GetPlacedControlBounds(const pcg::graph::ControlInstance& instance, const pcg::graph::ControlType* type);
 
 	/// @brief Everything a graph instance's evaluation reads besides the graph: region (the instance's area), seed,
 	///        parameter overrides, the resolved placed controls, the editor terrain sampler and the point limit.
@@ -44,6 +71,9 @@ namespace mmo
 		/// @brief Problems found while resolving the placed controls.
 		std::vector<String> warnings;
 
+		/// @brief The placed controls that could not be resolved (they are not in controls).
+		std::vector<UnresolvedPlacedControl> unresolved;
+
 		/// @brief Terrain sampler context.terrain points at.
 		std::unique_ptr<EditorTerrainSampler> sampler;
 	};
@@ -63,6 +93,9 @@ namespace mmo
 
 		/// @brief Control resolution warnings, parameter merge warnings and the collection's warnings.
 		std::vector<String> warnings;
+
+		/// @brief The placed controls that could not be resolved (the evaluation ran without them).
+		std::vector<UnresolvedPlacedControl> unresolved;
 	};
 
 	/// @brief Reads and parses a graph asset (.hpcgg).
@@ -86,7 +119,7 @@ namespace mmo
 	bool ParseGraphParameterValue(const pcg::graph::ParameterDef& parameter, const String& text, pcg::graph::AttributeValue& out, String& error);
 
 	/// @brief Builds the evaluation context of a graph instance. Resolves the placed controls (problems become
-	///        warnings), loads the terrain pages under the area and under every resolved control whose bounds reach into
+	///        warnings, the controls that failed are listed in out.unresolved), loads the terrain pages under the area and under every resolved control whose bounds reach into
 	///        it, plus a margin (page streaming does not change the terrain revision, so the sampler would not notice
 	///        them otherwise), and creates the editor terrain sampler. The graph
 	///        is not read here, so a caller can evaluate an in-memory graph with the same context.
@@ -115,7 +148,10 @@ namespace mmo
 	/// @brief Loads the saved graph file, validates it, evaluates it, collects placements and applies them through
 	///        ApplyGeneratedContent (no terrain step in phase 2). Refuses, leaving the world and record untouched, on:
 	///        missing graph, parse error, validation issues (message lists them), evaluation error, overlap with another
-	///        instance's area, or missing spawn assets.
+	///        instance's area, missing spawn assets, or a placed control that failed to resolve (missing, renamed or
+	///        invalid type, geometry not fitting the shape) whose bounds reach the area or cannot be computed: the
+	///        evaluation would silently run without it and the reconcile would delete its content (the message names
+	///        those controls).
 	/// @param editor The world editor to work on. Must have a terrain.
 	/// @param record The instance to rebuild; its owned content is updated.
 	/// @param otherInstances The world's other graph instances (their areas must not overlap this one's).

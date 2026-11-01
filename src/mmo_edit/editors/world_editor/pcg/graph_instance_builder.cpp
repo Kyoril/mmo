@@ -59,37 +59,24 @@ namespace mmo
 			return rect;
 		}
 
-		/// Conservative x/z bounds of a resolved control: its spline (loops and splines), its box footprint at any
-		/// yaw (volumes) or its position (points). Invalid without a type or instance.
-		pcg::graph::Bounds2D GetControlBounds(const pcg::graph::ResolvedControl& control)
+		/// Box footprint of a volume at any yaw: the footprint's diagonal radius covers every rotation.
+		pcg::graph::Bounds2D GetVolumeFootprint(const pcg::graph::ControlInstance& instance)
 		{
 			pcg::graph::Bounds2D bounds;
+			const float radius = std::sqrt(instance.halfExtents.x * instance.halfExtents.x + instance.halfExtents.z * instance.halfExtents.z);
+			bounds.Add(instance.position.x - radius, instance.position.z - radius);
+			bounds.Add(instance.position.x + radius, instance.position.z + radius);
+			return bounds;
+		}
+
+		/// Conservative x/z bounds of a resolved control. Invalid without a type or instance.
+		pcg::graph::Bounds2D GetControlBounds(const pcg::graph::ResolvedControl& control)
+		{
 			if (!control.type || !control.instance)
 			{
-				return bounds;
+				return pcg::graph::Bounds2D();
 			}
-
-			const pcg::graph::ControlInstance& instance = *control.instance;
-			switch (control.type->shape)
-			{
-			case pcg::graph::ControlShape::ClosedLoop:
-			case pcg::graph::ControlShape::OpenSpline:
-				return pcg::graph::SplineBounds(instance.spline);
-
-			case pcg::graph::ControlShape::Volume:
-			{
-				// The footprint's diagonal radius covers every yaw.
-				const float radius = std::sqrt(instance.halfExtents.x * instance.halfExtents.x + instance.halfExtents.z * instance.halfExtents.z);
-				bounds.Add(instance.position.x - radius, instance.position.z - radius);
-				bounds.Add(instance.position.x + radius, instance.position.z + radius);
-				return bounds;
-			}
-
-			case pcg::graph::ControlShape::Point:
-				bounds.Add(instance.position.x, instance.position.z);
-				return bounds;
-			}
-			return bounds;
+			return GetPlacedControlBounds(*control.instance, control.type);
 		}
 
 		bool CheckArea(const PathSpline& area, String& error)
@@ -122,6 +109,31 @@ namespace mmo
 			}
 			return "?";
 		}
+	}
+
+	pcg::graph::Bounds2D GetPlacedControlBounds(const pcg::graph::ControlInstance& instance, const pcg::graph::ControlType* type)
+	{
+		if (!type)
+		{
+			// Unknown shape: spline controls keep their points, volumes and points have none.
+			return instance.spline.points.empty() ? GetVolumeFootprint(instance) : pcg::graph::SplineBounds(instance.spline);
+		}
+
+		pcg::graph::Bounds2D bounds;
+		switch (type->shape)
+		{
+		case pcg::graph::ControlShape::ClosedLoop:
+		case pcg::graph::ControlShape::OpenSpline:
+			return pcg::graph::SplineBounds(instance.spline);
+
+		case pcg::graph::ControlShape::Volume:
+			return GetVolumeFootprint(instance);
+
+		case pcg::graph::ControlShape::Point:
+			bounds.Add(instance.position.x, instance.position.z);
+			return bounds;
+		}
+		return bounds;
 	}
 
 	bool LoadGraphAsset(const String& graphPath, pcg::graph::Graph& out, String& error)
@@ -253,7 +265,7 @@ namespace mmo
 			return false;
 		}
 
-		controls.ResolvePlacedControls(out.controls, out.warnings);
+		controls.ResolvePlacedControls(out.controls, out.warnings, &out.unresolved);
 
 		// Streaming a page in does not bump the terrain revision, so a sampler would not notice newly loaded pages:
 		// load everything the evaluation may read first. That is the area and every control reaching into it
@@ -307,6 +319,7 @@ namespace mmo
 		}
 
 		out.warnings = context.warnings;
+		out.unresolved = context.unresolved;
 		pcg::graph::MergeParameters(out.graph.parameters, record.parameterOverrides, &out.warnings);
 
 		out.result = pcg::graph::Evaluate(out.graph, pcg::graph::NodeRegistry::Default(), context.context, nullptr);
@@ -349,6 +362,25 @@ namespace mmo
 		if (!EvaluateGraphInstance(editor, record, controls, evaluation, error))
 		{
 			return refuse(error);
+		}
+
+		// A control the evaluation had to skip silently drops out of the result, and the reconcile would delete what
+		// it produced (renaming a control type would wipe a forest). Only controls that cannot reach the area are
+		// harmless; unknown bounds count as reaching.
+		const pcg::graph::Bounds2D areaBounds = pcg::graph::SplineBounds(record.area);
+		String unresolved;
+		for (const UnresolvedPlacedControl& control : evaluation.unresolved)
+		{
+			const bool known = control.bounds.valid && pcg::graph::SaneBounds(control.bounds);
+			if (!known || control.bounds.Intersects(areaBounds))
+			{
+				unresolved += (unresolved.empty() ? "" : "; ") + ("'" + control.name + "' (" + FormatId(control.id) + "): " + control.reason);
+			}
+		}
+		if (!unresolved.empty())
+		{
+			return refuse("placed control(s) that may reach the area could not be resolved: " + unresolved
+				+ ". Restore or fix their control types (or move or delete the controls), then rebuild again.");
 		}
 
 		if (!evaluation.result.issues.empty())

@@ -1498,6 +1498,7 @@ int main(int argc, char* arg[])
 				// mmo_edit --pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N]
 				//          [--set param=value ...]
 				// Adds a graph instance over the closed area through the points (sharp corners) with the graph, seed
+				// (default and 0: derived from the instance's id)
 				// and parameter overrides (typed by the graph's parameters). Does not build it (use --pcg-rebuild);
 				// saves the world and logs the new id (0 = success). An area overlapping another graph instance's
 				// area ("overlaps"), an unreadable graph or a bad --set are refused before anything is added or saved.
@@ -1512,7 +1513,8 @@ int main(int argc, char* arg[])
 				std::vector<std::pair<float, float>> points;
 				std::string graphPath;
 				std::string name;
-				uint64 seed = 1;
+				// 0: derived from the new instance's id (as the editor's button does); --seed overrides it.
+				uint64 seed = 0;
 				std::vector<std::pair<std::string, std::string>> settings;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount && argumentsValid; ++j)

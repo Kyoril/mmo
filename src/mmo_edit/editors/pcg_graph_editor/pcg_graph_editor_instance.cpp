@@ -357,6 +357,15 @@ namespace mmo
 		m_savedRevision = m_document.Revision();
 		m_wasDirty = false;
 		m_editor.saved();
+
+		// The procedural modes keep parsed graphs for their details panels.
+		for (WorldEditorInstance* world : WorldEditorInstance::GetOpenInstances())
+		{
+			if (ProceduralEditMode* mode = world->GetProceduralEditMode())
+			{
+				mode->InvalidateGraph(path);
+			}
+		}
 		ILOG("Saved PCG graph " << path << " (" << m_document.GetGraph().nodes.size() << " nodes, " << m_document.GetGraph().links.size() << " links)");
 		return true;
 	}
@@ -1468,6 +1477,9 @@ namespace mmo
 				m_debugContextFailed = false;
 				m_debugRetryDelay = 0;
 				m_debugWarnings = context.warnings;
+				// Evaluate merges the overrides itself but keeps the warnings to the nodes' context; list them here
+				// as the rebuild does.
+				pcg::graph::MergeParameters(graph.parameters, record->parameterOverrides, &m_debugWarnings);
 				m_debugResult = pcg::graph::Evaluate(graph, m_document.GetRegistry(), context.context, &m_debugCache);
 				m_hasDebugResult = true;
 				for (const auto& entry : m_debugResult.nodes)

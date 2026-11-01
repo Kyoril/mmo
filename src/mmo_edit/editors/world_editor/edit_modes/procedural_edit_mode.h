@@ -114,15 +114,17 @@ namespace mmo
 		/// @return True if the recipe is loaded.
 		bool CheckRecipe(String& error);
 
-		/// @brief Rebuilds every control (oases, section paths and graph instances). Continues after a
-		///        failure; all errors are joined.
+		/// @brief Rebuilds every control: oases and section paths first, then graph instances (they sample the
+		///        terrain the others write), in list order within each group. Continues after a failure; all
+		///        errors are joined.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True if all controls were rebuilt (also when there are none).
 		bool RebuildAll(String& error);
 
 		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
 		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
-		///        are refused if their influence overlaps another built oasis or section path. A graph
+		///        are refused if their influence overlaps another built oasis or section path; when their old or
+		///        new influence overlaps a graph instance's area, the status warns to rebuild that instance. A graph
 		///        instance is refused as RebuildGraphInstance describes (its saved graph is used). A placed
 		///        control has nothing to build (graph instances read it); the call succeeds without changes.
 		/// @param controlId Id of the control.
@@ -189,11 +191,12 @@ namespace mmo
 		/// @brief Adds a graph instance over a closed area through the given x/z points (sharp corners: manual,
 		///        zero tangents, so the area is the polygon; heights from the terrain, which is loaded under the
 		///        points first). Does not build it. The "New Graph Instance" button uses this with a 128 m square
-		///        around the viewport centre and no graph.
+		///        around the viewport centre, no graph and a seed derived from its id.
 		/// @param graphPath Asset path of the graph (.hpcgg); may be empty (picked later). A non-empty path must be
 		///        readable and parse.
 		/// @param points World x/z of the area points, at least 3.
-		/// @param seed Seed of the instance.
+		/// @param seed Seed of the instance; 0 derives a non-zero seed from the new instance's id (the "New Graph
+		///        Instance" button passes 0).
 		/// @param name Name of the instance; empty picks "Graph Instance <n>".
 		/// @param parameterSettings Parameter overrides as name and value text (typed by the graph's parameter
 		///        defaults, see ParseGraphParameterValue); every name must be a parameter of the graph.
@@ -225,14 +228,21 @@ namespace mmo
 
 		/// @brief Resolves every placed control against its control type, in list order. Controls whose
 		///        type is missing or invalid, or whose geometry does not fit the type's shape, are skipped
-		///        with a warning. The resolved controls point into this mode's controls and library; they
-		///        are valid until the next change of either (see GetControlsRevision).
+		///        with a warning (and listed in unresolved). The resolved controls point into this mode's
+		///        controls and library; they are valid until the next change of either (see GetControlsRevision).
 		/// @param out Receives the resolved controls (cleared first).
 		/// @param warnings Receives one message per problem (appended).
-		void ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings);
+		/// @param unresolved Optional; receives the skipped controls with the reason and their bounds (cleared first).
+		void ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings,
+			std::vector<UnresolvedPlacedControl>* unresolved = nullptr);
+
+		/// @brief Drops the cached copy of a graph the details panel shows, so it is read again (the graph
+		///        editor calls this when it saves). Paths compare with forward slashes.
+		/// @param graphPath Asset path of the graph (.hpcgg).
+		void InvalidateGraph(const String& graphPath);
 
 		/// @brief The control types this world's placed controls use (the control type editor invalidates
-		///        types here when it saves).
+		///        types here when it saves or creates one).
 		[[nodiscard]] ControlLibrary& GetControlLibrary() { return m_controlLibrary; }
 
 		/// @brief Removes the control's content from the world and the control from the list (its
@@ -540,6 +550,14 @@ namespace mmo
 		///        in the world.
 		static std::vector<pcg::WorldRect> GetBuiltRects(const Control& control);
 
+		/// @brief Hints for a single oasis or section path rebuild: one "rebuild graph instance <name> (<id>) to
+		///        re-ground its placements" per graph instance whose area bounds overlap the given rects or the
+		///        control's built rects (its placements sit on the terrain the rebuild changed). Empty while
+		///        RebuildAll runs (it rebuilds the graph instances afterwards).
+		/// @param control The rebuilt control.
+		/// @param rects What the control covered before the rebuild.
+		[[nodiscard]] std::vector<String> GetRegroundWarnings(const Control& control, std::vector<pcg::WorldRect> rects) const;
+
 		/// @brief Checks influence rects against every other built control.
 		/// @param control The control being rebuilt.
 		/// @param rects Its new influence rects.
@@ -640,6 +658,9 @@ namespace mmo
 
 		/// Bumped on every placed-control change (see GetControlsRevision).
 		uint64 m_placedRevision = 0;
+
+		/// Whether RebuildAll is running (suppresses the re-ground hints of GetRegroundWarnings).
+		bool m_rebuildingAll = false;
 
 		/// Text of the extra tags field while it is being edited (applied when the edit ends).
 		String m_tagsBuffer;

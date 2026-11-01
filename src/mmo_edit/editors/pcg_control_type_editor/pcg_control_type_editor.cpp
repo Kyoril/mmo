@@ -7,6 +7,8 @@
 #include "icon_font.h"
 #include "assets/asset_registry.h"
 #include "editors/pcg_graph_editor/asset_file_name.h"
+#include "editors/world_editor/edit_modes/procedural_edit_mode.h"
+#include "editors/world_editor/world_editor_instance.h"
 #include "log/default_log_levels.h"
 #include "pcg/graph/controls.h"
 
@@ -151,6 +153,16 @@ namespace mmo
 
 		*file << pcg::graph::WriteControlType(type);
 		file->flush();
+
+		// Open worlds may have looked this path up before (a placed control of a deleted or renamed type) and
+		// cached "not found".
+		for (WorldEditorInstance* world : WorldEditorInstance::GetOpenInstances())
+		{
+			if (ProceduralEditMode* mode = world->GetProceduralEditMode())
+			{
+				mode->GetControlLibrary().Invalidate(assetPath);
+			}
+		}
 
 		ILOG("Created control type " << assetPath);
 		m_host.assetImported(m_host.GetCurrentPath());

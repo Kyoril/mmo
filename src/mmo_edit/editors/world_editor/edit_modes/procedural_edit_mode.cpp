@@ -12,6 +12,7 @@
 #include "math/ray.h"
 #include "math/vector4.h"
 #include "pcg/oasis_recipe.h"
+#include "pcg/pcg_random.h"
 #include "pcg/section_path.h"
 #include "pcg/terrain_contribution.h"
 #include "scene_graph/camera.h"
@@ -1507,9 +1508,15 @@ namespace mmo
 		return true;
 	}
 
-	void ProceduralEditMode::ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings)
+	void ProceduralEditMode::ResolvePlacedControls(std::vector<pcg::graph::ResolvedControl>& out, std::vector<String>& warnings,
+		std::vector<UnresolvedPlacedControl>* unresolved)
 	{
 		out.clear();
+		if (unresolved)
+		{
+			unresolved->clear();
+		}
+
 		for (const Control& control : m_controls)
 		{
 			if (control.kind != ControlKind::Placed)
@@ -1522,13 +1529,24 @@ namespace mmo
 			if (!type)
 			{
 				warnings.push_back("placed control '" + control.Name() + "' (" + FormatId(control.Id()) + ") skipped: " + error);
+				if (unresolved)
+				{
+					unresolved->push_back({ control.Id(), control.Name(), error, GetPlacedControlBounds(control.placed, nullptr) });
+				}
 				continue;
 			}
 
 			pcg::graph::ResolvedControl resolved;
+			const size_t warningCount = warnings.size();
 			if (pcg::graph::ResolveControl(*type, control.placed, resolved, warnings))
 			{
 				out.push_back(std::move(resolved));
+			}
+			else if (unresolved)
+			{
+				// ResolveControl's last warning is its refusal reason.
+				const String reason = warnings.size() > warningCount ? warnings.back() : "its geometry does not fit its control type";
+				unresolved->push_back({ control.Id(), control.Name(), reason, GetPlacedControlBounds(control.placed, type) });
 			}
 		}
 	}
@@ -1556,7 +1574,8 @@ namespace mmo
 
 		String error;
 		uint64 id = 0;
-		CreateGraphInstance("", points, 1, "", {}, id, error);
+		// Seed 0: derived from the new instance's id, so instances created this way do not all share one seed.
+		CreateGraphInstance("", points, 0, "", {}, id, error);
 	}
 
 	bool ProceduralEditMode::CreateGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed, const String& name,
@@ -1663,6 +1682,12 @@ namespace mmo
 		}
 
 		record.id = m_worldEditor.GenerateEntityUniqueId();
+		if (record.seed == 0)
+		{
+			// Deterministic per instance and never 0.
+			record.seed = pcg::Hash(record.id, 0, 0, 0x5EEDu);
+			record.seed = record.seed == 0 ? 1 : record.seed;
+		}
 		const size_t instanceCount = static_cast<size_t>(std::count_if(m_controls.begin(), m_controls.end(),
 			[](const Control& c) { return c.kind == ControlKind::GraphInstance; }));
 		record.name = name.empty() ? "Graph Instance " + std::to_string(instanceCount + 1) : name;
@@ -1736,6 +1761,21 @@ namespace mmo
 		CachedGraph cached;
 		cached.valid = LoadGraphAsset(graphPath, cached.graph, cached.error);
 		return m_graphs.emplace(graphPath, std::move(cached)).first->second;
+	}
+
+	void ProceduralEditMode::InvalidateGraph(const String& graphPath)
+	{
+		const auto normalize = [](String path)
+		{
+			std::replace(path.begin(), path.end(), '\\', '/');
+			return path;
+		};
+
+		const String normalized = normalize(graphPath);
+		std::erase_if(m_graphs, [&normalize, &normalized](const auto& entry)
+		{
+			return normalize(entry.first) == normalized;
+		});
 	}
 
 	bool ProceduralEditMode::RebuildGraphInstanceControl(Control& control, String& error)
@@ -1892,6 +1932,8 @@ namespace mmo
 		}
 
 		pcg::OasisRecord& record = control.oasis;
+		// What the previous build covered: the rebuild restores the terrain there too.
+		const std::vector<pcg::WorldRect> previousRects = GetBuiltRects(control);
 
 		// Before the build changes the terrain; the build itself only uses the loop's x/z.
 		EnsureHeights(control, false);
@@ -1915,14 +1957,60 @@ namespace mmo
 		}
 
 		MarkChanged(control);
-		SetStatus(DescribeReport(report, "Rebuilt '" + record.name + "'"), StatusLevel::Ok);
-		ILOG(m_status);
+		String text = DescribeReport(report, "Rebuilt '" + record.name + "'");
+		const std::vector<String> warnings = GetRegroundWarnings(control, previousRects);
+		for (const String& warning : warnings)
+		{
+			text += "\nWarning: " + warning;
+		}
+		SetStatus(text, warnings.empty() ? StatusLevel::Ok : StatusLevel::Warning);
+		if (warnings.empty())
+		{
+			ILOG(m_status);
+		}
+		else
+		{
+			WLOG(m_status);
+		}
 		return true;
+	}
+
+	std::vector<String> ProceduralEditMode::GetRegroundWarnings(const Control& control, std::vector<pcg::WorldRect> rects) const
+	{
+		std::vector<String> warnings;
+		if (m_rebuildingAll)
+		{
+			return warnings;
+		}
+
+		const std::vector<pcg::WorldRect> builtRects = GetBuiltRects(control);
+		rects.insert(rects.end(), builtRects.begin(), builtRects.end());
+		for (const Control& other : m_controls)
+		{
+			if (other.kind != ControlKind::GraphInstance || other.instance.area.points.empty())
+			{
+				continue;
+			}
+
+			const pcg::graph::Bounds2D area = pcg::graph::SplineBounds(other.instance.area);
+			const pcg::WorldRect areaRect{ area.minX, area.minZ, area.maxX, area.maxZ };
+			const bool overlaps = std::any_of(rects.begin(), rects.end(), [&areaRect](const pcg::WorldRect& rect)
+			{
+				return pcg::RectsOverlap(rect, areaRect);
+			});
+			if (overlaps)
+			{
+				warnings.push_back("rebuild graph instance " + other.Name() + " (" + FormatId(other.Id()) + ") to re-ground its placements");
+			}
+		}
+		return warnings;
 	}
 
 	bool ProceduralEditMode::RebuildSectionPathControl(Control& control, String& error)
 	{
 		pcg::SectionPathRecord& record = control.path;
+		// What the previous build covered: the rebuild restores the terrain there too.
+		const std::vector<pcg::WorldRect> previousRects = GetBuiltRects(control);
 
 		// Always read from disk: the panel's copy may be older than the last bake.
 		pcg::SectionAsset asset;
@@ -1974,6 +2062,8 @@ namespace mmo
 		record.builtRects = record.content.IsEmpty() ? std::vector<pcg::WorldRect>() : rects;
 		MarkChanged(control);
 		warnings.insert(warnings.end(), report.warnings.begin(), report.warnings.end());
+		const std::vector<String> regroundWarnings = GetRegroundWarnings(control, previousRects);
+		warnings.insert(warnings.end(), regroundWarnings.begin(), regroundWarnings.end());
 
 		String text = DescribeReport(report, "Rebuilt '" + record.name + "'") + " Layout: " + DescribeSectionLayout(probe) + ".";
 		for (const String& warning : warnings)
@@ -1996,18 +2086,27 @@ namespace mmo
 	{
 		error.clear();
 
-		// Placed controls build nothing themselves (graph instances read them).
+		// Placed controls build nothing themselves (graph instances read them). Graph instances sample the terrain
+		// the oases and section paths write, so they go last (list order within each group).
 		std::vector<uint64> ids;
+		std::vector<uint64> graphInstanceIds;
 		for (const Control& control : m_controls)
 		{
-			if (control.kind != ControlKind::Placed)
+			if (control.kind == ControlKind::GraphInstance)
+			{
+				graphInstanceIds.push_back(control.Id());
+			}
+			else if (control.kind != ControlKind::Placed)
 			{
 				ids.push_back(control.Id());
 			}
 		}
+		ids.insert(ids.end(), graphInstanceIds.begin(), graphInstanceIds.end());
 
 		uint32 rebuilt = 0;
 		bool warned = false;
+		// The graph instances are rebuilt below anyway: no "rebuild graph instance" hints from the terrain writers.
+		m_rebuildingAll = true;
 		for (const uint64 id : ids)
 		{
 			String controlError;
@@ -2021,6 +2120,7 @@ namespace mmo
 				error += (error.empty() ? "" : "\n") + controlError;
 			}
 		}
+		m_rebuildingAll = false;
 
 		if (!error.empty())
 		{
