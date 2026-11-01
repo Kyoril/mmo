@@ -8,6 +8,8 @@
 #include <map>
 
 #include "asset_picker_widget.h"
+#include "proto_entry_picker.h"
+#include "game/pet_defines.h"
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
 #include "attribute_ui.h"
@@ -1999,6 +2001,55 @@ namespace mmo
 
 			// Type-specific settings
 			DrawSectionHeader("Type-Specific Settings");
+
+			// Pet settings of the pet effects
+			if (currentEffectType == spell_effects::SummonPet)
+			{
+				static const char* const s_petLimitPolicies[] = { "Replace oldest", "Fail at cap" };
+				static const char* const s_petLevelSources[] = { "Creature level", "Character level", "Class level" };
+
+				int petGroup = static_cast<int>(effect.pet_group());
+				if (ImGui::InputInt("Pet Group", &petGroup))
+				{
+					effect.set_pet_group(petGroup < 0 ? 0 : static_cast<uint32>(petGroup));
+				}
+				DrawHelpMarker("Pets summoned by effects with the same group count against the same cap.");
+
+				int petMaxCount = static_cast<int>(effect.pet_max_count());
+				if (ImGui::InputInt("Pet Max Count", &petMaxCount))
+				{
+					effect.set_pet_max_count(petMaxCount < 0 ? 0 : static_cast<uint32>(petMaxCount));
+				}
+				DrawHelpMarker("Maximum number of pets of this group at the same time. 0 means unlimited.");
+
+				int petLimitPolicy = static_cast<int>(effect.pet_limit_policy());
+				if (DrawEnumCombo("##petLimitPolicy", "Pet Limit Policy", petLimitPolicy, s_petLimitPolicies, static_cast<int>(std::size(s_petLimitPolicies)), "What happens when the cap is reached."))
+				{
+					effect.set_pet_limit_policy(static_cast<uint32>(petLimitPolicy));
+				}
+
+				int petLevelSource = static_cast<int>(effect.pet_level_source());
+				if (DrawEnumCombo("##petLevelSource", "Pet Level Source", petLevelSource, s_petLevelSources, static_cast<int>(std::size(s_petLevelSources)), "Which level the summoned pet uses."))
+				{
+					effect.set_pet_level_source(static_cast<uint32>(petLevelSource));
+				}
+			}
+			else if (currentEffectType == spell_effects::SummonPersistentPet)
+			{
+				int petEntry = static_cast<int>(effect.miscvaluea());
+				if (DrawEntryPicker("##petEntry", "Pet Entry", petEntry, m_project.pets, "The stored pet to summon. None (0) summons the most recently summoned pet (last summoned)."))
+				{
+					effect.set_miscvaluea(petEntry);
+				}
+			}
+			else if (currentEffectType == spell_effects::GrantPersistentPet)
+			{
+				int petEntry = static_cast<int>(effect.miscvaluea());
+				if (DrawEntryPicker("##petEntry", "Pet Entry", petEntry, m_project.pets, "The pet entry added to the caster as a stored pet."))
+				{
+					effect.set_miscvaluea(petEntry);
+				}
+			}
 
 			switch (currentEffectType)
 			{
