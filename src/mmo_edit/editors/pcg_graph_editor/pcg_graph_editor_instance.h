@@ -177,9 +177,12 @@ namespace mmo
 			uint32 node = 0;
 			String title;
 			uint32 argb = 0;
+			/// False when there is no evaluation result for the node (the legend shows a dash).
+			bool hasResult = false;
 			size_t pointsDrawn = 0;
 			size_t pointsTotal = 0;
-			size_t lines = 0;
+			size_t linesDrawn = 0;
+			size_t linesTotal = 0;
 		};
 
 		/// @brief Last owner key handed out (see m_debugOwnerKey).
@@ -206,6 +209,15 @@ namespace mmo
 
 		/// @brief Whether the target world holds this editor's layer.
 		bool m_debugLayerSet { false };
+
+		/// @brief Whether the node overlay (m_nodeRunInfo) shows m_debugResult.
+		bool m_debugResultsShown { false };
+
+		/// @brief Set when building the evaluation context failed: it is retried at m_debugRetryTime (ImGui time),
+		///        with a back-off that doubles up to a cap, or at once through the Retry button.
+		bool m_debugContextFailed { false };
+		double m_debugRetryTime { 0 };
+		double m_debugRetryDelay { 0 };
 
 		String m_debugError;
 		std::vector<String> m_debugWarnings;

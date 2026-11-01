@@ -156,6 +156,15 @@ namespace mmo
 			return name;
 		}
 
+		/// What one debug layer draws at most, split evenly across the debug-enabled nodes.
+		constexpr size_t s_debugBoxBudget = 20'000;
+		constexpr size_t s_debugPointBudget = 200'000;
+		constexpr size_t s_debugLineBudget = 500'000;
+
+		/// Back-off of retries after building the debug evaluation context failed (seconds).
+		constexpr double s_debugFirstRetryDelay = 2.0;
+		constexpr double s_debugMaxRetryDelay = 30.0;
+
 		/// The path with forward slashes.
 		String NormalizePath(String path)
 		{
@@ -1360,6 +1369,9 @@ namespace mmo
 		m_debugError.clear();
 		m_debugWarnings.clear();
 		m_nodeRunInfo.clear();
+		m_debugResultsShown = false;
+		m_debugContextFailed = false;
+		m_debugRetryDelay = 0;
 	}
 
 	void PcgGraphEditorInstance::ClearDebugLayer()
@@ -1410,7 +1422,19 @@ namespace mmo
 		if (!anyDebug)
 		{
 			ClearDebugLayer();
+			if (m_debugResultsShown)
+			{
+				// Do not leave the debug evaluation's timings on the nodes.
+				m_nodeRunInfo.clear();
+				m_debugResultsShown = false;
+			}
 			return;
+		}
+
+		// A failed context build is retried after a back-off (or at once through the Retry button).
+		if (m_debugContextFailed && ImGui::GetTime() >= m_debugRetryTime)
+		{
+			m_debugEvalKey = 0;
 		}
 
 		// Re-evaluate when anything the evaluation reads changed (not on node moves, comments or debug toggles).
@@ -1433,9 +1457,16 @@ namespace mmo
 			if (!BuildGraphInstanceContext(*world, *record, *mode, context, error))
 			{
 				m_debugError = error;
+				m_debugContextFailed = true;
+				m_debugRetryDelay = m_debugRetryDelay <= 0 ? s_debugFirstRetryDelay : std::min(m_debugRetryDelay * 2.0, s_debugMaxRetryDelay);
+				m_debugRetryTime = ImGui::GetTime() + m_debugRetryDelay;
+				m_nodeRunInfo.clear();
+				m_debugResultsShown = false;
 			}
 			else
 			{
+				m_debugContextFailed = false;
+				m_debugRetryDelay = 0;
 				m_debugWarnings = context.warnings;
 				m_debugResult = pcg::graph::Evaluate(graph, m_document.GetRegistry(), context.context, &m_debugCache);
 				m_hasDebugResult = true;
@@ -1448,7 +1479,15 @@ namespace mmo
 					m_debugError = DescribeGraphIssues(graph, m_debugResult.issues);
 				}
 				SetNodeResults(m_debugResult);
+				m_debugResultsShown = true;
 			}
+		}
+
+		// Debug was switched back on without a re-evaluation: show the kept result on the nodes again.
+		if (m_hasDebugResult && !m_debugResultsShown)
+		{
+			SetNodeResults(m_debugResult);
+			m_debugResultsShown = true;
 		}
 
 		// Redraw when the evaluation or the set of debug nodes changed.
@@ -1469,6 +1508,15 @@ namespace mmo
 			return;
 		}
 
+		// One budget for the whole layer, split evenly across the debug nodes.
+		const size_t debugNodeCount = static_cast<size_t>(std::count_if(graph.nodes.begin(), graph.nodes.end(), [](const NodeInstance& node)
+		{
+			return node.debug;
+		}));
+		const size_t boxShare = s_debugBoxBudget / debugNodeCount;
+		const size_t pointShare = s_debugPointBudget / debugNodeCount;
+		const size_t lineShare = s_debugLineBudget / debugNodeCount;
+
 		std::vector<pcg::graph::DebugLine> lines;
 		m_debugLegend.clear();
 		for (size_t i = 0; i < graph.nodes.size(); ++i)
@@ -1486,28 +1534,27 @@ namespace mmo
 			entry.argb = DebugColor(i);
 
 			const auto result = m_hasDebugResult ? m_debugResult.nodes.find(node.id) : m_debugResult.nodes.end();
-			if (result != m_debugResult.nodes.end())
+			if (result != m_debugResult.nodes.end() && result->second.output.error.empty())
 			{
-				const std::map<String, pcg::graph::Collection>& pins = result->second.output.pins;
-				pcg::graph::DebugGeometry geometry;
-				if (pins.size() == 1)
+				entry.hasResult = true;
+
+				// The node's output pins share its budget, in pin order.
+				size_t boxBudget = boxShare;
+				size_t pointBudget = pointShare;
+				size_t lineBudget = lineShare;
+				for (const auto& pin : result->second.output.pins)
 				{
-					geometry = pcg::graph::BuildDebugGeometry(pins.begin()->second, entry.argb);
+					const pcg::graph::DebugGeometry geometry = pcg::graph::BuildDebugGeometry(pin.second, entry.argb, boxBudget, pointBudget, lineBudget);
+					boxBudget -= geometry.boxesDrawn;
+					pointBudget -= geometry.pointsDrawn;
+					lineBudget -= geometry.linesDrawn;
+
+					entry.pointsDrawn += geometry.pointsDrawn;
+					entry.pointsTotal += geometry.pointsTotal;
+					entry.linesDrawn += geometry.linesDrawn;
+					entry.linesTotal += geometry.linesTotal;
+					lines.insert(lines.end(), geometry.lines.begin(), geometry.lines.end());
 				}
-				else if (pins.size() > 1)
-				{
-					// Draw every output pin under one limit.
-					pcg::graph::Collection merged;
-					for (const auto& pin : pins)
-					{
-						merged.insert(merged.end(), pin.second.begin(), pin.second.end());
-					}
-					geometry = pcg::graph::BuildDebugGeometry(merged, entry.argb);
-				}
-				entry.pointsDrawn = geometry.pointsDrawn;
-				entry.pointsTotal = geometry.pointsTotal;
-				entry.lines = geometry.lines.size();
-				lines.insert(lines.end(), geometry.lines.begin(), geometry.lines.end());
 			}
 			m_debugLegend.push_back(std::move(entry));
 		}
@@ -1595,6 +1642,16 @@ namespace mmo
 				ImGui::TextDisabled("Evaluated in %.1f ms", m_debugEvalMilliseconds);
 			}
 
+			if (m_debugContextFailed)
+			{
+				if (ImGui::Button("Retry"))
+				{
+					m_debugRetryTime = 0;
+				}
+				ImGui::SameLine();
+				ImGui::TextDisabled("(retrying in %.0f s)", std::max(0.0, m_debugRetryTime - ImGui::GetTime()));
+			}
+
 			ImGui::PushTextWrapPos(0.0f);
 			if (!m_debugError.empty())
 			{
@@ -1622,13 +1679,21 @@ namespace mmo
 					ImGui::TableNextColumn();
 					ImGui::Text("%s (#%u)", entry.title.c_str(), entry.node);
 					ImGui::TableNextColumn();
-					if (entry.pointsTotal > 0)
+					if (!entry.hasResult)
 					{
-						ImGui::Text("showing %zu of %zu", entry.pointsDrawn, entry.pointsTotal);
+						// No evaluation result (the context could not be built or the node failed).
+						ImGui::TextDisabled("-");
 					}
 					else
 					{
-						ImGui::TextDisabled("%zu line(s)", entry.lines);
+						if (entry.pointsTotal > 0)
+						{
+							ImGui::Text("showing %zu of %zu points", entry.pointsDrawn, entry.pointsTotal);
+						}
+						if (entry.pointsTotal == 0 || entry.linesDrawn < entry.linesTotal)
+						{
+							ImGui::Text("showing %zu of %zu lines", entry.linesDrawn, entry.linesTotal);
+						}
 					}
 					ImGui::PopID();
 				}

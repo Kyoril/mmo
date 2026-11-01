@@ -61,36 +61,47 @@ namespace mmo::pcg::graph
 			});
 		}
 
-		void AddPolyline(const PathSpline& spline, const uint32 argb, std::vector<DebugLine>& lines)
+		/// Adds a spline's polyline while the line budget lasts; always counts its segments in linesTotal.
+		/// @return False once the budget ran out.
+		bool AddPolyline(const PathSpline& spline, const uint32 argb, const size_t lineLimit, bool budgetLeft, DebugGeometry& geometry)
 		{
 			if (spline.points.size() < 2 || !FiniteSpline(spline))
 			{
-				return;
+				return budgetLeft;
 			}
 
 			const SampledPath path(spline, EvaluationStep(spline, SamplingStep));
 			const std::vector<SplineSample>& samples = path.GetSamples();
 			if (samples.size() < 2)
 			{
-				return;
+				return budgetLeft;
+			}
+
+			const size_t segments = samples.size() - 1 + (path.IsClosed() ? 1 : 0);
+			geometry.linesTotal += segments;
+			if (!budgetLeft)
+			{
+				return false;
 			}
 
 			const auto toVector = [](const SplineSample& s)
 			{
 				return Vector3(s.x, s.y, s.z);
 			};
-			for (size_t i = 1; i < samples.size(); ++i)
+			// Segment i joins sample i and sample i + 1 (wrapping to 0 for the closing segment).
+			for (size_t i = 0; i < segments; ++i)
 			{
-				lines.push_back(DebugLine { toVector(samples[i - 1]), toVector(samples[i]), argb });
+				if (geometry.lines.size() >= lineLimit)
+				{
+					return false;
+				}
+				geometry.lines.push_back(DebugLine { toVector(samples[i]), toVector(samples[(i + 1) % samples.size()]), argb });
 			}
-			if (path.IsClosed())
-			{
-				lines.push_back(DebugLine { toVector(samples.back()), toVector(samples.front()), argb });
-			}
+			return true;
 		}
 	}
 
-	DebugGeometry BuildDebugGeometry(const Collection& items, const uint32 argb, const size_t boxLimit, const size_t pointLimit)
+	DebugGeometry BuildDebugGeometry(const Collection& items, const uint32 argb, const size_t boxLimit, const size_t pointLimit, const size_t lineLimit)
 	{
 		DebugGeometry geometry;
 		for (const DataItem& item : items)
@@ -104,7 +115,10 @@ namespace mmo::pcg::graph
 		// Every stride-th point (in collection order) is drawn.
 		const size_t stride = pointLimit == 0 ? 0 : std::max<size_t>(1, (geometry.pointsTotal + pointLimit - 1) / pointLimit);
 
+		// Once something does not fit the line budget, nothing more is added (totals keep counting).
+		bool budgetLeft = true;
 		size_t index = 0;
+		size_t sampled = 0;
 		for (const DataItem& item : items)
 		{
 			if (item.kind == ItemKind::Points)
@@ -117,10 +131,20 @@ namespace mmo::pcg::graph
 						continue;
 					}
 
+					const bool box = sampled++ < boxLimit;
+					const size_t needed = box ? 12 : 1;
+					geometry.linesTotal += needed;
+					if (!budgetLeft || geometry.lines.size() + needed > lineLimit)
+					{
+						budgetLeft = false;
+						continue;
+					}
+
 					const uint32 color = ShadeByDensity(argb, point.density);
-					if (geometry.pointsDrawn < boxLimit)
+					if (box)
 					{
 						AddBox(point, color, geometry.lines);
+						++geometry.boxesDrawn;
 					}
 					else
 					{
@@ -131,9 +155,10 @@ namespace mmo::pcg::graph
 			}
 			else if (item.kind == ItemKind::Spline || item.kind == ItemKind::Area)
 			{
-				AddPolyline(item.spline, argb, geometry.lines);
+				budgetLeft = AddPolyline(item.spline, argb, lineLimit, budgetLeft, geometry);
 			}
 		}
+		geometry.linesDrawn = geometry.lines.size();
 		return geometry;
 	}
 }

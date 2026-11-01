@@ -5,6 +5,7 @@
 #include "pcg/graph/debug_geometry.h"
 
 #include <cmath>
+#include <initializer_list>
 #include <utility>
 
 using namespace mmo;
@@ -147,4 +148,59 @@ TEST_CASE("BuildDebugGeometry scales brightness by density", "[graph_debug]")
 	CHECK(((dim >> 16) & 0xFF) < 0xC0);
 	CHECK(((dim >> 8) & 0xFF) < 0x80);
 	CHECK((dim & 0xFF) < 0x40);
+}
+
+TEST_CASE("BuildDebugGeometry caps lines at the line limit", "[graph_debug]")
+{
+	// Ten 100 x 100 areas: thousands of polyline segments each at the sampling step.
+	Collection items;
+	for (int a = 0; a < 10; ++a)
+	{
+		DataItem item;
+		item.kind = ItemKind::Area;
+		item.spline.closed = true;
+		item.spline.interpolation = SplineInterpolation::Linear;
+		const float x0 = static_cast<float>(a) * 200.0f;
+		for (const std::pair<float, float>& xz : std::initializer_list<std::pair<float, float>> { { x0, 0.0f }, { x0 + 100.0f, 0.0f }, { x0 + 100.0f, 100.0f }, { x0, 100.0f } })
+		{
+			SplinePoint p;
+			p.x = xz.first;
+			p.z = xz.second;
+			item.spline.points.push_back(p);
+		}
+		items.push_back(item);
+	}
+	// A point after the areas: no budget left for it.
+	items.push_back(MakePoints(1));
+
+	const DebugGeometry unlimited = BuildDebugGeometry(items, 0xFFFFFFFF, 20'000, 200'000, ~size_t(0));
+	REQUIRE(unlimited.linesTotal > 10'000);
+	CHECK(unlimited.linesDrawn == unlimited.linesTotal);
+	CHECK(unlimited.pointsDrawn == 1);
+
+	const DebugGeometry capped = BuildDebugGeometry(items, 0xFFFFFFFF, 20'000, 200'000, 10'000);
+	CHECK(capped.lines.size() == 10'000);
+	CHECK(capped.linesDrawn == 10'000);
+	CHECK(capped.linesTotal == unlimited.linesTotal);
+	CHECK(capped.pointsTotal == 1);
+	CHECK(capped.pointsDrawn == 0);
+
+	// The capped lines are the first lines of the unlimited drawing.
+	bool prefix = true;
+	for (size_t i = 0; i < capped.lines.size() && prefix; ++i)
+	{
+		prefix = SamePosition(capped.lines[i].a, unlimited.lines[i].a) && SamePosition(capped.lines[i].b, unlimited.lines[i].b);
+	}
+	CHECK(prefix);
+}
+
+TEST_CASE("BuildDebugGeometry draws a point only if its whole box fits", "[graph_debug]")
+{
+	const Collection items { MakePoints(3) };
+	const DebugGeometry geometry = BuildDebugGeometry(items, 0xFFFFFFFF, 20'000, 200'000, 30);
+	CHECK(geometry.lines.size() == 24);
+	CHECK(geometry.pointsDrawn == 2);
+	CHECK(geometry.boxesDrawn == 2);
+	CHECK(geometry.linesTotal == 36);
+	CHECK(geometry.linesDrawn == 24);
 }

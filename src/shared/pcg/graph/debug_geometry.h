@@ -33,6 +33,15 @@ namespace mmo::pcg::graph
 
 		/// @brief Number of those points that were drawn (as a box or a tick).
 		size_t pointsDrawn = 0;
+
+		/// @brief Number of drawn points shown as boxes.
+		size_t boxesDrawn = 0;
+
+		/// @brief Number of lines the collection produces under the box and point limits, without the line limit.
+		size_t linesTotal = 0;
+
+		/// @brief Number of lines drawn (lines.size(), at most the line limit).
+		size_t linesDrawn = 0;
 	};
 
 	/// @brief Height of the vertical tick drawn for a point beyond the box limit.
@@ -44,10 +53,15 @@ namespace mmo::pcg::graph
 	///        collection order, k = ceil(total / pointLimit)) is drawn, recorded in pointsDrawn. Splines and areas
 	///        become polylines evaluated at EvaluationStep(spline, SamplingStep), closed for closed splines. Params
 	///        items draw nothing. The colour is `argb` with its brightness scaled by the point's density (density 1
-	///        keeps `argb`, density 0 keeps 30 % of it); lines of splines use `argb`. Deterministic.
+	///        keeps `argb`, density 0 keeps 30 % of it); lines of splines use `argb`. At most `lineLimit` lines are
+	///        produced: items are drawn in collection order until one does not fit (a point's box or tick is all or
+	///        nothing, a polyline is cut at the limit), after which nothing more is drawn but linesTotal keeps
+	///        counting. Deterministic.
 	/// @param items The collection to draw.
 	/// @param argb The base colour.
-	/// @param boxLimit Number of drawn points shown as boxes; further points are ticks.
+	/// @param boxLimit Number of sampled points shown as boxes; further points are ticks.
 	/// @param pointLimit Number of points drawn at most (0 draws no points).
-	DebugGeometry BuildDebugGeometry(const Collection& items, uint32 argb, size_t boxLimit = 20'000, size_t pointLimit = 200'000);
+	/// @param lineLimit Number of lines produced at most, for points and polylines together.
+	DebugGeometry BuildDebugGeometry(const Collection& items, uint32 argb, size_t boxLimit = 20'000, size_t pointLimit = 200'000,
+		size_t lineLimit = 500'000);
 }
