@@ -14,6 +14,7 @@
 #include "game_server/quest_status_data.h"
 #include "game_server/pets/persistent_pet.h"
 #include "game/pet_defines.h"
+#include "game/pet_packets.h"
 #include "game/quest.h"
 #include "game/group.h"
 #include "game/character_customization/customizable_avatar_definition.h"
@@ -531,6 +532,45 @@ namespace mmo
 		/// @param petEntry Id of the pet entry.
 		[[nodiscard]] PersistentPetData* FindStoredPet(uint32 petEntry);
 
+		/// @copydoc FindStoredPet
+		[[nodiscard]] const PersistentPetData* FindStoredPet(uint32 petEntry) const;
+
+		/// Checks whether SummonStoredPet would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param petEntry As for SummonStoredPet.
+		/// @return Ok or the result SummonStoredPet would fail with.
+		[[nodiscard]] pet_result::Type CanSummonStoredPet(uint32 petEntry) const;
+
+		/// Checks whether TameCreature would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param target The creature to tame.
+		/// @return Ok or the result TameCreature would fail with.
+		[[nodiscard]] pet_result::Type CanTameCreature(const GameCreatureS& target) const;
+
+		/// Checks whether GrantPersistentPet would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param petEntry Id of the pet entry.
+		/// @return Ok or the result GrantPersistentPet would fail with.
+		[[nodiscard]] pet_result::Type CanGrantPersistentPet(uint32 petEntry) const;
+
+		/// Checks whether RevivePet would succeed, without changing anything or telling the client
+		/// (spell cast validation).
+		/// @param petEntry As for RevivePet.
+		/// @return Ok or the result RevivePet would fail with.
+		[[nodiscard]] pet_result::Type CanRevivePet(uint32 petEntry) const;
+
+		/// Renames the summoned persistent pet. The name must be valid (IsValidPetName) and the
+		/// pet's entry must allow player naming; it is normalized (NormalizePetName). On success the
+		/// stored and the live name change, the client is told (OnPetSpellsChanged) and the change
+		/// is saved (storedPetsChanged). On failure nothing changes and the client is told why.
+		/// @param name The new name.
+		/// @return Ok, Disabled, NoPet, NamingNotAllowed or InvalidName.
+		pet_result::Type RenamePersistentPet(const String& name);
+
+		/// @return The state of the summoned persistent pet as the PetSpells packet carries it; a
+		///	        petGuid of 0 if no persistent pet is summoned (or it has not spawned yet).
+		[[nodiscard]] game::PetSpellsData GetPetSpellsData() const;
+
 		/// Summons a stored pet. The currently summoned persistent pet is dismissed first. The pet
 		/// enters the world shortly after (the spawn is posted).
 		/// @param petEntry Pet entry of the stored pet, or 0 for the most recently summoned one of
@@ -724,10 +764,22 @@ namespace mmo
 		/// @return The stored pet with a database id, or nullptr.
 		PersistentPetData* FindStoredPetByDbId(uint64 dbId);
 
+		/// @copydoc FindStoredPetByDbId
+		const PersistentPetData* FindStoredPetByDbId(uint64 dbId) const;
+
 		/// @return The stored pet a request without a pet entry means: the most recently summoned
 		///	        pet of the active class, else one that was summoned, else the first of the active
 		///	        class, else the first one. With deadOnly, only dead pets are considered.
 		PersistentPetData* SelectStoredPet(bool deadOnly);
+
+		/// @copydoc SelectStoredPet
+		const PersistentPetData* SelectStoredPet(bool deadOnly) const;
+
+		/// The checks of SummonPet that can fail: Disabled, WrongClass, PetDead, NoPet (unknown pet
+		/// or creature entry) and TooManyPets.
+		/// @param pet The stored pet to summon.
+		/// @return Ok or why the summon fails.
+		[[nodiscard]] pet_result::Type CheckSummonPet(const PersistentPetData& pet) const;
 
 		/// Summons a stored pet (see SummonStoredPet).
 		pet_result::Type SummonPet(PersistentPetData& pet);

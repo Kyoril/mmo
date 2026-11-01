@@ -283,6 +283,20 @@ namespace mmo
 			FailedInventoryFull,
 			/// A summon would exceed the cap of its pet group, and the summon fails at the cap.
 			FailedTooManyPets,
+			/// There is no stored pet to summon, or no dead pet to revive.
+			FailedNoPet,
+			/// The stored pet to summon is a dead tamed pet, which needs to be revived first.
+			FailedPetDead,
+			/// The stored pet belongs to another class than the caster's active class.
+			FailedPetWrongClass,
+			/// The caster already has a stored pet of the pet entry to grant.
+			FailedAlreadyHavePet,
+			/// Every stored pet slot of the caster is used.
+			FailedNoFreePetSlot,
+			/// The target cannot be tamed.
+			FailedNotTamable,
+			/// The target's level is above the caster's level.
+			FailedTargetTooHighLevel,
 
 			/// Custom value used if no error occurred (will not be sent to the client)
 			CastOkay = 0xFF

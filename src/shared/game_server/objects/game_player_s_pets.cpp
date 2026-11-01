@@ -15,6 +15,7 @@
 #include "shared/proto_data/project.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace mmo
 {
@@ -44,6 +45,11 @@ namespace mmo
 
 	PersistentPetData* GamePlayerS::FindStoredPet(const uint32 petEntry)
 	{
+		return const_cast<PersistentPetData*>(std::as_const(*this).FindStoredPet(petEntry));
+	}
+
+	const PersistentPetData* GamePlayerS::FindStoredPet(const uint32 petEntry) const
+	{
 		const auto it = std::find_if(m_storedPets.begin(), m_storedPets.end(), [petEntry](const PersistentPetData& pet)
 			{
 				return pet.petEntry == petEntry;
@@ -52,6 +58,11 @@ namespace mmo
 	}
 
 	PersistentPetData* GamePlayerS::FindStoredPetByDbId(const uint64 dbId)
+	{
+		return const_cast<PersistentPetData*>(std::as_const(*this).FindStoredPetByDbId(dbId));
+	}
+
+	const PersistentPetData* GamePlayerS::FindStoredPetByDbId(const uint64 dbId) const
 	{
 		const auto it = std::find_if(m_storedPets.begin(), m_storedPets.end(), [dbId](const PersistentPetData& pet)
 			{
@@ -62,21 +73,26 @@ namespace mmo
 
 	PersistentPetData* GamePlayerS::SelectStoredPet(const bool deadOnly)
 	{
+		return const_cast<PersistentPetData*>(std::as_const(*this).SelectStoredPet(deadOnly));
+	}
+
+	const PersistentPetData* GamePlayerS::SelectStoredPet(const bool deadOnly) const
+	{
 		const uint32 activeClass = Get<uint32>(object_fields::Class);
 		const auto eligible = [deadOnly](const PersistentPetData& pet)
 		{
 			return !deadOnly || pet.isDead;
 		};
 
-		PersistentPetData* last = FindStoredPetByDbId(m_lastSummonedPetDbId);
+		const PersistentPetData* last = FindStoredPetByDbId(m_lastSummonedPetDbId);
 		if (last && last->classId == activeClass && eligible(*last))
 		{
 			return last;
 		}
 
-		PersistentPetData* firstOfClass = nullptr;
-		PersistentPetData* first = nullptr;
-		for (auto& pet : m_storedPets)
+		const PersistentPetData* firstOfClass = nullptr;
+		const PersistentPetData* first = nullptr;
+		for (const auto& pet : m_storedPets)
 		{
 			if (!eligible(pet))
 			{
@@ -124,18 +140,31 @@ namespace mmo
 		return !m_netPlayerWatcher || m_netPlayerWatcher->ArePetsAvailable();
 	}
 
-	pet_result::Type GamePlayerS::SummonStoredPet(const uint32 petEntry)
+	pet_result::Type GamePlayerS::CanSummonStoredPet(const uint32 petEntry) const
 	{
 		if (!ArePetsAvailable())
 		{
-			return PetActionFailed(pet_result::Disabled);
+			return pet_result::Disabled;
+		}
+
+		const PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(false);
+		if (!pet)
+		{
+			return pet_result::NoPet;
+		}
+
+		return CheckSummonPet(*pet);
+	}
+
+	pet_result::Type GamePlayerS::SummonStoredPet(const uint32 petEntry)
+	{
+		if (const pet_result::Type check = CanSummonStoredPet(petEntry); check != pet_result::Ok)
+		{
+			return PetActionFailed(check);
 		}
 
 		PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(false);
-		if (!pet)
-		{
-			return PetActionFailed(pet_result::NoPet);
-		}
+		ASSERT(pet);
 
 		const pet_result::Type result = SummonPet(*pet);
 		if (result != pet_result::Ok)
@@ -146,7 +175,7 @@ namespace mmo
 		return result;
 	}
 
-	pet_result::Type GamePlayerS::SummonPet(PersistentPetData& pet)
+	pet_result::Type GamePlayerS::CheckSummonPet(const PersistentPetData& pet) const
 	{
 		// Also covers the summons nobody asked for: the return with the owner and a tamed pet the
 		// realm created. Such a pet stays wasSummoned and comes back once pets are available again.
@@ -170,13 +199,27 @@ namespace mmo
 		const proto::PetEntry* entry = m_project.pets.getById(pet.petEntry);
 		if (!entry || !GetPersistentPetUnitEntry(m_project, pet, *entry))
 		{
-			ELOG("Stored pet " << pet.dbId << " of character " << log_hex_digit(GetGuid()) << " uses unknown pet entry " << pet.petEntry);
 			return pet_result::NoPet;
 		}
 
 		if (m_classEntry && m_classEntry->max_summoned_persistent_pets() == 0)
 		{
 			return pet_result::TooManyPets;
+		}
+
+		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::SummonPet(PersistentPetData& pet)
+	{
+		if (const pet_result::Type check = CheckSummonPet(pet); check != pet_result::Ok)
+		{
+			if (check == pet_result::NoPet)
+			{
+				ELOG("Stored pet " << pet.dbId << " of character " << log_hex_digit(GetGuid()) << " uses unknown pet entry " << pet.petEntry);
+			}
+
+			return check;
 		}
 
 		// Already summoned (or about to be).
@@ -560,33 +603,45 @@ namespace mmo
 		}
 	}
 
-	pet_result::Type GamePlayerS::TameCreature(GameCreatureS& target)
+	pet_result::Type GamePlayerS::CanTameCreature(const GameCreatureS& target) const
 	{
 		if (!ArePetsAvailable())
 		{
-			return PetActionFailed(pet_result::Disabled);
+			return pet_result::Disabled;
 		}
 
 		if (!target.IsAlive() || target.IsPet() || target.GetOwnerGuid() != 0)
 		{
-			return PetActionFailed(pet_result::NotTamable);
+			return pet_result::NotTamable;
 		}
 
-		const proto::PetEntry* entry = m_project.pets.getById(target.GetEntry().tame_pet_entry());
-		if (target.GetEntry().tame_pet_entry() == 0 || !entry)
+		if (target.GetEntry().tame_pet_entry() == 0 || !m_project.pets.getById(target.GetEntry().tame_pet_entry()))
 		{
-			return PetActionFailed(pet_result::NotTamable);
+			return pet_result::NotTamable;
 		}
 
 		if (target.GetLevel() > GetLevel())
 		{
-			return PetActionFailed(pet_result::TooHighLevel);
+			return pet_result::TooHighLevel;
 		}
 
 		if (!HasFreePetSlot())
 		{
-			return PetActionFailed(pet_result::NoFreeSlot);
+			return pet_result::NoFreeSlot;
 		}
+
+		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::TameCreature(GameCreatureS& target)
+	{
+		if (const pet_result::Type check = CanTameCreature(target); check != pet_result::Ok)
+		{
+			return PetActionFailed(check);
+		}
+
+		const proto::PetEntry* entry = m_project.pets.getById(target.GetEntry().tame_pet_entry());
+		ASSERT(entry);
 
 		PersistentPetData pet;
 		pet.classId = Get<uint32>(object_fields::Class);
@@ -608,30 +663,46 @@ namespace mmo
 		return pet_result::Ok;
 	}
 
-	pet_result::Type GamePlayerS::GrantPersistentPet(const uint32 petEntry)
+	pet_result::Type GamePlayerS::CanGrantPersistentPet(const uint32 petEntry) const
 	{
 		if (!ArePetsAvailable())
 		{
-			return PetActionFailed(pet_result::Disabled);
+			return pet_result::Disabled;
 		}
 
-		const proto::PetEntry* entry = m_project.pets.getById(petEntry);
-		if (!entry)
+		if (!m_project.pets.getById(petEntry))
 		{
-			ELOG("GrantPersistentPet: unknown pet entry " << petEntry);
-			return PetActionFailed(pet_result::NoPet);
+			return pet_result::NoPet;
 		}
 
 		if (FindStoredPet(petEntry) ||
 			std::find(m_pendingPetCreations.begin(), m_pendingPetCreations.end(), petEntry) != m_pendingPetCreations.end())
 		{
-			return PetActionFailed(pet_result::AlreadyHavePet);
+			return pet_result::AlreadyHavePet;
 		}
 
 		if (!HasFreePetSlot())
 		{
-			return PetActionFailed(pet_result::NoFreeSlot);
+			return pet_result::NoFreeSlot;
 		}
+
+		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::GrantPersistentPet(const uint32 petEntry)
+	{
+		if (const pet_result::Type check = CanGrantPersistentPet(petEntry); check != pet_result::Ok)
+		{
+			if (check == pet_result::NoPet)
+			{
+				ELOG("GrantPersistentPet: unknown pet entry " << petEntry);
+			}
+
+			return PetActionFailed(check);
+		}
+
+		const proto::PetEntry* entry = m_project.pets.getById(petEntry);
+		ASSERT(entry);
 
 		PersistentPetData pet;
 		pet.classId = Get<uint32>(object_fields::Class);
@@ -643,6 +714,30 @@ namespace mmo
 		pet.level = GetPetMasterLevel(*this, *entry);
 		RequestPetCreation(pet);
 		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::CanRevivePet(const uint32 petEntry) const
+	{
+		if (!ArePetsAvailable())
+		{
+			return pet_result::Disabled;
+		}
+
+		const PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(true);
+		if (!pet || !pet->isDead)
+		{
+			return pet_result::NoPet;
+		}
+
+		if (pet->classId != Get<uint32>(object_fields::Class))
+		{
+			return pet_result::WrongClass;
+		}
+
+		// The revived pet is summoned right away.
+		PersistentPetData revived = *pet;
+		revived.isDead = false;
+		return CheckSummonPet(revived);
 	}
 
 	pet_result::Type GamePlayerS::RevivePet(const uint32 petEntry, const uint32 healthPercent)
@@ -720,6 +815,75 @@ namespace mmo
 
 		storedPetsChanged();
 		return pet_result::Ok;
+	}
+
+	pet_result::Type GamePlayerS::RenamePersistentPet(const String& name)
+	{
+		if (!ArePetsAvailable())
+		{
+			return PetActionFailed(pet_result::Disabled);
+		}
+
+		const auto pet = m_summonedPet.lock();
+		PersistentPetData* data = pet ? FindStoredPetByDbId(m_summonedPetDbId) : nullptr;
+		const proto::PetEntry* entry = data ? m_project.pets.getById(data->petEntry) : nullptr;
+		if (!entry)
+		{
+			return PetActionFailed(pet_result::NoPet);
+		}
+
+		if (!entry->allow_player_naming())
+		{
+			return PetActionFailed(pet_result::NamingNotAllowed);
+		}
+
+		if (!IsValidPetName(name))
+		{
+			return PetActionFailed(pet_result::InvalidName);
+		}
+
+		const String normalized = NormalizePetName(name);
+		if (normalized == data->name)
+		{
+			return pet_result::Ok;
+		}
+
+		data->name = normalized;
+		pet->SetCustomName(normalized);
+
+		if (m_netPlayerWatcher)
+		{
+			m_netPlayerWatcher->OnPetSpellsChanged();
+		}
+
+		storedPetsChanged();
+		return pet_result::Ok;
+	}
+
+	game::PetSpellsData GamePlayerS::GetPetSpellsData() const
+	{
+		game::PetSpellsData result;
+
+		const auto pet = m_summonedPet.lock();
+		const PersistentPetData* data = pet ? FindStoredPetByDbId(m_summonedPetDbId) : nullptr;
+		const proto::PetEntry* entry = data ? m_project.pets.getById(data->petEntry) : nullptr;
+		if (!entry)
+		{
+			return result;
+		}
+
+		result.petGuid = pet->GetGuid();
+		result.petEntry = data->petEntry;
+		result.name = data->name;
+		result.levelMode = static_cast<uint8>(entry->level_mode());
+		result.canRename = entry->allow_player_naming();
+		if (const CreatureAI* ai = pet->GetAI())
+		{
+			result.strategy = static_cast<uint8>(ai->GetPetStrategy());
+		}
+
+		result.spells = GetKnownPetSpells(*entry, *data, pet->GetLevel());
+		return result;
 	}
 
 	void GamePlayerS::OnResurrected()

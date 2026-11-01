@@ -107,6 +107,11 @@ namespace mmo
 	/// Maximum length of a pet name.
 	constexpr uint32 MaxPetNameLength = 12;
 
+	/// Maximum size of a stored pet name in bytes: the size of the realm's character_pets.name
+	/// column. Names a player chooses are shorter (MaxPetNameLength), but a tamed pet takes the
+	/// creature's name, which can be longer.
+	constexpr uint32 MaxStoredPetNameBytes = 32;
+
 	/// Checks whether a pet name is valid: 1 to MaxPetNameLength ASCII letters. Case is not validated, see NormalizePetName.
 	/// @param name The name to check.
 	bool IsValidPetName(const String& name);
@@ -114,4 +119,10 @@ namespace mmo
 	/// Normalizes a pet name so that the first letter is upper case and all others are lower case.
 	/// @param name The name to normalize.
 	String NormalizePetName(const String& name);
+
+	/// Shortens a UTF-8 name to at most MaxStoredPetNameBytes bytes, cutting at a character
+	/// boundary so no partial character is left at the end.
+	/// @param name The name to clamp.
+	/// @return The name, or its longest prefix that fits.
+	String ClampStoredPetName(const String& name);
 }

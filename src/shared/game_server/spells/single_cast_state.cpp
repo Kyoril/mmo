@@ -558,6 +558,16 @@ namespace mmo
 			return false;
 		}
 
+		// A persistent pet summon, grant or revive that is bound to fail must not spend the cast.
+		if (const GamePlayerS* player = m_context.GetPlayerExecutor())
+		{
+			if (const SpellCastResult petResult = CheckPersistentPetEffects(m_spell, *player); petResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(petResult);
+				return false;
+			}
+		}
+
 		return true;
 	}
 
@@ -592,6 +602,18 @@ namespace mmo
 		}
 
 		GamePlayerS* player = m_context.GetPlayerExecutor();
+
+		// A target that cannot be tamed fails a tame spell before it is spent. Checked again when the
+		// cast finishes: someone else may have tamed the creature in the meantime.
+		if (unitTarget && player)
+		{
+			if (const SpellCastResult tameResult = CheckTameTarget(m_spell, *player, *unitTarget); tameResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(tameResult);
+				return false;
+			}
+		}
+
 		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && player)
 		{
 			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();

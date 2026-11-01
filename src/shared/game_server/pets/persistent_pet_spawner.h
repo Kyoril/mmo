@@ -60,6 +60,7 @@ namespace mmo
 	/// Chooses the name of a new stored pet. RandomFromList picks from random_names (falling back
 	/// to the entry's name if the list is empty). Fixed uses the tamed creature's name for a tamed
 	/// pet and the entry's name otherwise.
+	/// The name is clamped to MaxStoredPetNameBytes (ClampStoredPetName).
 	/// @param entry The pet entry.
 	/// @param tamedCreatureName Name of the tamed creature, or an empty string for a granted pet.
 	String ChoosePetName(const proto::PetEntry& entry, const String& tamedCreatureName);

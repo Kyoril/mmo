@@ -4133,7 +4133,16 @@ namespace mmo
 			"SPELL_CAST_FAILED_LINE_OF_SIGHT",
 			"SPELL_CAST_FAILED_SKILL_TOO_LOW",
 			"SPELL_CAST_FAILED_INVENTORY_FULL",
-			"SPELL_CAST_FAILED_TOO_MANY_PETS"};
+			"SPELL_CAST_FAILED_TOO_MANY_PETS",
+			"SPELL_CAST_FAILED_NO_PET",
+			"SPELL_CAST_FAILED_PET_DEAD",
+			"SPELL_CAST_FAILED_PET_WRONG_CLASS",
+			"SPELL_CAST_FAILED_ALREADY_HAVE_PET",
+			"SPELL_CAST_FAILED_NO_FREE_PET_SLOT",
+			"SPELL_CAST_FAILED_NOT_TAMABLE",
+			"SPELL_CAST_FAILED_TARGET_TOO_HIGH_LEVEL"};
+		static_assert(std::size(s_spellCastResultStrings) == spell_cast_result::FailedTargetTooHighLevel + 1,
+			"s_spellCastResultStrings must have one entry per spell_cast_result value");
 
 		static const char *s_unknown = "UNKNOWN";
 

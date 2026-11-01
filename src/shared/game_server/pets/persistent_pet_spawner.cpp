@@ -109,10 +109,11 @@ namespace mmo
 		if (static_cast<pet_name_mode::Type>(entry.name_mode()) == pet_name_mode::RandomFromList && entry.random_names_size() > 0)
 		{
 			std::uniform_int_distribution<int> nameDist(0, entry.random_names_size() - 1);
-			return entry.random_names(nameDist(randomGenerator));
+			return ClampStoredPetName(entry.random_names(nameDist(randomGenerator)));
 		}
 
-		return tamedCreatureName.empty() ? entry.name() : tamedCreatureName;
+		// The realm stores at most MaxStoredPetNameBytes, and a creature name can be longer.
+		return ClampStoredPetName(tamedCreatureName.empty() ? entry.name() : tamedCreatureName);
 	}
 
 	uint32 GetPetXpToNextLevel(const proto::ClassEntry* classEntry, const uint32 level)

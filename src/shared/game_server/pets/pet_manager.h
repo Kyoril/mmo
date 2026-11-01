@@ -23,6 +23,7 @@ namespace mmo
 
 	class GameUnitS;
 	class GameCreatureS;
+	class GamePlayerS;
 
 	/// Keeps track of the pets of one unit: the temporary pets it summoned (grouped and capped per
 	/// summon effect) and its summoned persistent pet. Pets are held weakly; a pet that leaves the
@@ -167,4 +168,29 @@ namespace mmo
 	/// @param caster The caster.
 	/// @return FailedTooManyPets, or CastOkay.
 	SpellCastResult CheckSummonPetLimit(const proto::SpellEntry& spell, const GameUnitS& caster);
+
+	/// Maps the result of a persistent pet action to the spell cast result its spell fails with
+	/// before the cast starts. Ok and Disabled pass (CastOkay): with the PETS subsystem off the
+	/// cast goes through and its effect reports Disabled to the client with a PetResult.
+	/// @param result The pet action result.
+	/// @return The spell cast result.
+	SpellCastResult PetResultToCastResult(pet_result::Type result);
+
+	/// Checks the caster-side persistent pet effects of a spell before the cast starts:
+	/// SummonPersistentPet, GrantPersistentPet and RevivePet that would fail (GamePlayerS's
+	/// CanSummonStoredPet, CanGrantPersistentPet and CanRevivePet) fail the cast instead of
+	/// spending it.
+	/// @param spell The spell to cast.
+	/// @param caster The casting player.
+	/// @return CastOkay or the result the cast fails with (PetResultToCastResult).
+	SpellCastResult CheckPersistentPetEffects(const proto::SpellEntry& spell, const GamePlayerS& caster);
+
+	/// Checks the TameCreature effects of a spell against its unit target before the cast starts
+	/// and again when it finishes: a target that cannot be tamed (GamePlayerS::CanTameCreature;
+	/// anything but a creature is NotTamable) fails the cast instead of spending it.
+	/// @param spell The spell to cast.
+	/// @param caster The casting player.
+	/// @param target The spell's unit target.
+	/// @return CastOkay or the result the cast fails with (PetResultToCastResult).
+	SpellCastResult CheckTameTarget(const proto::SpellEntry& spell, const GamePlayerS& caster, const GameUnitS& target);
 }

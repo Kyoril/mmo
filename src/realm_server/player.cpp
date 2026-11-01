@@ -939,6 +939,10 @@ namespace mmo
 		case game::client_realm_packet::CheatResetCooldowns:
 		case game::client_realm_packet::CheatHeal:
 		case game::client_realm_packet::CheatRestorePower:
+		case game::client_realm_packet::CheatPetAdd:
+		case game::client_realm_packet::CheatPetRemove:
+		case game::client_realm_packet::CheatPetTame:
+		case game::client_realm_packet::CheatPetMake:
 			// Require GM level 2
 			if (!HasGMLevel(gm_level::SeniorGm))
 			{
@@ -3122,6 +3126,12 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::Emote, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CyclePose, *this, &Player::OnProxyPacket);
 
+			// Pet packets (proxied to world node)
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::PetCommand, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::PetCastSpell, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::PetRename, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::PetNameQuery, *this, &Player::OnProxyPacket);
+
 			// Trade packet handlers (proxied to world node)
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeInitiate, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::TradeCancelRequest, *this, &Player::OnProxyPacket);
@@ -3169,6 +3179,10 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatResetCooldowns, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatHeal, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatRestorePower, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetAdd, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetRemove, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetTame, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetMake, *this, &Player::OnProxyPacket);
 #endif
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);

@@ -51,4 +51,22 @@ namespace mmo
 
 		return result;
 	}
+
+	String ClampStoredPetName(const String& name)
+	{
+		if (name.size() <= MaxStoredPetNameBytes)
+		{
+			return name;
+		}
+
+		// Back off while the first byte cut off is a continuation byte (10xxxxxx): the cut then
+		// lies inside a multi-byte character, which is dropped whole.
+		size_t length = MaxStoredPetNameBytes;
+		while (length > 0 && (static_cast<uint8>(name[length]) & 0xC0) == 0x80)
+		{
+			--length;
+		}
+
+		return name.substr(0, length);
+	}
 }

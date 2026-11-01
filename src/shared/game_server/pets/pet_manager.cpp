@@ -402,6 +402,82 @@ namespace mmo
 		return spell_cast_result::CastOkay;
 	}
 
+	SpellCastResult PetResultToCastResult(const pet_result::Type result)
+	{
+		switch (result)
+		{
+		case pet_result::Ok:
+		case pet_result::Disabled:
+			return spell_cast_result::CastOkay;
+		case pet_result::TooManyPets:
+			return spell_cast_result::FailedTooManyPets;
+		case pet_result::NoPet:
+			return spell_cast_result::FailedNoPet;
+		case pet_result::PetDead:
+			return spell_cast_result::FailedPetDead;
+		case pet_result::NotTamable:
+			return spell_cast_result::FailedNotTamable;
+		case pet_result::TooHighLevel:
+			return spell_cast_result::FailedTargetTooHighLevel;
+		case pet_result::NoFreeSlot:
+			return spell_cast_result::FailedNoFreePetSlot;
+		case pet_result::AlreadyHavePet:
+			return spell_cast_result::FailedAlreadyHavePet;
+		case pet_result::WrongClass:
+			return spell_cast_result::FailedPetWrongClass;
+		default:
+			return spell_cast_result::FailedError;
+		}
+	}
+
+	SpellCastResult CheckPersistentPetEffects(const proto::SpellEntry& spell, const GamePlayerS& caster)
+	{
+		for (const auto& effect : spell.effects())
+		{
+			const uint32 petEntry = static_cast<uint32>(std::max(0, effect.miscvaluea()));
+
+			pet_result::Type result = pet_result::Ok;
+			switch (effect.type())
+			{
+			case spell_effects::SummonPersistentPet:
+				result = caster.CanSummonStoredPet(petEntry);
+				break;
+			case spell_effects::GrantPersistentPet:
+				result = caster.CanGrantPersistentPet(petEntry);
+				break;
+			case spell_effects::RevivePet:
+				result = caster.CanRevivePet(petEntry);
+				break;
+			default:
+				continue;
+			}
+
+			if (const SpellCastResult castResult = PetResultToCastResult(result); castResult != spell_cast_result::CastOkay)
+			{
+				return castResult;
+			}
+		}
+
+		return spell_cast_result::CastOkay;
+	}
+
+	SpellCastResult CheckTameTarget(const proto::SpellEntry& spell, const GamePlayerS& caster, const GameUnitS& target)
+	{
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.type() != spell_effects::TameCreature)
+			{
+				continue;
+			}
+
+			const auto* creature = dynamic_cast<const GameCreatureS*>(&target);
+			const pet_result::Type result = creature ? caster.CanTameCreature(*creature) : pet_result::NotTamable;
+			return PetResultToCastResult(result);
+		}
+
+		return spell_cast_result::CastOkay;
+	}
+
 	void NotifyPetOwnerOfAttacker(GameUnitS& pet, const uint64 attackerGuid)
 	{
 		WorldInstance* world = pet.GetWorldInstance();

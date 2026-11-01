@@ -496,6 +496,36 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes.
 		void OnBuyBackItem(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		// === Pets (player_pet_handlers.cpp) ===
+
+		/// Handles a PetCommand: a command for all pets of the character.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetCommand(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetCastSpell: the summoned persistent pet casts one of its spells.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetCastSpell(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetRename: renames the summoned persistent pet (GamePlayerS::RenamePersistentPet).
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetRename(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Handles a PetNameQuery: answers with the name of a persistent pet in the character's world.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnPetNameQuery(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// Sends a PetResult to the client.
+		/// @param result The result.
+		void SendPetResult(pet_result::Type result);
+
 		/// Handles the client's request to buy a spell from the currently interacted trainer npc.
 		///	@param opCode The op code of the packet.
 		///	@param size The size of the packet content in bytes, excluding the packet header.
@@ -999,6 +1029,18 @@ namespace mmo
 
 		/// The PETS subsystem of this node.
 		[[nodiscard]] bool ArePetsAvailable() const override;
+
+		/// Sends PetSpells with the summoned persistent pet's state (GamePlayerS::GetPetSpellsData).
+		void OnPetSpellsChanged() override;
+
+		/// Sends PetXp.
+		void OnPetXpChanged(uint32 xp, uint32 nextLevelXp) override;
+
+		/// Sends PetLearnedSpell.
+		void OnPetLearnedSpell(uint32 spellId) override;
+
+		/// Sends PetResult.
+		void OnPetResult(pet_result::Type result) override;
 
 		/// Reports the stored pets to the realm, once the realm sent them (ApplyStoredPets).
 		void SaveStoredPets() const;

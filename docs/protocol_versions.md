@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 34 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 35 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -47,7 +47,7 @@ It covers files that define a wire structure **together with its serializer**, o
 the indices and framing those structures travel in. For the game protocol that deliberately
 includes the field layer — `object_type_id.h` (`object_fields`), `field_map.h`,
 `movement_info.h` — plus the standalone payload structures `character_view.{h,cpp}`,
-`mail.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
+`mail.h`, `trade_skill_data.h`, `pet_packets.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
 `UpdateObject` and `object_fields::UnitFields` is numbered implicitly, so adding a unit stat
 in the middle renumbers every field after it. That is ordinary gameplay work that looks
 nothing like a protocol edit, and it is the likeliest wire break in this codebase.
@@ -122,6 +122,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 35 | 2026-11-01 | Pets: client `PetCommand` (uint8 pet_command, uint64 target, uint32 param), `PetCastSpell` (uint32 spellId + SpellTargetMap), `PetRename` (uint8-length name), `PetNameQuery` (uint64 guid), all proxied to the world node, and GM `CheatPetAdd`/`CheatPetRemove` (uint32 petEntry), `CheatPetTame`/`CheatPetMake` (no payload; selected creature), proxied with GM level 2; server `PetSpells` (uint64 petGuid, 0 = none, uint32 petEntry, uint8-length name, uint8 levelMode, uint8 strategy, uint8 canRename, uint8 count + uint32 spell ids), `PetLearnedSpell` (uint32), `PetXp` (uint32 xp, uint32 nextLevelXp), `PetNameQueryResult` (uint64 guid, uint8 found, uint8-length name) and `PetResult` (uint8 pet_result). Payloads live in `src/shared/game/pet_packets.h`, now on the fingerprint watch list. `spell_cast_result` gains `FailedTooManyPets` (23) and the pre-cast pet failures `FailedNoPet`, `FailedPetDead`, `FailedPetWrongClass`, `FailedAlreadyHavePet`, `FailedNoFreePetSlot`, `FailedNotTamable`, `FailedTargetTooHighLevel` (24-30). Subsystem id 3 `PETS` (world-owned) joins `SubsystemStatus` |
 | 34 | 2026-11-01 | Guilds become a switchable subsystem: subsystem id 2 `GUILD` (realm-owned) joins `SubsystemStatus`, and `GuildCommandResult` gains result 7 `Disabled`, sent for any guild request and for guild chat while the subsystem is off |
 | 33 | 2026-10-30 | Real-time regeneration: unit fields `HealthRegen` and `PowerRegen` (3 floats: mana, rage, energy; current rates per five seconds) are appended after `ManaRegenCasting`, renumbering every player field after them. The owning client extrapolates health and power with them |
 | 32 | 2026-10-30 | Friends become a switchable subsystem: subsystem id 1 `FRIENDS` (realm-owned) joins `SubsystemStatus`, and `FriendCommandResult` gains result 8 `Disabled`, sent for any friend request while the subsystem is off |
