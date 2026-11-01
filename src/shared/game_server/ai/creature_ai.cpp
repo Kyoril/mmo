@@ -13,6 +13,7 @@
 #include "game_server/world/world_instance.h"
 #include "game_server/world/universe.h"
 #include "creature_ai_pet_state.h"
+#include "game_server/pets/pet_behavior.h"
 #include "game_server/pets/pet_manager.h"
 #include "shared/proto_data/units.pb.h"
 
@@ -517,6 +518,12 @@ namespace mmo
 		}
 
 		if (target.GetWorldInstance() != m_controlled.GetWorldInstance() || !target.CanBeSeenBy(m_controlled))
+		{
+			return;
+		}
+
+		// A pet beyond its leash returns to its owner first: the combat state would break off at once.
+		if (const auto owner = m_petOwner.lock(); owner && m_controlled.GetSquaredDistanceTo(owner->GetPosition(), false) > PetLeashDistance * PetLeashDistance)
 		{
 			return;
 		}

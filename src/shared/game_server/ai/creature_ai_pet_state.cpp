@@ -125,7 +125,10 @@ namespace mmo
 
 		MatchOwnerSpeed(*owner);
 
-		if (owner->IsAlive() && !GetAI().IsPetRecalled() && TryEngage(*owner))
+		// Beyond the leash the pet first returns to its owner: the combat state would break off any
+		// fight started out there right away (it leashes at the same distance).
+		const bool beyondLeash = controlled.GetSquaredDistanceTo(owner->GetPosition(), false) > PetLeashDistance * PetLeashDistance;
+		if (!beyondLeash && owner->IsAlive() && !GetAI().IsPetRecalled() && TryEngage(*owner))
 		{
 			return;
 		}
@@ -190,6 +193,12 @@ namespace mmo
 		const auto usable = [&](const GameUnitS* unit) -> bool
 		{
 			if (!unit || unit == &controlled || !unit->IsAlive() || !controlled.UnitIsEnemy(*unit) || !unit->CanBeSeenBy(controlled))
+			{
+				return false;
+			}
+
+			// Nothing that would drag the pet beyond its leash
+			if (owner.GetSquaredDistanceTo(unit->GetPosition(), false) > PetLeashDistance * PetLeashDistance)
 			{
 				return false;
 			}

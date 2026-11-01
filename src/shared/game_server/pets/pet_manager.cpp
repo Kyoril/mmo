@@ -213,12 +213,27 @@ namespace mmo
 			});
 	}
 
+	bool PetManager::HasPet(const GameUnitS& unit) const
+	{
+		for (const auto& entry : m_temporaryPets)
+		{
+			if (const auto pet = entry->pet.lock(); pet.get() == &unit)
+			{
+				return true;
+			}
+		}
+
+		const auto persistent = m_persistentPet.lock();
+		return persistent && persistent.get() == &unit;
+	}
+
 	bool PetManager::IsAnyPetInCombat()
 	{
+		// A pet that left the world (despawning) no longer keeps its owner in combat.
 		bool inCombat = false;
 		ForEachPet([&inCombat](GameCreatureS& pet)
 			{
-				inCombat = inCombat || (pet.IsAlive() && pet.IsInCombat());
+				inCombat = inCombat || (pet.IsAlive() && pet.IsInCombat() && pet.GetWorldInstance() != nullptr);
 			});
 		return inCombat;
 	}
@@ -363,8 +378,9 @@ namespace mmo
 
 		// A player owner is put in combat through the pet's combat flag (GameUnitS::SetInCombat).
 		// A creature owner's combat belongs to its AI: it joins the fight like an ally called for help.
+		// Only real pets: other owned units (Summon effect adds) leave their owner alone.
 		auto* owner = world->FindByGuid<GameCreatureS>(pet.GetOwnerGuid());
-		if (!owner || owner == &pet || !owner->GetAI())
+		if (!owner || owner == &pet || !owner->GetAI() || !owner->FindPets() || !owner->FindPets()->HasPet(pet))
 		{
 			return;
 		}

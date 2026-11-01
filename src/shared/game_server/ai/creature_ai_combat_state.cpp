@@ -198,6 +198,16 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
 
+		// The pet's combat was its owner's. SetInCombat tells the owner through the world, which a
+		// despawning pet (dismissed, duration over) has already left, so tell it directly as well.
+		if (GetAI().IsPetMode())
+		{
+			if (const auto owner = GetAI().GetPetOwner(); owner && owner->IsPlayer())
+			{
+				owner->LeaveCombatIfIdle();
+			}
+		}
+
 		// Stop regeneration out of combat
 		controlled.StopRegeneration();
 

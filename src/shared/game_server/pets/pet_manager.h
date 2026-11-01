@@ -82,7 +82,12 @@ namespace mmo
 		/// @param attackerGuid Guid of the attacking unit.
 		void OnOwnerAttacked(uint64 attackerGuid);
 
-		/// @return Whether any pet of the owner is in combat.
+		/// @return Whether a unit is one of the owner's pets (temporary or the persistent pet). Other
+		///         units with an Owner field (Summon effect adds) are not.
+		/// @param unit The unit to check.
+		[[nodiscard]] bool HasPet(const GameUnitS& unit) const;
+
+		/// @return Whether any pet of the owner (still in the world) is in combat.
 		[[nodiscard]] bool IsAnyPetInCombat();
 
 		/// Determines the follow slot of a pet: its position among the owner's pets (ForEachPet

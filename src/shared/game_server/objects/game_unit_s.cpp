@@ -3233,10 +3233,11 @@ namespace mmo
 
 		// Pet combat is the owner's combat: a player owner is in combat while one of its pets is.
 		// (A creature owner's combat flag belongs to its AI, which NotifyPetOwnerOfAttacker drives.)
+		// Only real pets: other owned units (Summon effect adds) leave their owner alone.
 		if (regenRatesUpdate.changed && GetOwnerGuid() != 0 && m_worldInstance)
 		{
 			GameUnitS* owner = m_worldInstance->FindByGuid<GameUnitS>(GetOwnerGuid());
-			if (owner && owner != this && owner->IsPlayer())
+			if (owner && owner != this && owner->IsPlayer() && owner->FindPets() && owner->FindPets()->HasPet(*this))
 			{
 				if (inCombat)
 				{

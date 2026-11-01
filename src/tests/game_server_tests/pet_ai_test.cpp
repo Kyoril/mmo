@@ -549,3 +549,95 @@ TEST_CASE_METHOD(PetAIFixture, "npc owned pets join their owner's fight", "[pets
 
 	CHECK(RunUntil([&] { return pet->GetVictim() == player.get(); }, OneAIUpdate));
 }
+
+TEST_CASE_METHOD(PetAIFixture, "a pet beyond its leash returns to its owner instead of fighting from there", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto monster = SpawnMonster();
+
+	// The owner already fights when the pet shows up 80 yd away: past the 60 yd leash, short of the
+	// 100 yd teleport. Engaging from out there would be broken off at once, over and over.
+	owner->StartAttack(monster);
+	const auto pet = SpawnPet(*owner, Vector3(-80.0f, 0.0f, 0.0f));
+
+	CHECK(RunUntil([&] { return Distance2D(pet->GetMover().GetCurrentLocation(), owner->GetPosition()) < 5.0f; }, OneAIUpdate * 3));
+
+	// Back with its owner, it joins the fight.
+	CHECK(RunUntil([&] { return pet->GetVictim() == monster.get(); }, OneAIUpdate * 2));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "owner leaves combat when its fighting pet is dismissed", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPet(*owner);
+	const auto monster = SpawnMonster();
+	RunFor(std::chrono::milliseconds(50));
+
+	owner->GetPets().Command(pet_command::Attack, monster->GetGuid(), 0);
+	REQUIRE(RunUntil([&] { return InCombatState(*pet); }, OneAIUpdate));
+	REQUIRE(owner->IsInCombat());
+
+	owner->GetPets().Command(pet_command::Dismiss, 0, 0);
+
+	CHECK(RunUntil([&] { return pet->GetWorldInstance() == nullptr; }));
+	CHECK_FALSE(owner->IsInCombat());
+}
+
+TEST_CASE_METHOD(PetAIFixture, "owner leaves combat when its fighting pet's duration ends", "[pets][ai]")
+{
+	summonSpell->set_duration(1000);
+
+	const auto owner = SpawnPlayer();
+	const auto monster = SpawnMonster();
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Self);
+	REQUIRE(owner->CastSpell(targetMap, *summonSpell, 0, false, 0, true) == spell_cast_result::CastOkay);
+	REQUIRE(RunUntil([&] { return CountPetCreaturesInWorld() == 1; }));
+	const auto pet = std::static_pointer_cast<GameCreatureS>(FirstPetCreatureInWorld()->shared_from_this());
+
+	owner->GetPets().Command(pet_command::Attack, monster->GetGuid(), 0);
+	REQUIRE(RunUntil([&] { return InCombatState(*pet); }, OneAIUpdate));
+	REQUIRE(owner->IsInCombat());
+
+	CHECK(RunUntil([&] { return CountPetCreaturesInWorld() == 0; }, std::chrono::milliseconds(2000)));
+	CHECK_FALSE(owner->IsInCombat());
+}
+
+TEST_CASE_METHOD(PetAIFixture, "an owned creature that is no pet does not put its owner in combat", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto monster = SpawnMonster();
+
+	// What the Summon effect does: an Owner, but no pet.
+	auto add = world->CreateTemporaryCreature(*petEntry, Vector3(2.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	add->SetOwnerGuid(owner->GetGuid());
+	world->AddGameObject(*add);
+	RunFor(std::chrono::milliseconds(50));
+
+	add->GetAI()->EnterCombat(*monster);
+	RunFor(std::chrono::milliseconds(100));
+
+	REQUIRE(add->IsInCombat());
+	CHECK_FALSE(owner->IsInCombat());
+}
+
+TEST_CASE_METHOD(PetAIFixture, "an attacked creature add that is no pet does not call its owner", "[pets][ai]")
+{
+	auto* guardEntry = AddUnitEntry(12, "Guard", PlayerTemplate);
+	auto ownerCreature = world->CreateCreature(*monsterEntry, Vector3(0.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	world->AddGameObject(*ownerCreature);
+	ownerCreature->GetAI()->Idle();
+
+	auto add = world->CreateTemporaryCreature(*monsterEntry, Vector3(15.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	add->SetOwnerGuid(ownerCreature->GetGuid());
+	world->AddGameObject(*add);
+
+	auto guard = world->CreateCreature(*guardEntry, Vector3(45.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	world->AddGameObject(*guard);
+	RunFor(std::chrono::milliseconds(50));
+
+	guard->GetAI()->EnterCombat(*add);
+	RunFor(std::chrono::milliseconds(300));
+
+	CHECK_FALSE(ownerCreature->IsInCombat());
+}
