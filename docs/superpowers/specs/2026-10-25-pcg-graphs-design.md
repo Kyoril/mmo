@@ -294,3 +294,24 @@ section) and is the acceptance example for the node set's expressiveness.
 - Existing oasis and Section Path controls stay; the section path becomes a node; the oasis is not
   ported in v1.
 - Debug preview never writes the world; only Rebuild does.
+
+## Decided while building phase 1 (graph core)
+
+- **Region clipping happens when content is applied, not during evaluation.** Evaluation output is
+  deliberately unclipped, so spacing near a region border is computed from the whole neighbourhood
+  and stays consistent between neighbouring regions. The Rebuild/apply step (phases 2–3) clips to
+  the region's area, as "Resolved" item 3 requires.
+- **Graph parameters drive node settings through `$name` bindings.** Any setting value `"$name"` is
+  resolved from the merged graph parameters before the node runs (`"$$"` escapes a literal `$`), and
+  the resolved value is part of the cache key. A binding to an undeclared parameter is reported by
+  validation.
+- **Per-part context dependencies.** Each node declares which parts of the evaluation context it
+  reads (parameters, region, controls, terrain, point limit). Its cache key includes only those parts,
+  so dragging a control or changing a parameter re-runs only the nodes that depend on it.
+- **Distance To writes `distanceTo` by default.** Copy Attributes from Control also reads values from
+  area edges within `distance`; the waterfall rule uses this to give river ends the lake's `level`.
+- **Ties between points that are too close keep the lower seed** in both Sample Area's built-in prune
+  and Self Prune (`priority = seed`).
+- **Phase 2 notes from the final review:** outputs should be shared rather than copied before the
+  editor keeps per-node debug output; Evaluate needs cancellation and progress hooks; terrain-writing
+  nodes (phase 3) need an output item kind, because the terrain sampler is read-only.
