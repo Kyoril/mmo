@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <limits>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -87,6 +89,75 @@ namespace mmo::pcg::graph
 			return String(TerrainOpTypeName(in.op.type)) + " op of node " + std::to_string(in.op.order);
 		}
 
+		/// Distance between rim samples of a basin.
+		constexpr float kRimStep = 2.0f;
+
+		/// A length in metres as short text: at most 2 decimals, no trailing zeros ("20", "21.5").
+		String FormatMeters(const float value)
+		{
+			char buffer[48];
+			std::snprintf(buffer, sizeof(buffer), "%.2f", static_cast<double>(value));
+			String text = buffer;
+			if (text.find('.') != String::npos)
+			{
+				while (text.back() == '0')
+				{
+					text.pop_back();
+				}
+				if (text.back() == '.')
+				{
+					text.pop_back();
+				}
+			}
+			return text == "-0" ? String("0") : text;
+		}
+
+		/// Centroid of a closed polyline (area-weighted; the vertex average if it has no area).
+		Vector3 AreaCentroid(const std::vector<SplineSample>& samples)
+		{
+			double area = 0.0;
+			double cx = 0.0;
+			double cz = 0.0;
+			double ax = 0.0;
+			double az = 0.0;
+			const size_t count = samples.size();
+			for (size_t i = 0; i < count; ++i)
+			{
+				const SplineSample& p = samples[i];
+				const SplineSample& q = samples[(i + 1) % count];
+				const double cross = static_cast<double>(p.x) * q.z - static_cast<double>(q.x) * p.z;
+				area += cross;
+				cx += (static_cast<double>(p.x) + q.x) * cross;
+				cz += (static_cast<double>(p.z) + q.z) * cross;
+				ax += p.x;
+				az += p.z;
+			}
+			if (std::abs(area) > 1e-9)
+			{
+				return Vector3(static_cast<float>(cx / (3.0 * area)), 0.0f, static_cast<float>(cz / (3.0 * area)));
+			}
+			return count > 0 ? Vector3(static_cast<float>(ax / count), 0.0f, static_cast<float>(az / count)) : Vector3::Zero;
+		}
+
+		/// Lowest ground under a closed polyline, sampled at its vertices and every kRimStep along its segments.
+		float LowestRim(const std::vector<SplineSample>& samples, const std::function<float(float, float)>& ground)
+		{
+			float lowest = std::numeric_limits<float>::max();
+			const size_t count = samples.size();
+			for (size_t i = 0; i < count; ++i)
+			{
+				const SplineSample& p = samples[i];
+				const SplineSample& q = samples[(i + 1) % count];
+				const float length = std::hypot(q.x - p.x, q.z - p.z);
+				const int pieces = static_cast<int>(std::min(100000.0f, std::max(1.0f, std::ceil(length / kRimStep))));
+				for (int k = 0; k < pieces; ++k)
+				{
+					const float t = static_cast<float>(k) / static_cast<float>(pieces);
+					lowest = std::min(lowest, ground(p.x + (q.x - p.x) * t, p.z + (q.z - p.z) * t));
+				}
+			}
+			return lowest;
+		}
 		/// Adds the layer weights `splat` at `weight` over the composited paint (premultiplied, Porter-Duff over).
 		void CompositeSplat(std::array<double, 4>& premultiplied, double& alpha, const std::array<uint8, 4>& splat, const float weight)
 		{
@@ -138,6 +209,10 @@ namespace mmo::pcg::graph
 		// WaterArea.
 		float level = 0.0f;
 		float margin = 0.0f;
+		/// `depth` > 0 makes the area a basin; `basinEdge` finds the inward distance within shoreWidth.
+		float shoreWidth = 0.0f;
+		PolylineIndex basinEdge;
+		Vector3 centroid = Vector3::Zero;
 
 		// SectionPath.
 		SectionPathShape shape;
@@ -428,6 +503,20 @@ namespace mmo::pcg::graph
 				prepared->polygon = MakePolygon(path);
 				prepared->edge.Build(path.GetSamples(), true, prepared->margin);
 				prepared->bounds = Grow(PathRect(path), prepared->margin);
+					prepared->depth = std::max(0.0f, SettingFloat(op.params, "depth", 0.0f));
+					if (prepared->depth > 0.0f)
+					{
+						prepared->shoreWidth = std::max(0.5f, SettingFloat(op.params, "shoreWidth", 6.0f));
+						prepared->basinEdge.Build(path.GetSamples(), true, prepared->shoreWidth);
+						prepared->centroid = AreaCentroid(path.GetSamples());
+						const float lowest = LowestRim(path.GetSamples(), ground);
+						if (lowest < prepared->level)
+						{
+							Warn("WaterArea (node " + std::to_string(op.order) + ", control " + std::to_string(in.sourceId)
+								+ "): base rim drops to " + FormatMeters(lowest) + " m, below the water level "
+								+ FormatMeters(prepared->level) + " m; water will show past the shore");
+						}
+					}
 				if (!op.asset.empty())
 				{
 					if (m_waterMaterial.empty())
@@ -487,6 +576,12 @@ namespace mmo::pcg::graph
 			{
 				samples = &op->edge.GetSamples();
 				outline.closed = op->edge.IsClosed();
+					if (op->type == TerrainOpType::WaterArea && op->depth > 0.0f)
+					{
+						outline.depth = op->depth;
+						outline.level = op->level;
+						outline.centroid = op->centroid;
+					}
 			}
 			if (samples != nullptr)
 			{
@@ -709,6 +804,12 @@ namespace mmo::pcg::graph
 			case TerrainOpType::WaterArea:
 			{
 				NearestHit hit;
+					if (wantHeights && op.depth > 0.0f && op.polygon->Contains(x, z))
+					{
+						// Inward distance d; past the shore width the reach finds nothing and the bed holds.
+						const float s = op.basinEdge.Nearest(x, z, hit) ? Smoothstep01(hit.distance / op.shoreWidth) : 1.0f;
+						blendHeight(std::min(h, h + (op.level - op.depth - h) * s), 1.0f);
+					}
 				if (wantWater && (op.polygon->Contains(x, z) || op.edge.Nearest(x, z, hit)))
 				{
 					out.waterType = 1;

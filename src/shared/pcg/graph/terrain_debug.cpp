@@ -127,6 +127,20 @@ namespace mmo::pcg::graph
 				}
 			}
 
+			// Basin: one tick at the area's centroid, from the composed bed up to the water level.
+			if (outline.depth > 0.0f)
+			{
+				if (sink.Full())
+				{
+					sink.Skip(1);
+				}
+				else
+				{
+					const Vector3 bed = groundPoint(outline.centroid.x, outline.centroid.z);
+					sink.Add(DebugLine{ Vector3(bed.x, bed.y - TerrainDebugOutlineLift, bed.z), Vector3(bed.x, outline.level, bed.z), argbLower });
+				}
+			}
+
 			// Section copy rects, edges split so they follow the ground.
 			for (const WorldRect& rect : outline.copyRects)
 			{

@@ -428,3 +428,47 @@ TEST_CASE("Terrain nodes carry the stackOrder setting, overridable per item", "[
 	area.attributes["stackOrder"] = int64(100000);
 	CHECK(Run("TerrainNoise", {}, area).pins.at("Terrain")[0].op.stackOrder == 1000);
 }
+
+TEST_CASE("WaterArea has depth and shoreWidth, defaulting to no basin", "[graph_nodes_terrain]")
+{
+	const NodeTypeDef* def = NodeRegistry::Default().Find("WaterArea");
+	REQUIRE(def != nullptr);
+	bool depth = false;
+	bool shore = false;
+	for (const SettingDef& s : def->settings)
+	{
+		if (s.name == "depth")
+		{
+			depth = true;
+			CHECK(s.min == 0.0f);
+			CHECK(s.max == 200.0f);
+		}
+		if (s.name == "shoreWidth")
+		{
+			shore = true;
+			CHECK(s.min == 0.5f);
+			CHECK(s.max == 200.0f);
+		}
+	}
+	CHECK(depth);
+	CHECK(shore);
+
+	const DataItem lake = MakeSquare(0, 0, 50);
+	const DataItem plain = Run("WaterArea", {}, lake).pins.at("Terrain")[0];
+	CHECK(Number(plain, "depth") == 0.0f);
+	CHECK(Number(plain, "shoreWidth") == 6.0f);
+
+	DataItem deep = MakeSquare(0, 0, 50);
+	deep.attributes["depth"] = 2.5f;
+	const DataItem item = Run("WaterArea", { { "shoreWidth", 8.0f } }, deep).pins.at("Terrain")[0];
+	CHECK(Number(item, "depth") == 2.5f);
+	CHECK(Number(item, "shoreWidth") == 8.0f);
+}
+
+TEST_CASE("Water node output with depth composes to a basin", "[graph_nodes_terrain]")
+{
+	DataItem lake = MakeSquare(0, 0, 50);
+	lake.attributes["level"] = 21.5f;
+	const PreparedTerrain terrain = Compose(Run("WaterArea", { { "depth", 3.0f } }, lake), 1);
+	CHECK(Written(terrain.Evaluate(25.0f, 25.0f, 25.0f, {}), 25.0f) == Approx(18.5f));
+}

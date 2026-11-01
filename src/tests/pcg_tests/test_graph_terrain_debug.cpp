@@ -299,3 +299,42 @@ TEST_CASE("Section ops draw their copy rects", "[graph_terrain_debug]")
 		CHECK(maxZ);
 	}
 }
+
+TEST_CASE("A lake basin draws its shore loop and one depth tick at the centroid", "[graph_terrain_debug]")
+{
+	PreparedTerrain t;
+	String error;
+	REQUIRE(t.Prepare({ MakeOp(TerrainOpType::WaterArea, Square(0.0f, 0.0f, 40.0f), 3, { { "level", 1.0f }, { "depth", 3.0f } }) },
+		Flat2, {}, kBigRegion, 0.0f, error));
+
+	// A step wider than the area: no height ticks, so only the outline and the depth tick remain.
+	const DebugGeometry g = BuildTerrainDebugGeometry(t, Flat2, 1000.0f, kRaise, kLower, 500'000);
+	size_t loop = 0;
+	size_t ticks = 0;
+	for (const DebugLine& l : g.lines)
+	{
+		if (IsTick(l))
+		{
+			++ticks;
+			CHECK(l.a.x == Approx(20.0f));
+			CHECK(l.a.z == Approx(20.0f));
+			CHECK(l.a.y == Approx(-2.0f));
+			CHECK(l.b.y == Approx(1.0f));
+		}
+		else
+		{
+			++loop;
+		}
+	}
+	CHECK(loop >= 4);
+	CHECK(ticks == 1);
+
+	// No basin, no depth tick.
+	PreparedTerrain flat;
+	REQUIRE(flat.Prepare({ MakeOp(TerrainOpType::WaterArea, Square(0.0f, 0.0f, 40.0f), 3, { { "level", 1.0f } }) }, Flat2, {}, kBigRegion, 0.0f, error));
+	const DebugGeometry f = BuildTerrainDebugGeometry(flat, Flat2, 1000.0f, kRaise, kLower, 500'000);
+	for (const DebugLine& l : f.lines)
+	{
+		CHECK(!IsTick(l));
+	}
+}

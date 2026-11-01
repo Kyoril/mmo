@@ -79,6 +79,15 @@ namespace mmo::pcg::graph
 
 		/// @brief SectionPath: the influence rect of every section copy (GetSectionCopyRects), in layout order.
 		std::vector<WorldRect> copyRects;
+
+		/// @brief WaterArea: basin depth (m); 0 = no basin (then level and centroid are unused).
+		float depth = 0.0f;
+
+		/// @brief WaterArea with a basin: water surface height (level + levelOffset).
+		float level = 0.0f;
+
+		/// @brief WaterArea with a basin: centroid of the area (x/z; y is 0), where the debug view marks the depth.
+		Vector3 centroid = Vector3::Zero;
 	};
 
 	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
@@ -106,8 +115,13 @@ namespace mmo::pcg::graph
 	///   one within width of the spline, both fading (smoothstep) from 0 at the edge to full over falloff metres
 	///   inwards; the splat is the layer the lookup gives for the texture at (x, z), at `weight`. Skipped where the
 	///   lookup gives -1 (noted in TerrainEvaluateNotes).
-	/// - WaterArea (closed area; level 0, levelOffset 0, margin 4, op.asset = water material): waterType 1 and
-	///   waterHeight = level + levelOffset inside the area and up to margin metres outside its edge.
+	/// - WaterArea (closed area; level 0, levelOffset 0, margin 4, depth 0, shoreWidth 6, op.asset = water material):
+	///   waterType 1 and waterHeight = level + levelOffset inside the area and up to margin metres outside its edge.
+	///   With depth > 0 the area is also a basin (heights channel only): with d the inward distance from the edge and
+	///   s = smoothstep(0, shoreWidth, d), target = min(h, h + (level + levelOffset - depth - h) x s) at weight 1 inside
+	///   the area, so the shore starts at the running height and the bed lies depth under the water after shoreWidth.
+	///   Outside the edge heights are untouched. Prepare then also warns once if the base ground along the outline
+	///   (sampled every 2 m) is below the water level. depth 0 writes no heights.
 	/// Splat targets are composited in op order (each op's layer weights over the previous ones at its weight x
 	/// fade); water is last writer wins inside the region. Heights are only written where an op touches: the result
 	/// is then (final h, weight 1), else weight 0. Splat and water do not depend on the base height. Like all ops,

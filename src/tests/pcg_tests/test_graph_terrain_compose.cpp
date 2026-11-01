@@ -827,3 +827,119 @@ TEST_CASE("Section node output prepares with default and overridden params", "[g
 		CHECK_FALSE(t.IsEmpty());
 	}
 }
+
+namespace
+{
+	/// A lake: 50 m square, level 21.5, margin 4, on a flat base at 25 m unless `ground` says otherwise.
+	TerrainOpInput MakeLake(const float depth, const float shoreWidth = 6.0f)
+	{
+		return MakeOp(TerrainOpType::WaterArea, Square(0.0f, 0.0f, 50.0f), 1,
+			{ { "level", 21.5f }, { "depth", depth }, { "shoreWidth", shoreWidth } });
+	}
+
+	void PrepareLake(PreparedTerrain& t, const TerrainOpInput& lake, const std::function<float(float, float)>& ground)
+	{
+		String error;
+		REQUIRE(t.Prepare({ lake }, ground, {}, kBigRegion, 0.0f, error));
+		CHECK(error.empty());
+	}
+
+	float Flat25(float, float)
+	{
+		return 25.0f;
+	}
+}
+
+TEST_CASE("A lake basin follows the shore profile down to the bed", "[graph_terrain_compose]")
+{
+	PreparedTerrain t;
+	PrepareLake(t, MakeLake(3.0f), Flat25);
+
+	// The edge keeps the running height, 3 m in is halfway down the shore, 10 m in is the bed.
+	CHECK(Written(t.Evaluate(0.01f, 25.0f, 25.0f, {}), 25.0f) == Approx(25.0f).margin(0.01));
+	CHECK(Written(t.Evaluate(3.0f, 25.0f, 25.0f, {}), 25.0f) == Approx(21.75f));
+	CHECK(Written(t.Evaluate(10.0f, 25.0f, 25.0f, {}), 25.0f) == Approx(18.5f));
+	CHECK(Written(t.Evaluate(25.0f, 25.0f, 25.0f, {}), 25.0f) == Approx(18.5f));
+
+	const TerrainTarget inside = t.Evaluate(25.0f, 25.0f, 25.0f, {});
+	CHECK(inside.waterType == 1);
+	CHECK(inside.waterHeight == Approx(21.5f));
+
+	// The basin owns the bed: a hand bump inside is flattened, one outside survives.
+	CHECK(Written(t.Evaluate(10.0f, 25.0f, 27.0f, {}), 27.0f) == Approx(18.5f));
+	CHECK(Written(t.Evaluate(-10.0f, 25.0f, 27.0f, {}), 27.0f) == Approx(27.0f));
+	CHECK(t.Evaluate(-2.0f, 25.0f, 27.0f, {}).heightWeight == 0.0f);
+
+	// Ground already below the bed stays.
+	CHECK(Written(t.Evaluate(25.0f, 25.0f, 10.0f, {}), 10.0f) == Approx(10.0f));
+}
+
+TEST_CASE("A lake without depth writes no heights", "[graph_terrain_compose]")
+{
+	PreparedTerrain zero;
+	PrepareLake(zero, MakeLake(0.0f), Flat25);
+	PreparedTerrain absent;
+	PrepareLake(absent, MakeOp(TerrainOpType::WaterArea, Square(0.0f, 0.0f, 50.0f), 1, { { "level", 21.5f } }), Flat25);
+
+	for (int i = 0; i < 50; ++i)
+	{
+		const float x = -8.0f + 1.3f * static_cast<float>(i);
+		const float z = 3.0f + 0.9f * static_cast<float>(i);
+		const TerrainTarget a = zero.Evaluate(x, z, 25.0f, {});
+		const TerrainTarget b = absent.Evaluate(x, z, 25.0f, {});
+		CHECK(a.heightWeight == 0.0f);
+		CHECK(a.heightWeight == b.heightWeight);
+		CHECK(a.height == b.height);
+		CHECK(a.waterType == b.waterType);
+		CHECK(a.waterHeight == b.waterHeight);
+	}
+}
+
+TEST_CASE("A lake warns once when the base rim is below the water level", "[graph_terrain_compose]")
+{
+	// The west side of the area is at 20 m, below the level 21.5.
+	PreparedTerrain low;
+	PrepareLake(low, MakeLake(3.0f), [](const float x, float) { return x < 1.0f ? 20.0f : 25.0f; });
+	REQUIRE(low.GetWarnings().size() == 1);
+	CHECK(low.GetWarnings()[0] == "WaterArea (node 1, control 9): base rim drops to 20 m, below the water level 21.5 m; water will show past the shore");
+
+	PreparedTerrain high;
+	PrepareLake(high, MakeLake(3.0f), Flat25);
+	CHECK(high.GetWarnings().empty());
+}
+
+TEST_CASE("A water-only evaluation does not run the basin", "[graph_terrain_compose]")
+{
+	PreparedTerrain t;
+	PrepareLake(t, MakeLake(3.0f), Flat25);
+
+	const TerrainTarget water = t.Evaluate(25.0f, 25.0f, 25.0f, {}, nullptr, terrain_channel::Water);
+	CHECK(water.heightWeight == 0.0f);
+	CHECK(water.waterType == 1);
+	CHECK(water.waterHeight == Approx(21.5f));
+
+	const TerrainTarget heights = t.Evaluate(25.0f, 25.0f, 25.0f, {}, nullptr, terrain_channel::Heights);
+	CHECK(Written(heights, 25.0f) == Approx(18.5f));
+	CHECK(heights.waterType == 0);
+}
+
+TEST_CASE("A lake basin outline carries the area and a depth mark at its centroid", "[graph_terrain_compose]")
+{
+	PreparedTerrain t;
+	PrepareLake(t, MakeLake(3.0f), Flat25);
+	std::vector<TerrainOpOutline> outlines;
+	t.GetOutlines(outlines);
+	REQUIRE(outlines.size() == 1);
+	CHECK(outlines[0].closed);
+	CHECK(outlines[0].points.size() >= 4);
+	CHECK(outlines[0].depth == Approx(3.0f));
+	CHECK(outlines[0].level == Approx(21.5f));
+	CHECK(outlines[0].centroid.x == Approx(25.0f));
+	CHECK(outlines[0].centroid.z == Approx(25.0f));
+
+	PreparedTerrain flat;
+	PrepareLake(flat, MakeLake(0.0f), Flat25);
+	flat.GetOutlines(outlines);
+	REQUIRE(outlines.size() == 1);
+	CHECK(outlines[0].depth == 0.0f);
+}

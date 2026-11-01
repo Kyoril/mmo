@@ -8,7 +8,7 @@
 // RaiseAlongSpline   In: Spline.          Params: width (per side), falloffPower.
 // CarveAlongSpline   In: Spline.          Params: width (per side), depth, bank.
 // PaintSplat         In: Area or Spline.  Params: texture (String), weight, falloff, and width on open splines (per side).
-// WaterArea          In: Area.            Params: level, levelOffset, margin; op.asset = water material (.hmat).
+// WaterArea          In: Area.            Params: level, levelOffset, margin, depth, shoreWidth; op.asset = water material (.hmat).
 //
 // Every setting can be overridden per item by an item attribute of the same name; a numeric setting only by a
 // numeric (Float or Int) attribute, a String setting only by a String one (other types are ignored with a warning).
@@ -63,6 +63,9 @@ namespace mmo::pcg::graph
 			const char* name;
 			float defaultValue;
 			const char* description;
+				/// UI range; used when max > min.
+				float min = 0.0f;
+				float max = 0.0f;
 		};
 
 		/// Everything that differs between the nodes.
@@ -101,7 +104,9 @@ namespace mmo::pcg::graph
 			static const TerrainNodeDef water{ "WaterArea", "Water Area", TerrainOpType::WaterArea, { ItemKind::Area },
 				{ { "level", 0.0f, "Water surface height (m); the item attribute 'level' overrides it" },
 				  { "levelOffset", 0.0f, "Added to the level (m)" },
-				  { "margin", 4.0f, "Distance (m) past the shore that still holds water" } },
+				  { "margin", 4.0f, "Distance (m) past the shore that still holds water" },
+					  { "depth", 0.0f, "Basin depth (m) below the water level; 0 leaves the ground alone", 0.0f, 200.0f },
+					  { "shoreWidth", 6.0f, "Distance (m) inwards over which the shore slopes down to the bed", 0.5f, 200.0f } },
 				"areas" };
 			switch (type)
 			{
@@ -232,7 +237,7 @@ namespace mmo::pcg::graph
 			}
 			for (const NumberParam& param : source.numbers)
 			{
-				def.settings.push_back(SettingDef{ param.name, param.defaultValue, 0, 0, {}, param.description });
+				def.settings.push_back(SettingDef{ param.name, param.defaultValue, param.min, param.max, {}, param.description });
 			}
 			def.settings.push_back(StackOrderSetting());
 			if (opType == TerrainOpType::WaterArea)
