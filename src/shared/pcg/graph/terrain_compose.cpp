@@ -260,31 +260,6 @@ namespace mmo::pcg::graph
 			return std::make_unique<RowIndexedPolygon>(path.GetSamples(), std::max(1.0f, (r.maxZ - r.minZ) / 4096.0f));
 		}
 
-		/// Converts an attribute value to the text SetSectionPathParam parses.
-		bool ToParamText(const AttributeValue& value, String& out)
-		{
-			char buffer[64];
-			switch (TypeOf(value))
-			{
-			case AttributeType::Float:
-				std::snprintf(buffer, sizeof(buffer), "%.9g", static_cast<double>(std::get<float>(value)));
-				out = buffer;
-				return true;
-			case AttributeType::Int:
-				std::snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(std::get<int64>(value)));
-				out = buffer;
-				return true;
-			case AttributeType::Bool:
-				out = std::get<bool>(value) ? "1" : "0";
-				return true;
-			case AttributeType::String:
-				out = std::get<String>(value);
-				return true;
-			default:
-				return false;
-			}
-		}
-
 		String NodeLabel(const TerrainOpInput& in)
 		{
 			return String(TerrainOpTypeName(in.op.type)) + " op of node " + std::to_string(in.op.order);
@@ -486,7 +461,7 @@ namespace mmo::pcg::graph
 				{
 					String text;
 					String paramError;
-					if (!ToParamText(value, text))
+					if (!SectionParamText(value, text))
 					{
 						return fail(label + " (section asset '" + op.asset + "'): section param '" + name + "' has an unsupported type.");
 					}

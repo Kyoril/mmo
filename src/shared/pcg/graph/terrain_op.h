@@ -38,6 +38,10 @@ namespace mmo::pcg::graph
 	/// @brief Feeds every field of an op into a hasher.
 	void HashTerrainOp(Hasher& h, const TerrainOp& op);
 
+	/// @brief Converts a Float, Int, Bool or String value to the text pcg::SetSectionPathParam parses.
+	/// @return False for other types (out unchanged).
+	bool SectionParamText(const AttributeValue& value, String& out);
+
 	/// @brief Stable display name of an op type.
 	const char* TerrainOpTypeName(TerrainOpType type);
 }

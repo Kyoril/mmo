@@ -75,31 +75,6 @@ namespace mmo::pcg::graph
 			return params;
 		}
 
-		/// Converts a value to the text SetSectionPathParam parses; false for unsupported types.
-		bool ToParamText(const AttributeValue& value, String& out)
-		{
-			char buffer[64];
-			switch (TypeOf(value))
-			{
-			case AttributeType::Float:
-				std::snprintf(buffer, sizeof(buffer), "%.9g", static_cast<double>(std::get<float>(value)));
-				out = buffer;
-				return true;
-			case AttributeType::Int:
-				std::snprintf(buffer, sizeof(buffer), "%lld", static_cast<long long>(std::get<int64>(value)));
-				out = buffer;
-				return true;
-			case AttributeType::Bool:
-				out = std::get<bool>(value) ? "1" : "0";
-				return true;
-			case AttributeType::String:
-				out = std::get<String>(value);
-				return true;
-			default:
-				return false;
-			}
-		}
-
 		/// Brings a value to the canonical type of its parameter where that loses nothing; others stay as they are
 		/// (and are then rejected or accepted by SetSectionPathParam).
 		AttributeValue Normalize(const ParamKind kind, const AttributeValue& value)
@@ -188,6 +163,10 @@ namespace mmo::pcg::graph
 						{
 							section = *text;
 						}
+						else if (text == nullptr)
+						{
+							WarnOnce(out, "ignored the item attribute '" + sectionAttribute + "': it is not a String");
+						}
 					}
 				}
 				if (section.empty())
@@ -221,7 +200,7 @@ namespace mmo::pcg::graph
 
 					String text;
 					String error;
-					if (!ToParamText(value, text))
+					if (!SectionParamText(value, text))
 					{
 						out.error = String("invalid ") + origin + " '" + param.name + "': the value has an unsupported type";
 						out.pins.clear();

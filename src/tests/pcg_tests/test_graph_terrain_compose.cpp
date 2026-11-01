@@ -2,6 +2,8 @@
 
 #include "catch.hpp"
 
+#include "pcg/graph/evaluator.h"
+#include "pcg/graph/node_registry.h"
 #include "pcg/graph/terrain_compose.h"
 #include "pcg/section_path.h"
 
@@ -541,4 +543,49 @@ TEST_CASE("CollectTerrainOps gathers Terrain pins in op order", "[graph_terrain_
 	CHECK(ops[2].op.type == TerrainOpType::Raise);
 	CHECK(ops[1].itemIndex == 0);
 	CHECK(ops[2].itemIndex == 2);
+}
+
+TEST_CASE("Section node output prepares with default and overridden params", "[graph_terrain_compose][graph_nodes_section]")
+{
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };
+	const NodeTypeDef* def = NodeRegistry::Default().Find("LaySectionAlongSpline");
+	REQUIRE(def != nullptr);
+
+	DataItem road;
+	road.kind = ItemKind::Spline;
+	road.spline = Line(0.0f, 0.0f, 0.0f, 80.0f);
+	road.sourceId = 9;
+	road.attributes["section"] = String("Sections/TestRoad.hsec");
+
+	for (const bool overridden : { false, true })
+	{
+		if (overridden)
+		{
+			road.attributes["heightMode"] = String("smoothedGround");
+			road.attributes["groundSmoothing"] = int64(40);
+			road.attributes["massEnabled"] = true;
+		}
+		AttributeSet settings;
+		for (const SettingDef& s : def->settings)
+		{
+			settings.emplace(s.name, s.defaultValue);
+		}
+		std::map<String, Collection> inputs;
+		inputs["In"].push_back(road);
+		const NodeOutput out = def->execute(EvalContext(), 1, settings, inputs);
+		REQUIRE(out.error.empty());
+		const DataItem& item = out.pins.at("Terrain")[0];
+
+		TerrainOpInput in;
+		in.op = item.op;
+		in.spline = item.spline;
+		in.pointIds = item.pointIds;
+		in.sourceId = item.sourceId;
+
+		PreparedTerrain t;
+		String error;
+		CHECK(t.Prepare({ in }, Flat0, Provider(assets), kBigRegion, 10.0f, error));
+		CHECK(error.empty());
+		CHECK_FALSE(t.IsEmpty());
+	}
 }

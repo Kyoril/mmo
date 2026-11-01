@@ -190,3 +190,69 @@ TEST_CASE("The evaluator stamps the node id as the op order", "[graph_nodes_sect
 	CHECK(out[0].op.order == 7);
 	CHECK(out[0].pointIds == std::vector<uint64>{ 11, 4, 8 });
 }
+
+TEST_CASE("A non-String section attribute is ignored with a warning", "[graph_nodes_section]")
+{
+	AttributeSet settings;
+	settings["section"] = String("Editor/Pcg/Sections/Other.hsec");
+	DataItem road = RoadSpline();
+	road.attributes["section"] = int64(5);
+	const NodeOutput out = Lay("LaySectionAlongSpline", settings, road);
+	REQUIRE(out.error.empty());
+	CHECK(out.pins.at("Terrain")[0].op.asset == "Editor/Pcg/Sections/Other.hsec");
+	REQUIRE(out.warnings.size() == 1);
+	CHECK(out.warnings[0].find("section") != String::npos);
+}
+
+TEST_CASE("LaySectionAlongSpline keeps a closed spline closed", "[graph_nodes_section]")
+{
+	DataItem ring = MakeSplineItem({ { 0, 0 }, { 30, 0 }, { 30, 30 }, { 0, 30 } }, false);
+	ring.kind = ItemKind::Spline;
+	ring.spline.closed = true;
+	ring.attributes["section"] = String(RoadPath);
+	const NodeOutput out = Lay("LaySectionAlongSpline", AttributeSet(), ring);
+	REQUIRE(out.error.empty());
+	REQUIRE(out.pins.at("Terrain").size() == 1);
+	CHECK(out.pins.at("Terrain")[0].spline.closed);
+}
+
+TEST_CASE("A cached re-evaluation keeps the op order", "[graph_nodes_section]")
+{
+	Graph g;
+	NodeInstance lay;
+	lay.id = 7;
+	lay.type = "LaySectionAlongSpline";
+	lay.settings["section"] = String(RoadPath);
+	g.nodes.push_back(lay);
+	g.nextNodeId = 8;
+	// No input link: the node outputs nothing, so feed it through a controls node instead.
+	ControlType type;
+	type.name = "Road";
+	type.shape = ControlShape::OpenSpline;
+	ControlInstance inst;
+	inst.id = 5;
+	inst.typePath = "Controls/Road.hctl";
+	inst.spline.points = { { 0, 0 }, { 5, 0 }, { 10, 3 } };
+	inst.pointIds = { 1, 2, 3 };
+	inst.nextPointId = 4;
+	ResolvedControl rc;
+	std::vector<String> warnings;
+	REQUIRE(ResolveControl(type, inst, rc, warnings));
+	const std::vector<ResolvedControl> resolved{ rc };
+	NodeInstance controls;
+	controls.id = 1;
+	controls.type = "GetControls";
+	g.nodes.push_back(controls);
+	g.links.push_back(Link{ 1, "Out", 7, "In" });
+
+	EvalContext ctx;
+	ctx.controls = &resolved;
+	GraphCache cache;
+	const EvalResult first = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
+	const EvalResult second = Evaluate(g, NodeRegistry::Default(), ctx, &cache);
+	REQUIRE(first.ok);
+	REQUIRE(second.ok);
+	CHECK(second.nodes.at(7).fromCache);
+	REQUIRE(second.nodes.at(7).output.pins.at("Terrain").size() == 1);
+	CHECK(second.nodes.at(7).output.pins.at("Terrain")[0].op.order == 7);
+}
