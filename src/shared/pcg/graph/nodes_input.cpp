@@ -155,12 +155,14 @@ namespace mmo::pcg::graph
 					item.kind = ItemKind::Area;
 					item.spline = inst.spline;
 					item.spline.closed = true;
+					item.pointIds = inst.pointIds;
 					bounds = SplineBounds(item.spline);
 					break;
 				case ControlShape::OpenSpline:
 					item.kind = ItemKind::Spline;
 					item.spline = inst.spline;
 					item.spline.closed = false;
+					item.pointIds = inst.pointIds;
 					bounds = SplineBounds(item.spline);
 					break;
 				case ControlShape::Volume:

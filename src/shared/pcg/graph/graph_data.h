@@ -2,10 +2,12 @@
 
 #pragma once
 
+#include "attribute_value.h"
 #include "base/typedefs.h"
 #include "math/vector3.h"
 #include "math/quaternion.h"
 #include "math/path_spline.h"
+#include "terrain_op.h"
 
 #include <map>
 #include <set>
@@ -16,28 +18,6 @@
 
 namespace mmo::pcg::graph
 {
-	/// @brief Type of an attribute value.
-	enum class AttributeType : uint8
-	{
-		Float,
-		Int,
-		Bool,
-		Vector3,
-		String
-	};
-
-	/// @brief A single typed attribute value. The variant index equals the AttributeType value.
-	using AttributeValue = std::variant<float, int64, bool, Vector3, String>;
-
-	/// @brief Gets the type of an attribute value.
-	AttributeType TypeOf(const AttributeValue& v);
-
-	/// @brief Gets the default (zero) value of an attribute type.
-	AttributeValue DefaultValue(AttributeType type);
-
-	/// @brief Item-level attributes and graph parameters. Ordered map: iteration order is deterministic.
-	using AttributeSet = std::map<String, AttributeValue>;
-
 	/// @brief One point of a point set.
 	struct Point
 	{
@@ -79,7 +59,8 @@ namespace mmo::pcg::graph
 		Points,
 		Spline,
 		Area,
-		Params
+		Params,
+		Terrain
 	};
 
 	/// @brief One item flowing along a graph link.
@@ -99,6 +80,12 @@ namespace mmo::pcg::graph
 
 		/// @brief Producing control id (0 = generated).
 		uint64 sourceId = 0;
+
+		/// @brief Per spline point: the stable point id from the producing control (empty if generated).
+		std::vector<uint64> pointIds;
+
+		/// @brief Used by Terrain items: what to do to the terrain. Geometry is in spline / points.
+		TerrainOp op;
 	};
 
 	/// @brief The ordered list of items on a pin.

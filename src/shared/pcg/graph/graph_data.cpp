@@ -142,6 +142,16 @@ namespace mmo::pcg::graph
 			h.U64(static_cast<uint64>(item.kind));
 			h.U64(item.sourceId);
 
+			h.U64(item.pointIds.size());
+			for (const uint64 id : item.pointIds)
+			{
+				h.U64(id);
+			}
+			if (item.kind == ItemKind::Terrain)
+			{
+				HashTerrainOp(h, item.op);
+			}
+
 			h.Tags(item.tags);
 			h.Attributes(item.attributes);
 

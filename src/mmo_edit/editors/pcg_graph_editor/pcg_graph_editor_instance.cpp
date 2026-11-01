@@ -85,6 +85,7 @@ namespace mmo
 			case ItemKind::Spline: return ImVec4(0.45f, 0.90f, 0.45f, 1.0f);
 			case ItemKind::Area: return ImVec4(1.00f, 0.65f, 0.30f, 1.0f);
 			case ItemKind::Params: return ImVec4(0.80f, 0.50f, 1.00f, 1.0f);
+			case ItemKind::Terrain: return ImVec4(0.85f, 0.75f, 0.35f, 1.0f);
 			}
 			return ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
 		}
@@ -98,7 +99,7 @@ namespace mmo
 			String names;
 			for (const ItemKind kind : pin->accepts)
 			{
-				const char* name = kind == ItemKind::Points ? "Points" : kind == ItemKind::Spline ? "Spline" : kind == ItemKind::Area ? "Area" : "Params";
+				const char* name = kind == ItemKind::Points ? "Points" : kind == ItemKind::Spline ? "Spline" : kind == ItemKind::Area ? "Area" : kind == ItemKind::Terrain ? "Terrain" : "Params";
 				names += (names.empty() ? "" : ", ") + String(name);
 			}
 			return names;

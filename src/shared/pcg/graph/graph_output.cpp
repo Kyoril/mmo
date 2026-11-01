@@ -26,6 +26,7 @@ namespace mmo::pcg::graph
 			case ItemKind::Spline: return "Spline";
 			case ItemKind::Area: return "Area";
 			case ItemKind::Params: return "Params";
+			case ItemKind::Terrain: return "Terrain";
 			}
 			return "Params";
 		}
@@ -45,6 +46,24 @@ namespace mmo::pcg::graph
 				j["tags"].push_back(tag);
 			}
 			j["sourceId"] = item.sourceId;
+			if (!item.pointIds.empty())
+			{
+				j["pointIds"] = item.pointIds;
+			}
+			if (item.kind == ItemKind::Terrain)
+			{
+				Json op = Json::object();
+				op["type"] = TerrainOpTypeName(item.op.type);
+				op["asset"] = item.op.asset;
+				op["order"] = item.op.order;
+				Json params = Json::object();
+				for (const auto& [name, value] : item.op.params)
+				{
+					params[name] = jsonutil::ValueToJson(value);
+				}
+				op["params"] = std::move(params);
+				j["op"] = std::move(op);
+			}
 			Json attributes = Json::object();
 			for (const auto& [name, value] : item.attributes)
 			{
