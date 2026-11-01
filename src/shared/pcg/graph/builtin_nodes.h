@@ -21,4 +21,7 @@ namespace mmo::pcg::graph
 	/// @brief Registers the point operation nodes: TransformPoints, DensityNoise, AttributeMath and
 	///        CopyAttributesFromControl (nodes_point.cpp).
 	void RegisterPointNodes(NodeRegistry& registry);
+
+	/// @brief Registers the spawner nodes: SpawnMeshes (nodes_spawn.cpp).
+	void RegisterSpawnNodes(NodeRegistry& registry);
 }

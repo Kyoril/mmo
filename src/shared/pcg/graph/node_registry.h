@@ -78,6 +78,10 @@ namespace mmo::pcg::graph
 		std::vector<String> enumValues;
 
 		String description;
+
+		/// @brief Editor hint only (not part of any cache key or validation): "" (plain), "asset:<ext;ext>"
+		///        (one asset path), "assetList:<ext;ext>" (weighted asset list) or "color".
+		String widget = {};
 	};
 
 	/// @brief What a node produced: items per output pin, warnings, and an error (non-empty = failed).
