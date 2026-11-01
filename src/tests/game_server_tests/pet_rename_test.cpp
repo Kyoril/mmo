@@ -176,3 +176,22 @@ TEST_CASE_METHOD(PersistentPetFixture, "a tamed creature's long name is clamped 
 	REQUIRE_FALSE(stored.empty());
 	CHECK((static_cast<uint8>(stored.back()) & 0xC0) != 0xC0);
 }
+
+TEST_CASE_METHOD(PersistentPetFixture, "renaming a pet to its current name changes nothing", "[pets][rename]")
+{
+	const auto player = SpawnPlayer(4);
+	GameCreatureS* pet = SummonBeast(*this, *player, true);
+	REQUIRE(pet);
+
+	const uint32 spellsChangedBefore = watcher.spellsChanged;
+	const uint32 savesBefore = storedPetsChangedCount;
+
+	bool changed = true;
+	CHECK(player->RenamePersistentPet("fido", &changed) == pet_result::Ok);
+	CHECK_FALSE(changed);
+	CHECK(watcher.spellsChanged == spellsChangedBefore);
+	CHECK(storedPetsChangedCount == savesBefore);
+
+	CHECK(player->RenamePersistentPet("Shade", &changed) == pet_result::Ok);
+	CHECK(changed);
+}

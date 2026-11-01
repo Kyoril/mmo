@@ -343,8 +343,14 @@ namespace mmo
 			return pet_result::NotTamable;
 		}
 
-		// The creature stops whatever it was doing; the pet state takes over.
+		// The creature stops whatever it was doing, its fight included; the pet state takes over.
+		// Leaving its combat state (EnterPetMode) drops the threat table, but wipe it first so
+		// nothing of the old fight can pick a victim in between.
 		target.GetMover().StopMovement();
+		target.ResetThreat();
+		target.StopAttack();
+		target.RemoveAllCombatParticipants();
+		target.SetInCombat(false, false);
 
 		target.SetGrantsKillRewards(false);
 		target.SetSummonOwner(std::static_pointer_cast<GameUnitS>(owner.shared_from_this()));

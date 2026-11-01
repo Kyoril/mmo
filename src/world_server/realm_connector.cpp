@@ -1383,7 +1383,28 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		m_subsystemStatusChanged = subsystems.statusChanged.connect([this](const WorldSubsystemState::StatusList& entries)
 		{
 			SendSubsystemStatus(entries);
+
+			// The PETS switch stops the live pets too, not just new pet actions.
+			for (const auto& [id, status] : entries)
+			{
+				if (id == game::subsystem::Pets)
+				{
+					OnPetsAvailabilityChanged(status == game::subsystem_status::Available);
+				}
+			}
 		});
+	}
+
+	void RealmConnector::OnPetsAvailabilityChanged(const bool available)
+	{
+		for (const ObjectGuid characterGuid : m_playerManager.GetCharacterGuids())
+		{
+			const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+			if (player)
+			{
+				player->GetCharacter().OnPetsAvailabilityChanged(available);
+			}
+		}
 	}
 
 	void RealmConnector::SendSubsystemStatus(const WorldSubsystemState::StatusList& entries)

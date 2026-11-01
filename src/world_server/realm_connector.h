@@ -150,6 +150,11 @@ namespace mmo
 		/// Sends subsystem status entries to the realm (no-op while not logged in).
 		void SendSubsystemStatus(const WorldSubsystemState::StatusList& entries);
 
+		/// Dismisses (switched off) or brings back (switched on) the pets of every player on this
+		/// node after the PETS subsystem changed (GamePlayerS::OnPetsAvailabilityChanged).
+		/// @param available Whether pets are available now.
+		void OnPetsAvailabilityChanged(bool available);
+
 		/// Sends the answer to a bug report back to the realm.
 		void SendBugReportResult(uint64 characterGuid, game::BugReportResult result);
 

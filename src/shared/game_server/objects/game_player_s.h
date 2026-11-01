@@ -109,6 +109,14 @@ namespace mmo
 		{
 			return true;
 		}
+
+		/// Whether the realm's list of the character's stored pets has arrived. Until it has,
+		/// persistent pet actions fail with pet_result::Disabled like with the subsystem off, so
+		/// a grant or tame cannot duplicate a stored pet the world node does not know about yet.
+		[[nodiscard]] virtual bool AreStoredPetsLoaded() const
+		{
+			return true;
+		}
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -565,8 +573,10 @@ namespace mmo
 		/// stored and the live name change, the client is told (OnPetSpellsChanged) and the change
 		/// is saved (storedPetsChanged). On failure nothing changes and the client is told why.
 		/// @param name The new name.
+		/// @param changed If not null, set to whether the name changed (false for a rename to the
+		///	       current name, which also returns Ok).
 		/// @return Ok, Disabled, NoPet, NamingNotAllowed or InvalidName.
-		pet_result::Type RenamePersistentPet(const String& name);
+		pet_result::Type RenamePersistentPet(const String& name, bool* changed = nullptr);
 
 		/// @return The state of the summoned persistent pet as the PetSpells packet carries it; a
 		///	        petGuid of 0 if no persistent pet is summoned (or it has not spawned yet).
@@ -590,6 +600,12 @@ namespace mmo
 		/// levels up to its master's level (its level source) and keeps gaining when that rises.
 		/// @param xp The experience.
 		void AddPetExperience(uint32 xp);
+
+		/// Called when the PETS subsystem of the world node is switched off or on. Switched off, the
+		/// summoned persistent pet is dismissed (it stays wasSummoned) and the temporary pets are
+		/// despawned; switched on, the dismissed pet comes back.
+		/// @param available Whether pets are available now.
+		void OnPetsAvailabilityChanged(bool available);
 
 		/// Called with the realm's answer to petCreationRequested: the pet now exists with a
 		/// database id and is added to the stored pets (and summoned if wasSummoned is set).
@@ -815,7 +831,8 @@ namespace mmo
 		/// @return Whether another stored pet can be created (stored plus pending creations).
 		[[nodiscard]] bool HasFreePetSlot() const;
 
-		/// @return Whether persistent pets are available (NetPlayerWatcher::ArePetsAvailable).
+		/// @return Whether persistent pets are available (NetPlayerWatcher::ArePetsAvailable and
+		///	        NetPlayerWatcher::AreStoredPetsLoaded).
 		[[nodiscard]] bool ArePetsAvailable() const;
 
 		/// Asks the realm to create a stored pet (petCreationRequested).

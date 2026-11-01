@@ -32,6 +32,26 @@ TEST_CASE_METHOD(PersistentPetFixture, "making a hostile creature a pet makes it
 	CHECK(boar->GetAI()->IsPetMode());
 }
 
+TEST_CASE_METHOD(PersistentPetFixture, "making a fighting creature a pet ends its fight", "[pets][gm]")
+{
+	const auto gm = SpawnPlayer(1);
+	const auto victim = SpawnPlayer(1);
+	const auto boar = SpawnCreature(*boarUnit);
+	boar->GetAI()->EnterCombat(*victim);
+	REQUIRE(RunUntil([&] { return boar->IsInCombat() && boar->GetVictim() == victim.get(); }));
+
+	REQUIRE(MakeGmPet(*gm, *boar) == pet_result::Ok);
+
+	CHECK_FALSE(boar->IsInCombat());
+	CHECK(boar->GetVictim() == nullptr);
+	CHECK_FALSE(boar->HasCombatParticipants());
+
+	// The old fight does not come back: the pet stays with its owner.
+	RunFor(std::chrono::milliseconds(600));
+	CHECK(boar->GetVictim() == nullptr);
+	CHECK(boar->GetAI()->IsPetMode());
+}
+
 TEST_CASE_METHOD(PersistentPetFixture, "making pets has no cap", "[pets][gm]")
 {
 	const auto gm = SpawnPlayer(1);

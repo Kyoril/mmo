@@ -137,7 +137,26 @@ namespace mmo
 
 	bool GamePlayerS::ArePetsAvailable() const
 	{
-		return !m_netPlayerWatcher || m_netPlayerWatcher->ArePetsAvailable();
+		// Until the realm's list arrived, the world node cannot know which pets exist: a grant or a
+		// tame would duplicate a stored pet or overfill the slots.
+		return !m_netPlayerWatcher || (m_netPlayerWatcher->ArePetsAvailable() && m_netPlayerWatcher->AreStoredPetsLoaded());
+	}
+
+	void GamePlayerS::OnPetsAvailabilityChanged(const bool available)
+	{
+		if (available)
+		{
+			// The pet that was dismissed by the switch comes back.
+			ResummonPersistentPet();
+			return;
+		}
+
+		// Kept wasSummoned: the pet returns once pets are available again.
+		DismissPersistentPet(true);
+		if (FindPets())
+		{
+			FindPets()->DespawnTemporaryPets();
+		}
 	}
 
 	pet_result::Type GamePlayerS::CanSummonStoredPet(const uint32 petEntry) const
@@ -462,6 +481,11 @@ namespace mmo
 
 	void GamePlayerS::AddPetExperience(const uint32 xp)
 	{
+		if (!ArePetsAvailable())
+		{
+			return;
+		}
+
 		const auto pet = m_summonedPet.lock();
 		PersistentPetData* data = pet ? FindStoredPetByDbId(m_summonedPetDbId) : nullptr;
 		const proto::PetEntry* entry = data ? m_project.pets.getById(data->petEntry) : nullptr;
@@ -577,7 +601,10 @@ namespace mmo
 
 		if (pet.dbId == 0)
 		{
-			ELOG("Created pet of character " << log_hex_digit(GetGuid()) << " has no database id");
+			// The realm refused it (all slots taken in the database) or could not create it. The
+			// cast is spent, so the player is told.
+			WLOG("The realm did not create pet entry " << pet.petEntry << " for character " << log_hex_digit(GetGuid()));
+			PetActionFailed(pet_result::NoFreeSlot);
 			return;
 		}
 
@@ -775,21 +802,13 @@ namespace mmo
 
 	pet_result::Type GamePlayerS::RevivePet(const uint32 petEntry, const uint32 healthPercent)
 	{
-		if (!ArePetsAvailable())
+		if (const pet_result::Type check = CanRevivePet(petEntry); check != pet_result::Ok)
 		{
-			return PetActionFailed(pet_result::Disabled);
+			return PetActionFailed(check);
 		}
 
 		PersistentPetData* pet = petEntry != 0 ? FindStoredPet(petEntry) : SelectStoredPet(true);
-		if (!pet || !pet->isDead)
-		{
-			return PetActionFailed(pet_result::NoPet);
-		}
-
-		if (pet->classId != Get<uint32>(object_fields::Class))
-		{
-			return PetActionFailed(pet_result::WrongClass);
-		}
+		ASSERT(pet && pet->isDead);
 
 		pet->isDead = false;
 		pet->health = 0;
@@ -850,8 +869,13 @@ namespace mmo
 		return pet_result::Ok;
 	}
 
-	pet_result::Type GamePlayerS::RenamePersistentPet(const String& name)
+	pet_result::Type GamePlayerS::RenamePersistentPet(const String& name, bool* changed)
 	{
+		if (changed)
+		{
+			*changed = false;
+		}
+
 		if (!ArePetsAvailable())
 		{
 			return PetActionFailed(pet_result::Disabled);
@@ -883,6 +907,10 @@ namespace mmo
 
 		data->name = normalized;
 		pet->SetCustomName(normalized);
+		if (changed)
+		{
+			*changed = true;
+		}
 
 		if (m_netPlayerWatcher)
 		{

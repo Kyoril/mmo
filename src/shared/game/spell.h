@@ -765,7 +765,7 @@ namespace mmo
 			SummonPersistentPet     = 58,
 			/// Adds a stored persistent pet of PetEntry miscvaluea to the caster if it does not have one yet (learn-style grant); the summon spell is separate.
 			GrantPersistentPet      = 59,
-			/// Dismisses the caster's pets of the group given by pet_group (0 = all).
+			/// Dismisses (stores) the caster's summoned persistent pet. Temporary pets are not touched; the pet bar's Dismiss command despawns those.
 			DismissPet              = 60,
 			/// Revives a dead stored pet of the caster at basepoints % health.
 			RevivePet               = 61,

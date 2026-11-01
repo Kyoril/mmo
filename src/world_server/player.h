@@ -1058,6 +1058,9 @@ namespace mmo
 		/// The PETS subsystem of this node.
 		[[nodiscard]] bool ArePetsAvailable() const override;
 
+		/// Whether the realm's PlayerPetData for the character arrived (ApplyStoredPets).
+		[[nodiscard]] bool AreStoredPetsLoaded() const override;
+
 		/// Sends PetSpells with the summoned persistent pet's state (GamePlayerS::GetPetSpellsData).
 		void OnPetSpellsChanged() override;
 

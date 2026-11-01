@@ -86,7 +86,12 @@ namespace mmo
 		/// @param created Called with the result, on the io thread.
 		void CreatePet(uint64 characterGuid, const PersistentPetData& request, CreatedCallback created);
 
-		/// Deletes every stored pet of a character (character deletion).
+		/// Called when a character is deleted. Deletion is a soft delete (the character can be
+		/// restored), so the pets stay in the database; only the cached list is forgotten.
+		void OnCharacterSoftDeleted(uint64 characterGuid);
+
+		/// Deletes every stored pet of a character from the database. For a purge of the character
+		/// row; a soft delete keeps the pets (OnCharacterSoftDeleted).
 		void DeletePets(uint64 characterGuid);
 
 	private:

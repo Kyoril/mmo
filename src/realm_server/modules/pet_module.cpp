@@ -39,7 +39,14 @@ namespace mmo
 
 	void PetModule::OnCharacterDeleting(Player& player, const uint64 characterGuid)
 	{
-		DeletePets(characterGuid);
+		OnCharacterSoftDeleted(characterGuid);
+	}
+
+	void PetModule::OnCharacterSoftDeleted(const uint64 characterGuid)
+	{
+		// Character deletion only marks the character deleted (it can be restored), so its pets stay
+		// in the database with it. Only the cached list goes.
+		ForgetPets(characterGuid);
 	}
 
 	void PetModule::LoadPets(const uint64 characterGuid, std::function<void()> loaded)

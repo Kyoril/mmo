@@ -269,7 +269,19 @@ TEST_CASE_METHOD(PetModuleFixture, "creation is refused when every stored pet sl
 	CHECK(answer->dbId == 0);
 }
 
-TEST_CASE_METHOD(PetModuleFixture, "deleting a character deletes its pets", "[pets][pet_module]")
+TEST_CASE_METHOD(PetModuleFixture, "a soft deleted character keeps its pets in the database", "[pets][pet_module]")
+{
+	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3) };
+	EnterWorld();
+
+	module.OnCharacterSoftDeleted(CharacterGuid);
+
+	CHECK(database.deletedCharacters.empty());
+	CHECK(database.petsByCharacter[CharacterGuid].size() == 1);
+	CHECK_FALSE(module.GetPetsForJoin(CharacterGuid));
+}
+
+TEST_CASE_METHOD(PetModuleFixture, "purging a character's pets deletes them", "[pets][pet_module]")
 {
 	database.petsByCharacter[CharacterGuid] = { MakePet(1, 3) };
 	EnterWorld();

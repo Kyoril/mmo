@@ -110,6 +110,13 @@ namespace mmo
 			return;
 		}
 
+		// Switched off, the node dismissed every pet; a command that races the switch is refused.
+		if (!ArePetsAvailable())
+		{
+			SendPetResult(pet_result::Disabled);
+			return;
+		}
+
 		PetManager* pets = m_character->FindPets();
 		bool hasPet = false;
 		if (pets)
@@ -149,6 +156,12 @@ namespace mmo
 		if (!(contentReader >> request))
 		{
 			ELOG("Failed to read PetCastSpell packet");
+			return;
+		}
+
+		if (!ArePetsAvailable())
+		{
+			SendPetResult(pet_result::Disabled);
 			return;
 		}
 
@@ -215,7 +228,8 @@ namespace mmo
 		}
 
 		// Validation, the stored name and the PetSpells / PetResult answer are GamePlayerS's.
-		if (m_character->RenamePersistentPet(request.name) != pet_result::Ok)
+		bool changed = false;
+		if (m_character->RenamePersistentPet(request.name, &changed) != pet_result::Ok || !changed)
 		{
 			return;
 		}

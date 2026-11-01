@@ -84,9 +84,12 @@ namespace mmo::pet_tests
 		void OnPetLearnedSpell(const uint32 spellId) override { learned.push_back(spellId); }
 		void OnPetResult(const pet_result::Type result) override { results.push_back(result); }
 		bool ArePetsAvailable() const override { return petsAvailable; }
+		bool AreStoredPetsLoaded() const override { return storedPetsLoaded; }
 
 		/// The PETS subsystem switch the world node would report.
 		bool petsAvailable = true;
+		/// Whether the realm's stored pet list arrived (the world node's PlayerPetData).
+		bool storedPetsLoaded = true;
 		uint32 spellsChanged = 0;
 		uint32 xpChanged = 0;
 		uint32 lastXp = 0;

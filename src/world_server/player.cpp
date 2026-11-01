@@ -1921,6 +1921,11 @@ namespace mmo
 		return m_connector.IsSubsystemAvailable(game::subsystem::Pets);
 	}
 
+	bool Player::AreStoredPetsLoaded() const
+	{
+		return m_storedPetsReceived;
+	}
+
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)
 	{
 		// First, close a potential previous loot dialog

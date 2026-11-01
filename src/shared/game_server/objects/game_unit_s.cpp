@@ -13,6 +13,7 @@
 #include "base/localization.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+#include "game/spell_negativity.h"
 
 #include <map>
 #include <memory>
@@ -901,8 +902,9 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
-			// A harmful spell cast at an enemy is an attack: assisting pets join in
-			if (m_pets && target.HasUnitTarget() && m_worldInstance)
+			// A harmful spell cast at an enemy is an attack: assisting pets join in. Others (a tame,
+			// a dispel or an inspect cast at an enemy) are not, or pets would attack a tame target.
+			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
 			{
 				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
 				{

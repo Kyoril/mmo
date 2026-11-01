@@ -571,3 +571,150 @@ TEST_CASE_METHOD(PersistentPetFixture, "a persistent pet regenerates out of comb
 	pet->SettleRegeneration(pet->GetRegenSettledAt() + 10000);
 	CHECK(pet->GetHealth() > 10);
 }
+
+TEST_CASE_METHOD(PersistentPetFixture, "switching PETS off dismisses the live pets and switching it on brings the persistent pet back", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	player->SetStoredPets({ MakeStoredPet(ImpPetId) });
+	GameCreatureS* pet = Summon(*player, ImpPetId);
+	REQUIRE(pet);
+
+	// A temporary pet, the way the SummonPet effect adds one.
+	auto temporary = world->CreateTemporaryCreature(*rockUnit, Vector3(2.0f, 0.0f, 0.0f), 0.0f, 0.0f);
+	temporary->SetGrantsKillRewards(false);
+	temporary->SetSummonOwner(player);
+	temporary->SetOwnerGuid(player->GetGuid());
+	temporary->SetPetGroup(1);
+	world->AddGameObject(*temporary);
+	player->GetPets().AddTemporaryPet(*temporary, 1, 5, pet_limit_policy::ReplaceOldest);
+	temporary->GetAI()->EnterPetMode(*player);
+	const std::weak_ptr<GameObjectS> weakTemporary = temporary;
+	temporary.reset();
+
+	watcher.petsAvailable = false;
+	player->OnPetsAvailabilityChanged(false);
+
+	CHECK(PersistentPetOf(*player) == nullptr);
+	CHECK(player->GetStoredPets().front().wasSummoned);
+	CHECK(RunUntil([&] { return weakTemporary.expired() && CountCreaturesInWorld(ImpUnitId) == 0; }));
+
+	// No experience while switched off.
+	const uint32 xpChangedBefore = watcher.xpChanged;
+	player->AddPetExperience(50);
+	CHECK(watcher.xpChanged == xpChangedBefore);
+
+	watcher.petsAvailable = true;
+	player->OnPetsAvailabilityChanged(true);
+	CHECK(RunUntil([&] { return PersistentPetOf(*player) != nullptr; }));
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "an own-level pet gains no experience while PETS is off", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	PersistentPetData stored = MakeStoredPet(BeastPetId, 1);
+	stored.unitEntry = BoarUnitId;
+	player->SetStoredPets({ stored });
+	Summon(*player, BeastPetId);
+
+	watcher.petsAvailable = false;
+	const uint32 changesBefore = storedPetsChangedCount;
+	player->AddPetExperience(150);
+	CHECK(player->GetStoredPets().front().level == 1);
+	CHECK(player->GetStoredPets().front().xp == 0);
+	CHECK(storedPetsChangedCount == changesBefore);
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "before the realm's pet list arrived, grant, tame and summon are refused", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	const auto boar = SpawnCreature(*boarUnit);
+	watcher.storedPetsLoaded = false;
+
+	CHECK(player->CanGrantPersistentPet(ImpPetId) == pet_result::Disabled);
+	CHECK(player->GrantPersistentPet(ImpPetId) == pet_result::Disabled);
+	CHECK(player->CanTameCreature(*boar) == pet_result::Disabled);
+	CHECK(player->TameCreature(*boar) == pet_result::Disabled);
+	CHECK(player->SummonStoredPet(0) == pet_result::Disabled);
+	CHECK(requests.empty());
+	CHECK(boar->GetWorldInstance() != nullptr);
+	REQUIRE_FALSE(watcher.results.empty());
+	CHECK(watcher.results.back() == pet_result::Disabled);
+
+	watcher.storedPetsLoaded = true;
+	CHECK(player->CanGrantPersistentPet(ImpPetId) == pet_result::Ok);
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "a pet creation the realm refused tells the player", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	answerCreationRequests = false;
+	REQUIRE(player->GrantPersistentPet(ImpPetId) == pet_result::Ok);
+	REQUIRE(requests.size() == 1);
+
+	PersistentPetData refused = requests.front();
+	refused.dbId = 0;
+	player->OnPetCreated(refused);
+
+	CHECK(player->GetStoredPets().empty());
+	REQUIRE_FALSE(watcher.results.empty());
+	CHECK(watcher.results.back() == pet_result::NoFreeSlot);
+
+	// The pending creation is gone: the pet can be granted again.
+	CHECK(player->CanGrantPersistentPet(ImpPetId) == pet_result::Ok);
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "reviving checks like CanRevivePet and changes nothing on failure", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	PersistentPetData tamed = MakeStoredPet(BeastPetId, 2);
+	tamed.unitEntry = BoarUnitId;
+	tamed.isDead = true;
+	tamed.classId = OtherClassId;
+	player->SetStoredPets({ tamed });
+
+	CHECK(player->CanRevivePet(BeastPetId) == pet_result::WrongClass);
+	CHECK(player->RevivePet(BeastPetId, 100) == pet_result::WrongClass);
+	CHECK(player->FindStoredPet(BeastPetId)->isDead);
+
+	// The class may not summon persistent pets: the summon that follows a revive would fail.
+	player->SetStoredPets({ MakeStoredPet(ImpPetId) });
+	PersistentPetData dead = MakeStoredPet(BeastPetId, 2);
+	dead.unitEntry = BoarUnitId;
+	dead.isDead = true;
+	player->SetStoredPets({ dead });
+	mainClass->set_max_summoned_persistent_pets(0);
+	player->SetClass(*mainClass);
+	CHECK(player->CanRevivePet(BeastPetId) == pet_result::TooManyPets);
+	CHECK(player->RevivePet(BeastPetId, 100) == pet_result::TooManyPets);
+	CHECK(player->FindStoredPet(BeastPetId)->isDead);
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "only a harmful cast at an enemy sends the pet in", "[pets][persistent]")
+{
+	const auto player = SpawnPlayer(4);
+	player->SetStoredPets({ MakeStoredPet(ImpPetId) });
+	GameCreatureS* pet = Summon(*player, ImpPetId);
+	// Out of its aggro range, so only the owner's casts can start a fight.
+	const auto rock = SpawnCreature(*rockUnit, Vector3(25.0f, 0.0f, 0.0f));
+	REQUIRE(pet->GetVictim() == nullptr);
+
+	// A cast that is no attack, like a tame, leaves the pet with its owner.
+	constexpr uint32 InspectSpellId = 400;
+	auto* inspect = project.spells.add(InspectSpellId);
+	inspect->set_name("Inspect");
+	inspect->add_attributes(0);
+	inspect->add_attributes(0);
+	auto* effect = inspect->add_effects();
+	effect->set_index(0);
+	effect->set_type(spell_effects::Dummy);
+	// Aimed at the caster, so the rock is not hit and has no reason to fight back.
+	effect->set_targeta(spell_effect_targets::Caster);
+
+	REQUIRE(CastAt(*player, InspectSpellId, rock.get()) == spell_cast_result::CastOkay);
+	RunFor(std::chrono::milliseconds(600));
+	CHECK_FALSE(rock->IsInCombat());
+	CHECK(pet->GetVictim() == nullptr);
+
+	REQUIRE(CastAt(*player, BiteSpellId, rock.get()) == spell_cast_result::CastOkay);
+	CHECK(RunUntil([&] { return pet->GetVictim() == rock.get(); }));
+}

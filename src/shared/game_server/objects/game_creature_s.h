@@ -54,6 +54,10 @@ namespace mmo
 		/// can happen if the unit transforms.
 		signal<void()> entryChanged;
 
+		/// Share of its max health a pet without a unit class health regeneration rate regenerates
+		/// per regeneration tick (two seconds).
+		static constexpr float PetHealthRegenShare = 0.03f;
+
 	public:
 
 		/// Creates a new instance of the GameCreature class.
@@ -347,11 +351,6 @@ namespace mmo
 		/// Applies a pet's stat multipliers and its out-of-combat health regeneration on top of
 		/// the stats just computed from its entry.
 		void ApplyPetStats();
-
-	public:
-		/// Share of its max health a pet without a unit class health regeneration rate regenerates
-		/// per regeneration tick (two seconds).
-		static constexpr float PetHealthRegenShare = 0.03f;
 
 	protected:
 		float GetMeleeCritChanceFromAttributes() const override;
