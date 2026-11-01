@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace mmo::pcg::graph
@@ -41,6 +42,18 @@ namespace mmo::pcg::graph
 
 		/// @brief Producing control id (0 = generated).
 		uint64 sourceId = 0;
+
+		/// @brief Index of the item in its node's Terrain output; distinguishes generated items of one node (their
+		///        fallback point ids mix it in).
+		uint32 itemIndex = 0;
+	};
+
+	/// @brief What Evaluate found while evaluating, for the caller to report once after a pass.
+	struct TerrainEvaluateNotes
+	{
+		/// @brief Indices (in prepared op order) of Paint ops that were skipped somewhere because the tile has no
+		///        layer with their texture.
+		std::set<size_t> missingLayerOps;
 	};
 
 	/// @brief Gathers the Terrain items of every node's output pin named "Terrain" (nodes of the graph only),
@@ -56,17 +69,18 @@ namespace mmo::pcg::graph
 	/// - SectionPath (op.asset = .hsec path, op.params = SetSectionPathParam names): EvaluateSectionTerrain on h, its
 	///   paint remapped to tile layers through the lookup over the asset's layerTextures (identity if the asset names
 	///   no textures).
-	/// - Noise (closed area; amplitude 1.5, wavelength 24, octaves 3, falloff 8): target = h + amplitude x
-	///   FractalNoise (world-anchored, [-1, 1]); weight smoothstep from 0 at the area edge to 1 at falloff inside.
+	/// - Noise (closed area; amplitude 1.5, wavelength 24, octaves 3, falloff 8, seed): target = h + amplitude x
+	///   FractalNoise (world-anchored, [-1, 1]) seeded from the seed param (Int, or Float rounded to the nearest
+	///   integer; op.order when absent); weight smoothstep from 0 at the area edge to 1 at falloff inside.
 	/// - Raise (spline; width 40, falloffPower 2): peak = max(0, spline y - base ground under the spline) per spline
 	///   sample (base sampled in Prepare), interpolated at the nearest point; target = h + peak x
 	///   smoothstep(1 - d / width)^falloffPower, d = distance to the spline.
-	/// - Carve (spline; width 4, depth 1.5, bank 3): profile 1 within width / 2 of the spline, falling (smoothstep)
+	/// - Carve (spline; width 4, depth 1.5, bank 3): profile 1 within width (per side) of the spline, falling (smoothstep)
 	///   to 0 over bank metres beyond; target = h - depth x profile.
 	/// - Paint (texture = texture key, weight 1, width 4, falloff 2): a closed spline paints inside the area, an open
 	///   one within width of the spline, both fading (smoothstep) from 0 at the edge to full over falloff metres
 	///   inwards; the splat is the layer the lookup gives for the texture at (x, z), at `weight`. Skipped where the
-	///   lookup gives -1 (one warning per op).
+	///   lookup gives -1 (noted in TerrainEvaluateNotes).
 	/// - WaterArea (closed area; level 0, levelOffset 0, margin 4, op.asset = water material): waterType 1 and
 	///   waterHeight = level + levelOffset inside the area and up to margin metres outside its edge.
 	/// Splat targets are composited in op order (each op's layer weights over the previous ones at its weight x
@@ -75,7 +89,8 @@ namespace mmo::pcg::graph
 	/// Raise, Carve and Noise are relative to the running height and therefore commute with each other; SectionPath
 	/// targets an absolute height, so its place in the order matters.
 	///
-	/// Evaluate records the Paint warnings, so it is not safe to call concurrently.
+	/// Evaluate and BuildPlacements do not modify the object (what they find goes to caller-owned outputs), so they
+	/// may be called concurrently.
 	class PreparedTerrain final
 	{
 	public:
@@ -108,18 +123,26 @@ namespace mmo::pcg::graph
 		/// @brief Stacks all ops on `baseHeight` in order (see the class comment).
 		/// @param layers Texture key to tile layer lookup; empty = Paint ops are skipped and sections paint their
 		///        layers unmapped.
-		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers) const;
+		/// @param notes If not null, receives what was skipped (see DescribeNotes); owned by the caller.
+		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
+			TerrainEvaluateNotes* notes = nullptr) const;
 
-		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept if inside
-		///        the region, sorted by key (a duplicate key is dropped with a warning).
+		/// @brief Appends one warning per noted op (a Paint texture that is not a layer of some tile).
+		void DescribeNotes(const TerrainEvaluateNotes& notes, std::vector<String>& warnings) const;
+
+		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept where the
+		///        region fade is at least 0.5 (no props beside a road that has faded out at the border), sorted by key
+		///        (a duplicate key is dropped with a warning).
 		/// @param ground Final ground, passed to BuildSectionPlacements.
 		/// @param out Cleared, then receives the placements.
-		void BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out) const;
+		/// @param warnings If not null, receives the warnings.
+		void BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out,
+			std::vector<String>* warnings = nullptr) const;
 
 		/// @brief First non-empty WaterArea material (a warning is recorded if several differ).
 		const String& GetWaterMaterial() const;
 
-		/// @brief Warnings of Prepare, Evaluate and BuildPlacements, each text once.
+		/// @brief Warnings of Prepare, each text once.
 		const std::vector<String>& GetWarnings() const;
 
 	private:
@@ -129,7 +152,7 @@ namespace mmo::pcg::graph
 		float RegionFade(float x, float z) const;
 
 		/// @brief Adds a warning unless the same text is already recorded.
-		void Warn(const String& message) const;
+		void Warn(const String& message);
 
 	private:
 		std::vector<std::unique_ptr<PreparedOp>> m_ops;
@@ -137,6 +160,6 @@ namespace mmo::pcg::graph
 		float m_borderFade = 0.0f;
 		WorldRect m_influence;
 		String m_waterMaterial;
-		mutable std::vector<String> m_warnings;
+		std::vector<String> m_warnings;
 	};
 }

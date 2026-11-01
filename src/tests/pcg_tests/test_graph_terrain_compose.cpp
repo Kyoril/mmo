@@ -208,15 +208,19 @@ TEST_CASE("Raise and Carve stack to the hand-computed height", "[graph_terrain_c
 	// Centre: peak 10 (spline 10 over flat 0), bed depth 1.5.
 	CHECK(Written(t.Evaluate(50.0f, 0.0f, 0.0f, {}), 0.0f) == Approx(10.0f - 1.5f).margin(1e-4f));
 
-	// 3 m across: raise 10 x smoothstep(1 - 3/40)^2, carve 1.5 x (1 - smoothstep((3 - 2) / 3)).
-	const float r = Smooth(1.0f - 3.0f / 40.0f);
-	const float expected = 10.0f * r * r - 1.5f * (1.0f - Smooth(1.0f / 3.0f));
-	CHECK(Written(t.Evaluate(50.0f, 3.0f, 0.0f, {}), 0.0f) == Approx(expected).margin(1e-4f));
+	// 5 m across (in the bank: flat bed 4 m per side, bank 3 m): raise 10 x smoothstep(1 - 5/40)^2,
+	// carve 1.5 x (1 - smoothstep((5 - 4) / 3)) = 1.5 x (1 - 7/27).
+	const float r = Smooth(1.0f - 5.0f / 40.0f);
+	const float expected = 10.0f * r * r - 1.5f * (1.0f - 7.0f / 27.0f);
+	CHECK(Written(t.Evaluate(50.0f, 5.0f, 0.0f, {}), 0.0f) == Approx(expected).margin(1e-4f));
+	// 3 m across is still on the flat bed.
+	const float r3 = Smooth(1.0f - 3.0f / 40.0f);
+	CHECK(Written(t.Evaluate(50.0f, 3.0f, 0.0f, {}), 0.0f) == Approx(10.0f * r3 * r3 - 1.5f).margin(1e-4f));
 
 	// Both are relative, so they commute.
 	PreparedTerrain reversed;
 	PrepareOk(reversed, { carve, raise }, kBigRegion, 10.0f);
-	CHECK(Written(reversed.Evaluate(50.0f, 3.0f, 0.0f, {}), 0.0f) == Approx(expected).margin(1e-4f));
+	CHECK(Written(reversed.Evaluate(50.0f, 5.0f, 0.0f, {}), 0.0f) == Approx(expected).margin(1e-4f));
 
 	// Raise uses the base under the spline from Prepare: over a base of 4 the peak is 6.
 	PreparedTerrain raised;
@@ -337,6 +341,81 @@ TEST_CASE("Section placement keys are stable when an unrelated op is added", "[g
 	std::vector<Placement> inside;
 	clipped.BuildPlacements(Flat0, inside);
 	CHECK(inside.size() == 2);
+
+	// The prop at z 30 lies 4 m inside the border of a region ending at z 34: fade smoothstep(0.4) < 0.5, dropped.
+	PreparedTerrain faded;
+	PrepareOk(faded, { op }, Square(-10.0f, -10.0f, 44.0f), 10.0f, Provider(assets));
+	std::vector<Placement> kept;
+	faded.BuildPlacements(Flat0, kept);
+	REQUIRE(kept.size() == 1);
+	CHECK(kept[0].position.z == Approx(10.0f).margin(0.01f));
+}
+
+TEST_CASE("Generated section items of one node keep all their props", "[graph_terrain_compose]")
+{
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };
+	TerrainOpInput a = MakeOp(TerrainOpType::SectionPath, Line(0.0f, 0.0f, 0.0f, 80.0f), 4);
+	a.op.asset = "Sections/TestRoad.hsec";
+	a.pointIds.clear();
+	a.sourceId = 0;
+	TerrainOpInput b = a;
+	b.spline = Line(100.0f, 0.0f, 100.0f, 80.0f);
+	b.itemIndex = 1;
+
+	PreparedTerrain t;
+	PrepareOk(t, { a, b }, kBigRegion, 10.0f, Provider(assets));
+	std::vector<Placement> placements;
+	std::vector<String> warnings;
+	t.BuildPlacements(Flat0, placements, &warnings);
+	CHECK(placements.size() == 8);
+	CHECK(warnings.empty());
+}
+
+TEST_CASE("Section paint does not depend on the base height", "[graph_terrain_compose]")
+{
+	const std::map<String, SectionAsset> assets{ { "Sections/TestRoad.hsec", MakeRoad() } };
+	for (const bool mass : { false, true })
+	{
+		TerrainOpInput op = MakeOp(TerrainOpType::SectionPath, Line(0.0f, -100.0f, 0.0f, 100.0f, 10.0f), 4,
+			{ { "massEnabled", mass } });
+		op.op.asset = "Sections/TestRoad.hsec";
+		PreparedTerrain t;
+		PrepareOk(t, { op }, kBigRegion, 10.0f, Provider(assets));
+		for (float x = -8.0f; x <= 70.0f; x += 1.3f)
+		{
+			const TerrainTarget low = t.Evaluate(x, 13.0f, 0.0f, {});
+			const TerrainTarget high = t.Evaluate(x, 13.0f, 50.0f, {});
+			CHECK(low.splatWeight == high.splatWeight);
+			CHECK(low.splat == high.splat);
+		}
+	}
+}
+
+TEST_CASE("Noise is seeded from the seed param, else from the op order", "[graph_terrain_compose]")
+{
+	const PathSpline area = Square(0.0f, 0.0f, 100.0f);
+	PreparedTerrain a;
+	PrepareOk(a, { MakeOp(TerrainOpType::Noise, area, 3, { { "seed", int64(77) } }) }, kBigRegion, 10.0f);
+	PreparedTerrain b;
+	PrepareOk(b, { MakeOp(TerrainOpType::Noise, area, 9, { { "seed", 77.0f } }) }, kBigRegion, 10.0f);
+	PreparedTerrain c;
+	PrepareOk(c, { MakeOp(TerrainOpType::Noise, area, 3, { { "seed", int64(78) } }) }, kBigRegion, 10.0f);
+	PreparedTerrain byOrder;
+	PrepareOk(byOrder, { MakeOp(TerrainOpType::Noise, area, 3) }, kBigRegion, 10.0f);
+	PreparedTerrain otherOrder;
+	PrepareOk(otherOrder, { MakeOp(TerrainOpType::Noise, area, 4) }, kBigRegion, 10.0f);
+
+	int differentSeed = 0;
+	int differentOrder = 0;
+	for (float x = 20.0f; x <= 80.0f; x += 4.7f)
+	{
+		const float h = a.Evaluate(x, 50.0f, 0.0f, {}).height;
+		CHECK(b.Evaluate(x, 50.0f, 0.0f, {}).height == h);
+		differentSeed += c.Evaluate(x, 50.0f, 0.0f, {}).height != h ? 1 : 0;
+		differentOrder += byOrder.Evaluate(x, 50.0f, 0.0f, {}).height != otherOrder.Evaluate(x, 50.0f, 0.0f, {}).height ? 1 : 0;
+	}
+	CHECK(differentSeed > 5);
+	CHECK(differentOrder > 5);
 }
 
 TEST_CASE("A missing section asset or an unknown section param fails Prepare", "[graph_terrain_compose]")
@@ -381,15 +460,22 @@ TEST_CASE("Paint uses the looked-up layer and skips with one warning where there
 	CHECK(inside.heightWeight == 0.0f);
 	CHECK(t.Evaluate(1.0f, 25.0f, 0.0f, layer2).splatWeight == Approx(0.8f * Smooth(0.5f)).margin(1e-4f));
 	CHECK(t.Evaluate(60.0f, 25.0f, 0.0f, layer2).splatWeight == 0.0f);
+	TerrainEvaluateNotes notes;
+	t.Evaluate(25.0f, 25.0f, 0.0f, layer2, &notes);
+	CHECK(notes.missingLayerOps.empty());
 	CHECK(t.GetWarnings().empty());
 
 	const TextureLayerLookup none = [](float, float, const String&) -> int8 { return -1; };
 	for (float x = 5.0f; x < 45.0f; x += 5.0f)
 	{
-		const TerrainTarget target = t.Evaluate(x, 25.0f, 0.0f, none);
+		const TerrainTarget target = t.Evaluate(x, 25.0f, 0.0f, none, &notes);
 		CHECK(target.splatWeight == 0.0f);
 	}
-	CHECK(t.GetWarnings().size() == 1);
+	std::vector<String> warnings;
+	t.DescribeNotes(notes, warnings);
+	REQUIRE(warnings.size() == 1);
+	CHECK(warnings[0].find("Textures/Sand.htex") != String::npos);
+	CHECK(t.GetWarnings().empty());
 
 	// Along an open spline: painted within width.
 	PreparedTerrain road;
@@ -453,4 +539,6 @@ TEST_CASE("CollectTerrainOps gathers Terrain pins in op order", "[graph_terrain_
 	CHECK(ops[1].op.type == TerrainOpType::Carve);
 	CHECK(ops[1].sourceId == 11);
 	CHECK(ops[2].op.type == TerrainOpType::Raise);
+	CHECK(ops[1].itemIndex == 0);
+	CHECK(ops[2].itemIndex == 2);
 }

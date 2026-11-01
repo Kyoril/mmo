@@ -13,6 +13,7 @@
 #include <set>
 #include <tuple>
 #include <utility>
+#include <variant>
 
 namespace mmo::pcg::graph
 {
@@ -231,6 +232,27 @@ namespace mmo::pcg::graph
 			return r;
 		}
 
+		/// Seed param of a Noise op: Int as is, Float rounded to the nearest integer; op.order if absent or unusable.
+		int64 NoiseSeedParam(const TerrainOp& op)
+		{
+			const auto it = op.params.find("seed");
+			if (it != op.params.end())
+			{
+				if (const int64* i = std::get_if<int64>(&it->second))
+				{
+					return *i;
+				}
+				if (const float* f = std::get_if<float>(&it->second))
+				{
+					if (std::isfinite(*f) && std::abs(*f) < 9.0e18f)
+					{
+						return static_cast<int64>(std::llround(static_cast<double>(*f)));
+					}
+				}
+			}
+			return static_cast<int64>(op.order);
+		}
+
 		/// Containment index of a closed path, rows as PrepareControl builds them.
 		std::unique_ptr<RowIndexedPolygon> MakePolygon(const SampledPath& path)
 		{
@@ -302,7 +324,7 @@ namespace mmo::pcg::graph
 		uint32 octaves = 1;
 		uint64 noiseSeed = 0;
 
-		// Noise, Paint (areas), region: inward fade distance. Raise: width; Carve: half bed width and bank.
+		// Noise, Paint (areas), region: inward fade distance. Raise, Carve, Paint (splines): width per side; Carve: bank.
 		float falloff = 0.0f;
 		float width = 0.0f;
 		float falloffPower = 1.0f;
@@ -315,7 +337,6 @@ namespace mmo::pcg::graph
 		String textureKey;
 		float weight = 1.0f;
 		bool area = false;
-		mutable bool warnedMissingLayer = false;
 
 		// WaterArea.
 		float level = 0.0f;
@@ -359,6 +380,7 @@ namespace mmo::pcg::graph
 				in.pointIds = item.pointIds;
 				in.points = item.points;
 				in.sourceId = item.sourceId;
+				in.itemIndex = static_cast<uint32>(i);
 				gathered.emplace_back(item.op.order, id, i, std::move(in));
 			}
 		}
@@ -480,7 +502,7 @@ namespace mmo::pcg::graph
 					ids.clear();
 					for (size_t i = 0; i < in.spline.points.size(); ++i)
 					{
-						ids.push_back(Hash(in.sourceId, static_cast<int64>(i), 0, 0x5ec7));
+						ids.push_back(Hash(in.sourceId, static_cast<int64>(in.itemIndex), static_cast<int64>(i), 0x5ec7));
 					}
 				}
 
@@ -502,7 +524,7 @@ namespace mmo::pcg::graph
 				prepared->frequency = wavelength > 0.0f ? 1.0f / wavelength : 0.0f;
 				prepared->octaves = static_cast<uint32>(std::min(8.0f, std::max(1.0f, SettingFloat(op.params, "octaves", 3.0f))));
 				prepared->falloff = std::max(0.0f, SettingFloat(op.params, "falloff", 8.0f));
-				prepared->noiseSeed = Hash(kNoiseSeed, static_cast<int64>(op.order));
+				prepared->noiseSeed = Hash(kNoiseSeed, NoiseSeedParam(op));
 				prepared->polygon = MakePolygon(path);
 				prepared->edge.Build(path.GetSamples(), true, prepared->falloff);
 				prepared->bounds = PathRect(path);
@@ -529,7 +551,7 @@ namespace mmo::pcg::graph
 			case TerrainOpType::Carve:
 			{
 				const SampledPath path(in.spline, EvaluationStep(in.spline, SamplingStep));
-				prepared->width = std::max(0.0f, SettingFloat(op.params, "width", 4.0f)) * 0.5f;
+				prepared->width = std::max(0.0f, SettingFloat(op.params, "width", 4.0f));
 				prepared->depth = SettingFloat(op.params, "depth", 1.5f);
 				prepared->bank = std::max(0.0f, SettingFloat(op.params, "bank", 3.0f));
 				const float reach = prepared->width + prepared->bank;
@@ -642,7 +664,8 @@ namespace mmo::pcg::graph
 		return 1.0f;
 	}
 
-	TerrainTarget PreparedTerrain::Evaluate(const float x, const float z, const float baseHeight, const TextureLayerLookup& layers) const
+	TerrainTarget PreparedTerrain::Evaluate(const float x, const float z, const float baseHeight, const TextureLayerLookup& layers,
+		TerrainEvaluateNotes* notes) const
 	{
 		TerrainTarget out;
 		if (m_ops.empty() || !Contains(m_influence, x, z))
@@ -669,9 +692,9 @@ namespace mmo::pcg::graph
 			}
 		};
 
-		for (const auto& opPtr : m_ops)
+		for (size_t opIndex = 0; opIndex < m_ops.size(); ++opIndex)
 		{
-			const PreparedOp& op = *opPtr;
+			const PreparedOp& op = *m_ops[opIndex];
 			if (!Contains(op.bounds, x, z))
 			{
 				continue;
@@ -777,11 +800,9 @@ namespace mmo::pcg::graph
 				const int8 layer = layers ? layers(x, z, op.textureKey) : static_cast<int8>(-1);
 				if (layer < 0 || layer > 3)
 				{
-					if (!op.warnedMissingLayer)
+					if (notes)
 					{
-						op.warnedMissingLayer = true;
-						Warn("PaintSplat op of node " + std::to_string(op.order) + ": texture '" + op.textureKey
-							+ "' is not a layer of the terrain tile, skipped there.");
+						notes->missingLayerOps.insert(opIndex);
 					}
 					break;
 				}
@@ -820,7 +841,21 @@ namespace mmo::pcg::graph
 		return out;
 	}
 
-	void PreparedTerrain::BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out) const
+	void PreparedTerrain::DescribeNotes(const TerrainEvaluateNotes& notes, std::vector<String>& warnings) const
+	{
+		for (const size_t index : notes.missingLayerOps)
+		{
+			if (index < m_ops.size())
+			{
+				const PreparedOp& op = *m_ops[index];
+				warnings.push_back("Paint op of node " + std::to_string(op.order) + ": texture '" + op.textureKey
+					+ "' is not a layer of the terrain tile, skipped there.");
+			}
+		}
+	}
+
+	void PreparedTerrain::BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out,
+		std::vector<String>* warnings) const
 	{
 		out.clear();
 		std::vector<Placement> section;
@@ -833,7 +868,7 @@ namespace mmo::pcg::graph
 			BuildSectionPlacements(op->shape, ground, section);
 			for (Placement& p : section)
 			{
-				if (!Contains(m_region->bounds, p.position.x, p.position.z) || !m_region->polygon->Contains(p.position.x, p.position.z))
+				if (RegionFade(p.position.x, p.position.z) < 0.5f)
 				{
 					continue;
 				}
@@ -846,7 +881,10 @@ namespace mmo::pcg::graph
 		const auto duplicate = std::unique(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key == b.key; });
 		if (duplicate != out.end())
 		{
-			Warn("Section placements with duplicate keys were dropped (two section ops of one node share a control).");
+			if (warnings)
+			{
+				warnings->push_back("Section placements with duplicate keys were dropped.");
+			}
 			out.erase(duplicate, out.end());
 		}
 	}
@@ -861,7 +899,7 @@ namespace mmo::pcg::graph
 		return m_warnings;
 	}
 
-	void PreparedTerrain::Warn(const String& message) const
+	void PreparedTerrain::Warn(const String& message)
 	{
 		if (std::find(m_warnings.begin(), m_warnings.end(), message) == m_warnings.end())
 		{
