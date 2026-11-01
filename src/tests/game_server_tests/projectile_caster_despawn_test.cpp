@@ -205,3 +205,55 @@ TEST_CASE_METHOD(ProjectileFixture, "A projectile in flight is dropped when its 
 
 	CHECK(victim->GetHealth() == healthBefore);
 }
+
+// A spell with a travel speed resolved its effects - and with them its cooldown - only when its
+// projectile landed. Spamming Throwing Knife (spell 167, 8 s cooldown, speed 15) therefore sent a
+// second knife out as soon as the global cooldown was over, long before the first one hit. The
+// client had already been told the cooldown started, because SpellGo carries it when the cast goes
+// off; only the server had not started it.
+TEST_CASE_METHOD(ProjectileFixture, "A spell is on cooldown while its own projectile is still in flight", "[spell][projectile][cooldown]")
+{
+	bolt->set_cooldown(8000);
+
+	auto caster = Spawn(*casterEntry, Vector3(0.0f, 0.0f, 0.0f));
+	auto victim = Spawn(*victimEntry, Vector3(20.0f, 0.0f, 0.0f));
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+
+	REQUIRE(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+
+	// Past the global cooldown, but well before the bolt lands: 20 m at 5 m/s takes four seconds.
+	RunFor(std::chrono::milliseconds(1700));
+	REQUIRE(victim->GetHealth() == victim->GetMaxHealth());
+
+	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::FailedNotReady);
+}
+
+// The counterpart of the test above: the cooldown must run from the cast, not be (re)started when
+// the projectile lands, because that is what the client was told in SpellGo.
+TEST_CASE_METHOD(ProjectileFixture, "A projectile spell's cooldown is measured from the cast, not from the impact", "[spell][projectile][cooldown]")
+{
+	bolt->set_cooldown(5000);
+
+	auto caster = Spawn(*casterEntry, Vector3(0.0f, 0.0f, 0.0f));
+	auto victim = Spawn(*victimEntry, Vector3(20.0f, 0.0f, 0.0f));
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+
+	REQUIRE(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+
+	// The bolt lands after about four seconds; the cooldown is over after five, counted from the
+	// cast. Restarting it on impact would hold the spell back until nine seconds had passed.
+	// Waiting for the impact instead of a fixed time keeps a slow machine from failing the test.
+	REQUIRE(RunUntil([&]() { return victim->GetHealth() < victim->GetMaxHealth(); }, std::chrono::milliseconds(10000)));
+
+	// Past the five seconds the cooldown runs from the cast - the impact is never earlier than
+	// four seconds in, so this leaves the cooldown expired however slowly the loop above ran.
+	RunFor(std::chrono::milliseconds(1600));
+
+	CHECK(caster->CastSpell(targetMap, *bolt, 0, false, 0, true) == spell_cast_result::CastOkay);
+}
