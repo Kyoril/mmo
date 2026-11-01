@@ -336,6 +336,11 @@ namespace mmo
 		return *s_frameMgr;
 	}
 
+	bool FrameManager::IsInitialized()
+	{
+		return s_frameMgr != nullptr;
+	}
+
 	namespace
 	{
 		const std::string& LuaLocalize(const std::string& id)

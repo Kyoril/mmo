@@ -54,6 +54,9 @@ namespace mmo
 		/// Singleton getter method.
 		static FrameManager& Get();
 
+		/// @brief Whether Initialize was called and Destroy has not been called since.
+		static bool IsInitialized();
+
 	public:
 		/// Initializes the frame manager by registering default frame factories.
 		static void Initialize(lua_State* state, const Localization& localization);
