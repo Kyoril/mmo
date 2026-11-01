@@ -62,6 +62,7 @@ namespace mmo::pcg::graph
 		RegisterInputNodes(registry);
 		RegisterSamplerNodes(registry);
 		RegisterFilterNodes(registry);
+		RegisterPointNodes(registry);
 	}
 
 	namespace

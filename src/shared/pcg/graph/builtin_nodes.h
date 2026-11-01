@@ -17,4 +17,8 @@ namespace mmo::pcg::graph
 	/// @brief Registers the filter and spatial nodes: FilterByTag, FilterByAttribute, FilterByTerrain, DensityFilter,
 	///        SelfPrune, Difference, Intersection and DistanceTo (nodes_filter.cpp).
 	void RegisterFilterNodes(NodeRegistry& registry);
+
+	/// @brief Registers the point operation nodes: TransformPoints, DensityNoise, AttributeMath and
+	///        CopyAttributesFromControl (nodes_point.cpp).
+	void RegisterPointNodes(NodeRegistry& registry);
 }
