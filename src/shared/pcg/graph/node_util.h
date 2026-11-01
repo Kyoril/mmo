@@ -53,14 +53,32 @@ namespace mmo::pcg::graph
 	/// @brief Whether valid bounds are finite and within MaxWorldCoordinate.
 	bool SaneBounds(const Bounds2D& bounds);
 
-	/// @brief Polyline step used to evaluate splines for sampling.
+	/// @brief Finest polyline step used to evaluate splines for sampling.
 	constexpr float SamplingStep = 0.25f;
 
-	/// @brief Gets the sorted x coordinates where the horizontal line at z crosses a closed polyline (the
-	///        closing segment included), with the same segment predicate and intersection formula as
-	///        SampledPath::Contains, so InsideCrossings agrees with Contains exactly.
-	void PolygonCrossingsAtZ(const std::vector<SplineSample>& polygon, float z, std::vector<float>& crossings);
+	/// @brief Gets the polyline step to evaluate a spline with: the preferred step (at least SamplingStep),
+	///        doubled until the polyline has at most about 100000 samples (doubling keeps the step stable
+	///        while a vertex moves, which preserves locality).
+	float EvaluationStep(const PathSpline& spline, float preferred);
 
-	/// @brief Whether x lies inside by the even-odd rule, given the sorted crossings of its row.
-	bool InsideCrossings(const std::vector<float>& crossings, float x);
+	/// @brief A closed polyline with its segments bucketed into horizontal rows, for fast containment tests of
+	///        many points. Contains uses the same segment predicate and intersection formula as
+	///        SampledPath::Contains (even-odd rule), so both agree exactly.
+	class RowIndexedPolygon
+	{
+	public:
+		/// @brief Buckets the segments of a closed polyline (the closing segment included).
+		/// @param polygon Polyline samples; fewer than 3 make an empty polygon.
+		/// @param rowHeight Height of a row; must be positive.
+		RowIndexedPolygon(const std::vector<SplineSample>& polygon, float rowHeight);
+
+		/// @brief Even-odd containment test.
+		bool Contains(float x, float z) const;
+
+	private:
+		std::vector<SplineSample> m_polygon;
+		std::vector<std::vector<uint32>> m_rows;
+		int64 m_firstRow = 0;
+		float m_rowHeight = 1.0f;
+	};
 }

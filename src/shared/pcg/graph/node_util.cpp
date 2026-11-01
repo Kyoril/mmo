@@ -135,31 +135,98 @@ namespace mmo::pcg::graph
 		return true;
 	}
 
-	void PolygonCrossingsAtZ(const std::vector<SplineSample>& polygon, const float z, std::vector<float>& crossings)
+	float EvaluationStep(const PathSpline& spline, const float preferred)
 	{
-		crossings.clear();
-		const size_t n = polygon.size();
-		if (n < 3)
+		float step = std::isfinite(preferred) ? std::max(preferred, SamplingStep) : SamplingStep;
+		double chords = 0.0;
+		const size_t n = spline.points.size();
+		for (size_t i = 0; i + 1 < n || (spline.closed && n >= 3 && i < n); ++i)
+		{
+			const SplinePoint& a = spline.points[i];
+			const SplinePoint& b = spline.points[(i + 1) % n];
+			chords += std::hypot(static_cast<double>(b.x) - a.x, static_cast<double>(b.z) - a.z);
+		}
+		// Curved segments are longer than their chords; the factor 2 leaves room for that.
+		const double coarse = chords * 2.0 / 100000.0;
+		// Doubling (instead of using `coarse` directly) keeps the step, and so the polyline of unchanged segments,
+		// stable while a vertex moves; it only changes when the spline's size crosses a power of two.
+		while (std::isfinite(coarse) && coarse > step && step < MaxWorldCoordinate)
+		{
+			step *= 2.0f;
+		}
+		return step;
+	}
+
+	namespace
+	{
+		int64 RowOf(const float z, const float rowHeight)
+		{
+			return static_cast<int64>(std::floor(static_cast<double>(z) / static_cast<double>(rowHeight)));
+		}
+	}
+
+	RowIndexedPolygon::RowIndexedPolygon(const std::vector<SplineSample>& polygon, const float rowHeight)
+		: m_rowHeight(rowHeight > 0.0f ? rowHeight : 1.0f)
+	{
+		if (polygon.size() < 3)
 		{
 			return;
 		}
+		m_polygon = polygon;
+
+		int64 lo = RowOf(polygon[0].z, m_rowHeight);
+		int64 hi = lo;
+		for (const SplineSample& s : polygon)
+		{
+			const int64 row = RowOf(s.z, m_rowHeight);
+			lo = std::min(lo, row);
+			hi = std::max(hi, row);
+		}
+		m_firstRow = lo;
+		m_rows.resize(static_cast<size_t>(hi - lo + 1));
+
+		const size_t n = m_polygon.size();
 		for (size_t i = 0; i < n; ++i)
 		{
-			const SplineSample& a = polygon[i];
-			const SplineSample& b = polygon[(i + 1) % n];
-			// Same predicate and formula as SampledPath::Contains.
-			if ((a.z > z) != (b.z > z))
+			const SplineSample& a = m_polygon[i];
+			const SplineSample& b = m_polygon[(i + 1) % n];
+			const int64 r0 = RowOf(std::min(a.z, b.z), m_rowHeight);
+			const int64 r1 = RowOf(std::max(a.z, b.z), m_rowHeight);
+			for (int64 row = r0; row <= r1; ++row)
 			{
-				crossings.push_back(a.x + (z - a.z) / (b.z - a.z) * (b.x - a.x));
+				m_rows[static_cast<size_t>(row - m_firstRow)].push_back(static_cast<uint32>(i));
 			}
 		}
-		std::sort(crossings.begin(), crossings.end());
 	}
 
-	bool InsideCrossings(const std::vector<float>& crossings, const float x)
+	bool RowIndexedPolygon::Contains(const float x, const float z) const
 	{
-		// SampledPath::Contains toggles for every crossing with x < crossX.
-		const auto it = std::upper_bound(crossings.begin(), crossings.end(), x);
-		return (static_cast<size_t>(crossings.end() - it) & 1u) != 0;
+		if (m_rows.empty())
+		{
+			return false;
+		}
+		const int64 row = RowOf(z, m_rowHeight);
+		if (row < m_firstRow || row >= m_firstRow + static_cast<int64>(m_rows.size()))
+		{
+			return false;
+		}
+
+		// A segment crossing the line at z spans z, so it is in z's row bucket.
+		bool inside = false;
+		const size_t n = m_polygon.size();
+		for (const uint32 i : m_rows[static_cast<size_t>(row - m_firstRow)])
+		{
+			const SplineSample& a = m_polygon[i];
+			const SplineSample& b = m_polygon[(i + 1) % n];
+			if ((a.z > z) != (b.z > z))
+			{
+				const float crossX = a.x + (z - a.z) / (b.z - a.z) * (b.x - a.x);
+				if (x < crossX)
+				{
+					inside = !inside;
+				}
+			}
+		}
+		return inside;
 	}
 }
