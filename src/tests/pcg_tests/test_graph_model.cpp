@@ -4,6 +4,8 @@
 
 #include "pcg/graph/graph_io.h"
 
+#include <limits>
+
 using namespace mmo;
 using namespace mmo::pcg::graph;
 
@@ -151,4 +153,52 @@ TEST_CASE("Unknown keys are ignored and missing optional parts default", "[graph
 	Graph empty;
 	REQUIRE(ParseGraph(WriteGraph(empty), out, error));
 	CHECK(out.nodes.empty());
+}
+
+TEST_CASE("Non-finite floats and invalid UTF-8 are written safely", "[graph_model]")
+{
+	Graph g = MakeGraph();
+	g.nodes[0].settings["f"] = std::numeric_limits<float>::quiet_NaN();
+	g.nodes[0].settings["v"] = Vector3(std::numeric_limits<float>::infinity(), 1.0f, -std::numeric_limits<float>::infinity());
+	g.nodes[0].editorX = std::numeric_limits<float>::infinity();
+	g.nodes[0].comment = String("bad \xFF byte");
+
+	const String text = WriteGraph(g);
+	Graph parsed;
+	String error;
+	REQUIRE(ParseGraph(text, parsed, error));
+	for (const NodeInstance& n : parsed.nodes)
+	{
+		if (n.id == 4)
+		{
+			CHECK(std::get<float>(n.settings.at("f")) == 0.0f);
+			CHECK(std::get<Vector3>(n.settings.at("v")) == Vector3(0.0f, 1.0f, 0.0f));
+			CHECK(n.editorX == 0.0f);
+		}
+	}
+}
+
+TEST_CASE("Out-of-range numbers are refused", "[graph_model]")
+{
+	Graph out;
+	String error;
+	auto node = [](const String& settings) { return "{\"version\": 1, \"nodes\": [{\"id\": 1, \"type\": \"A\", \"settings\": {\"x\": " + settings + "}}]}"; };
+
+	CHECK_FALSE(ParseGraph(node("{\"type\": \"float\", \"value\": 1e400}"), out, error));
+	CHECK_FALSE(error.empty());
+	error.clear();
+	CHECK_FALSE(ParseGraph(node("{\"type\": \"float\", \"value\": 1e300}"), out, error));
+	CHECK_FALSE(error.empty());
+	error.clear();
+	CHECK_FALSE(ParseGraph(node("{\"type\": \"vector3\", \"value\": [0, 1e300, 0]}"), out, error));
+	CHECK_FALSE(error.empty());
+	error.clear();
+	CHECK_FALSE(ParseGraph(node("{\"type\": \"int\", \"value\": 18446744073709551615}"), out, error));
+	CHECK_FALSE(error.empty());
+	error.clear();
+	CHECK_FALSE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 4294967295, \"type\": \"A\"}]}", out, error));
+	CHECK_FALSE(error.empty());
+	error.clear();
+	CHECK_FALSE(ParseGraph("{\"version\": 1, \"nodes\": [{\"id\": 1, \"type\": \"A\", \"editorX\": 1e300}]}", out, error));
+	CHECK_FALSE(error.empty());
 }

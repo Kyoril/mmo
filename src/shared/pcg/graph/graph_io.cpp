@@ -5,6 +5,9 @@
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstdint>
 #include <set>
 #include <tuple>
 
@@ -42,19 +45,53 @@ namespace mmo::pcg::graph
 			return false;
 		}
 
+		/// Non-finite floats cannot be represented in JSON (they would dump as null), so they are written as 0.
+		double SafeDouble(const float v)
+		{
+			return std::isfinite(v) ? static_cast<double>(v) : 0.0;
+		}
+
+		/// Reads a finite number that fits into a float.
+		bool FloatFromJson(const Json& j, float& out)
+		{
+			if (!j.is_number())
+			{
+				return false;
+			}
+			const double d = j.get<double>();
+			if (!std::isfinite(d) || std::fabs(d) > static_cast<double>(FLT_MAX))
+			{
+				return false;
+			}
+			out = static_cast<float>(d);
+			return true;
+		}
+
+		/// Whether the number is an integer that fits int64 (unsigned values above INT64_MAX do not).
+		bool IsInt64(const Json& j)
+		{
+			return j.is_number_integer() && !(j.is_number_unsigned() && j.get<uint64_t>() > static_cast<uint64_t>(INT64_MAX));
+		}
+
+		/// Dumps with invalid UTF-8 replaced instead of throwing.
+		String Dump(const Json& j)
+		{
+			return j.dump(2, ' ', false, Json::error_handler_t::replace);
+		}
+
 		Json ValueToJson(const AttributeValue& v)
 		{
 			Json j = Json::object();
 			j["type"] = TypeName(TypeOf(v));
 			switch (TypeOf(v))
 			{
-			case AttributeType::Float: j["value"] = static_cast<double>(std::get<float>(v)); break;
+			case AttributeType::Float: j["value"] = SafeDouble(std::get<float>(v)); break;
 			case AttributeType::Int: j["value"] = std::get<int64>(v); break;
 			case AttributeType::Bool: j["value"] = std::get<bool>(v); break;
 			case AttributeType::Vector3:
 			{
 				const Vector3& vec = std::get<Vector3>(v);
-				j["value"] = Json::array({ static_cast<double>(vec.x), static_cast<double>(vec.y), static_cast<double>(vec.z) });
+				j["value"] = Json::array({ SafeDouble(vec.x), SafeDouble(vec.y), SafeDouble(vec.z) });
 				break;
 			}
 			case AttributeType::String: j["value"] = std::get<String>(v); break;
@@ -94,17 +131,20 @@ namespace mmo::pcg::graph
 			switch (t)
 			{
 			case AttributeType::Float:
-				if (!value->is_number())
+			{
+				float f = 0.0f;
+				if (!FloatFromJson(*value, f))
 				{
-					error = "float attribute needs a number";
+					error = "float attribute needs a finite number within float range";
 					return false;
 				}
-				out = static_cast<float>(value->get<double>());
+				out = f;
 				return true;
+			}
 			case AttributeType::Int:
-				if (!value->is_number_integer())
+				if (!IsInt64(*value))
 				{
-					error = "int attribute needs an integer";
+					error = "int attribute needs an integer within int64 range";
 					return false;
 				}
 				out = static_cast<int64>(value->get<int64_t>());
@@ -118,13 +158,16 @@ namespace mmo::pcg::graph
 				out = value->get<bool>();
 				return true;
 			case AttributeType::Vector3:
-				if (!value->is_array() || value->size() != 3 || !(*value)[0].is_number() || !(*value)[1].is_number() || !(*value)[2].is_number())
+			{
+				float c[3] = { 0.0f, 0.0f, 0.0f };
+				if (!value->is_array() || value->size() != 3 || !FloatFromJson((*value)[0], c[0]) || !FloatFromJson((*value)[1], c[1]) || !FloatFromJson((*value)[2], c[2]))
 				{
-					error = "vector3 attribute needs an array of three numbers";
+					error = "vector3 attribute needs an array of three finite numbers within float range";
 					return false;
 				}
-				out = Vector3(static_cast<float>((*value)[0].get<double>()), static_cast<float>((*value)[1].get<double>()), static_cast<float>((*value)[2].get<double>()));
+				out = Vector3(c[0], c[1], c[2]);
 				return true;
+			}
 			case AttributeType::String:
 				if (!value->is_string())
 				{
@@ -170,9 +213,9 @@ namespace mmo::pcg::graph
 				}
 				return true;
 			}
-			if (!v->is_number_integer() || v->get<int64_t>() < 0 || v->get<int64_t>() > 0xFFFFFFFFll)
+			if (!IsInt64(*v) || v->get<int64_t>() < 0 || v->get<int64_t>() > 0xFFFFFFFFll)
 			{
-				error = context + ": '" + key + "' must be a non-negative integer";
+				error = context + ": '" + key + "' must be a non-negative 32 bit integer";
 				return false;
 			}
 			out = static_cast<uint32>(v->get<int64_t>());
@@ -186,12 +229,11 @@ namespace mmo::pcg::graph
 			{
 				return true;
 			}
-			if (!v->is_number())
+			if (!FloatFromJson(*v, out))
 			{
-				error = context + ": '" + key + "' must be a number";
+				error = context + ": '" + key + "' must be a finite number within float range";
 				return false;
 			}
-			out = static_cast<float>(v->get<double>());
 			return true;
 		}
 
@@ -208,9 +250,9 @@ namespace mmo::pcg::graph
 			{
 				return false;
 			}
-			if (node.id == 0)
+			if (node.id == 0 || node.id == 0xFFFFFFFFu)
 			{
-				error = context + ": node id 0 is invalid";
+				error = context + ": node id " + std::to_string(node.id) + " is invalid";
 				return false;
 			}
 			if (!ReadNumber(j, "editorX", node.editorX, context, error) || !ReadNumber(j, "editorY", node.editorY, context, error) || !ReadString(j, "comment", node.comment, context, error, false))
@@ -266,7 +308,7 @@ namespace mmo::pcg::graph
 		}
 
 		const Json* version = Find(root, "version");
-		if (version == nullptr || !version->is_number_integer() || version->get<int64_t>() != kFileVersion)
+		if (version == nullptr || !IsInt64(*version) || version->get<int64_t>() != kFileVersion)
 		{
 			error = "unsupported or missing graph file version (expected 1)";
 			return false;
@@ -370,7 +412,7 @@ namespace mmo::pcg::graph
 		graph.nextNodeId = maxId + 1;
 		if (const Json* next = Find(root, "nextNodeId"))
 		{
-			if (!next->is_number_integer() || next->get<int64_t>() < 1 || next->get<int64_t>() > 0xFFFFFFFFll)
+			if (!IsInt64(*next) || next->get<int64_t>() < 1 || next->get<int64_t>() > 0xFFFFFFFFll)
 			{
 				error = "'nextNodeId' must be a positive integer";
 				return false;
@@ -402,8 +444,8 @@ namespace mmo::pcg::graph
 			Json j = Json::object();
 			j["id"] = n->id;
 			j["type"] = n->type;
-			j["editorX"] = static_cast<double>(n->editorX);
-			j["editorY"] = static_cast<double>(n->editorY);
+			j["editorX"] = SafeDouble(n->editorX);
+			j["editorY"] = SafeDouble(n->editorY);
 			j["debug"] = n->debug;
 			j["comment"] = n->comment;
 			Json settings = Json::object();
@@ -444,6 +486,6 @@ namespace mmo::pcg::graph
 		}
 		root["parameters"] = std::move(paramArray);
 
-		return root.dump(2);
+		return Dump(root);
 	}
 }

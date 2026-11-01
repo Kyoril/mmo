@@ -123,3 +123,38 @@ TEST_CASE("ContentHash is stable and sensitive to every field", "[graph_data]")
 	CHECK(differs([](Collection& c) { std::swap(c[0], c[1]); }));
 	CHECK(differs([](Collection& c) { c.pop_back(); }));
 }
+
+TEST_CASE("Append with a column type conflict keeps the receiver's column", "[graph_data]")
+{
+	PointSet a;
+	a.points.resize(1);
+	a.SetAttribute(0, "c", 3.0f);
+
+	PointSet b;
+	b.points.resize(2);
+	b.SetAttribute(0, "c", String("s"));
+	b.SetAttribute(1, "c", String("t"));
+
+	a.Append(b);
+	REQUIRE(a.points.size() == 3);
+	CHECK(a.columns["c"].first == AttributeType::Float);
+	CHECK(a.columns["c"].second.size() == 3);
+	CHECK(std::get<float>(*a.GetAttribute(0, "c")) == 3.0f);
+	CHECK(std::get<float>(*a.GetAttribute(2, "c")) == 0.0f);
+}
+
+TEST_CASE("Keep with a short mask drops the points beyond it", "[graph_data]")
+{
+	PointSet set;
+	set.points.resize(4);
+	for (size_t i = 0; i < 4; ++i)
+	{
+		set.points[i].seed = i;
+		set.SetAttribute(i, "n", static_cast<int64>(i));
+	}
+
+	set.Keep({ 0, 1 });
+	REQUIRE(set.points.size() == 1);
+	CHECK(set.points[0].seed == 1);
+	CHECK(set.columns["n"].second.size() == 1);
+}
