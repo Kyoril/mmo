@@ -13,6 +13,8 @@ namespace mmo::pcg
 	{
 		/// PCGP as little endian characters.
 		constexpr uint32 MagicPcgp = 0x50474350;
+		/// PCGG as little endian characters (the graph instance record's magic).
+		constexpr uint32 MagicPcgg = 0x47474350;
 		/// PCGO as little endian characters (the oasis record's magic).
 		constexpr uint32 MagicPcgo = 0x4F474350;
 		/// 1: initial layout. Placements use the oasis record's version 4 layout.
@@ -239,6 +241,8 @@ namespace mmo::pcg
 			return RecordKind::Oasis;
 		case MagicPcgp:
 			return RecordKind::SectionPath;
+		case MagicPcgg:
+			return RecordKind::GraphInstance;
 		default:
 			return RecordKind::Unknown;
 		}

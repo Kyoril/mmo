@@ -57,7 +57,9 @@ namespace mmo::pcg
 		/// An oasis record (magic PCGO).
 		Oasis,
 		/// A section path record (magic PCGP).
-		SectionPath
+		SectionPath,
+		/// A graph instance record (magic PCGG).
+		GraphInstance
 	};
 
 	/// Peeks the magic: which record type the stream holds. The reader position is restored.
