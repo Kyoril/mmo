@@ -380,6 +380,35 @@ namespace mmo
 		}
 	}
 
+	void ProceduralEditMode::OnControlsChanged()
+	{
+		// Any add, removal or reorder may move the placed controls that resolved controls point at.
+		++m_placedRevision;
+	}
+
+	void ProceduralEditMode::ApplyPendingTags()
+	{
+		if (!m_tagsEditing)
+		{
+			return;
+		}
+
+		m_tagsEditing = false;
+		const int32 index = FindControl(m_tagsControlId);
+		if (index < 0 || m_controls[index].kind != ControlKind::Placed)
+		{
+			return;
+		}
+
+		Control& control = m_controls[index];
+		std::set<String> tags = SplitTags(m_tagsBuffer);
+		if (tags != control.placed.extraTags)
+		{
+			control.placed.extraTags = std::move(tags);
+			MarkChanged(control);
+		}
+	}
+
 	bool ProceduralEditMode::IsPlacedVolume(const Control& control)
 	{
 		const pcg::graph::ControlType* type = m_controlLibrary.Find(control.placed.typePath);
@@ -432,6 +461,8 @@ namespace mmo
 
 	void ProceduralEditMode::SelectControl(const int32 index)
 	{
+		// A tags edit in progress belongs to the control it was typed for.
+		ApplyPendingTags();
 		m_selected = index;
 		m_splineEditor.CancelDrag();
 		ClearPointSelection();
@@ -726,6 +757,8 @@ namespace mmo
 	{
 		ClearPointSelection();
 		ClearTransformSelection();
+		// Reloading replaces the records; an unfinished tags edit is dropped with them.
+		m_tagsEditing = false;
 		++m_placedRevision;
 		m_controls.clear();
 		m_deletedIds.clear();
@@ -830,12 +863,15 @@ namespace mmo
 		}
 
 		std::stable_sort(m_controls.begin(), m_controls.end(), [](const Control& a, const Control& b) { return a.Id() < b.Id(); });
+		OnControlsChanged();
 
 		DLOG("Loaded " << m_controls.size() << " procedural record(s) from " << folder);
 	}
 
 	bool ProceduralEditMode::Save(const std::filesystem::path& pcgFolder)
 	{
+		// Saving while the tags field is being edited keeps what was typed.
+		ApplyPendingTags();
 		bool success = true;
 
 		bool deletionsFailed = false;
@@ -1074,6 +1110,7 @@ namespace mmo
 
 		id = record.id;
 		m_controls.push_back(std::move(control));
+		OnControlsChanged();
 		SelectControl(static_cast<int32>(m_controls.size()) - 1);
 		SetStatus("Created '" + m_controls.back().Name() + "' (" + FormatId(id) + "). Edit the loop, then Rebuild.", StatusLevel::Ok);
 		ILOG(m_status);
@@ -1113,7 +1150,8 @@ namespace mmo
 		MarkChanged(control);
 		pcg::SectionPathRecord& record = control.path;
 		record.id = m_worldEditor.GenerateEntityUniqueId();
-		record.name = name.empty() ? String(closed ? "Section Loop " : "Section Path ") + std::to_string(m_controls.size() - GetOasisCount() + 1) : name;
+		record.name = name.empty() ? String(closed ? "Section Loop " : "Section Path ") + std::to_string(std::count_if(m_controls.begin(), m_controls.end(),
+			[](const Control& c) { return c.kind == ControlKind::SectionPath; }) + 1) : name;
 		record.sectionAsset = sectionAsset;
 		// A loop follows the large shape of the hand-made ground and levels its bumps (SmoothedGround unless set).
 		if (!ApplyNewSectionPathOptions(options, record.params, error))
@@ -1163,6 +1201,7 @@ namespace mmo
 
 		id = record.id;
 		m_controls.push_back(std::move(control));
+		OnControlsChanged();
 		SelectControl(static_cast<int32>(m_controls.size()) - 1);
 		if (missing > 0 || !loaded)
 		{
@@ -1345,6 +1384,7 @@ namespace mmo
 		MarkChanged(control);
 		id = instance.id;
 		m_controls.push_back(std::move(control));
+		OnControlsChanged();
 		SelectControl(static_cast<int32>(m_controls.size()) - 1);
 		if (missing > 0 || !loaded)
 		{
@@ -1662,10 +1702,14 @@ namespace mmo
 	{
 		error.clear();
 
+		// Placed controls build nothing themselves (graph instances read them).
 		std::vector<uint64> ids;
 		for (const Control& control : m_controls)
 		{
-			ids.push_back(control.Id());
+			if (control.kind != ControlKind::Placed)
+			{
+				ids.push_back(control.Id());
+			}
 		}
 
 		uint32 rebuilt = 0;
@@ -1710,7 +1754,6 @@ namespace mmo
 			// Nothing in the world belongs to a placed control.
 			SetStatus("Deleted '" + control.Name() + "'.", StatusLevel::Ok);
 			ILOG(m_status);
-			++m_placedRevision;
 		}
 		else
 		{
@@ -1730,6 +1773,7 @@ namespace mmo
 
 		m_deletedIds.push_back(id);
 		m_controls.erase(m_controls.begin() + index);
+		OnControlsChanged();
 		SelectControl(m_controls.empty() ? -1 : std::min(index, static_cast<int32>(m_controls.size()) - 1));
 		return true;
 	}
@@ -2087,7 +2131,12 @@ namespace mmo
 		}
 
 		// Tags: applied when the field loses focus, so typing "a, " is not reformatted on the way.
-		if (!m_tagsEditing || m_tagsControlId != instance.id)
+		if (m_tagsEditing && m_tagsControlId != instance.id)
+		{
+			// The edit was typed for another control (the selection changed without SelectControl).
+			ApplyPendingTags();
+		}
+		if (!m_tagsEditing)
 		{
 			m_tagsBuffer = JoinTags(instance.extraTags);
 		}

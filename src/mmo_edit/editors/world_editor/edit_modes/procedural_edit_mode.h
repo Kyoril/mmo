@@ -179,8 +179,9 @@ namespace mmo
 		/// @return True if every setting was applied.
 		bool SetPlacedControlProperties(uint64 id, const std::vector<std::pair<String, String>>& settings, String& error);
 
-		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides,
-		///        creation, deletion, load) or of a control type in the library.
+		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides), on every
+		///        structural change of the control list of any kind (creation, deletion, load) and on any
+		///        change of a control type in the library.
 		[[nodiscard]] uint64 GetControlsRevision() const { return m_placedRevision + m_controlLibrary.Revision(); }
 
 		/// @brief Resolves every placed control against its control type, in list order. Controls whose
@@ -316,6 +317,13 @@ namespace mmo
 		/// @brief Marks a control changed (written on the next save; a placed control also bumps the
 		///        controls revision).
 		void MarkChanged(Control& control);
+
+		/// @brief Bumps the controls revision after any structural change of the control list (add, remove,
+		///        reorder, load), whatever the kind: it may move the placed controls resolved controls point at.
+		void OnControlsChanged();
+
+		/// @brief Applies an unfinished edit of the extra tags field to the control it was typed for.
+		void ApplyPendingTags();
 
 		/// @brief Whether a placed control without a spline is a volume (its type says so; also when the
 		///        type is missing, so its box stays visible and editable) rather than a point.
