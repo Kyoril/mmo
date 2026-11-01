@@ -110,7 +110,11 @@ namespace mmo
 		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" },
 		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" },
 		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" },
-		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" }
+		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" },
+		{ "Summon Persistent Pet", "Summon", "Summons a persistent pet from the pet entry given by Misc Value A" },
+		{ "Summon Temporary Pet", "Summon", "Summons a temporary pet creature" },
+		{ "Dismiss Pet", "Utility", "Dismisses the caster's pets of the given pet group" },
+		{ "Revive Pet", "Healing", "Revives the caster's dead persistent pet" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -171,7 +175,11 @@ namespace mmo
 		"Critical Block",
 		"Revive %",
 		"Change Class",
-		"Teach Emote"
+		"Teach Emote",
+		"Summon Persistent Pet",
+		"Summon Temporary Pet",
+		"Dismiss Pet",
+		"Revive Pet"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
