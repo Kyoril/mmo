@@ -109,10 +109,43 @@ namespace mmo::pcg::graph
 			return "unknown";
 		}
 
+		const ParameterDef* FindParameter(const Graph& g, const String& name)
+		{
+			for (const ParameterDef& def : g.parameters)
+			{
+				if (def.name == name)
+				{
+					return &def;
+				}
+			}
+			return nullptr;
+		}
+
 		String LinkText(const Link& link)
 		{
 			return std::to_string(link.fromNode) + "." + link.fromPin + " -> " + std::to_string(link.toNode) + "." + link.toPin;
 		}
+	}
+
+	bool IsParameterBinding(const AttributeValue& value, String& parameterName)
+	{
+		const String* s = std::get_if<String>(&value);
+		if (s == nullptr || s->empty() || (*s)[0] != '$' || (s->size() > 1 && (*s)[1] == '$'))
+		{
+			return false;
+		}
+		parameterName = s->substr(1);
+		return true;
+	}
+
+	AttributeValue UnescapeSettingValue(const AttributeValue& value)
+	{
+		const String* s = std::get_if<String>(&value);
+		if (s != nullptr && s->size() >= 2 && (*s)[0] == '$' && (*s)[1] == '$')
+		{
+			return AttributeValue(s->substr(1));
+		}
+		return value;
 	}
 
 	std::vector<GraphIssue> ValidateGraph(const Graph& g, const NodeRegistry& r)
@@ -147,10 +180,30 @@ namespace mmo::pcg::graph
 			for (const SettingDef& setting : def->settings)
 			{
 				const auto it = node.settings.find(setting.name);
-				if (it != node.settings.end() && TypeOf(it->second) != TypeOf(setting.defaultValue))
+				if (it == node.settings.end())
 				{
-					issues.push_back({ node.id, "setting '" + setting.name + "' must be " + TypeName(TypeOf(setting.defaultValue)) +
-						", not " + TypeName(TypeOf(it->second)) });
+					continue;
+				}
+				const AttributeType wanted = TypeOf(setting.defaultValue);
+				String parameterName;
+				if (IsParameterBinding(it->second, parameterName))
+				{
+					const ParameterDef* parameter = FindParameter(g, parameterName);
+					if (parameter == nullptr)
+					{
+						issues.push_back({ node.id, "setting '" + setting.name + "' is bound to the unknown parameter '" + parameterName + "'" });
+					}
+					else if (TypeOf(parameter->defaultValue) != wanted)
+					{
+						issues.push_back({ node.id, "setting '" + setting.name + "' must be " + TypeName(wanted) + ", but parameter '" + parameterName +
+							"' is " + TypeName(TypeOf(parameter->defaultValue)) });
+					}
+					continue;
+				}
+				const AttributeValue value = UnescapeSettingValue(it->second);
+				if (TypeOf(value) != wanted)
+				{
+					issues.push_back({ node.id, "setting '" + setting.name + "' must be " + TypeName(wanted) + ", not " + TypeName(TypeOf(value)) });
 				}
 			}
 		}

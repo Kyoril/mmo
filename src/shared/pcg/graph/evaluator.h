@@ -147,8 +147,9 @@ namespace mmo::pcg::graph
 	/// @brief Validates and evaluates a graph. Nodes run in topological order, choosing the smallest id among
 	///        ready nodes. An input pin receives the concatenation of its linked outputs in link order.
 	///        Declared settings missing from the instance take the def's default. Nodes see ctx.parameters
-	///        merged over the graph's parameter defaults (MergeParameters). Declared output pins are
-	///        always present (empty if not produced); undeclared output pins are dropped with a warning.
+	///        merged over the graph's parameter defaults (MergeParameters); parameter bindings ("$name", see
+	///        SettingDef) are resolved against those merged parameters. Declared output pins are always
+	///        present (empty if not produced); undeclared output pins are dropped with a warning.
 	///
 	///        The output is not clipped to ctx.region, by design: nodes may produce points outside the region
 	///        (samplers cover whole controls, which can cross the region border), and pruning steps need those

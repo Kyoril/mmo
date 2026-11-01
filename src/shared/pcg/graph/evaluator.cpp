@@ -79,13 +79,38 @@ namespace mmo::pcg::graph
 			}
 		};
 
-		/// Declared settings take the instance value or the def's default; undeclared instance settings are kept.
-		AttributeSet EffectiveSettings(const NodeTypeDef& def, const NodeInstance& node)
+		/// Declared settings take the instance value (bindings resolved, "$$" unescaped) or the def's default;
+		/// undeclared instance settings are kept as they are. Sets error (and returns what it has) when a binding
+		/// cannot be resolved.
+		AttributeSet EffectiveSettings(const NodeTypeDef& def, const NodeInstance& node, const AttributeSet& parameters, String& error)
 		{
 			AttributeSet settings = node.settings;
 			for (const SettingDef& setting : def.settings)
 			{
-				settings.emplace(setting.name, setting.defaultValue);
+				const auto it = settings.find(setting.name);
+				if (it == settings.end())
+				{
+					settings.emplace(setting.name, setting.defaultValue);
+					continue;
+				}
+				String parameterName;
+				if (!IsParameterBinding(it->second, parameterName))
+				{
+					it->second = UnescapeSettingValue(it->second);
+					continue;
+				}
+				const auto parameter = parameters.find(parameterName);
+				if (parameter == parameters.end())
+				{
+					error = "setting '" + setting.name + "' is bound to the unknown parameter '" + parameterName + "'";
+					return settings;
+				}
+				if (TypeOf(parameter->second) != TypeOf(setting.defaultValue))
+				{
+					error = "setting '" + setting.name + "' is bound to parameter '" + parameterName + "' of another type";
+					return settings;
+				}
+				it->second = parameter->second;
 			}
 			return settings;
 		}
@@ -228,7 +253,19 @@ namespace mmo::pcg::graph
 				continue;
 			}
 
-			const AttributeSet settings = EffectiveSettings(def, node);
+			String settingsError;
+			const AttributeSet settings = EffectiveSettings(def, node, ctx.parameters, settingsError);
+			if (!settingsError.empty())
+			{
+				nodeResult.output.error = settingsError;
+				NormalizeOutputs(def, nodeResult.output);
+				failed.insert(id);
+				if (cache != nullptr)
+				{
+					cache->m_entries.erase(id);
+				}
+				continue;
+			}
 			const uint64 nodeSeed = Hash(ctx.instanceSeed, id);
 
 			uint64 key = Mix(0x2545f4914f6cdd1dull, id, StringHash(node.type));

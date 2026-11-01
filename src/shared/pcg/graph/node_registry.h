@@ -56,6 +56,14 @@ namespace mmo::pcg::graph
 	};
 
 	/// @brief Describes a node setting. The default value's type is the setting's type.
+	///
+	///        Parameter bindings: a declared setting whose instance value is the String "$name" takes the value
+	///        of the graph parameter `name` (the caller's override merged over the graph's default) instead,
+	///        for settings of every type, String settings included. "$$..." is the literal String "$..." (one
+	///        "$" removed). The parameter must be declared by the graph (Graph::parameters) with the setting's
+	///        type, else ValidateGraph reports an issue (and the node fails if it is executed anyway). The
+	///        evaluator resolves bindings before a node runs, so the node sees, and its cache key covers, the
+	///        resolved value. Undeclared instance settings are never resolved or unescaped.
 	struct SettingDef
 	{
 		String name;
@@ -80,8 +88,9 @@ namespace mmo::pcg::graph
 	};
 
 	/// @brief Executes a node. Must be deterministic: the same arguments produce the same output.
-	///        `settings` holds every declared setting (instance value or the def's default), plus any
-	///        undeclared instance settings. `inputs` holds one entry per input pin that has links.
+	///        `settings` holds every declared setting (instance value with parameter bindings resolved, or
+	///        the def's default), plus any undeclared instance settings. `inputs` holds one entry per input
+	///        pin that has links.
 	///        A node may read only the context parts its type declares in contextDeps.
 	using NodeExecute = std::function<NodeOutput(const EvalContext&, uint64 nodeSeed, const AttributeSet& settings, const std::map<String, Collection>& inputs)>;
 
@@ -132,6 +141,14 @@ namespace mmo::pcg::graph
 	///        library link cannot drop it.
 	void RegisterBuiltinNodes(NodeRegistry& registry);
 
+	/// @brief Whether a setting value binds to a graph parameter: a String starting with "$" but not "$$".
+	/// @param parameterName Receives the parameter name (the text after "$"; may be empty) for a binding.
+	bool IsParameterBinding(const AttributeValue& value, String& parameterName);
+
+	/// @brief The literal value of a setting value that is not a binding: "$$..." becomes "$...", any other
+	///        value is returned unchanged.
+	AttributeValue UnescapeSettingValue(const AttributeValue& value);
+
 	/// @brief A validation problem. node is the offending node's id (0 for graph-level problems).
 	struct GraphIssue
 	{
@@ -141,8 +158,9 @@ namespace mmo::pcg::graph
 
 	/// @brief Validates a graph against a registry: invalid or duplicate node ids, unknown node types,
 	///        dangling links, unknown pins, pin kind mismatches, several links into a single-link pin,
-	///        cycles, missing required inputs and setting type mismatches (declared settings must hold the
-	///        default value's type exactly; undeclared settings are ignored).
+	///        cycles, missing required inputs, setting type mismatches (declared settings must hold the
+	///        default value's type exactly; undeclared settings are ignored) and parameter bindings to a
+	///        parameter the graph does not declare or that has another type than the setting.
 	/// @return The issues in a deterministic order; empty if the graph is valid.
 	std::vector<GraphIssue> ValidateGraph(const Graph& g, const NodeRegistry& r);
 }

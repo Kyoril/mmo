@@ -131,12 +131,18 @@ namespace
 			def.inputs.push_back(PinDef{ "In", {} });
 			def.outputs.push_back(PinDef{ "Out", {} });
 			def.settings.push_back(SettingDef{ "id", int64(0) });
+			def.settings.push_back(SettingDef{ "label", String() });
 			def.execute = [record](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
 			{
 				record(settings);
 				NodeOutput out;
 				const auto it = inputs.find("In");
 				out.pins["Out"] = it != inputs.end() ? it->second : Collection();
+				const String& label = std::get<String>(settings.at("label"));
+				if (!label.empty())
+				{
+					out.warnings.push_back(label);
+				}
 				return out;
 			};
 			r.Register(def);
@@ -732,6 +738,116 @@ TEST_CASE("Evaluate hashes the controls itself when controlsRevision is 0", "[gr
 	controls[0].attributes["a"] = 2.0f;
 	Evaluate(g, f.registry, ctx, &cache);
 	CHECK(f.Runs(1) == 1);
+}
+
+TEST_CASE("Settings bound to graph parameters resolve, re-run only bound nodes and are validated", "[graph_eval]")
+{
+	Fixture f;
+	Graph g;
+	g.nodes.push_back(Node(1, "Test.Source"));
+	g.nodes.push_back(Node(2, "Test.Offset"));
+	g.nodes.push_back(Node(3, "Test.Offset"));
+	g.nodes.push_back(Node(4, "Test.Combine"));
+	g.nextNodeId = 5;
+	g.nodes[0].settings["count"] = String("$count");
+	g.nodes[1].settings["dx"] = String("$shift");
+	g.nodes[3].settings["label"] = String("$label");
+	g.parameters.push_back(ParameterDef{ "count", int64(3), "" });
+	g.parameters.push_back(ParameterDef{ "shift", 2.0f, "" });
+	g.parameters.push_back(ParameterDef{ "label", String("hello"), "" });
+	Connect(g, 1, 2);
+	Connect(g, 1, 3);
+	Connect(g, 2, 4);
+
+	EvalContext ctx;
+	GraphCache cache;
+	const EvalResult first = Evaluate(g, f.registry, ctx, &cache);
+	REQUIRE(first.ok);
+	REQUIRE(first.nodes.at(1).output.error.empty());
+	const auto& shifted = first.nodes.at(2).output.pins.at("Out").at(0).points.points;
+	REQUIRE(shifted.size() == 3);   // count bound to the Int parameter
+	CHECK(shifted[0].position.x == 2.0f);   // dx bound to the Float parameter
+	CHECK(first.nodes.at(3).output.pins.at("Out").at(0).points.points[0].position.x == 1.0f);   // unbound default
+	REQUIRE(first.nodes.at(4).output.warnings.size() == 1);
+	CHECK(first.nodes.at(4).output.warnings[0] == "hello");   // String settings bind too
+
+	SECTION("changing a bound parameter changes the output and re-runs only the bound node and its downstream")
+	{
+		f.Reset();
+		ctx.parameters["shift"] = 5.0f;
+		const EvalResult second = Evaluate(g, f.registry, ctx, &cache);
+		REQUIRE(second.ok);
+		CHECK(second.nodes.at(2).output.pins.at("Out").at(0).points.points[0].position.x == 5.0f);
+		CHECK(f.Runs(2) == 1);
+		CHECK(f.Runs(4) == 1);
+		CHECK(f.log->size() == 2);
+		CHECK(second.nodes.at(1).fromCache);
+		CHECK(second.nodes.at(3).fromCache);
+
+		// Changing it back serves the first result again (the resolved value is the key, not the binding).
+		f.Reset();
+		ctx.parameters["shift"] = 2.0f;
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.Runs(2) == 1);
+	}
+
+	SECTION("an override of another type keeps the default (and warns via the merge)")
+	{
+		f.Reset();
+		ctx.parameters["shift"] = String("oops");
+		const EvalResult second = Evaluate(g, f.registry, ctx, &cache);
+		REQUIRE(second.ok);
+		CHECK(second.nodes.at(2).fromCache);
+	}
+
+	SECTION("$$ escapes a literal dollar")
+	{
+		g.nodes[3].settings["label"] = String("$$label");
+		const EvalResult second = Evaluate(g, f.registry, ctx, &cache);
+		REQUIRE(second.ok);
+		REQUIRE(second.nodes.at(4).output.warnings.size() == 1);
+		CHECK(second.nodes.at(4).output.warnings[0] == "$label");
+
+		// On a Float setting the escaped literal is a String: a type mismatch.
+		g.nodes[1].settings["dx"] = String("$$shift");
+		const EvalResult third = Evaluate(g, f.registry, ctx, &cache);
+		CHECK_FALSE(third.ok);
+		CHECK(HasIssueFor(third.issues, 2));
+	}
+
+	SECTION("unknown parameters and type mismatches are validation issues")
+	{
+		g.nodes[1].settings["dx"] = String("$nope");
+		g.nodes[2].settings["dx"] = String("$count");   // Int parameter on a Float setting
+		g.nodes[3].settings["label"] = String("$");
+		const std::vector<GraphIssue> issues = ValidateGraph(g, f.registry);
+		CHECK(HasIssueFor(issues, 2));
+		CHECK(HasIssueFor(issues, 3));
+		CHECK(HasIssueFor(issues, 4));
+		CHECK_FALSE(HasIssueFor(issues, 1));
+		bool namesParameter = false;
+		for (const GraphIssue& issue : issues)
+		{
+			namesParameter = namesParameter || issue.message.find("'nope'") != String::npos;
+		}
+		CHECK(namesParameter);
+		f.Reset();
+		CHECK_FALSE(Evaluate(g, f.registry, ctx, &cache).ok);
+		CHECK(f.log->empty());
+	}
+
+	SECTION("IsParameterBinding and UnescapeSettingValue")
+	{
+		String name;
+		CHECK(IsParameterBinding(String("$abc"), name));
+		CHECK(name == "abc");
+		CHECK_FALSE(IsParameterBinding(String("$$abc"), name));
+		CHECK_FALSE(IsParameterBinding(String("abc"), name));
+		CHECK_FALSE(IsParameterBinding(1.0f, name));
+		CHECK(std::get<String>(UnescapeSettingValue(String("$$abc"))) == "$abc");
+		CHECK(std::get<String>(UnescapeSettingValue(String("$abc"))) == "$abc");
+		CHECK(std::get<float>(UnescapeSettingValue(1.0f)) == 1.0f);
+	}
 }
 
 TEST_CASE("Node error stops downstream nodes", "[graph_eval]")
