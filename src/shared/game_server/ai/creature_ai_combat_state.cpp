@@ -124,9 +124,13 @@ namespace mmo
 			// entry. This ensures that if the creature dies in the same frame it enters
 			// combat (i.e. a one-shot from idle), the death state still finds a tagged
 			// creature and distributes XP and loot correctly.
-			if (initiator->IsPlayer() && !controlled.IsTagged())
+			if (!controlled.IsTagged())
 			{
-				controlled.AddLootRecipient(initiator->GetGuid());
+				// A pet tags for its owner.
+				if (const GameUnitS& tagger = initiator->GetTopOwner(); tagger.IsPlayer())
+				{
+					controlled.AddLootRecipient(tagger.GetGuid());
+				}
 			}
 		}
 		m_combatInitiator.reset();
@@ -243,11 +247,12 @@ namespace mmo
 
 		GetControlled().AddCombatParticipant(attacker);
 
-		if (attacker.IsPlayer())
+		// A pet tags for its owner: its damage is the owner's work.
+		if (!GetControlled().IsTagged())
 		{
-			if (!GetControlled().IsTagged())
+			if (const GameUnitS& tagger = attacker.GetTopOwner(); tagger.IsPlayer())
 			{
-				GetControlled().AddLootRecipient(attacker.GetGuid());
+				GetControlled().AddLootRecipient(tagger.GetGuid());
 			}
 		}
 

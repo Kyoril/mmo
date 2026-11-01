@@ -60,9 +60,10 @@ namespace mmo
 		const float playerDamageShare = controlled.GetPlayerDamageShare();
 
 		// Summons reward nobody: a boss raising adds on a timer would otherwise be a loot and
-		// experience farm. Neither does a creature the NPCs around killed: pulling a creature onto
-		// a guard and letting the guard do the work is not the player's kill.
-		if (controlled.IsTagged() && controlled.GrantsKillRewards() && playerDamageShare > MinPlayerDamageShare)
+		// experience farm. Pets (temporary or persistent) never reward their death either. Neither
+		// does a creature the NPCs around killed: pulling a creature onto a guard and letting the
+		// guard do the work is not the player's kill.
+		if (controlled.IsTagged() && controlled.GrantsKillRewards() && !controlled.IsPet() && playerDamageShare > MinPlayerDamageShare)
 		{
 			uint32 sumLevel = 0;
 

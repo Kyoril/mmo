@@ -49,6 +49,13 @@ namespace mmo
 				return fightsForPlayer(*followed, depth + 1);
 			}
 
+			// Pets (and anything else with an Owner) fight for whoever owns them, however they got linked.
+			const GameUnitS& topOwner = creature->GetTopOwner();
+			if (&topOwner != &unit)
+			{
+				return fightsForPlayer(topOwner, depth + 1);
+			}
+
 			return false;
 		}
 	}
