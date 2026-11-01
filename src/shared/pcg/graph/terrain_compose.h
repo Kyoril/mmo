@@ -10,6 +10,7 @@
 #include "pcg/placement.h"
 #include "pcg/section_asset.h"
 #include "pcg/terrain_contribution.h"
+#include "terrain_io/water_flow.h"
 
 #include <functional>
 #include <memory>
@@ -71,8 +72,13 @@ namespace mmo::pcg::graph
 		/// @brief Producing node id (op.order).
 		uint32 order = 0;
 
-		/// @brief The op's spline or area as sampled for the op (y is the spline height).
+		/// @brief The op's spline or area as sampled for the op (y is the spline height). River: the water surface
+		///        line, sampled every 1 m downstream (y is the water surface).
 		std::vector<Vector3> points;
+
+		/// @brief River: the bed edges at +-width across the spline (left of the flow, then right), one point per
+		///        surface sample (y is the bed height). Empty for other ops.
+		std::vector<std::vector<Vector3>> bedEdges;
 
 		/// @brief True if the last point joins the first.
 		bool closed = false;
@@ -122,6 +128,13 @@ namespace mmo::pcg::graph
 	///   the area, so the shore starts at the running height and the bed lies depth under the water after shoreWidth.
 	///   Outside the edge heights are untouched. Prepare then also warns once if the base ground along the outline
 	///   (sampled every 2 m) is below the water level. depth 0 writes no heights.
+	/// - River (open spline of at least 2 points; width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 2,
+	///   op.asset = water material): the spline is sampled every 1 m downstream (first to last point); the water surface
+	///   surface(s) is the running minimum of y(s) + surfaceOffset, so it never climbs (Prepare warns once, naming the
+	///   largest climb, where the spline rises more than 0.5 m above it). With d the distance to the spline and t the
+	///   surface at the projected arc distance: target = t - depth within width; over bank, target =
+	///   min(h, lerp(h, t - depth, smoothstep(width + bank, width, d))); weight 1 wherever d <= width + bank. Water:
+	///   waterType 1 and waterHeight = t where d <= width + waterMargin.
 	/// Splat targets are composited in op order (each op's layer weights over the previous ones at its weight x
 	/// fade); water is last writer wins inside the region. Heights are only written where an op touches: the result
 	/// is then (final h, weight 1), else weight 0. Splat and water do not depend on the base height. Like all ops,
@@ -184,8 +197,16 @@ namespace mmo::pcg::graph
 		void BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out,
 			std::vector<String>* warnings = nullptr) const;
 
-		/// @brief First non-empty WaterArea material (a warning is recorded if several differ).
+		/// @brief The water material: the first non-empty River material, else the first non-empty WaterArea material,
+		///        in op order (River materials win because only they read the flow; a warning is recorded for every
+		///        differing material that is not used).
 		const String& GetWaterMaterial() const;
+
+		/// @brief The flow paths of every River op, in op order: the river's samples every 4 m downstream (and its last
+		///        point), with halfWidth = width + waterMargin, cut into runs where the region fade is > 0. Each run of
+		///        two points or more is one path, in downstream order.
+		/// @param out Cleared, then receives the paths.
+		void GetFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& out) const;
 
 		/// @brief Warnings of Prepare, each text once.
 		const std::vector<String>& GetWarnings() const;
@@ -209,6 +230,8 @@ namespace mmo::pcg::graph
 		float m_borderFade = 0.0f;
 		WorldRect m_influence;
 		String m_waterMaterial;
+		/// True once m_waterMaterial is a River material.
+		bool m_waterMaterialFromRiver = false;
 		std::vector<String> m_warnings;
 	};
 }

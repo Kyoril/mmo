@@ -54,6 +54,7 @@ namespace mmo::pcg::graph
 		case TerrainOpType::Carve: return "Carve";
 		case TerrainOpType::Paint: return "Paint";
 		case TerrainOpType::WaterArea: return "WaterArea";
+		case TerrainOpType::River: return "River";
 		}
 		return "Noise";
 	}

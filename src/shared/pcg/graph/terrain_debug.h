@@ -15,10 +15,18 @@ namespace mmo::pcg::graph
 	/// @brief Height above the composed ground at which op outlines and section copy rects are drawn.
 	constexpr float TerrainDebugOutlineLift = 0.25f;
 
+	/// @brief Colour (argb, blue) of a river's water surface line.
+	constexpr uint32 TerrainDebugRiverSurfaceArgb = 0xFF3399FFu;
+
+	/// @brief Colour (argb, brown) of a river's bed edges.
+	constexpr uint32 TerrainDebugRiverBedArgb = 0xFF8B5A2Bu;
+
 	/// @brief Builds the debug drawing of prepared terrain ops on a base terrain.
 	/// @details First the outline of every op (its spline or area, see PreparedTerrain::GetOutlines; SectionPath ops
 	///          also their copy rects, edges split into pieces of at most `step`), drawn in argbRaise
-	///          TerrainDebugOutlineLift above the composed ground. Then height ticks: on the world-anchored grid of
+	///          TerrainDebugOutlineLift above the composed ground; a River op instead draws its water surface line at
+	///          the surface height (+ the lift) in TerrainDebugRiverSurfaceArgb and its two bed edges on the composed
+	///          ground in TerrainDebugRiverBedArgb. Then height ticks: on the world-anchored grid of
 	///          multiples of `step` inside the op influence (PreparedTerrain::GetInfluence), row by row (z, then x),
 	///          one vertical line per sample whose composed height differs from the base, from the base height to
 	///          the composed height, in argbRaise where the ground rises and argbLower where it sinks. The composed

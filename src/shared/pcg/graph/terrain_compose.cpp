@@ -9,6 +9,7 @@
 #include "pcg/section_path.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -91,6 +92,18 @@ namespace mmo::pcg::graph
 
 		/// Distance between rim samples of a basin.
 		constexpr float kRimStep = 2.0f;
+
+		/// Preferred distance between the water surface samples of a river (doubled for very long rivers).
+		constexpr float kRiverSurfaceStep = 1.0f;
+
+		/// Most surface samples per river; the step doubles until the river fits.
+		constexpr float kMaxRiverSurfaceSamples = 100000.0f;
+
+		/// Flow path points are every this many surface samples (4 m at the preferred step).
+		constexpr size_t kRiverFlowStride = 4;
+
+		/// A river spline may climb this far above its running water surface without a warning.
+		constexpr float kRiverClimbTolerance = 0.5f;
 
 		/// A length in metres as short text: at most 2 decimals, no trailing zeros ("20", "21.5").
 		String FormatMeters(const float value)
@@ -214,6 +227,33 @@ namespace mmo::pcg::graph
 		PolylineIndex basinEdge;
 		Vector3 centroid = Vector3::Zero;
 
+		// River (also width, bank, depth; margin = waterMargin).
+		/// Water surface samples downstream (distance = arc distance, y = running minimum surface), surfaceStep apart
+		/// except for the last one, which sits at the end of the spline.
+		std::vector<SplineSample> surface;
+		float surfaceStep = kRiverSurfaceStep;
+		/// Bed edges at +-width (left of the flow, then right), one point per surface sample, y = bed height.
+		std::array<std::vector<Vector3>, 2> bedEdges;
+
+		/// River: water surface at an arc distance, interpolated between the surface samples (clamped to the ends).
+		float SurfaceAt(const float distance) const
+		{
+			if (surface.empty())
+			{
+				return 0.0f;
+			}
+			if (surface.size() == 1 || !(distance > 0.0f))
+			{
+				return surface.front().y;
+			}
+			const size_t i = std::min(surface.size() - 2, static_cast<size_t>(std::max(0.0f, std::floor(distance / surfaceStep))));
+			const SplineSample& a = surface[i];
+			const SplineSample& b = surface[i + 1];
+			const float span = b.distance - a.distance;
+			const float t = span > 0.0f ? Saturate((distance - a.distance) / span) : 0.0f;
+			return a.y + (b.y - a.y) * t;
+		}
+
 		// SectionPath.
 		SectionPathShape shape;
 		bool remapLayers = false;
@@ -287,6 +327,7 @@ namespace mmo::pcg::graph
 		m_region.reset();
 		m_influence = WorldRect{};
 		m_waterMaterial.clear();
+		m_waterMaterialFromRiver = false;
 		m_warnings.clear();
 		m_borderFade = std::isfinite(borderFade) ? std::max(0.0f, borderFade) : 0.0f;
 		error.clear();
@@ -301,6 +342,7 @@ namespace mmo::pcg::graph
 			m_region.reset();
 			m_influence = WorldRect{};
 			m_waterMaterial.clear();
+			m_waterMaterialFromRiver = false;
 			error = message;
 			return false;
 		};
@@ -330,8 +372,9 @@ namespace mmo::pcg::graph
 			prepared->sourceId = in.sourceId;
 
 			const bool needsArea = op.type == TerrainOpType::Noise || op.type == TerrainOpType::WaterArea;
+			const bool needsOpen = op.type == TerrainOpType::River;
 			const size_t minPoints = needsArea || (op.type == TerrainOpType::Paint && in.spline.closed) ? 3u
-				: (op.type == TerrainOpType::SectionPath ? 2u : 1u);
+				: (op.type == TerrainOpType::SectionPath || needsOpen ? 2u : 1u);
 			const bool saneGeometry = in.spline.points.size() >= minPoints && SaneBounds(SplineBounds(in.spline));
 			if (op.type == TerrainOpType::SectionPath)
 			{
@@ -340,9 +383,9 @@ namespace mmo::pcg::graph
 					return fail(label + ": section path '" + op.asset + "' needs at least 2 points with sane coordinates.");
 				}
 			}
-			else if (!saneGeometry || (needsArea && !in.spline.closed))
+			else if (!saneGeometry || (needsArea && !in.spline.closed) || (needsOpen && in.spline.closed))
 			{
-				Warn(label + ": skipped, its geometry is not " + (needsArea ? "a closed area" : "a usable spline") + ".");
+				Warn(label + ": skipped, its geometry is not " + (needsArea ? "a closed area" : (needsOpen ? "an open spline" : "a usable spline")) + ".");
 				continue;
 			}
 
@@ -557,6 +600,87 @@ namespace mmo::pcg::graph
 				}
 				break;
 			}
+			case TerrainOpType::River:
+			{
+				const SampledPath path(in.spline, EvaluationStep(in.spline, SamplingStep));
+				prepared->width = std::max(0.0f, SettingFloat(op.params, "width", 5.0f));
+				prepared->bank = std::max(0.0f, SettingFloat(op.params, "bank", 4.0f));
+				prepared->depth = SettingFloat(op.params, "depth", 1.5f);
+				prepared->margin = std::max(0.0f, SettingFloat(op.params, "waterMargin", 2.0f));
+				const float surfaceOffset = SettingFloat(op.params, "surfaceOffset", -0.4f);
+				const float reach = prepared->width + std::max(prepared->bank, prepared->margin);
+				const float length = path.GetLength();
+				if (!(reach > 0.0f) || !std::isfinite(reach))
+				{
+					Warn(label + ": skipped, its width, bank and water margin are 0.");
+					continue;
+				}
+				if (!(length > 0.0f))
+				{
+					Warn(label + ": skipped, its spline has no length.");
+					continue;
+				}
+
+				// Water surface: the running minimum of the spline height plus the offset, sampled downstream.
+				float step = kRiverSurfaceStep;
+				while (length / step > kMaxRiverSurfaceSamples)
+				{
+					step *= 2.0f;
+				}
+				prepared->surfaceStep = step;
+				const size_t whole = static_cast<size_t>(std::floor(length / step));
+				const size_t count = whole + 1 + (length - static_cast<float>(whole) * step > 1e-3f ? 1 : 0);
+				float running = 0.0f;
+				float climb = 0.0f;
+				prepared->surface.reserve(count);
+				for (size_t i = 0; i < count; ++i)
+				{
+					const float distance = std::min(length, static_cast<float>(i) * step);
+					SplineSample s = path.SampleAtDistance(distance);
+					const float level = s.y + surfaceOffset;
+					running = i == 0 ? level : std::min(running, level);
+					climb = std::max(climb, level - running);
+					s.distance = distance;
+					s.y = running;
+					prepared->surface.push_back(s);
+
+					float nx = 0.0f;
+					float nz = 0.0f;
+					path.NormalAtDistance(distance, nx, nz);
+					const float bed = running - prepared->depth;
+					prepared->bedEdges[0].emplace_back(s.x + nx * prepared->width, bed, s.z + nz * prepared->width);
+					prepared->bedEdges[1].emplace_back(s.x - nx * prepared->width, bed, s.z - nz * prepared->width);
+				}
+				if (climb > kRiverClimbTolerance)
+				{
+					Warn("River (node " + std::to_string(op.order) + ", control " + std::to_string(in.sourceId)
+						+ "): the spline climbs " + FormatMeters(climb)
+						+ " m above the water surface upstream of it; the surface stays flat there (is the river drawn upstream-first?)");
+				}
+
+				prepared->edge.Build(path.GetSamples(), false, reach);
+				prepared->bounds = Grow(PathRect(path), reach);
+
+				// River materials win over WaterArea ones: only they read the flow (see GetWaterMaterial).
+				if (!op.asset.empty())
+				{
+					if (!m_waterMaterialFromRiver)
+					{
+						if (!m_waterMaterial.empty() && m_waterMaterial != op.asset)
+						{
+							Warn(label + ": water material '" + op.asset + "' is used instead of the WaterArea material '" + m_waterMaterial
+								+ "' (river materials win).");
+						}
+						m_waterMaterial = op.asset;
+						m_waterMaterialFromRiver = true;
+					}
+					else if (m_waterMaterial != op.asset)
+					{
+						Warn(label + ": water material '" + op.asset + "' differs from '" + m_waterMaterial + "', which is used.");
+					}
+				}
+				break;
+			}
 			}
 
 			m_ops.push_back(std::move(prepared));
@@ -598,6 +722,12 @@ namespace mmo::pcg::graph
 					outline.closed = op->shape.path->IsClosed();
 				}
 				GetSectionCopyRects(op->shape, outline.copyRects);
+			}
+			else if (op->type == TerrainOpType::River)
+			{
+				samples = &op->surface;
+				outline.closed = false;
+				outline.bedEdges.assign(op->bedEdges.begin(), op->bedEdges.end());
 			}
 			else
 			{
@@ -844,6 +974,35 @@ namespace mmo::pcg::graph
 				}
 				break;
 			}
+			case TerrainOpType::River:
+			{
+				NearestHit hit;
+				if ((!wantHeights && !wantWater) || !op.edge.Nearest(x, z, hit))
+				{
+					break;
+				}
+				const std::vector<SplineSample>& samples = op.edge.GetSamples();
+				const float along = samples[hit.a].distance + (samples[hit.b].distance - samples[hit.a].distance) * hit.t;
+				const float surface = op.SurfaceAt(along);
+				if (wantHeights && hit.distance <= op.width + op.bank)
+				{
+					// The bed is owned by the river; the bank only ever lowers the running height.
+					const float bed = surface - op.depth;
+					float target = bed;
+					if (hit.distance > op.width)
+					{
+						const float w = op.bank > 0.0f ? 1.0f - Smoothstep01((hit.distance - op.width) / op.bank) : 0.0f;
+						target = std::min(h, h + (bed - h) * w);
+					}
+					blendHeight(target, 1.0f);
+				}
+				if (wantWater && hit.distance <= op.width + op.margin)
+				{
+					out.waterType = 1;
+					out.waterHeight = surface;
+				}
+				break;
+			}
 			}
 		}
 
@@ -943,6 +1102,53 @@ namespace mmo::pcg::graph
 	const String& PreparedTerrain::GetWaterMaterial() const
 	{
 		return m_waterMaterial;
+	}
+
+	void PreparedTerrain::GetFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& out) const
+	{
+		out.clear();
+		terrain_io::water_flow::FlowPath run;
+		const auto flush = [&out, &run]()
+		{
+			if (run.size() >= 2)
+			{
+				out.push_back(run);
+			}
+			run.clear();
+		};
+		for (const auto& op : m_ops)
+		{
+			if (op->type != TerrainOpType::River)
+			{
+				continue;
+			}
+			const auto visit = [this, &op, &run, &flush](const SplineSample& s)
+			{
+				if (RegionFade(s.x, s.z) > 0.0f)
+				{
+					terrain_io::water_flow::FlowPoint point;
+					point.x = s.x;
+					point.z = s.z;
+					point.halfWidth = op->width + op->margin;
+					run.push_back(point);
+				}
+				else
+				{
+					flush();
+				}
+			};
+			// Every kRiverFlowStride-th surface sample, then the end of the river.
+			const size_t count = op->surface.size();
+			for (size_t i = 0; i < count; i += kRiverFlowStride)
+			{
+				visit(op->surface[i]);
+			}
+			if (count > 0 && (count - 1) % kRiverFlowStride != 0)
+			{
+				visit(op->surface.back());
+			}
+			flush();
+		}
 	}
 
 	const std::vector<String>& PreparedTerrain::GetWarnings() const

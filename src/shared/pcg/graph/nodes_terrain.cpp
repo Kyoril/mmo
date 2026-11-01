@@ -9,6 +9,7 @@
 // CarveAlongSpline   In: Spline.          Params: width (per side), depth, bank.
 // PaintSplat         In: Area or Spline.  Params: texture (String), weight, falloff, and width on open splines (per side).
 // WaterArea          In: Area.            Params: level, levelOffset, margin, depth, shoreWidth; op.asset = water material (.hmat).
+// River              In: Spline.          Params: width (per side), bank, depth, surfaceOffset, waterMargin; op.asset = water material (.hmat).
 //
 // Every setting can be overridden per item by an item attribute of the same name; a numeric setting only by a
 // numeric (Float or Int) attribute, a String setting only by a String one (other types are ignored with a warning).
@@ -108,6 +109,13 @@ namespace mmo::pcg::graph
 					  { "depth", 0.0f, "Basin depth (m) below the water level; 0 leaves the ground alone", 0.0f, 200.0f },
 					  { "shoreWidth", 6.0f, "Distance (m) inwards over which the shore slopes down to the bed", 0.5f, 200.0f } },
 				"areas" };
+			static const TerrainNodeDef river{ "River", "River", TerrainOpType::River, { ItemKind::Spline },
+				{ { "width", 5.0f, "Half width (m) of the bed floor, per side" },
+				  { "bank", 4.0f, "Distance (m) beyond the bed over which the bank rises back to the ground" },
+				  { "depth", 1.5f, "Depth (m) of the bed below the water surface" },
+				  { "surfaceOffset", -0.4f, "Water surface relative to the spline height (m); the surface never climbs downstream" },
+				  { "waterMargin", 2.0f, "Distance (m) past the bed that still holds water, covering the bank's waterline" } },
+				"splines" };
 			switch (type)
 			{
 			case TerrainOpType::Noise:
@@ -118,6 +126,8 @@ namespace mmo::pcg::graph
 				return carve;
 			case TerrainOpType::Paint:
 				return paint;
+			case TerrainOpType::River:
+				return river;
 			default:
 				return water;
 			}
@@ -205,6 +215,7 @@ namespace mmo::pcg::graph
 					break;
 				}
 				case TerrainOpType::WaterArea:
+				case TerrainOpType::River:
 				{
 					item.op.asset = ResolveString(out, source, settings, "material");
 					break;
@@ -246,6 +257,12 @@ namespace mmo::pcg::graph
 				material.widget = "asset:.hmat";
 				def.settings.push_back(std::move(material));
 			}
+			if (opType == TerrainOpType::River)
+			{
+				SettingDef material{ "material", String("Worlds/Water_River.hmat"), 0, 0, {}, "Water material (.hmat); it should read the flow" };
+				material.widget = "asset:.hmat";
+				def.settings.push_back(std::move(material));
+			}
 
 			def.contextDeps = context_dep::None;
 			def.execute = [opType](const EvalContext&, const uint64 nodeSeed, const AttributeSet& settings, const std::map<String, Collection>& inputs)
@@ -263,5 +280,6 @@ namespace mmo::pcg::graph
 		RegisterTerrainNode(registry, TerrainOpType::Carve);
 		RegisterTerrainNode(registry, TerrainOpType::Paint);
 		RegisterTerrainNode(registry, TerrainOpType::WaterArea);
+		RegisterTerrainNode(registry, TerrainOpType::River);
 	}
 }

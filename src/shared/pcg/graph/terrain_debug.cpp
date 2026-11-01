@@ -88,43 +88,59 @@ namespace mmo::pcg::graph
 
 		LineSink sink(geometry, lineLimit);
 
-		// Outlines of the ops on the composed ground.
+		// A polyline on the composed ground (onGround) or at its own heights, lifted by TerrainDebugOutlineLift.
+		const auto drawPolyline = [&sink, &groundPoint](const std::vector<Vector3>& points, const bool closed, const uint32 argb, const bool onGround)
+		{
+			const size_t count = points.size();
+			if (count < 2)
+			{
+				return;
+			}
+			const size_t segments = count - 1 + (closed && count >= 3 ? 1 : 0);
+			if (sink.Full())
+			{
+				// A vertical segment would read as a tick, so it is never drawn.
+				size_t drawable = 0;
+				for (size_t i = 0; i < segments; ++i)
+				{
+					drawable += IsVertical(points[i], points[(i + 1) % count]) ? 0 : 1;
+				}
+				sink.Skip(drawable);
+				return;
+			}
+			std::vector<Vector3> lifted;
+			lifted.reserve(count);
+			for (const Vector3& p : points)
+			{
+				lifted.push_back(onGround ? groundPoint(p.x, p.z) : Vector3(p.x, p.y + TerrainDebugOutlineLift, p.z));
+			}
+			for (size_t i = 0; i < segments; ++i)
+			{
+				const Vector3& a = lifted[i];
+				const Vector3& b = lifted[(i + 1) % count];
+				if (!IsVertical(a, b))
+				{
+					sink.Add(DebugLine{ a, b, argb });
+				}
+			}
+		};
+
+		// Outlines of the ops on the composed ground; a river's surface line at the water surface.
 		std::vector<TerrainOpOutline> outlines;
 		prepared.GetOutlines(outlines);
 		for (const TerrainOpOutline& outline : outlines)
 		{
-			const size_t count = outline.points.size();
-			if (count >= 2)
+			if (outline.type == TerrainOpType::River)
 			{
-				const size_t segments = count - 1 + (outline.closed && count >= 3 ? 1 : 0);
-				if (sink.Full())
+				drawPolyline(outline.points, false, TerrainDebugRiverSurfaceArgb, false);
+				for (const std::vector<Vector3>& edge : outline.bedEdges)
 				{
-					// A vertical segment would read as a tick, so it is never drawn.
-					size_t drawable = 0;
-					for (size_t i = 0; i < segments; ++i)
-					{
-						drawable += IsVertical(outline.points[i], outline.points[(i + 1) % count]) ? 0 : 1;
-					}
-					sink.Skip(drawable);
+					drawPolyline(edge, false, TerrainDebugRiverBedArgb, true);
 				}
-				else
-				{
-					std::vector<Vector3> ground;
-					ground.reserve(count);
-					for (const Vector3& p : outline.points)
-					{
-						ground.push_back(groundPoint(p.x, p.z));
-					}
-					for (size_t i = 0; i < segments; ++i)
-					{
-						const Vector3& a = ground[i];
-						const Vector3& b = ground[(i + 1) % count];
-						if (!IsVertical(a, b))
-						{
-							sink.Add(DebugLine{ a, b, argbRaise });
-						}
-					}
-				}
+			}
+			else
+			{
+				drawPolyline(outline.points, outline.closed, argbRaise, true);
 			}
 
 			// Basin: one tick at the area's centroid, from the composed bed up to the water level.

@@ -338,3 +338,46 @@ TEST_CASE("A lake basin draws its shore loop and one depth tick at the centroid"
 		CHECK(!IsTick(l));
 	}
 }
+
+TEST_CASE("A river draws its surface line and its bed edges", "[graph_terrain_debug]")
+{
+	// A river along z = 10 on flat ground at 2 (spline on the ground): surface 1.6, bed edges at z = 5 and 15.
+	PathSpline line;
+	SplinePoint a; a.x = 10.0f; a.z = 10.0f; a.y = 2.0f;
+	SplinePoint b; b.x = 50.0f; b.z = 10.0f; b.y = 2.0f;
+	line.points = { a, b };
+	PreparedTerrain t;
+	String error;
+	REQUIRE(t.Prepare({ MakeOp(TerrainOpType::River, line, 3) }, Flat2, {}, kBigRegion, 0.0f, error));
+
+	// A step wider than the river (its influence holds no grid sample): no height ticks.
+	const DebugGeometry g = BuildTerrainDebugGeometry(t, Flat2, 1000.0f, kRaise, kLower, 500'000);
+	size_t surface = 0;
+	size_t bed = 0;
+	for (const DebugLine& l : g.lines)
+	{
+		CHECK_FALSE(IsTick(l));
+		if (l.argb == TerrainDebugRiverSurfaceArgb)
+		{
+			++surface;
+			CHECK(l.a.z == Approx(10.0f));
+			CHECK(l.a.y == Approx(1.6f + TerrainDebugOutlineLift));
+		}
+		else
+		{
+			CHECK(l.argb == TerrainDebugRiverBedArgb);
+			++bed;
+			CHECK(std::abs(l.a.z - 10.0f) == Approx(5.0f));
+			// On the composed ground: the bed edge lies on the bed floor, 0.4 m + 1.5 m deep.
+			CHECK(l.a.y == Approx(0.1f + TerrainDebugOutlineLift).margin(1e-4));
+		}
+	}
+	CHECK(surface == 40);
+	CHECK(bed == 80);
+	CHECK(TerrainDebugRiverSurfaceArgb != TerrainDebugRiverBedArgb);
+
+	// The budget holds.
+	const DebugGeometry cut = BuildTerrainDebugGeometry(t, Flat2, 1000.0f, kRaise, kLower, 50);
+	CHECK(cut.lines.size() == 50);
+	CHECK(cut.linesTotal == g.linesTotal);
+}

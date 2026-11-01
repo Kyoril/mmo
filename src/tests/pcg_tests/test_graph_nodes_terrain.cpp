@@ -472,3 +472,80 @@ TEST_CASE("Water node output with depth composes to a basin", "[graph_nodes_terr
 	const PreparedTerrain terrain = Compose(Run("WaterArea", { { "depth", 3.0f } }, lake), 1);
 	CHECK(Written(terrain.Evaluate(25.0f, 25.0f, 25.0f, {}), 25.0f) == Approx(18.5f));
 }
+
+TEST_CASE("River emits a River op with the defaults and the material", "[graph_nodes_terrain]")
+{
+	const NodeTypeDef* def = NodeRegistry::Default().Find("River");
+	REQUIRE(def != nullptr);
+	CHECK(def->category == "Terrain");
+	REQUIRE(def->inputs.size() == 1);
+	CHECK(def->inputs[0].accepts == std::vector<ItemKind>({ ItemKind::Spline }));
+	REQUIRE(def->outputs.size() == 1);
+	CHECK(def->outputs[0].name == "Terrain");
+	const auto material = std::find_if(def->settings.begin(), def->settings.end(), [](const SettingDef& s) { return s.name == "material"; });
+	REQUIRE(material != def->settings.end());
+	CHECK(material->widget == "asset:.hmat");
+
+	const NodeOutput out = Run("River", {}, Line(0, 0, 40, 0));
+	REQUIRE(out.error.empty());
+	REQUIRE(out.pins.at("Terrain").size() == 1);
+	const DataItem& item = out.pins.at("Terrain")[0];
+	CHECK(item.op.type == TerrainOpType::River);
+	CHECK(Number(item, "width") == 5.0f);
+	CHECK(Number(item, "bank") == 4.0f);
+	CHECK(Number(item, "depth") == 1.5f);
+	CHECK(Number(item, "surfaceOffset") == -0.4f);
+	CHECK(Number(item, "waterMargin") == 2.0f);
+	CHECK(item.op.asset == "Worlds/Water_River.hmat");
+	CHECK(item.op.params.count("material") == 0);
+	CHECK(item.op.stackOrder == 0);
+	CHECK(item.sourceId == 42);
+	CHECK(item.pointIds == std::vector<uint64>({ 11, 12 }));
+	CHECK(String(TerrainOpTypeName(TerrainOpType::River)) == "River");
+}
+
+TEST_CASE("River settings are overridden by item attributes", "[graph_nodes_terrain]")
+{
+	DataItem river = Line(0, 0, 40, 0);
+	river.attributes["width"] = int64(8);
+	river.attributes["material"] = String("Water/Creek.hmat");
+	const DataItem item = Run("River", { { "depth", 2.0f }, { "stackOrder", int64(5) } }, river).pins.at("Terrain")[0];
+	CHECK(Number(item, "width") == 8.0f);
+	CHECK(Number(item, "depth") == 2.0f);
+	CHECK(item.op.asset == "Water/Creek.hmat");
+	CHECK(item.op.stackOrder == 5);
+
+	// An area is not a river.
+	const NodeOutput area = Run("River", {}, MakeSquare(0, 0, 10));
+	CHECK(area.pins.at("Terrain").empty());
+	CHECK(area.warnings.size() == 1);
+}
+
+TEST_CASE("An Area link into a River node is a validation issue", "[graph_nodes_terrain]")
+{
+	Graph g;
+	NodeInstance region;
+	region.id = 1;
+	region.type = "GetRegion";
+	NodeInstance river;
+	river.id = 2;
+	river.type = "River";
+	g.nodes = { region, river };
+	g.links.push_back(Link{ 1, "Out", 2, "In" });
+	g.nextNodeId = 3;
+
+	const std::vector<GraphIssue> issues = ValidateGraph(g, NodeRegistry::Default());
+	REQUIRE_FALSE(issues.empty());
+	CHECK(issues[0].message.find("does not accept") != String::npos);
+}
+
+TEST_CASE("River node output composes to a bed under the water surface", "[graph_nodes_terrain]")
+{
+	// Compose uses flat ground at 0 and a spline at y 0: surface -0.4, bed -1.9.
+	const PreparedTerrain terrain = Compose(Run("River", { { "material", String("Water/River.hmat") } }, Line(-50, 0, 50, 0)), 1);
+	const TerrainTarget centre = terrain.Evaluate(0.0f, 0.0f, 0.0f, {});
+	CHECK(Written(centre, 0.0f) == Approx(-1.9f));
+	CHECK(centre.waterType == 1);
+	CHECK(centre.waterHeight == Approx(-0.4f));
+	CHECK(terrain.GetWaterMaterial() == "Water/River.hmat");
+}

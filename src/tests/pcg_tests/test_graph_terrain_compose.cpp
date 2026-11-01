@@ -6,6 +6,7 @@
 #include "pcg/graph/node_registry.h"
 #include "pcg/graph/terrain_compose.h"
 #include "pcg/section_path.h"
+#include "terrain_io/water_flow.h"
 
 #include <cmath>
 #include <map>
@@ -942,4 +943,244 @@ TEST_CASE("A lake basin outline carries the area and a depth mark at its centroi
 	flat.GetOutlines(outlines);
 	REQUIRE(outlines.size() == 1);
 	CHECK(outlines[0].depth == 0.0f);
+}
+
+namespace
+{
+	/// Ground falling 2 % towards +x: 10 m at x = 0.
+	float Slope(const float x, float)
+	{
+		return 10.0f - 0.02f * x;
+	}
+
+	/// A river along z = 0 from x0 to x1, its points on the given heights.
+	TerrainOpInput MakeRiver(const float x0, const float y0, const float x1, const float y1, const uint32 order = 1,
+		const AttributeSet& params = {})
+	{
+		PathSpline s = Line(x0, 0.0f, x1, 0.0f);
+		s.points[0].y = y0;
+		s.points[1].y = y1;
+		return MakeOp(TerrainOpType::River, s, order, params);
+	}
+
+	void PrepareRiver(PreparedTerrain& t, const std::vector<TerrainOpInput>& ops, const std::function<float(float, float)>& ground,
+		const PathSpline& region = kBigRegion, const float borderFade = 0.0f)
+	{
+		String error;
+		REQUIRE(t.Prepare(ops, ground, {}, region, borderFade, error));
+		CHECK(error.empty());
+	}
+
+	bool HasWarning(const PreparedTerrain& t, const String& part)
+	{
+		for (const String& w : t.GetWarnings())
+		{
+			if (w.find(part) != String::npos)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+TEST_CASE("A river carves its bed below a running water surface", "[terrain_compose]")
+{
+	// Defaults: width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 2. The spline lies on the 2 % slope.
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
+	CHECK(t.GetWarnings().empty());
+
+	// At x = 100 the ground is 8, the surface 7.6 and the bed 6.1.
+	const TerrainTarget centre = t.Evaluate(100.0f, 0.0f, 8.0f, {});
+	CHECK(Written(centre, 8.0f) == Approx(6.1f).margin(1e-4));
+	CHECK(centre.waterType == 1);
+	CHECK(centre.waterHeight == Approx(7.6f).margin(1e-4));
+	CHECK(Written(t.Evaluate(100.0f, 4.9f, 8.0f, {}), 8.0f) == Approx(6.1f).margin(1e-4));
+
+	// Halfway up the bank: smoothstep(9, 5, 7) = 0.5.
+	CHECK(Written(t.Evaluate(100.0f, 7.0f, 8.0f, {}), 8.0f) == Approx(8.0f - 0.5f * 1.9f).margin(1e-4));
+
+	// At width + bank the running height holds; beyond, nothing is written.
+	const TerrainTarget rim = t.Evaluate(100.0f, 9.0f, 8.0f, {});
+	CHECK(rim.heightWeight == 1.0f);
+	CHECK(Written(rim, 8.0f) == Approx(8.0f));
+	CHECK(t.Evaluate(100.0f, 9.5f, 8.0f, {}).heightWeight == 0.0f);
+
+	// The bank never raises the ground above the running height.
+	CHECK(Written(t.Evaluate(100.0f, 8.0f, 2.0f, {}), 2.0f) == Approx(2.0f));
+
+	// Water inside width + waterMargin = 7, none beyond.
+	CHECK(t.Evaluate(100.0f, 6.9f, 8.0f, {}).waterType == 1);
+	CHECK(t.Evaluate(100.0f, -6.9f, 8.0f, {}).waterHeight == Approx(7.6f).margin(1e-4));
+	CHECK(t.Evaluate(100.0f, 7.1f, 8.0f, {}).waterType == 0);
+	CHECK(t.Evaluate(100.0f, 30.0f, 8.0f, {}).waterType == 0);
+}
+
+TEST_CASE("A river surface stays flat over a bump in the spline, with one warning", "[terrain_compose]")
+{
+	PathSpline s;
+	for (const auto& p : { std::make_pair(0.0f, 10.0f), std::make_pair(50.0f, 12.0f), std::make_pair(100.0f, 10.0f) })
+	{
+		SplinePoint point;
+		point.x = p.first;
+		point.y = p.second;
+		s.points.push_back(point);
+	}
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeOp(TerrainOpType::River, s, 1) }, [](float, float) { return 10.0f; });
+
+	for (const float x : { 10.0f, 30.0f, 50.0f, 70.0f, 90.0f })
+	{
+		const TerrainTarget target = t.Evaluate(x, 0.0f, 10.0f, {});
+		CHECK(target.waterHeight == Approx(9.6f).margin(1e-4));
+		CHECK(Written(target, 10.0f) == Approx(8.1f).margin(1e-4));
+	}
+	REQUIRE(t.GetWarnings().size() == 1);
+	CHECK(t.GetWarnings()[0] == "River (node 1, control 9): the spline climbs 2 m above the water surface upstream of it; the surface stays flat there (is the river drawn upstream-first?)");
+}
+
+TEST_CASE("A river drawn uphill keeps the first point's surface, with one warning", "[terrain_compose]")
+{
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(200.0f, 6.0f, 0.0f, 10.0f) }, Slope);
+	for (const float x : { 190.0f, 100.0f, 10.0f })
+	{
+		CHECK(t.Evaluate(x, 0.0f, Slope(x, 0.0f), {}).waterHeight == Approx(5.6f).margin(1e-4));
+	}
+	REQUIRE(t.GetWarnings().size() == 1);
+	CHECK(HasWarning(t, "climbs 4 m"));
+}
+
+TEST_CASE("River flow paths follow the river inside the region", "[terrain_compose]")
+{
+	// The river runs from x = -50 to 150; the region spans x 0..100 with a 10 m border fade.
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(-50.0f, 11.0f, 150.0f, 7.0f, 1, { { "width", 3.0f }, { "waterMargin", 1.5f } }) }, Slope,
+		Square(0.0f, -50.0f, 100.0f), 10.0f);
+
+	std::vector<terrain_io::water_flow::FlowPath> paths;
+	t.GetFlowPaths(paths);
+	REQUIRE(paths.size() == 1);
+	const terrain_io::water_flow::FlowPath& path = paths[0];
+	REQUIRE(path.size() == 25);
+	CHECK(path.front().x == Approx(2.0f));
+	CHECK(path.back().x == Approx(98.0f));
+	for (size_t i = 0; i < path.size(); ++i)
+	{
+		CHECK(path[i].z == Approx(0.0f).margin(1e-5));
+		CHECK(path[i].halfWidth == Approx(4.5f));
+		if (i > 0)
+		{
+			CHECK(path[i].x - path[i - 1].x == Approx(4.0f));
+		}
+	}
+
+	// A river wholly inside: one path from the first to the last point.
+	PreparedTerrain inside;
+	PrepareRiver(inside, { MakeRiver(0.0f, 10.0f, 30.0f, 9.4f) }, Slope);
+	inside.GetFlowPaths(paths);
+	REQUIRE(paths.size() == 1);
+	REQUIRE(paths[0].size() == 9);
+	CHECK(paths[0].front().x == Approx(0.0f));
+	CHECK(paths[0].back().x == Approx(30.0f));
+	CHECK(paths[0][7].x == Approx(28.0f));
+	CHECK(paths[0][0].halfWidth == Approx(7.0f));
+
+	// No rivers, no paths.
+	PreparedTerrain none;
+	PrepareRiver(none, { MakeLake(0.0f) }, Flat25);
+	none.GetFlowPaths(paths);
+	CHECK(paths.empty());
+}
+
+TEST_CASE("A river material wins over a WaterArea material, with one warning", "[terrain_compose]")
+{
+	TerrainOpInput lake = MakeOp(TerrainOpType::WaterArea, Square(0.0f, 0.0f, 50.0f), 1, { { "level", -1.0f } });
+	lake.op.asset = "Water/Lake.hmat";
+	TerrainOpInput river = MakeRiver(-20.0f, 0.0f, 80.0f, 0.0f, 2);
+	river.op.asset = "Water/River.hmat";
+
+	PreparedTerrain lakeFirst;
+	PrepareRiver(lakeFirst, { lake, river }, Flat0);
+	CHECK(lakeFirst.GetWaterMaterial() == "Water/River.hmat");
+	CHECK(lakeFirst.GetWarnings().size() == 1);
+
+	PreparedTerrain riverFirst;
+	PrepareRiver(riverFirst, { river, lake }, Flat0);
+	CHECK(riverFirst.GetWaterMaterial() == "Water/River.hmat");
+	CHECK(riverFirst.GetWarnings().size() == 1);
+
+	// Among rivers the first one wins.
+	TerrainOpInput other = MakeRiver(-20.0f, 0.0f, 80.0f, 0.0f, 3);
+	other.op.asset = "Water/Other.hmat";
+	PreparedTerrain rivers;
+	PrepareRiver(rivers, { river, other }, Flat0);
+	CHECK(rivers.GetWaterMaterial() == "Water/River.hmat");
+	CHECK(rivers.GetWarnings().size() == 1);
+
+	// The same material twice: no warning.
+	lake.op.asset = river.op.asset;
+	PreparedTerrain same;
+	PrepareRiver(same, { lake, river }, Flat0);
+	CHECK(same.GetWaterMaterial() == "Water/River.hmat");
+	CHECK(same.GetWarnings().empty());
+}
+
+TEST_CASE("A river prepares deterministically", "[terrain_compose]")
+{
+	const std::vector<TerrainOpInput> ops = { MakeRiver(-30.0f, 10.6f, 170.0f, 6.6f, 1, { { "width", 4.0f } }) };
+	PreparedTerrain a;
+	PreparedTerrain b;
+	PrepareRiver(a, ops, Slope);
+	PrepareRiver(b, ops, Slope);
+	for (int i = 0; i < 200; ++i)
+	{
+		const float x = -40.0f + 1.07f * static_cast<float>(i);
+		const float z = -12.0f + 0.13f * static_cast<float>(i);
+		const TerrainTarget ta = a.Evaluate(x, z, Slope(x, z), {});
+		const TerrainTarget tb = b.Evaluate(x, z, Slope(x, z), {});
+		CHECK(ta.height == tb.height);
+		CHECK(ta.heightWeight == tb.heightWeight);
+		CHECK(ta.waterType == tb.waterType);
+		CHECK(ta.waterHeight == tb.waterHeight);
+	}
+	std::vector<terrain_io::water_flow::FlowPath> pa;
+	std::vector<terrain_io::water_flow::FlowPath> pb;
+	a.GetFlowPaths(pa);
+	b.GetFlowPaths(pb);
+	REQUIRE(pa.size() == pb.size());
+	for (size_t i = 0; i < pa.size(); ++i)
+	{
+		REQUIRE(pa[i].size() == pb[i].size());
+		for (size_t j = 0; j < pa[i].size(); ++j)
+		{
+			CHECK(pa[i][j].x == pb[i][j].x);
+			CHECK(pa[i][j].z == pb[i][j].z);
+			CHECK(pa[i][j].halfWidth == pb[i][j].halfWidth);
+		}
+	}
+}
+
+TEST_CASE("A river outline carries its surface line and bed edges", "[terrain_compose]")
+{
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
+	std::vector<TerrainOpOutline> outlines;
+	t.GetOutlines(outlines);
+	REQUIRE(outlines.size() == 1);
+	const TerrainOpOutline& o = outlines[0];
+	CHECK(o.type == TerrainOpType::River);
+	CHECK_FALSE(o.closed);
+	REQUIRE(o.points.size() == 201);
+	CHECK(o.points[100].x == Approx(100.0f));
+	CHECK(o.points[100].y == Approx(7.6f).margin(1e-4));
+	REQUIRE(o.bedEdges.size() == 2);
+	for (const std::vector<Vector3>& edge : o.bedEdges)
+	{
+		REQUIRE(edge.size() == o.points.size());
+		CHECK(std::abs(edge[100].z) == Approx(5.0f));
+		CHECK(edge[100].x == Approx(100.0f));
+	}
+	CHECK(o.bedEdges[0][100].z == -o.bedEdges[1][100].z);
 }

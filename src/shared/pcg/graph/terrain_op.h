@@ -16,7 +16,8 @@ namespace mmo::pcg::graph
 		Raise,
 		Carve,
 		Paint,
-		WaterArea
+		WaterArea,
+		River
 	};
 
 	/// @brief Small descriptor of one terrain operation; the geometry lives in the owning item.
@@ -25,7 +26,7 @@ namespace mmo::pcg::graph
 		/// @brief The operation.
 		TerrainOpType type = TerrainOpType::Noise;
 
-		/// @brief SectionPath: .hsec path; WaterArea: water material (.hmat), may be empty.
+		/// @brief SectionPath: .hsec path; WaterArea, River: water material (.hmat), may be empty.
 		String asset;
 
 		/// @brief Op parameters by name (section params use SetSectionPathParam names).
