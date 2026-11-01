@@ -43,8 +43,11 @@ TEST_CASE("Point operation node types are registered", "[graph_nodes_point]")
 		CHECK(def->inputs[0].name == "In");
 		CHECK(def->inputs[0].required);
 	}
-	CHECK(NodeRegistry::Default().Find("TransformPoints")->readsContext);
-	CHECK_FALSE(NodeRegistry::Default().Find("DensityNoise")->readsContext);
+	CHECK(NodeRegistry::Default().Find("TransformPoints")->contextDeps == context_dep::Terrain);
+	for (const char* type : { "DensityNoise", "AttributeMath", "CopyAttributesFromControl" })
+	{
+		CHECK(NodeRegistry::Default().Find(type)->contextDeps == context_dep::None);
+	}
 }
 
 TEST_CASE("Every point operation node outputs empty collections for empty inputs", "[graph_nodes_point]")

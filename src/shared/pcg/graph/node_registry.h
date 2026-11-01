@@ -12,6 +12,33 @@ namespace mmo::pcg::graph
 {
 	struct EvalContext;
 
+	/// @brief Parts of the EvalContext a node type reads (bit mask). A node's cache key covers exactly the
+	///        parts it declares, so a node is re-run only when one of them changes.
+	namespace context_dep
+	{
+		enum Type : uint32
+		{
+			/// @brief Reads nothing from the context besides the node seed.
+			None = 0,
+
+			/// @brief ctx.parameters and ctx.parameterWarnings. Settings bound to a parameter ("$name") do
+			///        not need this: the resolved value is part of the effective settings.
+			Parameters = 1,
+
+			/// @brief ctx.region.
+			Region = 2,
+
+			/// @brief ctx.controls (presence and ctx.controlsRevision).
+			Controls = 4,
+
+			/// @brief ctx.terrain (presence and Revision()).
+			Terrain = 8,
+
+			/// @brief ctx.pointLimit.
+			PointLimit = 16
+		};
+	}
+
 	/// @brief Describes an input or output pin of a node type.
 	struct PinDef
 	{
@@ -55,7 +82,7 @@ namespace mmo::pcg::graph
 	/// @brief Executes a node. Must be deterministic: the same arguments produce the same output.
 	///        `settings` holds every declared setting (instance value or the def's default), plus any
 	///        undeclared instance settings. `inputs` holds one entry per input pin that has links.
-	///        Only nodes whose type sets readsContext may read the context.
+	///        A node may read only the context parts its type declares in contextDeps.
 	using NodeExecute = std::function<NodeOutput(const EvalContext&, uint64 nodeSeed, const AttributeSet& settings, const std::map<String, Collection>& inputs)>;
 
 	/// @brief A node type: pins, settings and the executor.
@@ -72,9 +99,10 @@ namespace mmo::pcg::graph
 		std::vector<PinDef> outputs;
 		std::vector<SettingDef> settings;
 
-		/// @brief Whether the node reads anything from the EvalContext besides its seed (parameters,
-		///        controls, terrain, region, point limit). Such nodes are re-run when the context changes.
-		bool readsContext = false;
+		/// @brief The context parts the node reads (context_dep::Type bits). Every part a node's executor
+		///        reads must be declared, or cached results go stale; executors of None nodes take an unnamed
+		///        context parameter.
+		uint32 contextDeps = context_dep::None;
 
 		NodeExecute execute;
 	};

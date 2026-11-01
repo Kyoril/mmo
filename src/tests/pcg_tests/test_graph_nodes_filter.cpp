@@ -79,9 +79,11 @@ TEST_CASE("Filter and spatial node types are registered", "[graph_nodes_filter]"
 		CHECK(def->inputs[0].name == "In");
 		CHECK(def->inputs[0].required);
 	}
-	CHECK(NodeRegistry::Default().Find("FilterByTerrain")->readsContext);
-	CHECK_FALSE(NodeRegistry::Default().Find("SelfPrune")->readsContext);
-	CHECK_FALSE(NodeRegistry::Default().Find("Difference")->readsContext);
+	CHECK(NodeRegistry::Default().Find("FilterByTerrain")->contextDeps == context_dep::Terrain);
+	for (const char* type : { "FilterByTag", "FilterByAttribute", "DensityFilter", "SelfPrune", "Difference", "Intersection", "DistanceTo" })
+	{
+		CHECK(NodeRegistry::Default().Find(type)->contextDeps == context_dep::None);
+	}
 	CHECK(NodeRegistry::Default().Find("FilterByTag")->outputs.size() == 2);
 	CHECK(NodeRegistry::Default().Find("FilterByTag")->outputs[1].name == "Rejected");
 }

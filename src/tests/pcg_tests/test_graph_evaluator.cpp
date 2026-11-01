@@ -2,6 +2,7 @@
 
 #include "catch.hpp"
 
+#include "pcg/graph/controls.h"
 #include "pcg/graph/evaluator.h"
 #include "pcg/graph/node_registry.h"
 #include "pcg/pcg_random.h"
@@ -86,15 +87,28 @@ namespace
 			r.Register(def);
 		}
 
-		// Params: reads ctx.parameters (readsContext) and emits them as a Params item.
+		// Params: emits ctx.parameters as a Params item. Test.Params declares every context part, the other
+		// two types declare one selection each (the executor is the same).
+		struct ParamsType
+		{
+			const char* type;
+			const char* title;
+			uint32 deps;
+		};
+		const ParamsType paramTypes[] = {
+			{ "Test.Params", "Params", context_dep::Parameters | context_dep::Region | context_dep::Controls | context_dep::Terrain | context_dep::PointLimit },
+			{ "Test.ParamsOnly", "Params Only", context_dep::Parameters },
+			{ "Test.TerrainLimit", "Terrain Limit", context_dep::Terrain | context_dep::PointLimit }
+		};
+		for (const ParamsType& paramType : paramTypes)
 		{
 			NodeTypeDef def;
-			def.type = "Test.Params";
+			def.type = paramType.type;
 			def.category = "Test";
-			def.title = "Params";
+			def.title = paramType.title;
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Params } });
 			def.settings.push_back(SettingDef{ "id", int64(0) });
-			def.readsContext = true;
+			def.contextDeps = paramType.deps;
 			def.execute = [record](const EvalContext& ctx, uint64, const AttributeSet& settings, const std::map<String, Collection>&)
 			{
 				record(settings);
@@ -274,9 +288,9 @@ TEST_CASE("Registry finds, lists sorted and default exists", "[graph_eval]")
 	CHECK(f.registry.Find("Nope") == nullptr);
 
 	const auto all = f.registry.All();
-	REQUIRE(all.size() == 6);
+	REQUIRE(all.size() == 8);
 	CHECK(all[0]->title == "Combine");
-	CHECK(all[5]->title == "Spline");
+	CHECK(all[7]->title == "Terrain Limit");
 
 	// Re-registering a type replaces it.
 	NodeTypeDef def;
@@ -284,7 +298,7 @@ TEST_CASE("Registry finds, lists sorted and default exists", "[graph_eval]")
 	def.category = "Test";
 	def.title = "Zeta";
 	f.registry.Register(def);
-	CHECK(f.registry.All().size() == 6);
+	CHECK(f.registry.All().size() == 8);
 	CHECK(f.registry.Find("Test.Source")->title == "Zeta");
 
 	// The default registry is a singleton.
@@ -556,7 +570,7 @@ TEST_CASE("Cache serves unchanged nodes and re-runs exactly the affected ones", 
 		CHECK(second.nodes.at(5).fromCache);
 	}
 
-	SECTION("changing ctx.parameters re-runs only readsContext nodes and their downstream")
+	SECTION("changing ctx.parameters re-runs only context-reading nodes and their downstream")
 	{
 		f.Reset();
 		ctx.parameters["p"] = 2.0f;
@@ -572,7 +586,7 @@ TEST_CASE("Cache serves unchanged nodes and re-runs exactly the affected ones", 
 		CHECK(second.nodes.at(7).fromCache);
 	}
 
-	SECTION("changing the controls revision, terrain or region invalidates readsContext nodes only")
+	SECTION("changing the controls revision, terrain or region invalidates context-reading nodes only")
 	{
 		f.Reset();
 		ctx.controlsRevision = 5;
@@ -629,6 +643,95 @@ TEST_CASE("Cache serves unchanged nodes and re-runs exactly the affected ones", 
 		Evaluate(g, f.registry, ctx, &cache);
 		CHECK(cache.Size() == 6);
 	}
+}
+
+TEST_CASE("Cache keys cover only the context parts a node declares", "[graph_eval]")
+{
+	Fixture f;
+	Graph g;
+	g.nodes.push_back(Node(1, "Test.ParamsOnly"));
+	g.nodes.push_back(Node(2, "Test.TerrainLimit"));
+	g.nodes.push_back(Node(3, "Test.Source"));
+	g.nextNodeId = 4;
+
+	FlatTerrain terrain;
+	const std::vector<ResolvedControl> controlsA;
+	std::vector<ResolvedControl> controlsB(1);
+	AttributeSet attributes;
+	attributes["a"] = 1.0f;
+	controlsB[0].attributes = attributes;
+
+	EvalContext ctx;
+	ctx.parameters["p"] = 1.0f;
+	ctx.terrain = &terrain;
+	ctx.controls = &controlsA;
+	GraphCache cache;
+	REQUIRE(Evaluate(g, f.registry, ctx, &cache).ok);
+	CHECK(f.log->size() == 3);
+
+	SECTION("parameters, controls and region do not re-run a Terrain|PointLimit node")
+	{
+		f.Reset();
+		ctx.parameters["p"] = 2.0f;
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.Runs(1) == 1);
+		CHECK(f.log->size() == 1);
+
+		f.Reset();
+		ctx.controls = &controlsB;   // revision 0: Evaluate hashes the controls itself
+		Evaluate(g, f.registry, ctx, &cache);
+		ctx.controlsRevision = 77;
+		Evaluate(g, f.registry, ctx, &cache);
+		ctx.region.points.push_back(SplinePoint());
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.log->empty());
+	}
+
+	SECTION("terrain and point limit re-run the Terrain|PointLimit node only")
+	{
+		f.Reset();
+		terrain.revision = 2;
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.Runs(2) == 1);
+		CHECK(f.log->size() == 1);
+
+		f.Reset();
+		ctx.pointLimit = 10;
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.Runs(2) == 1);
+		CHECK(f.log->size() == 1);
+
+		f.Reset();
+		ctx.terrain = nullptr;
+		Evaluate(g, f.registry, ctx, &cache);
+		CHECK(f.Runs(2) == 1);
+		CHECK(f.log->size() == 1);
+	}
+}
+
+TEST_CASE("Evaluate hashes the controls itself when controlsRevision is 0", "[graph_eval]")
+{
+	Fixture f;
+	Graph g;
+	g.nodes.push_back(Node(1, "Test.Params"));
+	g.nextNodeId = 2;
+
+	std::vector<ResolvedControl> controls(1);
+	controls[0].attributes["a"] = 1.0f;
+	EvalContext ctx;
+	ctx.controls = &controls;
+	GraphCache cache;
+	Evaluate(g, f.registry, ctx, &cache);
+	CHECK(f.Runs(1) == 1);
+
+	f.Reset();
+	Evaluate(g, f.registry, ctx, &cache);
+	CHECK(f.log->empty());
+
+	f.Reset();
+	controls[0].attributes["a"] = 2.0f;
+	Evaluate(g, f.registry, ctx, &cache);
+	CHECK(f.Runs(1) == 1);
 }
 
 TEST_CASE("Node error stops downstream nodes", "[graph_eval]")

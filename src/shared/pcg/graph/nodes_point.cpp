@@ -12,7 +12,7 @@
 //               rotation mapping +Y onto ctx.terrain's normal at the point, identity with a warning where there is
 //               no terrain). Rotation = start * yaw * pitch * roll. Every random value is
 //               HashRange(Hash(Hash(nodeSeed, point seed, 0, salt), channel), lo, hi): a point's result depends
-//               only on its seed and the node seed. Reads the context (terrain), so readsContext is set.
+//               only on its seed and the node seed. Reads only the terrain from the context (contextDeps Terrain).
 // DensityNoise  settings: frequency, octaves (1-8), persistence, amount, mode (multiply | add | set). n =
 //               FractalNoise(Hash(nodeSeed, 0, 0, salt), x, z, ...) in [-1, 1] at the point's world x/z, u = (n + 1)
 //               / 2. multiply: d *= 1 - amount + amount * u; add: d += amount * n; set: d = (1 - amount) * d +
@@ -557,7 +557,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(SettingDef{ "scaleMax", Vector3(1, 1, 1), 0, 0, {}, "Maximum scale factor" });
 			def.settings.push_back(SettingDef{ "uniformScale", true, 0, 0, {}, "Scale all axes by one factor (x range)" });
 			def.settings.push_back(SettingDef{ "orientation", String("keep"), 0, 0, { "keep", "upright", "alignToTerrain" }, "Rotation the random rotation starts from" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Terrain;
 			def.execute = ExecuteTransformPoints;
 			registry.Register(std::move(def));
 		}

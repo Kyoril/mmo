@@ -133,13 +133,15 @@ TEST_CASE("Sampler node types are registered", "[graph_nodes_sampler]")
 		const NodeTypeDef* def = NodeRegistry::Default().Find(type);
 		REQUIRE(def != nullptr);
 		CHECK(def->category == "Sampler");
-		CHECK(def->readsContext);
 		REQUIRE(def->outputs.size() == 1);
 		CHECK(def->outputs[0].name == "Out");
 	}
 	CHECK(NodeRegistry::Default().Find("SampleSpline")->inputs.at(0).required);
 	CHECK(NodeRegistry::Default().Find("SampleArea")->inputs.at(0).required);
 	CHECK_FALSE(NodeRegistry::Default().Find("SampleTerrainSurface")->inputs.at(0).required);
+	CHECK(NodeRegistry::Default().Find("SampleSpline")->contextDeps == context_dep::PointLimit);
+	CHECK(NodeRegistry::Default().Find("SampleArea")->contextDeps == (context_dep::Terrain | context_dep::PointLimit));
+	CHECK(NodeRegistry::Default().Find("SampleTerrainSurface")->contextDeps == (context_dep::Terrain | context_dep::Region | context_dep::PointLimit));
 }
 
 TEST_CASE("Sample Spline on a straight spline: count, spacing, offset, alignment, attributes", "[graph_nodes_sampler]")

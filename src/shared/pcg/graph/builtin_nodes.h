@@ -8,7 +8,7 @@ namespace mmo::pcg::graph
 
 	/// @brief Registers the input nodes: GetControls, GraphParameters and GetRegion (nodes_input.cpp).
 	///        There is no Get Terrain data node: nodes that need terrain read it through EvalContext::terrain
-	///        (and set readsContext).
+	///        (and declare context_dep::Terrain).
 	void RegisterInputNodes(NodeRegistry& registry);
 
 	/// @brief Registers the sampler nodes: SampleSpline, SampleArea and SampleTerrainSurface (nodes_sampler.cpp).

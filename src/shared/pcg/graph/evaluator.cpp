@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "evaluator.h"
+#include "controls.h"
 #include "hashing.h"
 
 #include "pcg/pcg_random.h"
@@ -28,17 +29,55 @@ namespace mmo::pcg::graph
 			return Hash(h, static_cast<int64>(a), static_cast<int64>(b));
 		}
 
-		uint64 ContextHash(const EvalContext& ctx)
+		/// Hashes of the context parts a node can depend on (see context_dep).
+		struct ContextPartHashes
 		{
-			uint64 h = Mix(0x9e3779b97f4a7c15ull, HashAttributes(ctx.parameters), HashSpline(ctx.region));
-			h = Mix(h, ctx.controlsRevision, ctx.terrain != nullptr ? ctx.terrain->Revision() : 0);
-			h = Mix(h, ctx.terrain != nullptr ? 1 : 0, static_cast<uint64>(ctx.pointLimit));
-			for (const String& warning : ctx.parameterWarnings)
+			uint64 parameters = 0;
+			uint64 region = 0;
+			uint64 controls = 0;
+			uint64 terrain = 0;
+			uint64 pointLimit = 0;
+
+			explicit ContextPartHashes(const EvalContext& ctx)
 			{
-				h = Mix(h, StringHash(warning), 2);
+				parameters = Mix(0x9e3779b97f4a7c15ull, HashAttributes(ctx.parameters), ctx.parameterWarnings.size());
+				for (const String& warning : ctx.parameterWarnings)
+				{
+					parameters = Mix(parameters, StringHash(warning), 2);
+				}
+				region = HashSpline(ctx.region);
+				controls = Mix(0x3c6ef372fe94f82bull, ctx.controls != nullptr ? 1 : 0, ctx.controlsRevision);
+				terrain = Mix(0xa54ff53a5f1d36f1ull, ctx.terrain != nullptr ? 1 : 0, ctx.terrain != nullptr ? ctx.terrain->Revision() : 0);
+				pointLimit = Mix(0x510e527fade682d1ull, static_cast<uint64>(ctx.pointLimit));
 			}
-			return h;
-		}
+
+			/// Folds the parts selected by a context_dep mask into a cache key.
+			uint64 Apply(uint64 key, const uint32 deps) const
+			{
+				key = Mix(key, deps, 1);
+				if ((deps & context_dep::Parameters) != 0)
+				{
+					key = Mix(key, parameters, context_dep::Parameters);
+				}
+				if ((deps & context_dep::Region) != 0)
+				{
+					key = Mix(key, region, context_dep::Region);
+				}
+				if ((deps & context_dep::Controls) != 0)
+				{
+					key = Mix(key, controls, context_dep::Controls);
+				}
+				if ((deps & context_dep::Terrain) != 0)
+				{
+					key = Mix(key, terrain, context_dep::Terrain);
+				}
+				if ((deps & context_dep::PointLimit) != 0)
+				{
+					key = Mix(key, pointLimit, context_dep::PointLimit);
+				}
+				return key;
+			}
+		};
 
 		/// Declared settings take the instance value or the def's default; undeclared instance settings are kept.
 		AttributeSet EffectiveSettings(const NodeTypeDef& def, const NodeInstance& node)
@@ -109,6 +148,10 @@ namespace mmo::pcg::graph
 		EvalContext ctx = callerCtx;
 		ctx.parameterWarnings.clear();
 		ctx.parameters = MergeParameters(g.parameters, callerCtx.parameters, &ctx.parameterWarnings);
+		if (ctx.controls != nullptr && ctx.controlsRevision == 0)
+		{
+			ctx.controlsRevision = ControlsHash(*ctx.controls);
+		}
 
 		EvalResult result;
 		result.issues = ValidateGraph(g, r);
@@ -147,7 +190,7 @@ namespace mmo::pcg::graph
 			}
 		}
 
-		const uint64 contextHash = ContextHash(ctx);
+		const ContextPartHashes contextHashes(ctx);
 		std::map<uint32, std::map<String, uint64>> pinHashes;
 		std::set<uint32> failed;
 
@@ -194,10 +237,7 @@ namespace mmo::pcg::graph
 			{
 				key = Mix(key, StringHash(link->toPin), pinHashes[link->fromNode][link->fromPin]);
 			}
-			if (def.readsContext)
-			{
-				key = Mix(key, contextHash, 1);
-			}
+			key = contextHashes.Apply(key, def.contextDeps);
 
 			if (cache != nullptr)
 			{

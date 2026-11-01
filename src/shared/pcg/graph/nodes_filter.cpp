@@ -665,7 +665,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(SettingDef{ "splatKey", String(), 0, 0, {}, "Terrain texture that must be present (empty = off)" });
 			def.settings.push_back(SettingDef{ "minSplatWeight", 0.5f, 0.0f, 1.0f, {}, "Minimum blend weight of splatKey" });
 			def.settings.push_back(SettingDef{ "excludeUnderWater", false, 0, 0, {}, "Reject points below the water level" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Terrain;
 			def.execute = ExecuteFilterByTerrain;
 			registry.Register(std::move(def));
 		}

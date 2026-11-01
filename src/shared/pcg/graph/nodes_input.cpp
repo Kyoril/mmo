@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-// Input nodes. All of them read the evaluation context and therefore set readsContext.
+// Input nodes. Each declares the context parts it reads (contextDeps): GetControls Controls + Region,
+// GraphParameters Parameters, GetRegion Region.
 //
 // GetControls  settings: tags (comma list, a control needs all of them), excludeTags (comma list, a control
 //              with any of them is dropped), controlType (type path; empty = any). Output "Out": one item per
@@ -236,7 +237,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(SettingDef{ "tags", String(), 0, 0, {}, "Comma separated tags; a control needs all of them" });
 			def.settings.push_back(SettingDef{ "excludeTags", String(), 0, 0, {}, "Comma separated tags; a control with any of them is dropped" });
 			def.settings.push_back(SettingDef{ "controlType", String(), 0, 0, {}, "Control type path (empty = any type)" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Controls | context_dep::Region;
 			def.execute = ExecuteGetControls;
 			registry.Register(std::move(def));
 		}
@@ -246,7 +247,7 @@ namespace mmo::pcg::graph
 			def.category = "Input";
 			def.title = "Graph Parameters";
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Params } });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Parameters;
 			def.execute = ExecuteGraphParameters;
 			registry.Register(std::move(def));
 		}
@@ -256,7 +257,7 @@ namespace mmo::pcg::graph
 			def.category = "Input";
 			def.title = "Get Region";
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Area } });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Region;
 			def.execute = ExecuteGetRegion;
 			registry.Register(std::move(def));
 		}

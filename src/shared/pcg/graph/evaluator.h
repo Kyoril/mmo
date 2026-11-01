@@ -60,8 +60,10 @@ namespace mmo::pcg::graph
 		/// @brief Terrain access (may be null).
 		const ITerrainSampler* terrain = nullptr;
 
-		/// @brief Set by the caller whenever *controls changes (normally ControlsHash(*controls)). The
-		///        evaluator does not look inside controls; a stale revision means stale cached results.
+		/// @brief Identifies the content of *controls for the cache (normally ControlsHash(*controls)). When
+		///        controls is set and this is 0, Evaluate computes ControlsHash(*controls) itself (cost: one pass
+		///        over every control). A caller that sets it must change it whenever *controls changes; a stale
+		///        revision means stale cached results.
 		uint64 controlsRevision = 0;
 
 		/// @brief Per-node cap on produced points.
@@ -94,11 +96,17 @@ namespace mmo::pcg::graph
 	EvalResult Evaluate(const Graph& g, const NodeRegistry& r, const EvalContext& ctx, GraphCache* cache);
 
 	/// @brief Outputs of earlier evaluations, one entry per node id. An entry is reused when the node's
-	///        key matches: hash of (node id, node type, effective settings, input content hashes in link
-	///        order, node seed and, only for readsContext nodes, the context hash). The context hash covers
-	///        the merged parameters and their merge warnings, ctx.region, ctx.controlsRevision,
-	///        ctx.terrain->Revision() and ctx.pointLimit.
-	///        Failed nodes are not cached; entries of nodes no longer in the graph are dropped.
+	///        key matches: hash of (node id, node type, effective settings with parameter bindings resolved,
+	///        input content hashes in link order, node seed, and the context parts the node type declares in
+	///        NodeTypeDef::contextDeps). The parts: Parameters = the merged parameters and their merge
+	///        warnings; Region = ctx.region; Controls = whether ctx.controls is set and ctx.controlsRevision;
+	///        Terrain = whether ctx.terrain is set and its Revision(); PointLimit = ctx.pointLimit.
+	///        Failed nodes are not cached; entries of nodes no longer in the graph are dropped. The key does
+	///        not cover the executor, so call Clear after re-registering a node type.
+	///
+	///        Use one GraphCache per graph instance (graph + instance seed + region): entries are keyed by node
+	///        id only, so sharing a cache between instances still gives correct results but makes them evict
+	///        each other's entries and re-run every node.
 	class GraphCache
 	{
 	public:
@@ -141,6 +149,12 @@ namespace mmo::pcg::graph
 	///        Declared settings missing from the instance take the def's default. Nodes see ctx.parameters
 	///        merged over the graph's parameter defaults (MergeParameters). Declared output pins are
 	///        always present (empty if not produced); undeclared output pins are dropped with a warning.
+	///
+	///        The output is not clipped to ctx.region, by design: nodes may produce points outside the region
+	///        (samplers cover whole controls, which can cross the region border), and pruning steps need those
+	///        points so that a point near the border is pruned the same way whichever region evaluates it.
+	///        Clipping to the region is the job of the step that applies the result (after all pruning), not
+	///        of the graph.
 	/// @param cache Optional cache that is read and updated.
 	EvalResult Evaluate(const Graph& g, const NodeRegistry& r, const EvalContext& ctx, GraphCache* cache);
 }

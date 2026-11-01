@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-// Sampler nodes. All of them read the context (at least ctx.pointLimit) and therefore set readsContext.
+// Sampler nodes. Context dependencies (contextDeps): SampleSpline PointLimit; SampleArea Terrain + PointLimit;
+// SampleTerrainSurface Terrain + Region + PointLimit.
 // Every sampler stops once it has output ctx.pointLimit points in total (over all items) and reports a
 // warning. Each input item yields at most one output Points item carrying the input's tags, item
 // attributes and sourceId; items that produce no points are left out; items keep their input order. Items
@@ -606,7 +607,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(SettingDef{ "offset", 0.0f, -50.0f, 50.0f, {}, "Signed lateral offset (left of travel / outward for loops)" });
 			def.settings.push_back(SettingDef{ "alignToPath", true, 0, 0, {}, "Rotate points to face along the path" });
 			def.settings.push_back(SettingDef{ "endsOnly", false, 0, 0, {}, "Emit only the two end points of open splines" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::PointLimit;
 			def.execute = ExecuteSampleSpline;
 			registry.Register(std::move(def));
 		}
@@ -621,7 +622,7 @@ namespace mmo::pcg::graph
 			def.settings.push_back(SettingDef{ "minSpacing", 0.0f, 0.0f, 100.0f, {}, "Minimum distance between points (0 = off)" });
 			def.settings.push_back(SettingDef{ "jitter", 1.0f, 0.0f, 1.0f, {}, "Random offset of a candidate inside its cell" });
 			def.settings.push_back(SettingDef{ "densityAttribute", String(), 0, 0, {}, "Item attribute (0-1) scaling the acceptance (empty = 1)" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Terrain | context_dep::PointLimit;
 			def.execute = ExecuteSampleArea;
 			registry.Register(std::move(def));
 		}
@@ -634,7 +635,7 @@ namespace mmo::pcg::graph
 			def.outputs.push_back(PinDef{ "Out", { ItemKind::Points } });
 			def.settings.push_back(SettingDef{ "cellSize", 2.0f, 0.01f, 100.0f, {}, "Distance between points" });
 			def.settings.push_back(SettingDef{ "alignToNormal", false, 0, 0, {}, "Rotate points onto the terrain normal" });
-			def.readsContext = true;
+			def.contextDeps = context_dep::Terrain | context_dep::Region | context_dep::PointLimit;
 			def.execute = ExecuteSampleTerrainSurface;
 			registry.Register(std::move(def));
 		}

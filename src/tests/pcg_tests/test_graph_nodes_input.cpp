@@ -127,11 +127,13 @@ TEST_CASE("Input node types are registered in the default registry", "[graph_nod
 		const NodeTypeDef* def = r.Find(type);
 		REQUIRE(def != nullptr);
 		CHECK(def->category == "Input");
-		CHECK(def->readsContext);
 		CHECK(def->inputs.empty());
 		REQUIRE(def->outputs.size() == 1);
 		CHECK(def->outputs[0].name == "Out");
 	}
+	CHECK(r.Find("GetControls")->contextDeps == (context_dep::Controls | context_dep::Region));
+	CHECK(r.Find("GraphParameters")->contextDeps == context_dep::Parameters);
+	CHECK(r.Find("GetRegion")->contextDeps == context_dep::Region);
 }
 
 TEST_CASE("Get Controls filters by tags (all of), exclude tags and control type", "[graph_nodes_input]")
