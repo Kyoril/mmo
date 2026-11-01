@@ -6,7 +6,7 @@
 
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
-#include "graphics_d3d11/material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "graphics_d3d11/shader_compiler_d3d11.h"
 
 using namespace mmo;
@@ -21,7 +21,7 @@ namespace
 {
 	/// Compiles one generated pixel shader variant with fxc.
 	/// @return The compiler's error text, or an empty string on success.
-	String CompilePixelVariant(const MaterialCompilerD3D11& compiler, const PixelShaderType type)
+	String CompilePixelVariant(const MaterialCompilerHlsl& compiler, const PixelShaderType type)
 	{
 		ShaderCompilerD3D11 shaderCompiler;
 
@@ -37,7 +37,7 @@ namespace
 
 	/// Builds a material that reads the vertex normal directly, through a reflection vector and
 	/// through a Fresnel node without a normal input.
-	void CompileVertexNormalMaterial(MaterialCompilerD3D11& compiler, const bool lit)
+	void CompileVertexNormalMaterial(MaterialCompilerHlsl& compiler, const bool lit)
 	{
 		compiler.SetLit(lit);
 
@@ -59,7 +59,7 @@ namespace
 
 TEST_CASE("Vertex normal compiles in every lit pixel variant", "[material_compiler]")
 {
-	MaterialCompilerD3D11 compiler;
+	MaterialCompilerHlsl compiler;
 	CompileVertexNormalMaterial(compiler, true);
 
 	CHECK(CompilePixelVariant(compiler, PixelShaderType::Forward) == "");
@@ -70,7 +70,7 @@ TEST_CASE("Vertex normal compiles in every lit pixel variant", "[material_compil
 
 TEST_CASE("Vertex normal compiles in every unlit pixel variant", "[material_compiler]")
 {
-	MaterialCompilerD3D11 compiler;
+	MaterialCompilerHlsl compiler;
 	CompileVertexNormalMaterial(compiler, false);
 
 	CHECK(CompilePixelVariant(compiler, PixelShaderType::Forward) == "");
