@@ -14,6 +14,10 @@
 #include "log/default_log_levels.h"
 #include "pcg/graph/hashing.h"
 #include "pcg/graph/node_registry.h"
+#include "pcg/graph/debug_geometry.h"
+#include "pcg/graph_instance_record.h"
+#include "editors/world_editor/world_editor_instance.h"
+#include "editors/world_editor/pcg/graph_instance_builder.h"
 
 #include <imgui_internal.h>
 #include <imgui_node_editor.h>
@@ -152,6 +156,57 @@ namespace mmo
 			return name;
 		}
 
+		/// The path with forward slashes.
+		String NormalizePath(String path)
+		{
+			std::replace(path.begin(), path.end(), '\\', '/');
+			return path;
+		}
+
+		/// Debug colour of the node at `index` in the graph's node list (argb, fixed palette).
+		uint32 DebugColor(const size_t index)
+		{
+			static const uint32 s_palette[] = {
+				0xFFFF5050, 0xFF50E050, 0xFF5090FF, 0xFFFFD040, 0xFFE060E0,
+				0xFF40E0E0, 0xFFFF9030, 0xFFB0FF60, 0xFFA080FF, 0xFFFFFFFF
+			};
+			return s_palette[index % (sizeof(s_palette) / sizeof(s_palette[0]))];
+		}
+
+		ImVec4 ArgbToColor(const uint32 argb)
+		{
+			return ImVec4(
+				static_cast<float>((argb >> 16) & 0xFF) / 255.0f,
+				static_cast<float>((argb >> 8) & 0xFF) / 255.0f,
+				static_cast<float>(argb & 0xFF) / 255.0f,
+				static_cast<float>((argb >> 24) & 0xFF) / 255.0f);
+		}
+
+		/// Index of a node in the graph's node list (the node count if it is missing).
+		size_t NodeIndex(const pcg::graph::Graph& graph, const uint32 id)
+		{
+			for (size_t i = 0; i < graph.nodes.size(); ++i)
+			{
+				if (graph.nodes[i].id == id)
+				{
+					return i;
+				}
+			}
+			return graph.nodes.size();
+		}
+
+		/// Changes whenever a graph instance setting that affects evaluation changes.
+		uint64 InstanceSettingsHash(const pcg::GraphInstanceRecord& record)
+		{
+			pcg::graph::Hasher hasher;
+			hasher.U64(record.seed);
+			hasher.U64(static_cast<uint64>(record.pointLimit));
+			hasher.U64(pcg::graph::HashSpline(record.area));
+			hasher.U64(pcg::graph::HashAttributes(record.parameterOverrides));
+			hasher.Str(record.graphPath);
+			return hasher.Result();
+		}
+
 		/// Why a name cannot be used for a new or renamed parameter, or empty if it can. Names are identifiers
 		/// ([A-Za-z_][A-Za-z0-9_]*), so a binding "$name" is never ambiguous (no leading '$').
 		String ParameterNameError(const pcg::graph::Graph& graph, const String& name)
@@ -183,12 +238,15 @@ namespace mmo
 		ed::Config config;
 		config.SettingsFile = nullptr;
 		m_context = ed::CreateEditor(&config);
+		m_debugOwnerKey = ++s_lastDebugOwnerKey;
 
 		LoadFromFile();
 	}
 
 	PcgGraphEditorInstance::~PcgGraphEditorInstance()
 	{
+		ClearDebugLayer();
+
 		if (m_context != nullptr)
 		{
 			if (ed::GetCurrentEditor() == m_context)
@@ -239,6 +297,7 @@ namespace mmo
 		const String paletteId = "Palette##" + GetAssetPath().string();
 		const String detailsId = "Details##" + GetAssetPath().string();
 		const String parametersId = "Parameters##" + GetAssetPath().string();
+		const String debugId = "Debug##" + GetAssetPath().string();
 
 		RefreshIssues();
 
@@ -246,8 +305,9 @@ namespace mmo
 		DrawPalettePanel(paletteId);
 		DrawDetailsPanel(detailsId);
 		DrawParametersPanel(parametersId);
+		DrawDebugPanel(debugId);
 
-		InitializeDockLayout(dockspaceId, graphId, paletteId, detailsId, parametersId);
+		InitializeDockLayout(dockspaceId, graphId, paletteId, detailsId, parametersId, debugId);
 
 		UpdateDirtyState();
 
@@ -447,6 +507,17 @@ namespace mmo
 			ImGui::SameLine();
 			ImGui::TextColored(s_warningColor, "(!)");
 		}
+
+		// Debug toggle: lit in the node's debug colour while its output is drawn in the world.
+		ImGui::SameLine();
+		const bool debugOn = node.debug;
+		ImGui::PushStyleColor(ImGuiCol_Text, debugOn ? ArgbToColor(DebugColor(NodeIndex(m_document.GetGraph(), node.id))) : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+		if (ImGui::SmallButton(ICON_FA_EYE))
+		{
+			m_document.SetNodeDebug(node.id, !debugOn);
+		}
+		ImGui::PopStyleColor();
+
 		const float headerBottom = ImGui::GetItemRectMax().y + ImGui::GetStyle().ItemSpacing.y * 0.5f;
 		ImGui::Dummy(ImVec2(150.0f, 1.0f));
 
@@ -1237,7 +1308,8 @@ namespace mmo
 		ImGui::End();
 	}
 
-	void PcgGraphEditorInstance::InitializeDockLayout(const ImGuiID dockspaceId, const String& graphId, const String& paletteId, const String& detailsId, const String& parametersId)
+	void PcgGraphEditorInstance::InitializeDockLayout(const ImGuiID dockspaceId, const String& graphId, const String& paletteId, const String& detailsId, const String& parametersId,
+		const String& debugId)
 	{
 		if (!m_initDockLayout)
 		{
@@ -1258,7 +1330,311 @@ namespace mmo
 		ImGui::DockBuilderDockWindow(paletteId.c_str(), leftId);
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), rightId);
 		ImGui::DockBuilderDockWindow(parametersId.c_str(), rightBottomId);
+		ImGui::DockBuilderDockWindow(debugId.c_str(), rightBottomId);
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;
+	}
+
+	String PcgGraphEditorInstance::GetNormalizedAssetPath() const
+	{
+		return NormalizePath(GetAssetPath().string());
+	}
+
+	void PcgGraphEditorInstance::SetDebugTarget(const uint64 worldSerial, const uint64 instanceId)
+	{
+		if (worldSerial == m_debugWorldSerial && instanceId == m_debugInstanceId)
+		{
+			return;
+		}
+
+		ClearDebugLayer();
+		m_debugWorldSerial = worldSerial;
+		m_debugInstanceId = instanceId;
+
+		// The cache belongs to one (world, instance) pair.
+		m_debugCache.Clear();
+		m_debugResult = pcg::graph::EvalResult();
+		m_hasDebugResult = false;
+		m_debugEvalKey = 0;
+		m_debugEvalMilliseconds = 0;
+		m_debugError.clear();
+		m_debugWarnings.clear();
+		m_nodeRunInfo.clear();
+	}
+
+	void PcgGraphEditorInstance::ClearDebugLayer()
+	{
+		if (m_debugLayerSet)
+		{
+			if (WorldEditorInstance* world = WorldEditorInstance::FindOpenInstance(m_debugWorldSerial))
+			{
+				world->ClearPcgDebugLayer(m_debugOwnerKey);
+			}
+			m_debugLayerSet = false;
+		}
+		m_debugDrawKey = 0;
+		m_debugLegend.clear();
+	}
+
+	void PcgGraphEditorInstance::UpdateDebugView()
+	{
+		if (m_debugWorldSerial == 0)
+		{
+			return;
+		}
+
+		WorldEditorInstance* world = WorldEditorInstance::FindOpenInstance(m_debugWorldSerial);
+		if (world == nullptr)
+		{
+			// The world was closed and took its debug layers with it.
+			m_debugLayerSet = false;
+			SetDebugTarget(0, 0);
+			m_debugError = "The target world was closed.";
+			return;
+		}
+
+		ProceduralEditMode* mode = world->GetProceduralEditMode();
+		const pcg::GraphInstanceRecord* record = mode != nullptr ? mode->FindGraphInstance(m_debugInstanceId) : nullptr;
+		if (record == nullptr || NormalizePath(record->graphPath) != GetNormalizedAssetPath())
+		{
+			SetDebugTarget(0, 0);
+			m_debugError = "The target graph instance was deleted or no longer uses this graph.";
+			return;
+		}
+
+		const pcg::graph::Graph& graph = m_document.GetGraph();
+		const bool anyDebug = m_loadError.empty() && std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const NodeInstance& node)
+		{
+			return node.debug;
+		});
+		if (!anyDebug)
+		{
+			ClearDebugLayer();
+			return;
+		}
+
+		// Re-evaluate when anything the evaluation reads changed (not on node moves, comments or debug toggles).
+		pcg::graph::Hasher evalHasher;
+		evalHasher.U64(m_document.EvalRevision());
+		evalHasher.U64(mode->GetControlsRevision());
+		evalHasher.U64(world->GetTerrainRevision());
+		evalHasher.U64(InstanceSettingsHash(*record));
+		const uint64 evalKey = evalHasher.Result() | 1;
+		if (evalKey != m_debugEvalKey)
+		{
+			m_debugEvalKey = evalKey;
+			m_debugError.clear();
+			m_debugWarnings.clear();
+			m_hasDebugResult = false;
+			m_debugEvalMilliseconds = 0;
+
+			GraphInstanceContext context;
+			String error;
+			if (!BuildGraphInstanceContext(*world, *record, *mode, context, error))
+			{
+				m_debugError = error;
+			}
+			else
+			{
+				m_debugWarnings = context.warnings;
+				m_debugResult = pcg::graph::Evaluate(graph, m_document.GetRegistry(), context.context, &m_debugCache);
+				m_hasDebugResult = true;
+				for (const auto& entry : m_debugResult.nodes)
+				{
+					m_debugEvalMilliseconds += entry.second.milliseconds;
+				}
+				if (!m_debugResult.issues.empty())
+				{
+					m_debugError = DescribeGraphIssues(graph, m_debugResult.issues);
+				}
+				SetNodeResults(m_debugResult);
+			}
+		}
+
+		// Redraw when the evaluation or the set of debug nodes changed.
+		pcg::graph::Hasher drawHasher;
+		drawHasher.U64(evalKey);
+		drawHasher.U64(m_hasDebugResult ? 1 : 0);
+		for (size_t i = 0; i < graph.nodes.size(); ++i)
+		{
+			if (graph.nodes[i].debug)
+			{
+				drawHasher.U64(graph.nodes[i].id);
+				drawHasher.U64(static_cast<uint64>(i));
+			}
+		}
+		const uint64 drawKey = drawHasher.Result() | 1;
+		if (m_debugLayerSet && drawKey == m_debugDrawKey)
+		{
+			return;
+		}
+
+		std::vector<pcg::graph::DebugLine> lines;
+		m_debugLegend.clear();
+		for (size_t i = 0; i < graph.nodes.size(); ++i)
+		{
+			const NodeInstance& node = graph.nodes[i];
+			if (!node.debug)
+			{
+				continue;
+			}
+
+			DebugLegendEntry entry;
+			entry.node = node.id;
+			const NodeTypeDef* def = m_document.FindNodeType(node.id);
+			entry.title = def != nullptr ? def->title : node.type;
+			entry.argb = DebugColor(i);
+
+			const auto result = m_hasDebugResult ? m_debugResult.nodes.find(node.id) : m_debugResult.nodes.end();
+			if (result != m_debugResult.nodes.end())
+			{
+				const std::map<String, pcg::graph::Collection>& pins = result->second.output.pins;
+				pcg::graph::DebugGeometry geometry;
+				if (pins.size() == 1)
+				{
+					geometry = pcg::graph::BuildDebugGeometry(pins.begin()->second, entry.argb);
+				}
+				else if (pins.size() > 1)
+				{
+					// Draw every output pin under one limit.
+					pcg::graph::Collection merged;
+					for (const auto& pin : pins)
+					{
+						merged.insert(merged.end(), pin.second.begin(), pin.second.end());
+					}
+					geometry = pcg::graph::BuildDebugGeometry(merged, entry.argb);
+				}
+				entry.pointsDrawn = geometry.pointsDrawn;
+				entry.pointsTotal = geometry.pointsTotal;
+				entry.lines = geometry.lines.size();
+				lines.insert(lines.end(), geometry.lines.begin(), geometry.lines.end());
+			}
+			m_debugLegend.push_back(std::move(entry));
+		}
+
+		world->SetPcgDebugLayer(m_debugOwnerKey, std::move(lines));
+		m_debugLayerSet = true;
+		m_debugDrawKey = drawKey;
+	}
+
+	void PcgGraphEditorInstance::DrawDebugPanel(const String& panelId)
+	{
+		if (ImGui::Begin(panelId.c_str()))
+		{
+			const String assetPath = GetNormalizedAssetPath();
+
+			String preview = "(none)";
+			if (WorldEditorInstance* world = WorldEditorInstance::FindOpenInstance(m_debugWorldSerial))
+			{
+				const ProceduralEditMode* mode = world->GetProceduralEditMode();
+				if (const pcg::GraphInstanceRecord* record = mode != nullptr ? mode->FindGraphInstance(m_debugInstanceId) : nullptr)
+				{
+					preview = world->GetAssetPath().filename().string() + " / " + record->name;
+				}
+			}
+
+			if (ImGui::BeginCombo("Target", preview.c_str()))
+			{
+				if (ImGui::Selectable("(none)", m_debugWorldSerial == 0))
+				{
+					SetDebugTarget(0, 0);
+				}
+
+				bool anyInstance = false;
+				for (WorldEditorInstance* world : WorldEditorInstance::GetOpenInstances())
+				{
+					const ProceduralEditMode* mode = world->GetProceduralEditMode();
+					if (mode == nullptr)
+					{
+						continue;
+					}
+					for (const pcg::GraphInstanceRecord* record : mode->GetGraphInstances())
+					{
+						if (NormalizePath(record->graphPath) != assetPath)
+						{
+							continue;
+						}
+
+						anyInstance = true;
+						const String label = world->GetAssetPath().filename().string() + " / " + record->name +
+							"##" + std::to_string(world->GetInstanceSerial()) + "_" + std::to_string(record->id);
+						const bool selected = world->GetInstanceSerial() == m_debugWorldSerial && record->id == m_debugInstanceId;
+						if (ImGui::Selectable(label.c_str(), selected))
+						{
+							SetDebugTarget(world->GetInstanceSerial(), record->id);
+						}
+					}
+				}
+				if (!anyInstance)
+				{
+					ImGui::TextDisabled("No graph instance in an open world uses this graph.");
+				}
+				ImGui::EndCombo();
+			}
+
+			if (HasUnsavedChanges())
+			{
+				ImGui::TextColored(s_warningColor, "Rebuild uses the saved file");
+				ImGui::TextDisabled("The debug view shows the unsaved graph.");
+			}
+
+			const bool anyDebug = std::any_of(m_document.GetGraph().nodes.begin(), m_document.GetGraph().nodes.end(), [](const NodeInstance& node)
+			{
+				return node.debug;
+			});
+			if (m_debugWorldSerial == 0)
+			{
+				ImGui::TextWrapped("Pick a graph instance to draw node outputs into its world.");
+			}
+			else if (!anyDebug)
+			{
+				ImGui::TextWrapped("Turn on a node's " ICON_FA_EYE " button to draw its output.");
+			}
+			else if (m_hasDebugResult)
+			{
+				ImGui::TextDisabled("Evaluated in %.1f ms", m_debugEvalMilliseconds);
+			}
+
+			ImGui::PushTextWrapPos(0.0f);
+			if (!m_debugError.empty())
+			{
+				ImGui::TextColored(s_errorColor, "%s", m_debugError.c_str());
+			}
+			for (const String& warning : m_debugWarnings)
+			{
+				ImGui::TextColored(s_warningColor, "%s", warning.c_str());
+			}
+			ImGui::PopTextWrapPos();
+
+			if (!m_debugLegend.empty() && ImGui::BeginTable("##pcg_debug_legend", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+				ImGui::TableSetupColumn("Node");
+				ImGui::TableSetupColumn("Shown");
+				ImGui::TableHeadersRow();
+				for (const DebugLegendEntry& entry : m_debugLegend)
+				{
+					ImGui::PushID(static_cast<int>(entry.node));
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					ImGui::ColorButton("##color", ArgbToColor(entry.argb), ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoPicker,
+						ImVec2(ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight()));
+					ImGui::TableNextColumn();
+					ImGui::Text("%s (#%u)", entry.title.c_str(), entry.node);
+					ImGui::TableNextColumn();
+					if (entry.pointsTotal > 0)
+					{
+						ImGui::Text("showing %zu of %zu", entry.pointsDrawn, entry.pointsTotal);
+					}
+					else
+					{
+						ImGui::TextDisabled("%zu line(s)", entry.lines);
+					}
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+		}
+		ImGui::End();
 	}
 }

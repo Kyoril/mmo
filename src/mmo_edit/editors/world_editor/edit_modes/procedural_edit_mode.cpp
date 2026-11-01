@@ -1699,6 +1699,19 @@ namespace mmo
 		return index >= 0 && m_controls[index].kind == ControlKind::GraphInstance ? &m_controls[index].instance : nullptr;
 	}
 
+	std::vector<const pcg::GraphInstanceRecord*> ProceduralEditMode::GetGraphInstances() const
+	{
+		std::vector<const pcg::GraphInstanceRecord*> instances;
+		for (const Control& control : m_controls)
+		{
+			if (control.kind == ControlKind::GraphInstance)
+			{
+				instances.push_back(&control.instance);
+			}
+		}
+		return instances;
+	}
+
 	std::vector<const pcg::GraphInstanceRecord*> ProceduralEditMode::GetOtherGraphInstances(const uint64 id) const
 	{
 		std::vector<const pcg::GraphInstanceRecord*> others;

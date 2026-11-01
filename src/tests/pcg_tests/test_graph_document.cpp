@@ -475,3 +475,34 @@ TEST_CASE("GraphDocument EvalRevision ignores positions and comments", "[graph_d
 	CHECK(doc.Revision() > revision);
 	CHECK(doc.EvalRevision() > evalRevision);
 }
+
+TEST_CASE("GraphDocument SetNodeDebug bumps Revision only", "[graph_document]")
+{
+	const NodeRegistry r = MakeRegistry();
+	GraphDocument doc;
+	String error;
+	REQUIRE(doc.Load(WriteGraph(Graph()), r, error));
+	const uint32 a = doc.AddNode("PointSource", 0, 0);
+
+	uint64 revision = doc.Revision();
+	const uint64 evalRevision = doc.EvalRevision();
+
+	doc.SetNodeDebug(a, true);
+	CHECK(doc.FindNode(a)->debug);
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() == evalRevision);
+	revision = doc.Revision();
+
+	// No change, no bump.
+	doc.SetNodeDebug(a, true);
+	CHECK(doc.Revision() == revision);
+
+	// Missing nodes are ignored.
+	doc.SetNodeDebug(a + 100, true);
+	CHECK(doc.Revision() == revision);
+
+	doc.SetNodeDebug(a, false);
+	CHECK_FALSE(doc.FindNode(a)->debug);
+	CHECK(doc.Revision() > revision);
+	CHECK(doc.EvalRevision() == evalRevision);
+}

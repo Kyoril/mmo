@@ -214,6 +214,10 @@ namespace mmo
 		/// @brief Gets the record of a graph instance, or null if the id names none.
 		[[nodiscard]] const pcg::GraphInstanceRecord* FindGraphInstance(uint64 id) const;
 
+		/// @brief Gets the records of every graph instance, in list order. The pointers are valid until the control
+		///        list changes (GetControlsRevision changes then); do not keep them across frames.
+		[[nodiscard]] std::vector<const pcg::GraphInstanceRecord*> GetGraphInstances() const;
+
 		/// @brief Counter bumped on any change of a placed control (geometry, name, tags, overrides), on every
 		///        structural change of the control list of any kind (creation, deletion, load) and on any
 		///        change of a control type in the library.

@@ -111,13 +111,18 @@ namespace mmo::pcg::graph
 		/// @return True if the comment changed.
 		bool SetNodeComment(uint32 node, const String& comment);
 
+		/// @brief Sets whether the editor shows a node's output in the world (NodeInstance::debug). Bumps Revision
+		///        (the flag is saved) but not EvalRevision. Does nothing for a missing node or an unchanged flag.
+		void SetNodeDebug(uint32 id, bool on);
+
 		/// @brief Gets a counter that every mutation increases: the dirty / save counter.
 		uint64 Revision() const;
 
 		/// @brief Gets a counter that every mutation that can change the evaluation result increases: every
-		///        mutation except node positions (SetNodePosition) and node comments (SetNodeComment). EditGraph
-		///        bumps it too (conservative). Views that evaluate the graph (the debug view) re-evaluate when it
-		///        changes, so dragging nodes or editing comments never re-evaluates.
+		///        mutation except node positions (SetNodePosition), node comments (SetNodeComment) and debug flags
+		///        (SetNodeDebug). EditGraph bumps it too (conservative). Views that evaluate the graph (the debug
+		///        view) re-evaluate when it changes, so dragging nodes, editing comments or toggling debug never
+		///        re-evaluates.
 		uint64 EvalRevision() const;
 
 		/// @brief Whether a node exists and its type is not registered.

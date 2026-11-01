@@ -55,6 +55,11 @@ namespace mmo
 		///        errors). Results of nodes no longer in the graph are ignored.
 		void SetNodeResults(const pcg::graph::EvalResult& result);
 
+		/// @brief Re-evaluates the document against the debug target when its inputs changed and redraws the debug
+		///        layer when the evaluation or the set of debug nodes changed. Called once per frame by the graph
+		///        editor, also while this instance's window is hidden; evaluates only while a node has debug on.
+		void UpdateDebugView();
+
 	private:
 		/// @brief What the canvas shows about a node's last evaluation.
 		struct NodeRunInfo
@@ -72,7 +77,20 @@ namespace mmo
 		void DrawPalettePanel(const String& panelId);
 		void DrawDetailsPanel(const String& panelId);
 		void DrawParametersPanel(const String& panelId);
-		void InitializeDockLayout(ImGuiID dockspaceId, const String& graphId, const String& paletteId, const String& detailsId, const String& parametersId);
+		void InitializeDockLayout(ImGuiID dockspaceId, const String& graphId, const String& paletteId, const String& detailsId, const String& parametersId,
+			const String& debugId);
+
+		/// @brief Draws the Debug window: target graph instance, hints, errors and the legend.
+		void DrawDebugPanel(const String& panelId);
+
+		/// @brief Points the debug view at a graph instance (0, 0 = none). Clears the old layer and the cache.
+		void SetDebugTarget(uint64 worldSerial, uint64 instanceId);
+
+		/// @brief Removes this editor's debug layer from the target world (if it is still open).
+		void ClearDebugLayer();
+
+		/// @brief The asset path with forward slashes, as graph instances store it.
+		[[nodiscard]] String GetNormalizedAssetPath() const;
 
 		/// @brief Submits every node and link to the node editor.
 		void CommitNodes();
@@ -152,5 +170,45 @@ namespace mmo
 		String m_renameError;
 		String m_renameErrorParameter;
 		int m_newParameterType { 0 };
+
+		/// @brief One row of the debug legend.
+		struct DebugLegendEntry
+		{
+			uint32 node = 0;
+			String title;
+			uint32 argb = 0;
+			size_t pointsDrawn = 0;
+			size_t pointsTotal = 0;
+			size_t lines = 0;
+		};
+
+		/// @brief Last owner key handed out (see m_debugOwnerKey).
+		static inline uint64 s_lastDebugOwnerKey = 0;
+
+		/// @brief Identifies this editor's debug layer in a world.
+		uint64 m_debugOwnerKey { 0 };
+
+		/// @brief Debug target: world serial (looked up every frame, never stored as a pointer) and graph instance id.
+		uint64 m_debugWorldSerial { 0 };
+		uint64 m_debugInstanceId { 0 };
+
+		/// @brief Evaluation cache of the debug target; cleared when the target changes.
+		pcg::graph::GraphCache m_debugCache;
+
+		/// @brief Last debug evaluation and the key of its inputs (0 = none yet).
+		pcg::graph::EvalResult m_debugResult;
+		bool m_hasDebugResult { false };
+		uint64 m_debugEvalKey { 0 };
+		double m_debugEvalMilliseconds { 0 };
+
+		/// @brief Key of what the layer shows (0 = nothing drawn).
+		uint64 m_debugDrawKey { 0 };
+
+		/// @brief Whether the target world holds this editor's layer.
+		bool m_debugLayerSet { false };
+
+		String m_debugError;
+		std::vector<String> m_debugWarnings;
+		std::vector<DebugLegendEntry> m_debugLegend;
 	};
 }

@@ -68,6 +68,12 @@ namespace mmo
 
 	void PcgGraphEditor::DrawImpl()
 	{
+		// Debug views follow world edits even while their graph window is hidden.
+		for (const auto& entry : m_instances)
+		{
+			static_cast<PcgGraphEditorInstance&>(*entry.second).UpdateDebugView();
+		}
+
 		if (m_showGraphNameDialog)
 		{
 			ImGui::OpenPopup("Create New PCG Graph");

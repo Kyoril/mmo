@@ -74,6 +74,7 @@
 #include "minimap_baker.h"
 #include "minimap_grid_view.h"
 #include "glue_bake/glue_bake_placement.h"
+#include "pcg/graph/debug_geometry.h"
 
 namespace mmo
 {
@@ -305,6 +306,7 @@ namespace mmo
 	class SelectedSplinePoint;
 	class SelectedControlTransform;
 	class SectionPanel;
+	class PcgDebugLayer;
 
 	class SelectableVisitor
 	{
@@ -832,6 +834,16 @@ namespace mmo
 		/// @brief Gets the procedural edit mode of this world (placed controls, control library), or null.
 		[[nodiscard]] ProceduralEditMode* GetProceduralEditMode() const { return m_proceduralEditMode.get(); }
 
+		/// @brief Replaces the debug lines an owner (a PCG graph editor's debug view) draws into this world's
+		///        viewport, creating its layer on first use. Debug layers are never saved.
+		/// @param ownerKey Identifies the owner; each owner has one layer.
+		/// @param lines The lines to draw (empty clears the drawing but keeps the layer).
+		void SetPcgDebugLayer(uint64 ownerKey, std::vector<pcg::graph::DebugLine> lines);
+
+		/// @brief Removes an owner's debug layer and its lines. Does nothing if the owner has none.
+		/// @param ownerKey Identifies the owner.
+		void ClearPcgDebugLayer(uint64 ownerKey);
+
 		/// @brief Deletes a procedural control (oasis, section path, graph instance or placed control) and
 		///        everything it generated like
 		///        the "Delete" button does, for unattended runs. The world is not saved.
@@ -1081,6 +1093,9 @@ namespace mmo
 		std::unique_ptr<AtlasEditMode> m_atlasEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
 		std::unique_ptr<ProceduralEditMode> m_proceduralEditMode;
+
+		/// PCG graph debug views drawing into this world, by owner key (see SetPcgDebugLayer). Never saved.
+		std::map<uint64, std::unique_ptr<PcgDebugLayer>> m_pcgDebugLayers;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
 
 		/// Section authoring panel; only set for section worlds.

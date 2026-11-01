@@ -70,6 +70,7 @@
 #include "pcg/placement.h"
 #include "section_panel.h"
 #include "pcg/section_bake_job.h"
+#include "pcg/pcg_debug_layer.h"
 
 #include <algorithm>
 #include <cctype>
@@ -567,6 +568,9 @@ namespace mmo
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
+
+		// PCG debug layers own scene objects; destroy them while the scene is intact.
+		m_pcgDebugLayers.clear();
 
 		m_transformWidget.reset();
 		m_kitCollisionOverlay.reset();
@@ -5160,6 +5164,21 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
 	{
 		m_scene.DestroySceneNode(node);
+	}
+
+	void WorldEditorInstance::SetPcgDebugLayer(const uint64 ownerKey, std::vector<pcg::graph::DebugLine> lines)
+	{
+		std::unique_ptr<PcgDebugLayer>& layer = m_pcgDebugLayers[ownerKey];
+		if (!layer)
+		{
+			layer = std::make_unique<PcgDebugLayer>(*this, ownerKey);
+		}
+		layer->SetLines(lines);
+	}
+
+	void WorldEditorInstance::ClearPcgDebugLayer(const uint64 ownerKey)
+	{
+		m_pcgDebugLayers.erase(ownerKey);
 	}
 
 	uint32 WorldEditorInstance::GenerateFogVolumeId()

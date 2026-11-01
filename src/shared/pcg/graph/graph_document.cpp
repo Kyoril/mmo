@@ -311,6 +311,18 @@ namespace mmo::pcg::graph
 		return true;
 	}
 
+	void GraphDocument::SetNodeDebug(const uint32 id, const bool on)
+	{
+		NodeInstance* instance = FindMutableNode(id);
+		if (instance == nullptr || instance->debug == on)
+		{
+			return;
+		}
+
+		instance->debug = on;
+		Touch(false);
+	}
+
 	uint64 GraphDocument::Revision() const
 	{
 		return m_revision;
