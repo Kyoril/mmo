@@ -259,6 +259,15 @@ UI lua files and xml files should not contain hardcoded strings, but string cons
 
 If you add or modify localized strings, add them in all locales (at least as a placeholder).
 
+### UI iteration without the client
+
+`ui_test` (`cmake --build build --config Release -t ui_test`) renders GlueUI/GameUI with the real
+frame_ui code outside the client, hot-reloads XML/Lua/TOC changes, and writes
+`artifacts/ui_test/latest.png` plus `status.json` (errors, unmocked API calls) after every load.
+The client's C++ Lua API is replaced by Lua mocks in `tools/ui_test/mocks/`; window states are
+scenarios in `tools/ui_test/scenarios/`. Use it to check UI changes visually — see
+[tools/ui_test/README.md](tools/ui_test/README.md).
+
 Text property values in XML are automatically localized. In lua, you should use the `Localize("KEY")` method. If a key is not available in the current locales Localization.txt file, the KEY is printed as is.
 
 
