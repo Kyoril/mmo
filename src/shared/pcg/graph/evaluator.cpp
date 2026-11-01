@@ -58,6 +58,10 @@ namespace mmo::pcg::graph
 			uint64 h = Mix(0x9e3779b97f4a7c15ull, AttributesHash(ctx.parameters), SplineHash(ctx.region));
 			h = Mix(h, ctx.controlsRevision, ctx.terrain != nullptr ? ctx.terrain->Revision() : 0);
 			h = Mix(h, ctx.terrain != nullptr ? 1 : 0, static_cast<uint64>(ctx.pointLimit));
+			for (const String& warning : ctx.parameterWarnings)
+			{
+				h = Mix(h, StringHash(warning), 2);
+			}
 			return h;
 		}
 
@@ -102,8 +106,35 @@ namespace mmo::pcg::graph
 		}
 	}
 
-	EvalResult Evaluate(const Graph& g, const NodeRegistry& r, const EvalContext& ctx, GraphCache* cache)
+	AttributeSet MergeParameters(const std::vector<ParameterDef>& defaults, const AttributeSet& overrides, std::vector<String>* warnings)
 	{
+		AttributeSet merged = overrides;
+		for (const ParameterDef& def : defaults)
+		{
+			const auto it = merged.find(def.name);
+			if (it == merged.end())
+			{
+				merged.emplace(def.name, def.defaultValue);
+			}
+			else if (TypeOf(it->second) != TypeOf(def.defaultValue))
+			{
+				if (warnings != nullptr)
+				{
+					warnings->push_back("parameter '" + def.name + "': override has the wrong type, the default is used");
+				}
+				it->second = def.defaultValue;
+			}
+		}
+		return merged;
+	}
+
+	EvalResult Evaluate(const Graph& g, const NodeRegistry& r, const EvalContext& callerCtx, GraphCache* cache)
+	{
+		// Nodes see the overrides merged over the graph's parameter defaults.
+		EvalContext ctx = callerCtx;
+		ctx.parameterWarnings.clear();
+		ctx.parameters = MergeParameters(g.parameters, callerCtx.parameters, &ctx.parameterWarnings);
+
 		EvalResult result;
 		result.issues = ValidateGraph(g, r);
 		if (!result.issues.empty())

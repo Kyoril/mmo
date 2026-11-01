@@ -2,6 +2,8 @@
 
 #include "node_registry.h"
 
+#include "builtin_nodes.h"
+
 #include <algorithm>
 #include <set>
 
@@ -56,8 +58,8 @@ namespace mmo::pcg::graph
 
 	void RegisterBuiltinNodes(NodeRegistry& registry)
 	{
-		// Node families add one explicit call each (e.g. RegisterInputNodes(registry)) as they are implemented.
-		(void)registry;
+		// One explicit call per node family (no static registration: a static library link could drop it).
+		RegisterInputNodes(registry);
 	}
 
 	namespace

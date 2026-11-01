@@ -46,8 +46,13 @@ namespace mmo::pcg::graph
 		/// @brief Region the instance generates into.
 		PathSpline region;
 
-		/// @brief Graph parameter overrides.
+		/// @brief Graph parameter overrides. Evaluate hands nodes a copy of the context in which this holds the
+		///        overrides merged over the graph's parameter defaults (see MergeParameters).
 		AttributeSet parameters;
+
+		/// @brief Set by Evaluate on the context it hands to nodes: the problems found while merging the
+		///        parameters (overrides whose type differs from the default). Callers leave it empty.
+		std::vector<String> parameterWarnings;
 
 		/// @brief Placed controls visible to the graph (may be null).
 		const std::vector<ResolvedControl>* controls = nullptr;
@@ -62,6 +67,12 @@ namespace mmo::pcg::graph
 		/// @brief Per-node cap on produced points.
 		size_t pointLimit = 2'000'000;
 	};
+
+	/// @brief Merges graph parameter overrides over the graph's parameter defaults. An override replaces the
+	///        default of the same name only if it has the default's type (otherwise the default stays and a
+	///        warning is added); overrides of undeclared parameters are kept as they are.
+	/// @param warnings Optional; receives one message per rejected override.
+	AttributeSet MergeParameters(const std::vector<ParameterDef>& defaults, const AttributeSet& overrides, std::vector<String>* warnings);
 
 	/// @brief Result of one node in an evaluation.
 	struct NodeResult
@@ -85,7 +96,8 @@ namespace mmo::pcg::graph
 	/// @brief Outputs of earlier evaluations, one entry per node id. An entry is reused when the node's
 	///        key matches: hash of (node id, node type, effective settings, input content hashes in link
 	///        order, node seed and, only for readsContext nodes, the context hash). The context hash covers
-	///        ctx.parameters, ctx.region, ctx.controlsRevision, ctx.terrain->Revision() and ctx.pointLimit.
+	///        the merged parameters and their merge warnings, ctx.region, ctx.controlsRevision,
+	///        ctx.terrain->Revision() and ctx.pointLimit.
 	///        Failed nodes are not cached; entries of nodes no longer in the graph are dropped.
 	class GraphCache
 	{
@@ -126,7 +138,8 @@ namespace mmo::pcg::graph
 
 	/// @brief Validates and evaluates a graph. Nodes run in topological order, choosing the smallest id among
 	///        ready nodes. An input pin receives the concatenation of its linked outputs in link order.
-	///        Declared settings missing from the instance take the def's default. Declared output pins are
+	///        Declared settings missing from the instance take the def's default. Nodes see ctx.parameters
+	///        merged over the graph's parameter defaults (MergeParameters). Declared output pins are
 	///        always present (empty if not produced); undeclared output pins are dropped with a warning.
 	/// @param cache Optional cache that is read and updated.
 	EvalResult Evaluate(const Graph& g, const NodeRegistry& r, const EvalContext& ctx, GraphCache* cache);
