@@ -32,8 +32,10 @@ namespace
 	class GridSampler final : public ITerrainSampler
 	{
 	public:
-		explicit GridSampler(const FakeTerrain& terrain)
+		/// @param stepsPerPage Outer vertex steps per page: page-local index 0 has no left / up neighbour in the normal.
+		explicit GridSampler(const FakeTerrain& terrain, const int32 stepsPerPage = kStepsPerPage)
 			: m_terrain(terrain)
+			, m_stepsPerPage(stepsPerPage)
 		{
 		}
 
@@ -57,8 +59,12 @@ namespace
 			const int32 vz = static_cast<int32>(z);
 			const float fx = x - vx;
 			const float fz = z - vz;
-			const Vector3 n0 = VertexNormal(vx, vz) * (1.0f - fx) + VertexNormal(vx + 1, vz) * fx;
-			const Vector3 n1 = VertexNormal(vx, vz + 1) * (1.0f - fx) + VertexNormal(vx + 1, vz + 1) * fx;
+			// Page::GetSmoothNormalAt: the four corner normals as the page holding the cell stores them (a vertex on a
+			// page seam has one normal per page).
+			const int32 px = vx - vx % m_stepsPerPage;
+			const int32 pz = vz - vz % m_stepsPerPage;
+			const Vector3 n0 = VertexNormal(vx, vz, px, pz) * (1.0f - fx) + VertexNormal(vx + 1, vz, px, pz) * fx;
+			const Vector3 n1 = VertexNormal(vx, vz + 1, px, pz) * (1.0f - fx) + VertexNormal(vx + 1, vz + 1, px, pz) * fx;
 			return (n0 * (1.0f - fz) + n1 * fz).NormalizedCopy();
 		}
 
@@ -105,12 +111,14 @@ namespace
 			return m_terrain.GetOuterHeight(x, z);
 		}
 
-		Vector3 VertexNormal(const int32 x, const int32 z) const
+		/// Page::CalculateNormalAt of the page whose first vertex is (pageX, pageZ): no left / up neighbour at its
+		/// local index 0.
+		Vector3 VertexNormal(const int32 x, const int32 z, const int32 pageX, const int32 pageZ) const
 		{
-			const float scaling = 1.0f * kStepsPerPage / (kStepsPerPage + 1.0f);
+			const float scaling = 1.0f * m_stepsPerPage / (m_stepsPerPage + 1.0f);
 			const float c = Outer(x, z);
-			const float left = x > 0 ? Outer(x - 1, z) : c;
-			const float up = z > 0 ? Outer(x, z - 1) : c;
+			const float left = x > pageX ? Outer(x - 1, z) : c;
+			const float up = z > pageZ ? Outer(x, z - 1) : c;
 			Vector3 n(-(Outer(x + 1, z) - left) / (2.0f * scaling), 1.0f, -(Outer(x, z + 1) - up) / (2.0f * scaling));
 			n.Normalize();
 			const EncodedNormal8 e = EncodeNormalSNorm8(n.x, n.y, n.z);
@@ -120,6 +128,7 @@ namespace
 		}
 
 		const FakeTerrain& m_terrain;
+		int32 m_stepsPerPage;
 	};
 
 	/// Base terrain: a slope with a bump, layer 0 everywhere, no water.
@@ -273,4 +282,119 @@ TEST_CASE("BaseTerrainView revision mixes the live revision and the contribution
 	const uint64 before = viewA.Revision();
 	liveSampler.revision = 2;
 	CHECK(viewA.Revision() != before);
+}
+
+TEST_CASE("BaseTerrainView normals follow the page seam rule", "[graph_base_terrain_view]")
+{
+	// Two pages of 8 steps per axis: vertex 8 is page-local index 0 of the second page (no left / up neighbour).
+	constexpr int32 stepsPerPage = 8;
+	FakeTerrain live;
+	MakeBase(live);
+	TerrainContribution contribution;
+	Apply(live, kRect, Pond, "Grass", contribution);
+	REQUIRE(!contribution.outer.empty());
+
+	FakeTerrain truth = live;
+	TerrainContribution undo = contribution;
+	Unapply(truth, undo);
+
+	const GridSampler liveSampler(live, stepsPerPage);
+	const GridSampler truthSampler(truth, stepsPerPage);
+	const BaseTerrainView view(liveSampler, live, contribution, LayerMask, stepsPerPage);
+
+	// Around and on the seam, including exactly on vertex 8 and at cell fractions that weight it fully.
+	for (const float z : { 6.5f, 7.75f, 8.0f, 8.25f, 9.5f })
+	{
+		for (const float x : { 6.5f, 7.0f, 7.75f, 8.0f, 8.25f, 9.0f, 9.5f })
+		{
+			const Vector3 expected = truthSampler.Normal(x, z);
+			const Vector3 actual = view.Normal(x, z);
+			CHECK(actual.x == Approx(expected.x).margin(1e-5f));
+			CHECK(actual.y == Approx(expected.y).margin(1e-5f));
+			CHECK(actual.z == Approx(expected.z).margin(1e-5f));
+		}
+	}
+
+	// The seam rule matters here: a one-page view (left neighbour at vertex 8) gives another normal on the seam, and
+	// vertex 8 has a different normal in the cell left of it (page 0, which has the neighbour) than on it (page 1).
+	const BaseTerrainView onePage(liveSampler, live, contribution, LayerMask, kStepsPerPage);
+	const Vector3 seam = view.Normal(8.0f, 6.5f);
+	const Vector3 noSeam = onePage.Normal(8.0f, 6.5f);
+	CHECK(std::abs(seam.x - noSeam.x) > 1e-3f);
+	const Vector3 leftOfSeam = view.Normal(7.9999f, 6.5f);
+	CHECK(std::abs(seam.x - leftOfSeam.x) > 1e-3f);
+}
+
+TEST_CASE("BaseTerrainView keeps unrecorded water quads at their live type", "[graph_base_terrain_view]")
+{
+	// The engine stores one water type per tile: a build that waters quad (2, 2) changes the type of tile (0, 0), and
+	// quad (5, 5) of that tile, which it did not record, now reads the new type live too. The view only undoes recorded
+	// quads, so (5, 5) reads its live type, not the type it had before the build.
+	FakeTerrain live;
+	live.SetWaterQuad(2, 2, 1);
+	live.SetWaterQuad(5, 5, 1);
+	for (const int32 v : { 2, 3, 5, 6 })
+	{
+		live.SetWaterHeight(v, 2, 4.0f);
+		live.SetWaterHeight(v, 3, 4.0f);
+		live.SetWaterHeight(v, 5, 4.0f);
+		live.SetWaterHeight(v, 6, 4.0f);
+	}
+	TerrainContribution contribution;
+	contribution.waterQuads.push_back({ 2, 2, 0, 1 });
+
+	const GridSampler liveSampler(live);
+	const BaseTerrainView view(liveSampler, live, contribution, LayerMask, kStepsPerPage);
+	float level = 0.0f;
+	CHECK_FALSE(view.WaterLevel(2.5f, 2.5f, level));
+	REQUIRE(view.WaterLevel(5.5f, 5.5f, level));
+	CHECK(level == Approx(4.0f));
+}
+
+TEST_CASE("BaseTerrainView finds water quads on the quad grid", "[graph_base_terrain_view]")
+{
+	// A layout with 4 quads per tile of 8 vertex steps: quads are 2 m, water vertices 2 m apart.
+	class CoarseWater final : public ITerrainAccess
+	{
+	public:
+		CoarseWater()
+		{
+			m_layout.quadsPerTile = 4;
+			m_layout.verticesPerTile = 8;
+		}
+		const GridLayout& GetLayout() const override { return m_layout; }
+		float GetOuterHeight(int32, int32) const override { return 0.0f; }
+		void SetOuterHeight(int32, int32, float) override {}
+		float GetInnerHeight(int32, int32) const override { return 0.0f; }
+		void SetInnerHeight(int32, int32, float) override {}
+		uint32 GetSplat(int32, int32) const override { return 0xFFu; }
+		void SetSplat(int32, int32, uint32) override {}
+		uint8 GetWaterQuad(const int32 x, const int32 z) const override { return x == 1 && z == 1 ? 1 : 0; }
+		void SetWaterQuad(int32, int32, uint8) override {}
+		float GetWaterHeight(const int32 x, int32) const override { return x == 2 ? 6.0f : 4.0f; }
+		void SetWaterHeight(int32, int32, float) override {}
+		String GetTileMaterial(int32, int32) const override { return "Base"; }
+		void SetTileMaterial(int32, int32, const String&) override {}
+		void FinishEdits(const IntRect&) override {}
+
+	private:
+		GridLayout m_layout;
+	};
+
+	// The build watered quad (1, 1) (world 2..4) and its vertices (1..2, 1..2); before, (2, *) was at 5.
+	const CoarseWater live;
+	TerrainContribution contribution;
+	contribution.waterQuads.push_back({ 1, 1, 2, 1 });
+	contribution.waterHeights.push_back({ 2, 1, 5.0f, 6.0f });
+	contribution.waterHeights.push_back({ 2, 2, 5.0f, 6.0f });
+	FakeTerrain unused;
+	const GridSampler liveSampler(unused);
+	const BaseTerrainView view(liveSampler, live, contribution, LayerMask, kStepsPerPage);
+
+	// Quad (1, 1) at world (3, 3), half way between water vertices 1 (4.0) and 2 (base 5.0): the base type 2.
+	float level = 0.0f;
+	REQUIRE(view.WaterLevel(3.0f, 3.0f, level));
+	CHECK(level == Approx(4.5f));
+	REQUIRE(view.WaterLevel(3.5f, 2.5f, level));
+	CHECK(level == Approx(4.75f));
 }

@@ -14,6 +14,14 @@ namespace mmo
 {
 	class IWorldEditor;
 
+	namespace terrain
+	{
+		class Terrain;
+	}
+
+	/// @brief World extent (x/z) of a terrain: its pages centred on the origin.
+	pcg::WorldRect GetTerrainRect(const terrain::Terrain& terrain);
+
 	/// @brief Outcome of applying or removing the content of a generator.
 	struct OasisBuildReport
 	{

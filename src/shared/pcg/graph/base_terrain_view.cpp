@@ -95,12 +95,17 @@ namespace mmo::pcg::graph
 
 	bool BaseTerrainView::Cell(const float x, const float z, int64& vx, int64& vz, float& fx, float& fz) const
 	{
-		if (!(m_layout.vertexSpacing > 0.0))
+		return GridCell(x, z, m_layout.vertexSpacing, vx, vz, fx, fz);
+	}
+
+	bool BaseTerrainView::GridCell(const float x, const float z, const double spacing, int64& vx, int64& vz, float& fx, float& fz) const
+	{
+		if (!(spacing > 0.0))
 		{
 			return false;
 		}
-		const double gx = (static_cast<double>(x) - m_layout.originX) / m_layout.vertexSpacing;
-		const double gz = (static_cast<double>(z) - m_layout.originZ) / m_layout.vertexSpacing;
+		const double gx = (static_cast<double>(x) - m_layout.originX) / spacing;
+		const double gz = (static_cast<double>(z) - m_layout.originZ) / spacing;
 		if (!std::isfinite(gx) || !std::isfinite(gz) || std::abs(gx) > 1.0e9 || std::abs(gz) > 1.0e9)
 		{
 			return false;
@@ -264,9 +269,14 @@ namespace mmo::pcg::graph
 
 	bool BaseTerrainView::WaterLevel(const float x, const float z, float& level) const
 	{
+		// Water quads and water vertices lie on the quad grid (quadsPerTile quads per tile side), which only matches the
+		// outer vertex grid when quadsPerTile == verticesPerTile.
+		const double quadSize = m_layout.quadsPerTile > 0
+			? m_layout.vertexSpacing * m_layout.verticesPerTile / m_layout.quadsPerTile
+			: 0.0;
 		int64 vx = 0, vz = 0;
 		float fx = 0.0f, fz = 0.0f;
-		if ((m_waterQuads.empty() && m_waterHeights.empty()) || !Cell(x, z, vx, vz, fx, fz))
+		if ((m_waterQuads.empty() && m_waterHeights.empty()) || !GridCell(x, z, quadSize, vx, vz, fx, fz))
 		{
 			return m_live.WaterLevel(x, z, level);
 		}

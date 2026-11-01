@@ -190,6 +190,41 @@ TEST_CASE("PaintSplat takes areas and splines, width only for open splines", "[g
 	CHECK(std::get<String>(Run("PaintSplat", settings, overridden).pins.at("Terrain")[0].op.params.at("texture")) == "Terrain/Mud.htex");
 }
 
+TEST_CASE("An Int seed attribute is taken as is, even beyond the float range check", "[graph_nodes_terrain]")
+{
+	DataItem area = MakeSquare(0, 0, 50);
+	area.attributes["seed"] = int64(9'200'000'000'000'000'000);
+	NodeOutput out = Run("TerrainNoise", {}, area);
+	CHECK(out.warnings.empty());
+	CHECK(std::get<int64>(out.pins.at("Terrain")[0].op.params.at("seed")) == int64(9'200'000'000'000'000'000));
+
+	area.attributes["seed"] = int64(-9'200'000'000'000'000'000);
+	out = Run("TerrainNoise", {}, area);
+	CHECK(std::get<int64>(out.pins.at("Terrain")[0].op.params.at("seed")) == int64(-9'200'000'000'000'000'000));
+
+	// A Float is rounded; one out of the int64 range is ignored with a warning (the node seed is used).
+	area.attributes["seed"] = 41.6f;
+	CHECK(std::get<int64>(Run("TerrainNoise", {}, area).pins.at("Terrain")[0].op.params.at("seed")) == 42);
+	area.attributes["seed"] = 1.0e19f;
+	out = Run("TerrainNoise", {}, area, 77);
+	CHECK(out.warnings.size() == 1);
+	CHECK(std::get<int64>(out.pins.at("Terrain")[0].op.params.at("seed")) == 77);
+}
+
+TEST_CASE("PaintSplat without a texture warns once", "[graph_nodes_terrain]")
+{
+	std::map<String, Collection> inputs;
+	inputs["In"].push_back(Line(0, 0, 40, 0));
+	inputs["In"].push_back(MakeSquare(0, 0, 30));
+	const NodeOutput out = ExecNode("PaintSplat", {}, inputs, EvalContext(), 1);
+	CHECK(out.error.empty());
+	CHECK(out.pins.at("Terrain").size() == 2);
+	REQUIRE(out.warnings.size() == 1);
+	CHECK(out.warnings[0].find("texture") != String::npos);
+
+	CHECK(Run("PaintSplat", { { "texture", String("Terrain/Sand.htex") } }, Line(0, 0, 40, 0)).warnings.empty());
+}
+
 TEST_CASE("A wrong item kind is skipped with a warning", "[graph_nodes_terrain]")
 {
 	const NodeOutput noise = Run("TerrainNoise", {}, Line(0, 0, 10, 0));

@@ -109,6 +109,44 @@ TEST_CASE("A Noise op gives at most one tick per grid sample inside the influenc
 	CHECK(outlines > 0);
 }
 
+TEST_CASE("Height ticks end at hand-computed heights", "[graph_terrain_debug]")
+{
+	// Carve along z = 0 on flat ground at 2: width 4 (per side), depth 1.5, bank 3. On the 2 m grid at x = 20 the
+	// profile is 1 for |z| <= 4, 1 - smoothstep(2 / 3) = 7 / 27 at |z| = 6 and 0 from |z| = 7 on.
+	PathSpline line;
+	SplinePoint a; a.x = 0.0f; a.z = 0.0f;
+	SplinePoint b; b.x = 40.0f; b.z = 0.0f;
+	line.points = { a, b };
+	PreparedTerrain t;
+	String error;
+	REQUIRE(t.Prepare({ MakeOp(TerrainOpType::Carve, line, 1, { { "width", 4.0f }, { "depth", 1.5f }, { "bank", 3.0f } }) }, Flat2, {},
+		kBigRegion, 0.0f, error));
+
+	const DebugGeometry g = BuildTerrainDebugGeometry(t, Flat2, 2.0f, kRaise, kLower, 500'000);
+	std::map<float, DebugLine> ticks;
+	for (const DebugLine& tick : g.lines)
+	{
+		if (IsTick(tick) && tick.a.x == 20.0f)
+		{
+			CHECK(ticks.emplace(tick.a.z, tick).second);
+		}
+	}
+
+	const std::map<float, float> expected{
+		{ -6.0f, 2.0f - 1.5f * 7.0f / 27.0f }, { -4.0f, 0.5f }, { -2.0f, 0.5f }, { 0.0f, 0.5f }, { 2.0f, 0.5f }, { 4.0f, 0.5f },
+		{ 6.0f, 2.0f - 1.5f * 7.0f / 27.0f },
+	};
+	REQUIRE(ticks.size() == expected.size());
+	for (const auto& [z, height] : expected)
+	{
+		const auto tick = ticks.find(z);
+		REQUIRE(tick != ticks.end());
+		CHECK(tick->second.a.y == 2.0f);
+		CHECK(tick->second.b.y == Approx(height).margin(1e-5f));
+		CHECK(tick->second.argb == kLower);
+	}
+}
+
 TEST_CASE("Terrain debug respects the line budget", "[graph_terrain_debug]")
 {
 	PreparedTerrain t;

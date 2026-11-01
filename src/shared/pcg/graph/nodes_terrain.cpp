@@ -169,10 +169,15 @@ namespace mmo::pcg::graph
 					const auto it = source.attributes.find("seed");
 					if (it != source.attributes.end())
 					{
+						// An Int is taken as is (every int64 is a valid seed); a Float is rounded if it fits an int64.
 						float number = 0.0f;
-						if (!std::holds_alternative<bool>(it->second) && ToNumber(it->second, number) && std::abs(number) < 9.0e18f)
+						if (const int64* integer = std::get_if<int64>(&it->second))
 						{
-							seed = std::holds_alternative<int64>(it->second) ? std::get<int64>(it->second) : static_cast<int64>(std::llround(number));
+							seed = *integer;
+						}
+						else if (!std::holds_alternative<bool>(it->second) && ToNumber(it->second, number) && std::abs(number) < 9.0e18f)
+						{
+							seed = static_cast<int64>(std::llround(number));
 						}
 						else
 						{
@@ -184,7 +189,13 @@ namespace mmo::pcg::graph
 				}
 				case TerrainOpType::Paint:
 				{
-					item.op.params["texture"] = ResolveString(out, source, settings, "texture");
+					const String texture = ResolveString(out, source, settings, "texture");
+					if (texture.empty())
+					{
+						// Prepare skips such an op; say so where the graph is edited.
+						WarnOnce(out, "no texture: the 'texture' setting and the item attribute are empty, nothing is painted");
+					}
+					item.op.params["texture"] = texture;
 					break;
 				}
 				case TerrainOpType::WaterArea:

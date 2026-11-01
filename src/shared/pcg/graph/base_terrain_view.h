@@ -32,8 +32,9 @@ namespace mmo::pcg::graph
 	///            a corner or one of its neighbours is recorded; elsewhere the live normal.
 	///          - SplatWeight: the splat pixel truncated from (x - origin) / pixelSpacing (Terrain::GetLayerValueAt);
 	///            the base packed weights of the layers the layer match function gives, summed and clamped to 1.
-	///          - WaterLevel: the water quad under (x, z); its base type (0 = no water) and the bilinear base water
-	///            heights of its four vertices (Terrain::GetWaterHeightAtWorldPos).
+	///          - WaterLevel: the water quad under (x, z) on the quad grid (vertexSpacing x verticesPerTile /
+	///            quadsPerTile, as Apply writes it); its base type (0 = no water) and the bilinear base water heights of
+	///            its four vertices (Terrain::GetWaterHeightAtWorldPos).
 	///          Tile materials are not undone (the layer match uses the live tile layers); HasMaterialChanges tells.
 	///          Main thread only when the live accessors are.
 	class BaseTerrainView final : public ITerrainSampler
@@ -103,6 +104,10 @@ namespace mmo::pcg::graph
 
 		/// @brief Cell of the outer vertex grid under a world position and the fractions inside it.
 		bool Cell(float x, float z, int64& vx, int64& vz, float& fx, float& fz) const;
+
+		/// @brief Cell of a grid with the given spacing (from the layout origin) under a world position and the fractions
+		///        inside it. False for a spacing that is not positive or a position far outside any grid.
+		bool GridCell(float x, float z, double spacing, int64& vx, int64& vz, float& fx, float& fz) const;
 
 	private:
 		const ITerrainSampler& m_live;

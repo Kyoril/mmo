@@ -757,7 +757,7 @@ namespace mmo::pcg::graph
 			{
 				const PreparedOp& op = *m_ops[current];
 				warnings.push_back("SectionPath op of node " + std::to_string(op.order) + " (section asset '" + op.sectionAsset
-					+ "'): section paint with texture(s) " + textures + " skipped on tiles that have no layer with that texture.");
+					+ "'): section paint with texture(s) " + textures + " may be skipped on tiles that have no layer with that texture.");
 			}
 			textures.clear();
 		};

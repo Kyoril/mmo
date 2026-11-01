@@ -82,14 +82,6 @@ namespace mmo
 			return any;
 		}
 
-		/// World extent of the terrain.
-		pcg::WorldRect GetTerrainRect(const terrain::Terrain& terrain)
-		{
-			const auto halfX = static_cast<float>(static_cast<double>(terrain.GetWidth()) / 2.0 * terrain::constants::PageSize);
-			const auto halfZ = static_cast<float>(static_cast<double>(terrain.GetHeight()) / 2.0 * terrain::constants::PageSize);
-			return pcg::WorldRect{ -halfX, -halfZ, halfX, halfZ };
-		}
-
 		bool Contains(const pcg::WorldRect& outer, const pcg::WorldRect& inner)
 		{
 			return inner.minX >= outer.minX && inner.minZ >= outer.minZ && inner.maxX <= outer.maxX && inner.maxZ <= outer.maxZ;
@@ -269,6 +261,13 @@ namespace mmo
 					});
 			}
 		}
+	}
+
+	pcg::WorldRect GetTerrainRect(const terrain::Terrain& terrain)
+	{
+		const auto halfX = static_cast<float>(static_cast<double>(terrain.GetWidth()) / 2.0 * terrain::constants::PageSize);
+		const auto halfZ = static_cast<float>(static_cast<double>(terrain.GetHeight()) / 2.0 * terrain::constants::PageSize);
+		return pcg::WorldRect{ -halfX, -halfZ, halfX, halfZ };
 	}
 
 	OasisBuildReport ApplyGeneratedContent(IWorldEditor& editor, const GeneratedContent& content, pcg::OwnedContent& owned,

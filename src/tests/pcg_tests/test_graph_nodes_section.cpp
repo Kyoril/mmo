@@ -62,7 +62,8 @@ TEST_CASE("LaySectionAlongSpline emits a SectionPath op per spline", "[graph_nod
 
 	CHECK(FloatParam(item, "joinBlend") == 2.0f);
 	CHECK(FloatParam(item, "groundSmoothing") == 20.0f);
-	CHECK(std::get<String>(item.op.params.at("heightMode")) == "followSpline");
+	// Spec "Resolved 1": sections follow the smoothed base ground unless a graph asks for exact spline heights.
+	CHECK(std::get<String>(item.op.params.at("heightMode")) == "smoothedGround");
 	CHECK(std::get<bool>(item.op.params.at("floorInside")) == true);
 	CHECK(std::get<int64>(item.op.params.at("seed")) == 1);
 	CHECK(std::get<int64>(item.op.params.at("massPaintLayer")) == -1);
@@ -102,6 +103,32 @@ TEST_CASE("An item attribute overrides a section param setting", "[graph_nodes_s
 	const NodeOutput out = Lay("LaySectionAlongSpline", settings, road);
 	REQUIRE(out.error.empty());
 	CHECK(FloatParam(out.pins.at("Terrain")[0], "groundSmoothing") == 40.0f);
+}
+
+TEST_CASE("Bool section params take 0 and 1 of any number type", "[graph_nodes_section]")
+{
+	DataItem road = RoadSpline();
+	road.attributes["massEnabled"] = 1.0f;
+	road.attributes["mirrorCopies"] = int64(1);
+	AttributeSet settings;
+	settings["sequentialVariants"] = 0.0f;
+	const NodeOutput out = Lay("LaySectionAlongSpline", settings, road);
+	REQUIRE(out.error.empty());
+	const DataItem& item = out.pins.at("Terrain")[0];
+	REQUIRE(std::holds_alternative<bool>(item.op.params.at("massEnabled")));
+	CHECK(std::get<bool>(item.op.params.at("massEnabled")) == true);
+	REQUIRE(std::holds_alternative<bool>(item.op.params.at("mirrorCopies")));
+	CHECK(std::get<bool>(item.op.params.at("mirrorCopies")) == true);
+	REQUIRE(std::holds_alternative<bool>(item.op.params.at("sequentialVariants")));
+	CHECK(std::get<bool>(item.op.params.at("sequentialVariants")) == false);
+
+	// Other numbers stay numbers (and SetSectionPathParam decides).
+	road.attributes["massEnabled"] = 0.5f;
+	const NodeOutput half = Lay("LaySectionAlongSpline", AttributeSet(), road);
+	if (half.error.empty())
+	{
+		CHECK_FALSE(std::holds_alternative<bool>(half.pins.at("Terrain")[0].op.params.at("massEnabled")));
+	}
 }
 
 TEST_CASE("LaySectionAlongLoop takes closed areas only and forces closed", "[graph_nodes_section]")

@@ -55,12 +55,12 @@ namespace mmo
 		/// Salt of the keys of section placements, keeping them apart from the spawn keys (CollectPlacements).
 		constexpr uint64 SectionPlacementKeySalt = 0x5EC7A11Du;
 
-		/// The rect clipped to the world extent of the terrain.
+		/// The rect clipped to the world extent of the terrain (min > max when it lies wholly outside).
 		pcg::WorldRect ClampToTerrain(const pcg::WorldRect& rect, const terrain::Terrain& terrain)
 		{
-			const auto halfX = static_cast<float>(static_cast<double>(terrain.GetWidth()) / 2.0 * terrain::constants::PageSize);
-			const auto halfZ = static_cast<float>(static_cast<double>(terrain.GetHeight()) / 2.0 * terrain::constants::PageSize);
-			return pcg::WorldRect{ std::max(rect.minX, -halfX), std::max(rect.minZ, -halfZ), std::min(rect.maxX, halfX), std::min(rect.maxZ, halfZ) };
+			const pcg::WorldRect extent = GetTerrainRect(terrain);
+			return pcg::WorldRect{ std::max(rect.minX, extent.minX), std::max(rect.minZ, extent.minZ), std::min(rect.maxX, extent.maxX),
+				std::min(rect.maxZ, extent.maxZ) };
 		}
 
 		/// Conservative x/z bounds of the area (pcg::graph::SplineBounds: its points and tangent handles).
@@ -608,6 +608,16 @@ namespace mmo
 			return refuse(error);
 		}
 
+		// An area wholly outside the terrain would clamp to an inverted influence.
+		if (const terrain::Terrain* terrain = editor.GetTerrain())
+		{
+			const pcg::WorldRect clamped = ClampToTerrain(GetAreaRect(record.area), *terrain);
+			if (clamped.minX > clamped.maxX || clamped.minZ > clamped.maxZ)
+			{
+				return refuse("the area lies outside the terrain");
+			}
+		}
+
 		for (const pcg::GraphInstanceRecord* other : otherInstances)
 		{
 			if (other && other->id != record.id && pcg::AreasOverlap(record.area, other->area))
@@ -626,7 +636,8 @@ namespace mmo
 			return refuse(error);
 		}
 
-		// The warnings come from the run on the base terrain (content.prepare); these are discarded.
+		// The warnings come from the run on the base terrain (content.prepare), which takes these over only when it
+		// reuses the dry run.
 		std::vector<String> dryWarnings;
 		if (!CheckEvaluation(dryRun, record.area, dryWarnings, error))
 		{
@@ -671,18 +682,34 @@ namespace mmo
 		const bool dryEmpty = dryTerrain.IsEmpty();
 		const pcg::WorldRect dryInfluence = dryTerrain.GetInfluence();
 		const String dryWaterMaterial = dryTerrain.GetWaterMaterial();
-		content.prepare = [&editor, &record, &controls, &graph, sections, state, dryEmpty, dryInfluence, dryWaterMaterial](
-			const GroundFunction& ground, String& prepareError)
+
+		// Without a recorded contribution the live terrain already is the base: unless the terrain changed since the dry
+		// run (an ocean page materialised for the writes), prepare takes over the dry run instead of evaluating again.
+		const bool liveIsBase = record.content.terrain.IsEmpty();
+		const uint64 dryTerrainRevision = editor.GetTerrainRevision();
+		content.prepare = [&editor, &record, &controls, &graph, &dryRun, &dryWarnings, &dryTerrain, liveIsBase, dryTerrainRevision,
+			sections, state, dryEmpty, dryInfluence, dryWaterMaterial](const GroundFunction& ground, String& prepareError)
 		{
 			// The previous contribution is undone: the graph sees the base terrain.
 			GraphInstanceEvaluation base;
-			base.graph = graph;
 			std::vector<String> warnings;
-			if (!EvaluateLoadedGraph(editor, record, controls, base, prepareError) ||
-				!CheckEvaluation(base, record.area, warnings, prepareError) ||
-				!PrepareTerrainOps(base, record, ground, *sections, state->terrain, prepareError))
+			if (liveIsBase && editor.GetTerrainRevision() == dryTerrainRevision)
 			{
-				return false;
+				// Same terrain, same ground (GetSmoothHeightAt): the dry run's evaluation and prepared ops are what this
+				// run would produce. The dry run is not used after this step.
+				base = std::move(dryRun);
+				warnings = std::move(dryWarnings);
+				state->terrain = std::move(dryTerrain);
+			}
+			else
+			{
+				base.graph = graph;
+				if (!EvaluateLoadedGraph(editor, record, controls, base, prepareError) ||
+					!CheckEvaluation(base, record.area, warnings, prepareError) ||
+					!PrepareTerrainOps(base, record, ground, *sections, state->terrain, prepareError))
+				{
+					return false;
+				}
 			}
 
 			// writeRects and waterMaterial were fixed from the dry run before the undo (ApplyGeneratedContent reads them

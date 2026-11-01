@@ -56,8 +56,9 @@ namespace mmo::pcg::graph
 		///        layer with their texture.
 		std::set<size_t> missingLayerOps;
 
-		/// @brief (op index, section layer 0..3) of SectionPath ops whose painted section layer names a texture the
-		///        lookup found no tile layer for at a sample the section paints (its paint was skipped there).
+		/// @brief (op index, section layer 0..3) of SectionPath ops whose section layer, painted somewhere in the asset,
+		///        names a texture the lookup found no tile layer for at a sample where the section paints (any layer). That
+		///        layer's paint may have been skipped there (it is not checked whether the layer has weight at the sample).
 		std::set<std::pair<size_t, uint8>> missingSectionLayers;
 	};
 

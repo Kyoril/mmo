@@ -4,7 +4,9 @@
 // emitting one Terrain item per input item, carrying a SectionPath terrain op (terrain_op.h) that the terrain
 // stage prepares (terrain_compose.h).
 //
-// LaySectionAlongSpline  In: Spline items (open or closed).
+// LaySectionAlongSpline  In: Spline items (open or closed). Has no floorInside setting, but its ops still carry
+//                        floorInside = true (the parameter default, or an item attribute of that name): it decides
+//                        which side is the floor on a closed spline (open paths ignore it).
 // LaySectionAlongLoop    In: Area items (closed loops); an Area whose spline is not closed is a node error.
 //                        Has the extra setting floorInside; the output spline is closed.
 //
@@ -27,7 +29,6 @@
 #include "pcg/section_path.h"
 
 #include <cmath>
-#include <cstdio>
 #include <variant>
 
 namespace mmo::pcg::graph
@@ -57,7 +58,7 @@ namespace mmo::pcg::graph
 				{ "sequentialVariants", ParamKind::Bool, false, "Variants in layout order instead of hashed per copy" },
 				{ "joinBlend", ParamKind::Float, 2.0f, "Distance (m) over which the terrain targets of two copies cross-fade" },
 				{ "propDensity", ParamKind::Float, 1.0f, "Multiplies every prop rule's keep chance (0..1)" },
-				{ "heightMode", ParamKind::Enum, String("followSpline"), "Where the centre line height comes from" },
+				{ "heightMode", ParamKind::Enum, String("smoothedGround"), "Where the centre line height comes from" },
 				{ "floorInside", ParamKind::Bool, true, "Closed paths: the floor side faces the loop interior" },
 				{ "groundSmoothing", ParamKind::Float, 20.0f, "smoothedGround: length (m) the base ground is averaged over" },
 				{ "massEnabled", ParamKind::Bool, false, "Adds a broad terrain mass behind the section" },
@@ -105,6 +106,13 @@ namespace mmo::pcg::graph
 					if (*i == 0 || *i == 1)
 					{
 						return *i == 1;
+					}
+				}
+				if (const float* f = std::get_if<float>(&value))
+				{
+					if (*f == 0.0f || *f == 1.0f)
+					{
+						return *f == 1.0f;
 					}
 				}
 				break;

@@ -242,15 +242,17 @@ namespace mmo
 
 	/// @brief Rebuilds a graph instance: terrain ops and placements through ApplyGeneratedContent.
 	/// @details First a dry run on the live terrain decides every refusal, leaving the world and record untouched:
-	///          missing graph, parse error, validation issues (message lists them), evaluation error, overlap with
-	///          another instance's area, missing spawn assets, a placed control that failed to resolve (missing,
+	///          an area wholly outside the terrain, missing graph, parse error, validation issues (message lists them),
+	///          evaluation error, overlap with another instance's area, missing spawn assets, a placed control that failed to resolve (missing,
 	///          renamed or invalid type, geometry not fitting the shape) whose bounds reach the area or cannot be
 	///          computed (the evaluation would silently run without it and the reconcile would delete its content; the
 	///          message names those controls), and terrain ops that cannot be prepared (missing, unreadable or stale
 	///          section asset, a section param it rejects; the message names the node and asset).
 	///          Then ApplyGeneratedContent undoes the previous contribution and, in content.prepare, the graph is
 	///          evaluated again on that base terrain, its terrain ops are prepared on it (pcg::graph::PreparedTerrain,
-	///          clipped to the area with the record's borderFade) and written; an op-free graph writes nothing. Should
+	///          clipped to the area with the record's borderFade) and written; an op-free graph writes nothing. A record
+	///          without a terrain contribution has the base as its live terrain: prepare then takes over the dry run
+	///          instead, unless the terrain revision changed in between (an ocean page was materialised). Should
 	///          that second run fail after all, the old contribution is put back (the world ends as before). Spawned
 	///          placements keep their height above the base ground on the final ground; the section placements of
 	///          the ops are added under salted keys.

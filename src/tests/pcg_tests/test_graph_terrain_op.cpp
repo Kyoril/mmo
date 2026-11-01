@@ -5,6 +5,7 @@
 #include "pcg/graph/controls.h"
 #include "pcg/graph/evaluator.h"
 #include "pcg/graph/graph_output.h"
+#include "pcg/graph/json_util.h"
 #include "pcg/graph/node_registry.h"
 #include "pcg/graph/terrain_op.h"
 
@@ -31,6 +32,26 @@ namespace
 	uint64 HashOf(const DataItem& item)
 	{
 		return ContentHash(Collection{ item });
+	}
+
+	/// The first JSON object (depth first) that has the given key, or null.
+	const jsonutil::Json* FindObjectWithKey(const jsonutil::Json& json, const char* key)
+	{
+		if (json.is_object() && json.contains(key))
+		{
+			return &json;
+		}
+		if (json.is_object() || json.is_array())
+		{
+			for (const auto& child : json)
+			{
+				if (const jsonutil::Json* found = FindObjectWithKey(child, key))
+				{
+					return found;
+				}
+			}
+		}
+		return nullptr;
 	}
 }
 
@@ -160,4 +181,14 @@ TEST_CASE("The eval dump names the Terrain kind and lists the op", "[graph_terra
 	CHECK(dump.find("SectionPath") != String::npos);
 	CHECK(dump.find("Sections/Road.hsec") != String::npos);
 	CHECK(dump.find("width") != String::npos);
+
+	// The item's point ids and the op order (stamped with the node id by the evaluator).
+	const jsonutil::Json json = jsonutil::Json::parse(dump, nullptr, false);
+	REQUIRE_FALSE(json.is_discarded());
+	const jsonutil::Json* item = FindObjectWithKey(json, "op");
+	REQUIRE(item != nullptr);
+	REQUIRE(item->contains("pointIds"));
+	CHECK(item->at("pointIds") == jsonutil::Json::array({ 1, 2, 3 }));
+	REQUIRE(item->at("op").contains("order"));
+	CHECK(item->at("op").at("order") == 1);
 }
