@@ -19,7 +19,7 @@ local DISMISS_SHADOW = 303
 local GLOOM_DART = 304
 local SHADE_PET = 1
 local UMBRAL_SHADE = 122
-local CALL_PET = 310
+local SUMMON_COMPANION = 310
 local BECOME_MAGE = 230
 local BECOME_ACOLYTE = 233
 local FROST_ARMOR = 6
@@ -175,6 +175,7 @@ Assert(WaitUntil(function() return GetPetName() == NEW_NAME end, 10000, "renamed
 -- Relog: the summoned shade comes back with its owner, still renamed
 -- ---------------------------------------------------------------------------------------------
 
+local petBeforeRelog = pet
 ExpectDisconnect()
 Assert(LoginElsewhere(15000), "second login should be accepted")
 Assert(WaitUntil(function() return IsDisconnected() end, 15000, "session displaced"), "first session should be kicked")
@@ -184,6 +185,7 @@ me = Me()
 Assert(WaitUntil(function() return GetPet() ~= nil and UnitExists(GetPet()) end, 15000, "shade back after relog"),
 	"the shade that was out at logout should come back with its owner")
 pet = GetPet()
+Assert(pet == petBeforeRelog, "the returning shade should be the same pet (guid " .. petBeforeRelog .. ", got " .. pet .. ")")
 Assert(GetOwner(pet) == me, "the returning shade should be owned by the character")
 Assert(GetPetName() == NEW_NAME, "the shade should keep its new name over a relog, is " .. GetPetName())
 Assert(GetLevel(pet) == petLevel, "the shade should keep its level over a relog")
@@ -204,13 +206,13 @@ Assert(WaitUntil(function() return HasSpell(FROST_ARMOR) end, 15000, "now a mage
 Dismissed(pet, "class switch")
 
 -- A mage cannot summon the acolyte's shade. Summon Shadow is an acolyte spell the mage does not
--- know, so try the class-less test spell Call Pet (310: SummonPersistentPet, miscvaluea 0 = the
+-- know, so try the class-less test spell Summon Companion (310: SummonPersistentPet, miscvaluea 0 = the
 -- stored pet summoned last, which is the shade): the class lock must refuse it.
 Assert(not HasSpell(SUMMON_SHADOW), "a mage should not know the acolyte's Summon Shadow")
-GM.LearnSpell(CALL_PET)
-Assert(WaitUntil(function() return HasSpell(CALL_PET) end, 10000, "Call Pet learned"), "Call Pet should be learned")
-local wrongClass = CastResult(CALL_PET, me)
-Assert(wrongClass == FAILED_PET_WRONG_CLASS, "a mage's Call Pet should not summon the acolyte's shade, got " .. wrongClass)
+GM.LearnSpell(SUMMON_COMPANION)
+Assert(WaitUntil(function() return HasSpell(SUMMON_COMPANION) end, 10000, "Summon Companion learned"), "Summon Companion should be learned")
+local wrongClass = CastResult(SUMMON_COMPANION, me)
+Assert(wrongClass == FAILED_PET_WRONG_CLASS, "a mage's Summon Companion should not summon the acolyte's shade, got " .. wrongClass)
 Sleep(1500)
 Assert(GetPet() == nil and CountUnitsOwnedBy(me, UMBRAL_SHADE) == 0, "no shade should appear for the mage")
 

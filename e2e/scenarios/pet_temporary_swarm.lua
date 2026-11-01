@@ -90,9 +90,10 @@ TargetUnit(gravecaller)
 GM.KillTarget()
 Assert(WaitUntil(function() return not IsAlive(gravecaller) end, 10000, "Gravecaller dies"),
 	"the Gravecaller should die")
+-- Gone, not merely dead: a despawned skeleton leaves no corpse behind.
 Assert(WaitUntil(function()
 	for _, skeleton in ipairs(enemySkeletons) do
-		if UnitExists(skeleton) and IsAlive(skeleton) then return false end
+		if UnitExists(skeleton) then return false end
 	end
 	return true
 end, 15000, "skeletons gone"), "the Gravecaller's skeletons should leave the world when she dies")
@@ -163,7 +164,8 @@ Assert(secondCast == "ok", "the second Raise Skeletons should be cast, got " .. 
 Assert(WaitUntil(function()
 	local survivors = 0
 	for _, skeleton in ipairs(ownSkeletons) do
-		if UnitExists(skeleton) and IsAlive(skeleton) then survivors = survivors + 1 end
+		-- The replaced skeleton leaves the world.
+		if UnitExists(skeleton) then survivors = survivors + 1 end
 	end
 	return CountUnitsOwnedBy(me, RISEN_SKELETON) == MAX_SKELETONS and survivors == 2
 end, 10000, "capped at five"), "a second cast should keep five skeletons, replacing the oldest (has " ..

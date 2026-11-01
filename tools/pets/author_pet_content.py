@@ -6,7 +6,8 @@ shadow, and a taming test kit.
     py tools/pets/author_pet_content.py            # validate only
     py tools/pets/author_pet_content.py --apply    # write editor + ClientDB
 
-Idempotent: every row is replaced by id (refusing to overwrite a row of another name), the
+Idempotent: every row is replaced by id (refusing to overwrite a row of another name, except
+the earlier names in PREVIOUS_NAMES), the
 trainer rows and the spawn are replaced by spell id / spawn name. ClientDB receives a byte
 copy of the editor blobs it shares with the client (spells, maps), exactly what mmo_edit's
 ExportToClient does. units, pets and trainers are server-only.
@@ -30,10 +31,11 @@ Design notes that are easy to undo by accident:
 * Pet abilities (Gloom Dart, Sapping Murk, Umbral Lash, Murkbind) have classmask 0, no
   reagents and no power cost: the shade casts them through its AI and its pet bar, and nothing
   may stop a creature from casting them.
-* Tame Beast is a 5 s *cast*, not a channel: a Channeled spell applies its effects when the
+* Bind Beast is a 5 s *cast*, not a channel: a Channeled spell applies its effects when the
   channel starts (SingleCastState), which would tame on the first frame.
-* No class learns Tame Beast, Call Pet or Revive Pet (classmask 0, on no trainer). They are
-  test spells, learned with the GM command ``learnspell``.
+* No class learns Bind Beast, Summon Companion or Rekindle Companion (classmask 0, on no
+  trainer). They are test spells, learned with the GM command ``learnspell``. They were first
+  called Tame Beast, Call Pet and Revive Pet; those echoed another game's hunter kit.
 * All names are original. Placeholder models: the shade uses the undead NPC model at 0.8
   scale until it gets its own.
 """
@@ -62,7 +64,14 @@ RAISE_SKELETONS = 300
 BIND_SHADOW, SUMMON_SHADOW, DISMISS_SHADOW = 301, 302, 303
 GLOOM_DART, SAPPING_MURK, UMBRAL_LASH, MURKBIND = 304, 305, 306, 307
 SHADOW_LORE_MURKBIND = 308
-TAME_BEAST, CALL_PET, REVIVE_PET = 309, 310, 311
+BIND_BEAST, SUMMON_COMPANION, REKINDLE_COMPANION = 309, 310, 311
+
+# Earlier names of rows this script renamed: a re-run may overwrite a row of that name.
+PREVIOUS_NAMES = {
+    ("spell", BIND_BEAST): "Tame Beast",
+    ("spell", SUMMON_COMPANION): "Call Pet",
+    ("spell", REKINDLE_COMPANION): "Revive Pet",
+}
 SPELL_IDS = tuple(range(300, 312))
 
 RISEN_SKELETON, GRAVECALLER, UMBRAL_SHADE = 120, 121, 122
@@ -292,24 +301,26 @@ def spell_definitions():
     result.append(shadow_lore)
 
     tame_beast = spell(
-        TAME_BEAST, "T_Icon_Nature_101.htex", school=0, positive=0, casttime=5000,
+        BIND_BEAST, "T_Icon_Nature_101.htex", school=0, positive=0, casttime=5000,
         interruptflags=5, rangetype=RANGE_25,
         effects=[{"index": 0, "type": TAME_CREATURE, "targeta": TARGET_ENEMY}])
     tame_beast.update(spell_texts(
-        ("Bestie zähmen", "Tame Beast", "Apprivoiser une bête", "Приручить зверя"),
-        ("Zähmt die Zielkreatur, die dir danach als Begleiter folgt. Testzauber.",
-         "Tames the target creature, which follows you as a companion afterwards. Test spell.",
-         "Apprivoise la créature ciblée, qui vous accompagne ensuite. Sort de test.",
-         "Приручает выбранное существо, которое затем сопровождает вас. Тестовое "
+        ("Bestie binden", "Bind Beast", "Lier une bête", "Связать зверя"),
+        ("Bindet die Zielkreatur an dich, die dir danach als Begleiter folgt. Testzauber.",
+         "Binds the target creature to you, which follows you as a companion afterwards. "
+         "Test spell.",
+         "Lie la créature ciblée à vous, qui vous accompagne ensuite. Sort de test.",
+         "Привязывает выбранное существо к вам, и оно затем сопровождает вас. Тестовое "
          "заклинание.")))
     result.append(tame_beast)
 
     call_pet = spell(
-        CALL_PET, "T_Icon_Nature_102.htex", school=0, casttime=1500, interruptflags=5,
+        SUMMON_COMPANION, "T_Icon_Nature_102.htex", school=0, casttime=1500, interruptflags=5,
         effects=[{"index": 0, "type": SUMMON_PERSISTENT_PET, "targeta": CASTER,
                   "miscvaluea": 0}])
     call_pet.update(spell_texts(
-        ("Begleiter rufen", "Call Pet", "Appeler le familier", "Позвать питомца"),
+        ("Begleiter beschwören", "Summon Companion", "Invoquer le compagnon",
+         "Призыв спутника"),
         ("Ruft den zuletzt beschworenen Begleiter herbei. Testzauber.",
          "Calls the companion you summoned last. Test spell.",
          "Appelle le dernier compagnon que vous avez invoqué. Sort de test.",
@@ -317,12 +328,13 @@ def spell_definitions():
     result.append(call_pet)
 
     revive_pet = spell(
-        REVIVE_PET, "T_Icon_Nature_103.htex", school=0, casttime=5000, interruptflags=5,
+        REKINDLE_COMPANION, "T_Icon_Nature_103.htex", school=0, casttime=5000, interruptflags=5,
         visualization_id=VIS_RESURRECTION,
         effects=[{"index": 0, "type": REVIVE_PET_EFFECT, "basepoints": 50, "targeta": CASTER,
                   "miscvaluea": 0}])
     revive_pet.update(spell_texts(
-        ("Begleiter wiederbeleben", "Revive Pet", "Ranimer le familier", "Оживить питомца"),
+        ("Begleiter neu entfachen", "Rekindle Companion", "Raviver le compagnon",
+         "Возрождение спутника"),
         ("Belebt deinen toten Begleiter mit $s0% seiner Gesundheit wieder. Testzauber.",
          "Revives your dead companion with $s0% of its health. Test spell.",
          "Ranime votre compagnon mort avec $s0% de sa vie. Sort de test.",
@@ -502,7 +514,7 @@ def upsert_by_id(dataset, drafts, kind, keep=()):
         if target is None:
             target = dataset.entry.add()
         else:
-            _require(target.name == draft["name"],
+            _require(target.name in (draft["name"], PREVIOUS_NAMES.get((kind, draft["id"]))),
                      f"{kind} {draft['id']} is {target.name!r}, refusing to overwrite it "
                      f"with {draft['name']!r}")
             kept = {field: getattr(target, field) for field in keep if target.HasField(field)}
@@ -599,7 +611,7 @@ def validate(data):
     # Pet abilities are cast by a creature: no class restriction may stand in the way.
     for spell_id in (GLOOM_DART, SAPPING_MURK, UMBRAL_LASH, MURKBIND, RAISE_SKELETONS):
         _require(spells_by_id[spell_id].classmask == 0, f"creature spell {spell_id} has a classmask")
-    for spell_id in (TAME_BEAST, CALL_PET, REVIVE_PET):
+    for spell_id in (BIND_BEAST, SUMMON_COMPANION, REKINDLE_COMPANION):
         _require(spells_by_id[spell_id].classmask == 0, f"test spell {spell_id} has a classmask")
         for trainer in trainers.entry:
             _require(all(row.spell != spell_id for row in trainer.spells),

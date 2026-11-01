@@ -109,14 +109,21 @@ class PetContentDataTest(unittest.TestCase):
 
     def test_taming_kit_is_test_only(self):
         apc = self.apc
-        self.assertEqual(self.effect(apc.TAME_BEAST).type, 42)
-        self.assertEqual(self.row("spells", apc.TAME_BEAST).attributes[0] & 0x1, 0,
+        self.assertEqual(self.effect(apc.BIND_BEAST).type, 42)
+        self.assertEqual(self.row("spells", apc.BIND_BEAST).attributes[0] & 0x1, 0,
                          "a channel would tame on the first frame")
-        call = self.effect(apc.CALL_PET)
+        call = self.effect(apc.SUMMON_COMPANION)
         self.assertEqual((call.type, call.miscvaluea), (58, 0))
-        revive = self.effect(apc.REVIVE_PET)
+        revive = self.effect(apc.REKINDLE_COMPANION)
         self.assertEqual((revive.type, revive.basepoints), (61, 50))
-        for spell_id in (apc.TAME_BEAST, apc.CALL_PET, apc.REVIVE_PET):
+        # Original names: the first ones echoed another game's hunter kit.
+        names = {spell_id: self.row("spells", spell_id).name
+                 for spell_id in (apc.BIND_BEAST, apc.SUMMON_COMPANION, apc.REKINDLE_COMPANION)}
+        self.assertEqual(names, {apc.BIND_BEAST: "Bind Beast",
+                                 apc.SUMMON_COMPANION: "Summon Companion",
+                                 apc.REKINDLE_COMPANION: "Rekindle Companion"})
+        for spell_id in (apc.BIND_BEAST, apc.SUMMON_COMPANION, apc.REKINDLE_COMPANION):
+            self.assertIn("Test spell.", self.row("spells", spell_id).description)
             self.assertEqual(self.row("spells", spell_id).classmask, 0)
             for trainer in self.data["trainers"].entry:
                 self.assertNotIn(spell_id, [row.spell for row in trainer.spells])

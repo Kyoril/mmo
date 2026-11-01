@@ -396,7 +396,8 @@ TEST_CASE("Pet frame clicks target the pet and open its menu", "[pets][pet_ui]")
 	CHECK(RunPetUi(R"lua(
 		-- ContextMenu.lua and StaticDialog.lua replaced the recording stubs while loading.
 		function ContextMenu_Show(menu, x, y, data) record("ContextMenu_Show", menu); end
-		function StaticDialog_Show(which) record("StaticDialog_Show", which); end
+		local renameDialog = { editBox = NewFrame("RenameEditBox") };
+		function StaticDialog_Show(which) record("StaticDialog_Show", which); return renameDialog; end
 
 		PetFrame_OnClick(Wrap(PetFrame), "LEFT", 0, 0);
 		assert(lastCall("TargetUnit").arg == "pet", "left click did not target the pet");
@@ -411,10 +412,12 @@ TEST_CASE("Pet frame clicks target the pet and open its menu", "[pets][pet_ui]")
 		assert(lastCall("PetDismiss"), "dismiss not sent");
 
 		pet.canRename = true;
+		pet.unit = MakePetUnit();
 		items = ContextMenus["PET_FRAME"].items(nil);
 		assert(#items == 2 and items[1].text == "L:PET_RENAME", "rename missing");
 		items[1].callback();
 		assert(lastCall("StaticDialog_Show").arg == "RENAME_PET", "rename dialog not shown");
+		assert(renameDialog.editBox:GetText() == "Rex", "rename dialog not prefilled with the pet's name");
 	)lua") == "ok");
 }
 

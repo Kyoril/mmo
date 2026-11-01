@@ -38,7 +38,7 @@ New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:
 | `LearnPetSpell` | 44 | `triggerspell` | Teaches the spell to the summoned persistent pet and stores it on the pet (sent as `PetLearnedSpell` + `PetSpells`). |
 | `SummonPersistentPet` | 58 | `miscvaluea` = `PetEntry` id, 0 = the stored pet summoned last | Summons a stored pet. The current persistent pet is dismissed first. A dead summon-style pet comes back at full health; a dead *tamed* pet fails with `FailedPetDead` and needs `RevivePet`. |
 | `GrantPersistentPet` | 59 | `miscvaluea` = `PetEntry` id | Adds a stored pet of that entry if the caster has none yet (`FailedAlreadyHavePet` otherwise, `FailedNoFreePetSlot` when full). Does not summon it: the summon spell is separate. The realm creates the database row asynchronously, so the pet is summonable a moment after the cast. |
-| `DismissPet` | 60 | - | Dismisses (stores, with health and power) the summoned persistent pet. The pet bar's Dismiss does the same for every pet. |
+| `DismissPet` | 60 | - | Dismisses (stores, with health and power) the summoned persistent pet only; temporary pets are not touched. The pet bar's Dismiss command also despawns the temporary pets. |
 | `RevivePet` | 61 | `miscvaluea` = `PetEntry` id (0 = any dead pet), `basepoints` = health % (0 = 100) | Revives a dead stored pet and summons it at that health. |
 
 Pet cast checks (pet effects fail the cast before it starts, with the `FailedPet*` /
@@ -110,8 +110,8 @@ state with `GetPet`, `GetPetName`, `GetOwner`, `CountUnitsOwnedBy` and friends (
   ids: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121, Barrowfield) raising
   Risen Skeletons (unit 120); the acolyte's Umbral Shade (pet entry 1, unit 122) with Bind Shadow
   (301, at acolyte trainer 4), Summon Shadow (302), Dismiss Shadow (303), its spells 304-307 and
-  Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Tame Beast 309, Call Pet
-  310, Revive Pet 311, pet entry 2 "Wolf", Young Forest Wolf unit 44 tamable). It validates by
+  Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind Beast 309, Summon
+  Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf unit 44 tamable). It validates by
   default and writes the editor data and ClientDB with `--apply`.
 - E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`.
 - Unit tests: the `[pets]` tag in `game_server_tests`, `realm_server_tests`, `game_protocol_tests`,
