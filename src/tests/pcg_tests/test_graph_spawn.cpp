@@ -316,3 +316,22 @@ TEST_CASE("WriteEvalDump is byte-identical across evaluations", "[graph_spawn]")
 	const CollectedPlacements c = CollectPlacements(g, first, Region10());
 	CHECK(c.placements.size() + c.clipped == 40);
 }
+
+TEST_CASE("CollectPlacements warns when a Spawns pin is linked onward", "[graph_spawn]")
+{
+	// "Spawns" pins are terminal: their items are collected as the node emits them, whatever downstream nodes do.
+	Graph g;
+	g.links.push_back(Link{ 1, "Spawns", 2, "In" });
+	g.links.push_back(Link{ 1, "Spawns", 3, "In" });
+	g.links.push_back(Link{ 2, "Out", 3, "Other" });
+
+	const CollectedPlacements c = CollectPlacements(g, MakeResult(1, { SpawnItem({ { 4, 4 } }) }), Region10());
+	REQUIRE(c.placements.size() == 1);
+	REQUIRE(c.warnings.size() == 1);
+	CHECK(c.warnings[0].find("node 1") != String::npos);
+	CHECK(c.warnings[0].find("terminal") != String::npos);
+
+	Graph unlinked;
+	unlinked.links.push_back(Link{ 2, "Out", 1, "In" });
+	CHECK(CollectPlacements(unlinked, MakeResult(1, { SpawnItem({ { 4, 4 } }) }), Region10()).warnings.empty());
+}

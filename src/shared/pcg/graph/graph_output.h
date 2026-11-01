@@ -26,6 +26,10 @@ namespace mmo::pcg::graph
 	};
 
 	/// @brief Collects every node's "Spawns" output (Points items with a String column "asset").
+	///        "Spawns" pins are terminal: their items are collected exactly as the node emits them, so linking a
+	///        "Spawns" pin onward does not post-process what is placed (downstream results are not collected
+	///        unless a downstream node emits its own "Spawns"). Each node whose "Spawns" pin is linked onward
+	///        gets one warning.
 	///        Item attributes: "kind" (String "Entity" | "Foliage" | "WorldModel"; an item with another or no
 	///        kind is skipped with a warning), "collides" (Bool, default true). Position, rotation and scale
 	///        come from the point.

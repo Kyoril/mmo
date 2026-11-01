@@ -79,9 +79,25 @@ namespace mmo::pcg::graph
 		}
 	}
 
-	CollectedPlacements CollectPlacements(const Graph&, const EvalResult& result, const PathSpline& region)
+	CollectedPlacements CollectPlacements(const Graph& graph, const EvalResult& result, const PathSpline& region)
 	{
 		CollectedPlacements collected;
+
+		// "Spawns" pins are terminal: a link onward looks like post-processing but changes nothing collected here.
+		std::set<uint32> linkedOnward;
+		for (const Link& link : graph.links)
+		{
+			if (link.fromPin == "Spawns")
+			{
+				linkedOnward.insert(link.fromNode);
+			}
+		}
+		for (const uint32 nodeId : linkedOnward)
+		{
+			collected.warnings.push_back("node " + std::to_string(nodeId) + ": its \"Spawns\" pin is linked onward, but \"Spawns\" "
+				"pins are terminal: their points are collected as the node emits them, and what downstream nodes do with "
+				"them is not collected");
+		}
 
 		// Region containment: the same indexed polygon test the samplers use.
 		std::unique_ptr<RowIndexedPolygon> polygon;

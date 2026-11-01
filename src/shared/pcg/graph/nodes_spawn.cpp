@@ -2,7 +2,9 @@
 
 // Spawner nodes. A spawner turns points into things to place: it outputs a copy of its input on "Spawns" in
 // which every point carries a String column "asset", and every item the attributes "kind" (String) and
-// "collides" (Bool). CollectPlacements (graph_output.h) turns those items into placements.
+// "collides" (Bool). CollectPlacements (graph_output.h) turns those items into placements. "Spawns" is terminal:
+// it is collected as emitted, and linking it into further nodes does not change what is placed (CollectPlacements
+// warns about such links); filter and transform points before the spawner.
 //
 // SpawnMeshes  settings: meshes (weighted list "path|weight;path|weight"; a missing weight is 1; entries with
 //               a weight that is not a positive finite number are ignored with a warning), kind (Entity |
