@@ -15,6 +15,21 @@ TEST_CASE("FRIENDS is a realm-owned subsystem", "[subsystem]")
 	CHECK(std::string(game::GetSubsystemName(game::subsystem::Friends)) == "FRIENDS");
 }
 
+TEST_CASE("GUILD is a realm-owned subsystem", "[subsystem]")
+{
+	game::Subsystem id;
+	REQUIRE(game::FindSubsystemByName("GUILD", id));
+	CHECK(id == game::subsystem::Guild);
+	CHECK(game::GetSubsystemOwner(id) == game::subsystem_owner::Realm);
+	CHECK(std::string(game::GetSubsystemName(game::subsystem::Guild)) == "GUILD");
+
+	// Realm-owned, so available without a world node until switched off
+	RealmSubsystemTable table;
+	CHECK(table.IsAvailable(game::subsystem::Guild, nullptr));
+	REQUIRE(table.SetRealmOwned(game::subsystem::Guild, false));
+	CHECK_FALSE(table.IsAvailable(game::subsystem::Guild, nullptr));
+}
+
 TEST_CASE("Every subsystem table row sits at the index of its id", "[subsystem]")
 {
 	for (uint8 i = 0; i < game::subsystem::Count_; ++i)

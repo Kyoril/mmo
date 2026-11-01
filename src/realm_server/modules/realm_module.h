@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/non_copyable.h"
+#include "game/chat_type.h"
 #include "game/subsystem.h"
 
 #include <memory>
@@ -62,6 +63,11 @@ namespace mmo
 		/// A character of the player's account is about to be deleted. Runs even while the module
 		/// is unavailable, so the module can clean up data that refers to the character.
 		virtual void OnCharacterDeleting(Player& player, uint64 characterGuid) {}
+
+		/// The player's character sent a chat message. Returns true if the module owns the chat
+		/// type (guild chat, for example) and handled it, even if it refused the message; Player
+		/// then does nothing more with it.
+		virtual bool OnChatMessage(Player& player, ChatType type, const String& message) { return false; }
 	};
 
 	/// The set of modules of a realm process. Forwards every hook to each module in the order the
@@ -117,6 +123,20 @@ namespace mmo
 			{
 				module->OnCharacterDeleting(player, characterGuid);
 			}
+		}
+
+		/// Offers a chat message to each module in turn. Returns true once one handled it.
+		bool OnChatMessage(Player& player, const ChatType type, const String& message) const
+		{
+			for (const auto& module : m_modules)
+			{
+				if (module->OnChatMessage(player, type, message))
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 
 	private:

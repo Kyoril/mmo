@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 12 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 32 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 34 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -121,6 +121,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 34 | 2026-11-01 | Guilds become a switchable subsystem: subsystem id 2 `GUILD` (realm-owned) joins `SubsystemStatus`, and `GuildCommandResult` gains result 7 `Disabled`, sent for any guild request and for guild chat while the subsystem is off |
 | 33 | 2026-10-30 | Real-time regeneration: unit fields `HealthRegen` and `PowerRegen` (3 floats: mana, rage, energy; current rates per five seconds) are appended after `ManaRegenCasting`, renumbering every player field after them. The owning client extrapolates health and power with them |
 | 32 | 2026-10-30 | Friends become a switchable subsystem: subsystem id 1 `FRIENDS` (realm-owned) joins `SubsystemStatus`, and `FriendCommandResult` gains result 8 `Disabled`, sent for any friend request while the subsystem is off |
 | 31 | 2026-10-29 | Data-driven attributes: the unit fields `Stat`, `PosStat` and `NegStat` hold `MaxAttributes` (10) values each instead of five named ones, and the player field `AttributePointCost` spans `AttributePointCostFieldCount` (3) uint32 fields instead of a uint64, renumbering every field after them. `LevelUp` carries health, mana, talent and attribute points, then a uint8 count of (uint8 attribute id, int32 gain) pairs instead of five fixed attribute gains |

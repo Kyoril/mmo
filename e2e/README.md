@@ -111,7 +111,9 @@ Actions:
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
-`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
+`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"guild"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
+`GetGuildChatCount()` and `GetLastGuildChat()` for guild chat received, `GuildInvite(name)`,
+`GuildLeave()`, `LastGuildCommandResult()` / `ClearLastGuildCommandResult()` (game::guild_command_result, -1 for none),
 `InviteToParty(name)`, `AcceptPartyInvitation()` (only once `HasPendingPartyInvitation()` is
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
@@ -151,6 +153,8 @@ cancel the realm's scheduled shutdown, needs gm_level 3; wait for the realm's
 ShutdownCountdown announcement and return its seconds, `GM.CancelShutdown` returns whether it
 announced the cancellation — a shutdown that runs out stops the shared test stack, so always
 cancel it within the scenario, and never pass 0 seconds),
+`GM.CreateGuild(name)` (founds a guild led by the character; it persists, so leave it again
+with `GuildLeave()`, which disbands a guild the character leads),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
 quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
 equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the

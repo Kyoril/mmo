@@ -47,7 +47,11 @@ namespace mmo
 
 				AlreadyInOtherGuild,
 
-				InvitePending
+				InvitePending,
+
+				/// Guilds are switched off (GUILD subsystem unavailable). Sent for any guild request
+				/// and for guild chat; the command byte then only names the closest command.
+				Disabled
 			};
 		}
 
@@ -99,7 +103,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000021;
+		constexpr uint32 ProtocolVersion = 0x00000022;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.

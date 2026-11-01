@@ -137,8 +137,8 @@
 		]
 	},
 	"game": {
-		"version": 33,
-		"fingerprint": "sha256:c418b8d144e1524e561467a04e71db1f73a15456a7774877de7a1a1654bd84df",
+		"version": 34,
+		"fingerprint": "sha256:ac8e6430c33dafa7683b60f9e76d818c21aab0520ab4a677f440bafd1e3b3eec",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -155,7 +155,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:686258e7c3771d27ac4e3705024a20b951198cb0e500ed5a0d8631fdf4ee5418"
+			"src/shared/game_protocol/game_protocol.h": "sha256:d89ffff9c551f3af444c37690b0b24fc730f114a54969ada566a963e16a80948"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -393,6 +393,7 @@
 			"game::guild_command::Uninvite = 1",
 			"game::guild_command_result::AlreadyInGuild = 2",
 			"game::guild_command_result::AlreadyInOtherGuild = 5",
+			"game::guild_command_result::Disabled = 7",
 			"game::guild_command_result::InvitePending = 6",
 			"game::guild_command_result::NotAllowed = 3",
 			"game::guild_command_result::NotInGuild = 1",

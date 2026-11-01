@@ -374,6 +374,9 @@ namespace mmo
 		/// Number of FriendListUpdate packets received.
 		uint32 m_friendListUpdates = 0;
 
+		/// Result of the last GuildCommandResult received (game::guild_command_result), or -1 for none.
+		int32 m_lastGuildCommandResult = -1;
+
 		/// Last spell visualization the server told us to play, if any.
 		struct SpellVisual
 		{
@@ -516,6 +519,21 @@ namespace mmo
 
 		/// Asks the realm for the friend list.
 		void RequestFriendList();
+
+		/// Result of the last guild command (game::guild_command_result), or -1 for none.
+		[[nodiscard]] int32 GetLastGuildCommandResult() const { return m_lastGuildCommandResult; }
+
+		/// Forgets the last guild command result.
+		void ClearLastGuildCommandResult() { m_lastGuildCommandResult = -1; }
+
+		/// Invites a character to the own guild by name.
+		void GuildInvite(const String& name);
+
+		/// Leaves the own guild (disbands it if the character leads it).
+		void GuildLeave();
+
+		/// GAME MASTER only. Creates a guild led by this character.
+		void CheatCreateGuild(const String& name);
 
 		/// GAME MASTER only. Switches a subsystem realm-wide.
 		void CheatSetSubsystem(game::Subsystem subsystem, bool enabled);
@@ -972,6 +990,8 @@ namespace mmo
 		PacketParseResult OnFriendCommandResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnFriendListUpdate(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildCommandResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 

@@ -23,6 +23,9 @@ namespace mmo
 				/// The friend list. Owned by the realm.
 				Friends = 1,
 
+				/// Guilds: guild commands, guild chat and member online events. Owned by the realm.
+				Guild = 2,
+
 				Count_
 			};
 		}
@@ -69,6 +72,7 @@ namespace mmo
 		{{
 			{ subsystem::BugReport, "BUG_REPORT", subsystem_owner::World },
 			{ subsystem::Friends, "FRIENDS", subsystem_owner::Realm },
+			{ subsystem::Guild, "GUILD", subsystem_owner::Realm },
 		}};
 
 		/// Returns the script name of a subsystem ("BUG_REPORT"), or an empty string if unknown.
