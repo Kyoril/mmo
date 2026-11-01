@@ -340,10 +340,6 @@ namespace mmo
 
 		void SendPartyOperationResult(PartyOperation operation, PartyResult result, const String &playerName);
 
-		void SendGuildCommandResult(uint8 command, uint8 result, const String &playerName);
-
-		void OnGuildRemoveCharacterIdResolve(DatabaseId characterId, const String &playerName);
-
 	public:
 		struct PacketHandlerRegistrationHandle final
 		{
@@ -534,11 +530,8 @@ namespace mmo
 
 		scoped_connection m_onGroupLoaded;
 
+		/// Only for guild queries (names above heads); everything else about guilds lives in GuildModule.
 		GuildMgr &m_guildMgr;
-
-		uint64 m_pendingGuildInvite = 0;
-
-		uint64 m_guildInviter = 0;
 
 		RealmModules &m_modules;
 
@@ -612,18 +605,6 @@ namespace mmo
 		[[nodiscard]] String GetMapName(MapId mapId) const;
 		PacketParseResult OnLogoutRequest(game::IncomingPacket &packet);
 
-		// Guild packet handlers
-		PacketParseResult OnGuildInvite(game::IncomingPacket &packet);
-		PacketParseResult OnGuildRemove(game::IncomingPacket &packet);
-		PacketParseResult OnGuildPromote(game::IncomingPacket &packet);
-		PacketParseResult OnGuildDemote(game::IncomingPacket &packet);
-		PacketParseResult OnGuildLeave(game::IncomingPacket &packet);
-		PacketParseResult OnGuildDisband(game::IncomingPacket &packet);
-		PacketParseResult OnGuildMotd(game::IncomingPacket &packet);
-		PacketParseResult OnGuildAccept(game::IncomingPacket &packet);
-		PacketParseResult OnGuildDecline(game::IncomingPacket &packet);
-		PacketParseResult OnGuildRoster(game::IncomingPacket &packet);
-
 		// Mail packet handlers
 		PacketParseResult OnMailListRequest(game::IncomingPacket &packet);
 		PacketParseResult OnMailDelete(game::IncomingPacket &packet);
@@ -655,7 +636,6 @@ namespace mmo
 		void LeaveAllChatChannels();
 
 		// Helper methods for character deletion
-		void HandleCharacterGuildOnDelete(uint64 charGuid);
 		void HandleCharacterGroupOnDelete(uint64 charGuid);
 
 #ifdef MMO_WITH_DEV_COMMANDS
@@ -670,7 +650,6 @@ namespace mmo
 		void ForwardGmFlagsToWorld();
 		PacketParseResult OnCheatSetTimeOfDay(game::IncomingPacket &packet);
 		PacketParseResult OnCheatSetSubsystem(game::IncomingPacket &packet);
-		PacketParseResult OnGuildCreate(game::IncomingPacket &packet);
 #endif
 	};
 

@@ -135,6 +135,7 @@ namespace mmo
 			m_lastBugReportResult.clear();
 			m_lastFriendCommandResult = -1;
 			m_friendListUpdates = 0;
+			m_lastGuildCommandResult = -1;
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -148,6 +149,7 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
 			RegisterPacketHandler(game::realm_client_packet::FriendCommandResult, *this, &BotRealmConnector::OnFriendCommandResult);
 			RegisterPacketHandler(game::realm_client_packet::FriendListUpdate, *this, &BotRealmConnector::OnFriendListUpdate);
+			RegisterPacketHandler(game::realm_client_packet::GuildCommandResult, *this, &BotRealmConnector::OnGuildCommandResult);
 		}
 		else
 		{
@@ -870,6 +872,46 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::FriendListRequest);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnGuildCommandResult(game::IncomingPacket& packet)
+	{
+		uint8 command = 0;
+		uint8 result = 0;
+		String playerName;
+		if (!(packet >> io::read<uint8>(command) >> io::read<uint8>(result) >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastGuildCommandResult = result;
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::GuildInvite(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildInvite);
+			packet << io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::GuildLeave()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildLeave);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatCreateGuild(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildCreate);
+			packet << io::write_dynamic_range<uint8>(name);
 			packet.Finish();
 			});
 	}

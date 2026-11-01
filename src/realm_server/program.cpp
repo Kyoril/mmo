@@ -14,6 +14,7 @@
 #include "friend_mgr.h"
 #include "modules/bug_report_module.h"
 #include "modules/friend_module.h"
+#include "modules/guild_module.h"
 #include "modules/realm_module.h"
 #include "chat_channel_mgr.h"
 #include "motd_manager.h"
@@ -341,6 +342,7 @@ namespace mmo
 		RealmModules modules;
 		modules.Add(std::make_unique<BugReportModule>());
 		modules.Add(std::make_unique<FriendModule>(friendMgr, playerManager, asyncDatabase));
+		modules.Add(std::make_unique<GuildModule>(guildMgr, playerManager, asyncDatabase));
 
 		// Initialize chat channel manager from game data
 		ChannelMgr channelMgr{ project, asyncChatChannelDb, playerManager, timerQueue };

@@ -71,6 +71,9 @@ namespace mmo
 			/// Whispers received, oldest first.
 			std::vector<std::string> whispers;
 
+			/// Guild chat lines received, oldest first.
+			std::vector<std::string> guildChats;
+
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
@@ -345,6 +348,34 @@ namespace mmo
 			g_runtime->session->GetRealm().RequestFriendList();
 		}
 
+		int32 luaLastGuildCommandResult()
+		{
+			return g_runtime->session->GetRealm().GetLastGuildCommandResult();
+		}
+
+		void luaClearLastGuildCommandResult()
+		{
+			g_runtime->session->GetRealm().ClearLastGuildCommandResult();
+		}
+
+		void luaGuildLeave()
+		{
+			g_runtime->session->GetRealm().GuildLeave();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GuildLeave", {});
+			}
+		}
+
+		void luaGuildInvite(const std::string& name)
+		{
+			g_runtime->session->GetRealm().GuildInvite(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GuildInvite", { { "name", name } });
+			}
+		}
+
 		std::string luaLastBugReportResult()
 		{
 			return g_runtime->session->GetRealm().GetLastBugReportResult();
@@ -423,6 +454,15 @@ namespace mmo
 			}
 			std::fclose(file);
 			return content;
+		}
+
+		void luaGmCreateGuild(const std::string& name)
+		{
+			g_runtime->session->GetRealm().CheatCreateGuild(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.CreateGuild", { { "name", name } });
+			}
 		}
 
 		void luaGmSetSubsystem(const std::string& name, const bool enabled)
@@ -1106,9 +1146,13 @@ namespace mmo
 			{
 				type = ChatType::Emote;
 			}
+			else if (channel == "guild")
+			{
+				type = ChatType::Guild;
+			}
 			else if (channel != "say")
 			{
-				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, general or whisper)");
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, guild, general or whisper)");
 			}
 
 			g_runtime->session->GetContext().SendChatMessage(message, type);
@@ -1743,6 +1787,10 @@ namespace mmo
 				luabind::def_lambda("FriendListUpdateCount", &luaFriendListUpdateCount),
 				luabind::def_lambda("FriendInvite", &luaFriendInvite),
 				luabind::def_lambda("RequestFriendList", &luaRequestFriendList),
+				luabind::def_lambda("LastGuildCommandResult", &luaLastGuildCommandResult),
+				luabind::def_lambda("ClearLastGuildCommandResult", &luaClearLastGuildCommandResult),
+				luabind::def_lambda("GuildInvite", &luaGuildInvite),
+				luabind::def_lambda("GuildLeave", &luaGuildLeave),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 
@@ -1810,6 +1858,8 @@ namespace mmo
 				luabind::def_lambda("SendChatImpl", &luaSendChat),
 				luabind::def_lambda("GetWhisperCount", []() { return static_cast<uint32>(g_runtime->whispers.size()); }),
 				luabind::def_lambda("GetLastWhisper", []() { return g_runtime->whispers.empty() ? std::string() : g_runtime->whispers.back(); }),
+				luabind::def_lambda("GetGuildChatCount", []() { return static_cast<uint32>(g_runtime->guildChats.size()); }),
+				luabind::def_lambda("GetLastGuildChat", []() { return g_runtime->guildChats.empty() ? std::string() : g_runtime->guildChats.back(); }),
 				luabind::def_lambda("InviteToParty", &luaInviteToParty),
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
@@ -1851,7 +1901,8 @@ namespace mmo
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
 				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
 				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory),
-				luabind::def_lambda("GM_SetSubsystem", &luaGmSetSubsystem)
+				luabind::def_lambda("GM_SetSubsystem", &luaGmSetSubsystem),
+				luabind::def_lambda("GM_CreateGuild", &luaGmCreateGuild)
 			);
 
 			luabind::module(state)[std::move(apiScope)];
@@ -1929,6 +1980,7 @@ namespace mmo
 				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
 				ClearInventory = GM_ClearInventory,
 				SetSubsystem = GM_SetSubsystem,
+				CreateGuild = GM_CreateGuild,
 			}
 		)LUA";
 
@@ -2017,6 +2069,10 @@ namespace mmo
 				if (message.type == ChatType::Whisper)
 				{
 					runtime.whispers.push_back(message.message);
+				}
+				else if (message.type == ChatType::Guild)
+				{
+					runtime.guildChats.push_back(message.message);
 				}
 
 				transcript.Event("chat_received",
