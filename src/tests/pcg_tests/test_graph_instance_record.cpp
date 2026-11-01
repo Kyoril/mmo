@@ -435,3 +435,23 @@ TEST_CASE("AreasOverlap separates contact from shared interior", "[graph_instanc
 		CHECK_FALSE(AreasOverlap(base, PathSpline()));
 	}
 }
+
+TEST_CASE("GraphInstanceRecord round-trips seamHash and reads a missing key as 0", "[graph_instance_record]")
+{
+	GraphInstanceRecord original = MakePopulated();
+	CHECK(original.seamHash == 0);
+	const std::vector<char> plain = Serialize(original);
+
+	original.seamHash = 0xfedcba9876543210ull;
+	const std::vector<char> bytes = Serialize(original);
+	GraphInstanceRecord loaded;
+	REQUIRE(Deserialize(bytes, loaded));
+	CHECK(loaded.seamHash == 0xfedcba9876543210ull);
+	CHECK(Serialize(loaded) == bytes);
+
+	// Without seams the key is not written, so older bytes stay identical and read as 0.
+	loaded.seamHash = 5;
+	REQUIRE(Deserialize(plain, loaded));
+	CHECK(loaded.seamHash == 0);
+	CHECK(Serialize(loaded) == plain);
+}

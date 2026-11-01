@@ -36,6 +36,9 @@ namespace mmo::pcg
 		size_t pointLimit = 2'000'000;
 		/// Width (m) inside the area border over which terrain writes fade to nothing (0 = hard edge). Finite, >= 0.
 		float borderFade = 8.0f;
+		/// Hash of the seam set (the area edges shared with touching graph instances) of the last build, 0 = none. Stored in
+		/// the JSON blob under "seamHash" (only when not 0; a missing key reads as 0).
+		uint64 seamHash = 0;
 		/// What the last build put into the world.
 		OwnedContent content;
 		/// River paths written by the last build, in op order. They take part in the world's river flow.

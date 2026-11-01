@@ -1184,3 +1184,143 @@ TEST_CASE("A river outline carries its surface line and bed edges", "[terrain_co
 	}
 	CHECK(o.bedEdges[0][100].z == -o.bedEdges[1][100].z);
 }
+
+namespace
+{
+	/// Noise over a wide area (no falloff at the seams) for the seam tests.
+	TerrainOpInput WideNoise()
+	{
+		return MakeOp(TerrainOpType::Noise, Square(-100.0f, -100.0f, 400.0f), 3, { { "amplitude", 2.0f }, { "wavelength", 24.0f }, { "falloff", 8.0f } });
+	}
+
+	void PrepareWithNeighbours(PreparedTerrain& t, const PathSpline& region, const std::vector<PathSpline>& neighbours)
+	{
+		String error;
+		REQUIRE(t.Prepare({ WideNoise() }, Flat0, {}, region, 10.0f, error, neighbours));
+		CHECK(error.empty());
+	}
+}
+
+TEST_CASE("Touching regions do not fade along their shared edge", "[terrain_compose]")
+{
+	const PathSpline regionA = Square(0.0f, 0.0f, 100.0f);
+	const PathSpline regionB = Square(100.0f, 0.0f, 100.0f);
+	PreparedTerrain a;
+	PrepareWithNeighbours(a, regionA, { regionB });
+	PreparedTerrain b;
+	PrepareWithNeighbours(b, regionB, { regionA });
+	PreparedTerrain reference;
+	PrepareWithNeighbours(reference, kBigRegion, {});
+
+	CHECK(a.GetSeamHash() != 0);
+	CHECK(b.GetSeamHash() != 0);
+	CHECK(a.GetSeamNeighbours() == std::vector<size_t>{ 0 });
+	float largestNoise = 0.0f;
+
+	for (float z = 10.0f; z <= 90.0f; z += 16.0f)
+	{
+		const TerrainTarget onA = a.Evaluate(99.75f, z, 0.0f, {});
+		const TerrainTarget onB = b.Evaluate(100.25f, z, 0.0f, {});
+		// Unfaded: the height is the one of the unclipped noise.
+		CHECK(Written(onA, 0.0f) == Approx(reference.Evaluate(99.75f, z, 0.0f, {}).height).margin(1e-5f));
+		largestNoise = std::max(largestNoise, std::abs(Written(onA, 0.0f)));
+		CHECK(Written(onB, 0.0f) == Approx(reference.Evaluate(100.25f, z, 0.0f, {}).height).margin(1e-5f));
+
+		// The two sides differ by no more than the noise changes over 0.5 m.
+		const float change = std::abs(reference.Evaluate(99.75f, z, 0.0f, {}).height - reference.Evaluate(100.25f, z, 0.0f, {}).height);
+		CHECK(std::abs(Written(onA, 0.0f) - Written(onB, 0.0f)) <= change + 1e-4f);
+
+		// Writes still stop at the region edge.
+		CHECK(a.Evaluate(100.25f, z, 0.0f, {}).heightWeight == 0.0f);
+		CHECK(b.Evaluate(99.75f, z, 0.0f, {}).heightWeight == 0.0f);
+	}
+}
+
+TEST_CASE("The outer edges of a region with a seam still fade", "[terrain_compose]")
+{
+	const PathSpline regionA = Square(0.0f, 0.0f, 100.0f);
+	PreparedTerrain withSeam;
+	PrepareWithNeighbours(withSeam, regionA, { Square(100.0f, 0.0f, 100.0f) });
+	PreparedTerrain alone;
+	PrepareWithNeighbours(alone, regionA, {});
+	PreparedTerrain reference;
+	PrepareWithNeighbours(reference, kBigRegion, {});
+
+	const std::vector<std::pair<float, float>> spots = { { 50.0f, 2.0f }, { 50.0f, 98.0f }, { 2.0f, 50.0f }, { 5.0f, 5.0f }, { 0.5f, 50.0f } };
+	for (const auto& [x, z] : spots)
+	{
+		const TerrainTarget fadedSeam = withSeam.Evaluate(x, z, 0.0f, {});
+		const TerrainTarget fadedAlone = alone.Evaluate(x, z, 0.0f, {});
+		const float unfaded = reference.Evaluate(x, z, 0.0f, {}).height;
+		REQUIRE(std::abs(unfaded) > 0.05f);
+		CHECK(std::abs(Written(fadedSeam, 0.0f)) < std::abs(unfaded));
+		CHECK(fadedSeam.heightWeight == fadedAlone.heightWeight);
+		CHECK(fadedSeam.height == fadedAlone.height);
+	}
+}
+
+TEST_CASE("Without neighbours the result is identical", "[terrain_compose]")
+{
+	const PathSpline region = Square(0.0f, 0.0f, 100.0f);
+	PreparedTerrain plain;
+	String error;
+	REQUIRE(plain.Prepare({ WideNoise() }, Flat0, {}, region, 10.0f, error));
+	PreparedTerrain empty;
+	PrepareWithNeighbours(empty, region, {});
+	// A neighbour that is nowhere near.
+	PreparedTerrain far;
+	PrepareWithNeighbours(far, region, { Square(300.0f, 300.0f, 50.0f) });
+
+	CHECK(plain.GetSeamHash() == 0);
+	CHECK(far.GetSeamHash() == 0);
+	CHECK(far.GetSeamNeighbours().empty());
+	for (int j = 0; j < 10; ++j)
+	{
+		for (int i = 0; i < 10; ++i)
+		{
+			const float x = -3.0f + static_cast<float>(i) * 11.0f;
+			const float z = -3.0f + static_cast<float>(j) * 11.0f;
+			const TerrainTarget p = plain.Evaluate(x, z, 1.0f, {});
+			for (const PreparedTerrain* other : { &empty, &far })
+			{
+				const TerrainTarget o = other->Evaluate(x, z, 1.0f, {});
+				CHECK(o.height == p.height);
+				CHECK(o.heightWeight == p.heightWeight);
+			}
+		}
+	}
+}
+
+TEST_CASE("A neighbour that only touches at a corner creates no seam", "[terrain_compose]")
+{
+	const PathSpline regionA = Square(0.0f, 0.0f, 100.0f);
+	PreparedTerrain corner;
+	PrepareWithNeighbours(corner, regionA, { Square(100.0f, 100.0f, 100.0f) });
+	PreparedTerrain alone;
+	PrepareWithNeighbours(alone, regionA, {});
+	PreparedTerrain reference;
+	PrepareWithNeighbours(reference, kBigRegion, {});
+	CHECK(corner.GetSeamHash() == 0);
+	for (const auto& [x, z] : std::vector<std::pair<float, float>>{ { 99.75f, 50.0f }, { 50.0f, 99.75f } })
+	{
+		CHECK(corner.Evaluate(x, z, 0.0f, {}).height == alone.Evaluate(x, z, 0.0f, {}).height);
+		REQUIRE(std::abs(reference.Evaluate(x, z, 0.0f, {}).height) > 0.05f);
+		CHECK(std::abs(corner.Evaluate(x, z, 0.0f, {}).height) < std::abs(reference.Evaluate(x, z, 0.0f, {}).height));
+	}
+}
+
+TEST_CASE("A neighbour with a vertex in the middle of the shared edge still makes a seam", "[terrain_compose]")
+{
+	PathSpline neighbour = Square(100.0f, 0.0f, 100.0f);
+	SplinePoint mid;
+	mid.x = 100.0f;
+	mid.z = 50.0f;
+	neighbour.points.push_back(mid);
+	// Closed loop: (100,0) (200,0) (200,100) (100,100) (100,50): the last edge runs back down the shared border.
+	PreparedTerrain a;
+	PrepareWithNeighbours(a, Square(0.0f, 0.0f, 100.0f), { neighbour });
+	CHECK(a.GetSeamHash() != 0);
+	PreparedTerrain reference;
+	PrepareWithNeighbours(reference, kBigRegion, {});
+	CHECK(a.Evaluate(99.75f, 25.0f, 0.0f, {}).height == Approx(reference.Evaluate(99.75f, 25.0f, 0.0f, {}).height).margin(1e-5f));
+}

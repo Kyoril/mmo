@@ -41,6 +41,62 @@ namespace mmo::pcg::graph
 			return x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
 		}
 
+		/// A region edge segment lies on a neighbour edge if points along it are within this (m) of the neighbour's border.
+		constexpr double kSeamTolerance = 0.05;
+
+		/// Distance from (x, z) to the segment a-b.
+		double DistanceToSegment(const double x, const double z, const SplineSample& a, const SplineSample& b)
+		{
+			const double dx = static_cast<double>(b.x) - a.x;
+			const double dz = static_cast<double>(b.z) - a.z;
+			const double len2 = dx * dx + dz * dz;
+			double t = 0.0;
+			if (len2 > 0.0)
+			{
+				t = std::min(1.0, std::max(0.0, ((x - a.x) * dx + (z - a.z) * dz) / len2));
+			}
+			const double px = x - (a.x + dx * t);
+			const double pz = z - (a.z + dz * t);
+			return std::sqrt(px * px + pz * pz);
+		}
+
+		/// Whether (x, z) lies within the seam tolerance of the closed loop.
+		bool NearLoop(const double x, const double z, const std::vector<SplineSample>& loop)
+		{
+			const size_t n = loop.size();
+			for (size_t i = 0; i < n; ++i)
+			{
+				if (DistanceToSegment(x, z, loop[i], loop[(i + 1) % n]) <= kSeamTolerance)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// Whether the region segment a-b lies on the neighbour's border: both end points and points along it (eighths)
+		/// all lie on the neighbour loop. A segment that only ends at a neighbour corner, or cuts across it, fails.
+		bool IsSeamSegment(const SplineSample& a, const SplineSample& b, const std::vector<SplineSample>& neighbour)
+		{
+			for (int step = 0; step <= 8; ++step)
+			{
+				const double t = static_cast<double>(step) / 8.0;
+				if (!NearLoop(a.x + (static_cast<double>(b.x) - a.x) * t, a.z + (static_cast<double>(b.z) - a.z) * t, neighbour))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		/// FNV-1a step.
+		uint64 HashStep(uint64 h, const int64 value)
+		{
+			h ^= static_cast<uint64>(value);
+			h *= 0x100000001b3ull;
+			return h;
+		}
+
 		WorldRect Grow(WorldRect r, const float by)
 		{
 			r.minX -= by;
@@ -321,7 +377,8 @@ namespace mmo::pcg::graph
 	PreparedTerrain& PreparedTerrain::operator=(PreparedTerrain&&) noexcept = default;
 
 	bool PreparedTerrain::Prepare(const std::vector<TerrainOpInput>& ops, const std::function<float(float, float)>& baseGround,
-		const SectionAssetProvider& sections, const PathSpline& region, const float borderFade, String& error)
+		const SectionAssetProvider& sections, const PathSpline& region, const float borderFade, String& error,
+		const std::vector<PathSpline>& neighbours)
 	{
 		m_ops.clear();
 		m_region.reset();
@@ -330,6 +387,8 @@ namespace mmo::pcg::graph
 		m_waterMaterialFromRiver = false;
 		m_warnings.clear();
 		m_borderFade = std::isfinite(borderFade) ? std::max(0.0f, borderFade) : 0.0f;
+		m_seamHash = 0;
+		m_seamNeighbours.clear();
 		error.clear();
 
 		auto ground = [&baseGround](const float x, const float z)
@@ -343,6 +402,8 @@ namespace mmo::pcg::graph
 			m_influence = WorldRect{};
 			m_waterMaterial.clear();
 			m_waterMaterialFromRiver = false;
+			m_seamHash = 0;
+			m_seamNeighbours.clear();
 			error = message;
 			return false;
 		};
@@ -357,7 +418,71 @@ namespace mmo::pcg::graph
 			const SampledPath path(region, EvaluationStep(region, SamplingStep));
 			auto prepared = std::make_unique<PreparedOp>();
 			prepared->polygon = MakePolygon(path);
-			prepared->edge.Build(path.GetSamples(), true, m_borderFade);
+
+			// Seams: the segments that lie on a neighbour's border do not fade (the neighbour fades to nothing there
+			// as well, which would leave a dip between the two).
+			const std::vector<SplineSample>& samples = path.GetSamples();
+			const size_t sampleCount = samples.size();
+			std::vector<uint8> seamSegments(sampleCount, 0);
+			std::vector<uint8> touching(neighbours.size(), 0);
+			uint64 seamHash = 0xcbf29ce484222325ull;
+			bool anySeam = false;
+			for (size_t n = 0; n < neighbours.size() && sampleCount >= 3; ++n)
+			{
+				const PathSpline& other = neighbours[n];
+				const Bounds2D otherBounds = SplineBounds(other);
+				if (other.points.size() < 3 || !other.closed || !SaneBounds(otherBounds))
+				{
+					continue;
+				}
+
+				const Bounds2D regionBounds = SplineBounds(region);
+				constexpr float reach = 1.0f;
+				if (otherBounds.maxX + reach < regionBounds.minX || otherBounds.minX - reach > regionBounds.maxX ||
+					otherBounds.maxZ + reach < regionBounds.minZ || otherBounds.minZ - reach > regionBounds.maxZ)
+				{
+					continue;
+				}
+
+				const SampledPath otherPath(other, EvaluationStep(other, SamplingStep));
+				const std::vector<SplineSample>& otherSamples = otherPath.GetSamples();
+				if (otherSamples.size() < 3)
+				{
+					continue;
+				}
+				for (size_t i = 0; i < sampleCount; ++i)
+				{
+					const SplineSample& a = samples[i];
+					const SplineSample& b = samples[(i + 1) % sampleCount];
+					if (IsSeamSegment(a, b, otherSamples))
+					{
+						touching[n] = 1;
+						if (!seamSegments[i])
+						{
+							seamSegments[i] = 1;
+							anySeam = true;
+							seamHash = HashStep(seamHash, static_cast<int64>(std::llround(a.x * 100.0f)));
+							seamHash = HashStep(seamHash, static_cast<int64>(std::llround(a.z * 100.0f)));
+							seamHash = HashStep(seamHash, static_cast<int64>(std::llround(b.x * 100.0f)));
+							seamHash = HashStep(seamHash, static_cast<int64>(std::llround(b.z * 100.0f)));
+						}
+					}
+				}
+			}
+			if (anySeam)
+			{
+				// Never 0: 0 means no seams.
+				m_seamHash = seamHash | 1ull;
+				for (size_t n = 0; n < touching.size(); ++n)
+				{
+					if (touching[n])
+					{
+						m_seamNeighbours.push_back(n);
+					}
+				}
+			}
+
+			prepared->edge.Build(samples, true, m_borderFade, seamSegments);
 			prepared->bounds = PathRect(path);
 			m_region = std::move(prepared);
 		}

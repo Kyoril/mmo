@@ -37,7 +37,9 @@ namespace mmo::pcg::graph
 		/// @param samples The polyline (y is kept but ignored).
 		/// @param closed True joins the last sample to the first (with at least 3 samples).
 		/// @param reach Largest distance a query finds a segment at; negative counts as 0.
-		void Build(const std::vector<SplineSample>& samples, bool closed, float reach);
+		/// @param skipSegments If not empty: entry s non-zero leaves segment s out (segments numbered as above: (i, i + 1) for
+		///        i = 0.., then (last, 0) if closed); a shorter vector keeps the rest.
+		void Build(const std::vector<SplineSample>& samples, bool closed, float reach, const std::vector<uint8>& skipSegments = {});
 
 		/// @brief Nearest segment within the reach of (x, z).
 		/// @param hit Receives the segment and distance when the call returns true.

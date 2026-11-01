@@ -257,11 +257,12 @@ namespace mmo
 
 		/// Prepares the evaluation's terrain ops (see PreparedTerrain::Prepare); the error names the node and asset.
 		bool PrepareTerrainOps(const GraphInstanceEvaluation& evaluation, const pcg::GraphInstanceRecord& record,
-			const GroundFunction& ground, SectionAssetCache& sections, pcg::graph::PreparedTerrain& out, String& error)
+			const GroundFunction& ground, SectionAssetCache& sections, const std::vector<PathSpline>& neighbours,
+			pcg::graph::PreparedTerrain& out, String& error)
 		{
 			String prepareError;
 			if (!out.Prepare(pcg::graph::CollectTerrainOps(evaluation.graph, evaluation.result), ground, sections.MakeProvider(),
-				record.area, record.borderFade, prepareError))
+				record.area, record.borderFade, prepareError, neighbours))
 			{
 				error = "the terrain ops could not be prepared: " + prepareError;
 				return false;
@@ -649,7 +650,7 @@ namespace mmo
 
 	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, const uint32 nodeId,
 		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, SectionAssetCache& sections,
-		pcg::graph::PreparedTerrain& out, String& error)
+		pcg::graph::PreparedTerrain& out, String& error, const std::vector<PathSpline>& neighbours)
 	{
 		std::vector<pcg::graph::TerrainOpInput> ops = pcg::graph::CollectTerrainOps(graph, result);
 		ops.erase(std::remove_if(ops.begin(), ops.end(), [nodeId](const pcg::graph::TerrainOpInput& op)
@@ -657,7 +658,7 @@ namespace mmo
 			return op.op.order != nodeId;
 		}), ops.end());
 
-		return out.Prepare(ops, ground, sections.MakeProvider(), record.area, record.borderFade, error);
+		return out.Prepare(ops, ground, sections.MakeProvider(), record.area, record.borderFade, error, neighbours);
 	}
 
 	bool EvaluateGraphInstance(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
@@ -669,6 +670,70 @@ namespace mmo
 		}
 
 		return EvaluateLoadedGraph(editor, record, controls, out, error, baseTerrain);
+	}
+
+	bool GraphHasTerrainOps(const pcg::graph::Graph& graph)
+	{
+		const pcg::graph::NodeRegistry& registry = pcg::graph::NodeRegistry::Default();
+		for (const pcg::graph::NodeInstance& node : graph.nodes)
+		{
+			const pcg::graph::NodeTypeDef* def = registry.Find(node.type);
+			if (def == nullptr)
+			{
+				continue;
+			}
+			for (const pcg::graph::PinDef& pin : def->outputs)
+			{
+				if (pin.name == "Terrain")
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	void CollectSeamNeighbours(const pcg::GraphInstanceRecord& record, const std::vector<const pcg::GraphInstanceRecord*>& instances,
+		std::vector<PathSpline>& areas, std::vector<String>* names)
+	{
+		areas.clear();
+		if (names != nullptr)
+		{
+			names->clear();
+		}
+
+		std::vector<const pcg::GraphInstanceRecord*> sorted;
+		for (const pcg::GraphInstanceRecord* other : instances)
+		{
+			if (other != nullptr && other->id != record.id)
+			{
+				sorted.push_back(other);
+			}
+		}
+		std::sort(sorted.begin(), sorted.end(), [](const pcg::GraphInstanceRecord* a, const pcg::GraphInstanceRecord* b)
+		{
+			return a->id < b->id;
+		});
+
+		for (const pcg::GraphInstanceRecord* other : sorted)
+		{
+			// A terrain writer: it has written terrain, or its graph has terrain ops (phase 3a rule R11).
+			bool writer = !other->content.terrain.IsEmpty();
+			if (!writer)
+			{
+				pcg::graph::Graph graph;
+				String ignored;
+				writer = LoadGraphAsset(other->graphPath, graph, ignored) && GraphHasTerrainOps(graph);
+			}
+			if (writer)
+			{
+				areas.push_back(other->area);
+				if (names != nullptr)
+				{
+					names->push_back(other->name);
+				}
+			}
+		}
 	}
 
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
@@ -734,9 +799,17 @@ namespace mmo
 			return terrain->GetSmoothHeightAt(x, z);
 		};
 
+		// Touching terrain-writing instances share seams with this one: no border fade along them.
+		std::vector<PathSpline> neighbourAreas;
+		std::vector<String> neighbourNames;
+		if (GraphHasTerrainOps(dryRun.graph))
+		{
+			CollectSeamNeighbours(record, otherInstances, neighbourAreas, &neighbourNames);
+		}
+
 		const auto sections = std::make_shared<SectionAssetCache>();
 		pcg::graph::PreparedTerrain dryTerrain;
-		if (!PrepareTerrainOps(dryRun, record, liveGround, *sections, dryTerrain, error))
+		if (!PrepareTerrainOps(dryRun, record, liveGround, *sections, neighbourAreas, dryTerrain, error))
 		{
 			return refuse(error);
 		}
@@ -770,7 +843,7 @@ namespace mmo
 		// run (an ocean page materialised for the writes), prepare takes over the dry run instead of evaluating again.
 		const bool liveIsBase = record.content.terrain.IsEmpty();
 		const uint64 dryTerrainRevision = editor.GetTerrainRevision();
-		content.prepare = [&editor, &record, &controls, &graph, &dryRun, &dryWarnings, &dryTerrain, liveIsBase, dryTerrainRevision,
+		content.prepare = [&editor, &record, &controls, &graph, &dryRun, &dryWarnings, &dryTerrain, &neighbourAreas, liveIsBase, dryTerrainRevision,
 			sections, state, dryEmpty, dryInfluence, dryWaterMaterial](const GroundFunction& ground, String& prepareError)
 		{
 			// The previous contribution is undone: the graph sees the base terrain.
@@ -790,7 +863,7 @@ namespace mmo
 				base.graph = graph;
 				if (!EvaluateLoadedGraph(editor, record, controls, base, prepareError) ||
 					!CheckEvaluation(base, record.area, warnings, prepareError) ||
-					!PrepareTerrainOps(base, record, ground, *sections, state->terrain, prepareError))
+					!PrepareTerrainOps(base, record, ground, *sections, neighbourAreas, state->terrain, prepareError))
 				{
 					return false;
 				}
@@ -884,6 +957,26 @@ namespace mmo
 			std::vector<terrain_io::water_flow::FlowPath> flowPaths;
 			state->terrain.GetFlowPaths(flowPaths);
 			ApplyInstanceFlow(editor, record, controls, std::move(flowPaths), report.warnings);
+
+			// The seam set decides which edges do not fade; a neighbour that was created or deleted since the last build
+			// leaves its side of the seam as it was until it is rebuilt too.
+			const uint64 seamHash = state->terrain.GetSeamHash();
+			if (seamHash != record.seamHash)
+			{
+				String touching;
+				for (const size_t index : state->terrain.GetSeamNeighbours())
+				{
+					if (index < neighbourNames.size())
+					{
+						touching += (touching.empty() ? "'" : ", '") + neighbourNames[index] + "'";
+					}
+				}
+				report.warnings.push_back(touching.empty()
+					? "seams changed since the last build of '" + record.name + "'; rebuild the touching instances too"
+					: "seams changed since the last build of " + touching + "; rebuild " + (state->terrain.GetSeamNeighbours().size() > 1 ? "them" : "it") + " too");
+				WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << report.warnings.back());
+				record.seamHash = seamHash;
+			}
 			report.milliseconds = MillisecondsSince(start);
 
 			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << state->spawns.size()
@@ -900,6 +993,7 @@ namespace mmo
 		if (report.ok)
 		{
 			ApplyInstanceFlow(editor, record, controls, {}, report.warnings);
+			record.seamHash = 0;
 		}
 		return report;
 	}

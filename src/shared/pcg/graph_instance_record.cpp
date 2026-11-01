@@ -135,6 +135,10 @@ namespace mmo::pcg
 			blob["seed"] = record.seed;
 			blob["pointLimit"] = static_cast<uint64>(record.pointLimit);
 			blob["borderFade"] = record.borderFade;
+			if (record.seamHash != 0)
+			{
+				blob["seamHash"] = record.seamHash;
+			}
 			Json overrides = Json::object();
 			for (const auto& entry : record.parameterOverrides)
 			{
@@ -176,6 +180,13 @@ namespace mmo::pcg
 			// Optional: records written before it existed keep the default.
 			out.borderFade = GraphInstanceRecord().borderFade;
 			if (!graph::jsonutil::ReadNumber(blob, "borderFade", out.borderFade, "instance", error) || out.borderFade < 0.0f)
+			{
+				return false;
+			}
+
+			// Optional: a missing key (a build without seams) is 0.
+			out.seamHash = 0;
+			if (graph::jsonutil::Find(blob, "seamHash") != nullptr && !ReadUInt64(blob, "seamHash", out.seamHash))
 			{
 				return false;
 			}

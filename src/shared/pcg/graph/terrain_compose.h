@@ -162,12 +162,29 @@ namespace mmo::pcg::graph
 		/// @param borderFade Width (m) of the fade inside the region border; 0 = no fade.
 		/// @param error Receives a message naming the node and asset for a missing asset, a rejected section param
 		///        or a degenerate section path, or the problem with the region.
+		/// @param neighbours Areas of the other graph instances in the world that contain terrain nodes (closed loops).
+		///        A region edge segment is a seam where it lies on a neighbour edge (both end points within 0.05 m of
+		///        that edge, collinear within 0.05 m); the border fade ignores seam edges, so terrain does not fade
+		///        there. Writes still stop at the region edge. Loops that are not usable are ignored.
 		/// @return False on such an error (the object is then empty).
 		bool Prepare(const std::vector<TerrainOpInput>& ops, const std::function<float(float, float)>& baseGround,
-			const SectionAssetProvider& sections, const PathSpline& region, float borderFade, String& error);
+			const SectionAssetProvider& sections, const PathSpline& region, float borderFade, String& error,
+			const std::vector<PathSpline>& neighbours = {});
 
 		/// @brief Union of op influences clipped to the region bounds; empty (all 0) if there are no ops.
 		WorldRect GetInfluence() const;
+
+		/// @brief Hash of the region's seam segments (the edges it shares with neighbours), 0 if it has none.
+		uint64 GetSeamHash() const
+		{
+			return m_seamHash;
+		}
+
+		/// @brief Indices (into the neighbours passed to Prepare, ascending) of the neighbours that share a seam.
+		const std::vector<size_t>& GetSeamNeighbours() const
+		{
+			return m_seamNeighbours;
+		}
 
 		/// @brief True if no op was prepared.
 		bool IsEmpty() const;
@@ -228,6 +245,8 @@ namespace mmo::pcg::graph
 		std::vector<std::unique_ptr<PreparedOp>> m_ops;
 		std::unique_ptr<PreparedOp> m_region;
 		float m_borderFade = 0.0f;
+		uint64 m_seamHash = 0;
+		std::vector<size_t> m_seamNeighbours;
 		WorldRect m_influence;
 		String m_waterMaterial;
 		/// True once m_waterMaterial is a River material.

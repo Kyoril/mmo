@@ -13,7 +13,7 @@ namespace mmo::pcg::graph
 		constexpr double kMaxIndexCells = 256.0;
 	}
 
-	void PolylineIndex::Build(const std::vector<SplineSample>& samples, const bool closed, const float reach)
+	void PolylineIndex::Build(const std::vector<SplineSample>& samples, const bool closed, const float reach, const std::vector<uint8>& skipSegments)
 	{
 		m_samples = samples;
 		m_closed = closed;
@@ -33,11 +33,18 @@ namespace mmo::pcg::graph
 		{
 			m_segments.emplace_back(0, 0);
 		}
+		const auto skipped = [&skipSegments](const size_t s)
+		{
+			return s < skipSegments.size() && skipSegments[s] != 0;
+		};
 		for (uint32 i = 0; i + 1 < n; ++i)
 		{
-			m_segments.emplace_back(i, i + 1);
+			if (!skipped(i))
+			{
+				m_segments.emplace_back(i, i + 1);
+			}
 		}
-		if (closed && n >= 3)
+		if (closed && n >= 3 && !skipped(n - 1))
 		{
 			m_segments.emplace_back(n - 1, 0);
 		}

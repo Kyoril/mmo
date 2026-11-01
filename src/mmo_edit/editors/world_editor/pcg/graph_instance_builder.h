@@ -158,6 +158,19 @@ namespace mmo
 	/// @return True if the graph was read and parsed (it may still have validation issues).
 	bool LoadGraphAsset(const String& graphPath, pcg::graph::Graph& out, String& error);
 
+	/// @brief Whether the graph has a node whose type has a "Terrain" output pin (it can write terrain).
+	bool GraphHasTerrainOps(const pcg::graph::Graph& graph);
+
+	/// @brief The areas of the graph instances that share seams with `record` (see PreparedTerrain::Prepare): every other
+	///        instance that is a terrain writer (phase 3a rule R11: it has written terrain, or its graph has terrain
+	///        ops), sorted by id.
+	/// @param record The instance.
+	/// @param instances The world's graph instances (may include the record itself, which is skipped).
+	/// @param areas Cleared, then receives the areas.
+	/// @param names If not null, cleared, then receives the instance names, parallel to areas.
+	void CollectSeamNeighbours(const pcg::GraphInstanceRecord& record, const std::vector<const pcg::GraphInstanceRecord*>& instances,
+		std::vector<PathSpline>& areas, std::vector<String>* names = nullptr);
+
 	/// @brief Joins validation issues into one message: "node <id> (<type>): <message>" per issue ("graph: <message>"
 	///        for graph-level issues), separated by "; ".
 	String DescribeGraphIssues(const pcg::graph::Graph& graph, const std::vector<pcg::graph::GraphIssue>& issues);
@@ -221,10 +234,11 @@ namespace mmo
 	/// @param sections Supplies the section assets (kept across calls by the caller).
 	/// @param out Receives the prepared ops.
 	/// @param error Receives the reason (naming the node and asset) when the call returns false.
+	/// @param neighbours Areas of the neighbouring terrain-writing instances (CollectSeamNeighbours).
 	/// @return False if the ops could not be prepared.
 	bool PrepareNodeTerrainOps(const pcg::graph::Graph& graph, const pcg::graph::EvalResult& result, uint32 nodeId,
 		const pcg::GraphInstanceRecord& record, const std::function<float(float, float)>& ground, SectionAssetCache& sections,
-		pcg::graph::PreparedTerrain& out, String& error);
+		pcg::graph::PreparedTerrain& out, String& error, const std::vector<PathSpline>& neighbours);
 
 	/// @brief Reads the instance's saved graph, builds its context and evaluates it, without changing the world. When the
 	///        graph validates, the spawned points are collected and clipped to the area.

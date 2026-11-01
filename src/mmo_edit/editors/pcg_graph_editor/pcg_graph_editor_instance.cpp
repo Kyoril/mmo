@@ -1575,11 +1575,22 @@ namespace mmo
 			m_debugSections->DropChanged();
 		}
 
+		// The seams with touching terrain-writing instances (no border fade there), as a rebuild prepares them.
+		std::vector<PathSpline> seamNeighbours;
+		if (GraphHasTerrainOps(graph))
+		{
+			CollectSeamNeighbours(*record, mode->GetGraphInstances(), seamNeighbours);
+		}
+
 		// Redraw when the evaluation, the set of debug nodes, the border fade or a section asset changed.
 		pcg::graph::Hasher drawHasher;
 		drawHasher.U64(evalKey);
 		drawHasher.U64(m_hasDebugResult ? 1 : 0);
 		drawHasher.F32(record->borderFade);
+		for (const PathSpline& neighbour : seamNeighbours)
+		{
+			drawHasher.U64(pcg::graph::HashSpline(neighbour));
+		}
 		drawHasher.U64(m_debugSections->GetRevision());
 		for (size_t i = 0; i < graph.nodes.size(); ++i)
 		{
@@ -1689,7 +1700,7 @@ namespace mmo
 					pcg::graph::PreparedTerrain prepared;
 					String prepareError;
 					groundMisses = 0;
-					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), *m_debugSections, prepared, prepareError))
+					if (PrepareNodeTerrainOps(graph, m_debugResult, node.id, *record, getBaseGround(), *m_debugSections, prepared, prepareError, seamNeighbours))
 					{
 						const pcg::graph::DebugGeometry geometry = pcg::graph::BuildTerrainDebugGeometry(prepared, getBaseGround(),
 							s_debugTerrainTickStep, entry.argb, ShadeArgb(entry.argb, 0.45f), lineBudget);
