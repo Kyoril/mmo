@@ -727,6 +727,10 @@ namespace mmo
 						// The summon fights for whoever called it: its damage is the caster's own
 						// work when the kill rewards are handed out.
 						summon->SetSummonOwner(weakOwner.lock());
+						if (const auto summonOwner = weakOwner.lock())
+						{
+							summon->SetOwnerGuid(summonOwner->GetGuid());
+						}
 
 						GameCreatureS* summonPtr = summon.get();
 						summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)

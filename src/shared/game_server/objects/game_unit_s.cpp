@@ -5,6 +5,7 @@
 #include "game_server/cc_movement_controller.h"
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
+#include "game_server/world/world_instance.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/assign_on_exit.h"
 #include "base/utilities.h"
@@ -3499,9 +3500,77 @@ namespace mmo
 		return reducedDamage;
 	}
 
+	uint64 GameUnitS::GetOwnerGuid() const
+	{
+		return Get<uint64>(object_fields::Owner);
+	}
+
+	void GameUnitS::SetOwnerGuid(const uint64 ownerGuid)
+	{
+		Set<uint64>(object_fields::Owner, ownerGuid);
+	}
+
+	const GameUnitS& GameUnitS::GetTopOwner() const
+	{
+		const GameUnitS* current = this;
+		for (uint32 depth = 0; depth < MaxOwnerChainDepth; ++depth)
+		{
+			const uint64 ownerGuid = current->GetOwnerGuid();
+			if (ownerGuid == 0)
+			{
+				break;
+			}
+
+			WorldInstance* world = const_cast<GameUnitS*>(current)->GetWorldInstance();
+			if (!world)
+			{
+				break;
+			}
+
+			const GameUnitS* owner = world->FindByGuid<GameUnitS>(ownerGuid);
+			if (!owner)
+			{
+				break;
+			}
+
+			current = owner;
+		}
+
+		return *current;
+	}
+
+	bool GameUnitS::SharesTopOwnerWith(const GameUnitS& other) const
+	{
+		return &GetTopOwner() == &other.GetTopOwner();
+	}
+
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return false;
+		}
+
+		return FactionIsEnemy(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	{
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return true;
+		}
+
+		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)
+	{
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
@@ -3541,9 +3610,9 @@ namespace mmo
 		return false;
 	}
 
-	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	bool GameUnitS::FactionIsFriendly(const GameUnitS &unit, const GameUnitS &other)
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
