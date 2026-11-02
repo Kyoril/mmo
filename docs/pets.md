@@ -119,6 +119,14 @@ state with `GetPet`, `GetPetName`, `GetOwner`, `CountUnitsOwnedBy` and friends (
   77 raises `OnQuestReward` on Malrik, whose trigger (117) casts Bind Duskling on the player. Bind
   Duskling's effects target the spell's unit target, so `GrantPersistentPet` and `LearnSpell` land
   on the player; no one learns Bind Duskling itself.
+- The Duskling talks (enUS only, `Locales/Locale_enUS/Voice/Pet/Duskling/`, voice "Feagol Dollum"
+  pitched up with a subtle sub-octave/saturation/reverb chain baked into the files): its own
+  display model 79 "Duskling (pet)" (a copy of demon minion 70, so other demon minions stay silent)
+  carries `CombatSounds` aggro 426, hit 427 (20 %), crit hit 428 (60 %), death 429, at most one
+  line per 6 s. Summon Duskling has its own visualization 140 (cast loop animation, shadow hand
+  channel, `DusklingSummonCircle.hpar`, ritual loop 430; release burst `DusklingSummonBurst.hpar`,
+  sound 431 and the summon line 424); Dismiss Duskling's visualization 139 plays line 425. Hit lines
+  react to melee hits only (`CombatLogClient`), not to spell damage.
 - E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`,
   `acolyte_shadow_binding.lua`.
 - Unit tests: the `[pets]` tag in `game_server_tests`, `realm_server_tests`, `game_protocol_tests`,
