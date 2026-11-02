@@ -4685,16 +4685,22 @@ namespace mmo
 			}
 		}
 
-		// Trigger proc events
-		if (hit)
+		// Trigger proc events. Misses, dodges and parries raise them too, without a hit flag, so
+		// "after you dodge" procs can react (see AuraContainer::HandleProc).
+		const bool avoided = outcome == MeleeAttackOutcome::Miss || outcome == MeleeAttackOutcome::Dodge || outcome == MeleeAttackOutcome::Parry;
+		if (hit || avoided)
 		{
 			// Attacker procs (done)
 			uint32 procEx = 0;
-			if (hitInfo & hit_info::CriticalHit)
+			if (!hit)
+			{
+				procEx |= outcome == MeleeAttackOutcome::Miss ? proc_ex_flags::MissHit : 0;
+			}
+			else if (hitInfo & hit_info::CriticalHit)
 			{
 				procEx |= proc_ex_flags::CriticalHit;
 			}
-			else if (hit)
+			else
 			{
 				procEx |= proc_ex_flags::NormalHit;
 			}
