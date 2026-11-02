@@ -2,6 +2,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_server/ai/creature_facing.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
@@ -588,7 +589,20 @@ namespace mmo
 				return false;
 			}
 
-			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			// Creatures (NPCs and pets) turn to what they cast at, unless crowd control holds them. This
+			// runs again when the cast finishes, so a target that walked past the caster during the
+			// cast no longer throws the finished cast away. Players have to face their target themselves.
+			GameUnitS& executer = m_cast.GetExecuter();
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0
+				&& unitTarget != &executer
+				&& !executer.IsPlayer()
+				&& !executer.IsFacingTowards(*unitTarget)
+				&& CanTurnToFaceTarget(executer))
+			{
+				executer.SetFacing(executer.GetAngle(*unitTarget));
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !executer.IsFacingTowards(*unitTarget))
 			{
 				SendEndCast(spell_cast_result::FailedUnitNotInfront);
 				return false;

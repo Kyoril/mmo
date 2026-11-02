@@ -316,6 +316,11 @@ namespace mmo
 
 		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0) = 0;
 
+		/// Spell damage dealt by a unit this one owns (a pet, a summoned swarm). Such units have no
+		/// connection of their own, so their owner is told. Does nothing unless overridden.
+		/// @param sourceGuid The owned unit that dealt the damage.
+		virtual void OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked) {}
+
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
 		/// @brief Called when environmental damage is dealt to a unit.

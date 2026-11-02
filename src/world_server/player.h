@@ -1006,6 +1006,8 @@ namespace mmo
 
 		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked = 0) override;
 
+		void OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked) override;
+
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
 		void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) override;

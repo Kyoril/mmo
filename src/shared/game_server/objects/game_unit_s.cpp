@@ -1125,12 +1125,22 @@ namespace mmo
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
 								   const proto::SpellEntry &spell, uint32 blocked)
 	{
-		if (!m_netUnitWatcher)
+		if (m_netUnitWatcher)
 		{
+			m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
+		// Pets and summons have no connection of their own: whoever owns them (through any number of
+		// owners, e.g. a pet's summon) sees the numbers.
+		if (GetOwnerGuid() != 0)
+		{
+			const GameUnitS& owner = GetTopOwner();
+			if (&owner != this && owner.m_netUnitWatcher)
+			{
+				owner.m_netUnitWatcher->OnOwnedUnitSpellDamageLog(GetGuid(), targetGuid, amount, school, flags, spell, blocked);
+			}
+		}
 	}
 
 	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
