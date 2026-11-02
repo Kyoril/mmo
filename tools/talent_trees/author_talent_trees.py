@@ -905,6 +905,7 @@ ACOLYTE = {
                     # No range type: the proc casts it at the Corrupting Touch victim, wherever that is.
                     "attributes": [0x10, 128], "spellSchool": SCHOOL_SHADOW, "duration": 8000,
                     "icon": ICONS + "Acolyte_GloomTether.htex",
+                    "visualization_id": 150,  # Acolyte - Gloom Tether
                     "effects": [{"type": SUMMON, "basepoints": 1, "targeta": T_ENEMY, "radius": 2.0, "summonunit": 123}],
                     **text_fields(("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
                                   ("Ruft $D lang einen Düsterling herbei.", "Calls a Gloomling for $D.",
@@ -912,6 +913,7 @@ ACOLYTE = {
             "M": talent(244, Spell(1345, {
                 "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "positive": 1,
                 "icon": ICONS + "Acolyte_EmpowerDuskling.htex", "duration": 12000, "cooldown": "60000", "cost": 30,
+                "visualization_id": 149,  # Acolyte - Empower Duskling
                 "effects": [aura(DMG_DONE_PCT, 30, target=T_PET), aura(MOD_ATTACK_SPEED, 30, target=T_PET)],
                 **text_fields(("Dämmerling stärken", "Empower Duskling", "Renforcer le crépusculin", "Усиление бесёнка"),
                               ("Erfüllt Euren Dämmerling $D lang mit Dunkelheit: Er verursacht 30% mehr Schaden und greift 30% schneller an.",
@@ -935,6 +937,7 @@ ACOLYTE = {
                 extra=[Spell(1349, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
                     "icon": ICONS + "Acolyte_SharedNight.htex", "maxlevel": 12, "baselevel": 4, "spelllevel": 4,
+                    "visualization_id": 151,  # Acolyte - Shared Night
                     "effects": [{"type": HEAL, "basepoints": 5, "diesides": 2, "pointsperlevel": 0.5, "targeta": T_PET}],
                     **text_fields(("Geteilte Nacht", "Shared Night", "Nuit partagée", "Общая ночь"),
                                   ("Heilt Euren Dämmerling um $s0.", "Heals your Duskling for $s0.",
@@ -959,6 +962,7 @@ ACOLYTE = {
             "CAP": talent(248, Spell(1352, {
                 "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_BroodHorror.htex",
                 "duration": 20000, "cooldown": "180000", "cost": 80, "rangetype": 2,
+                "visualization_id": 152,  # Acolyte - Brood Horror
                 "effects": [{"type": SUMMON, "basepoints": 1, "targeta": T_ENEMY, "radius": 3.0, "summonunit": 124}],
                 **text_fields(("Brutschrecken", "Brood Horror", "Horreur de la couvée", "Ужас выводка"),
                               ("Ruft $D lang einen Brutschrecken aus der Leere herbei. Er greift Euer Ziel an.",
@@ -1005,6 +1009,7 @@ ACOLYTE = {
                 extra=[Spell(1357, {
                     "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 4000,
                     "mechanic": MECHANIC_SNARE, "icon": ICONS + "Acolyte_CreepingRot.htex",
+                    "visualization_id": 153,  # Acolyte - Creeping Rot
                     "effects": [aura(MOD_DECREASE_SPEED, -30, target=T_ENEMY)],
                     **text_fields(("Kriechende Fäulnis", "Creeping Rot", "Pourriture rampante", "Ползучая гниль"),
                                   ("", "", "", ""),
@@ -1070,6 +1075,7 @@ ACOLYTE = {
                 "attributes": AOE_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_WailOfTheLost.htex",
                 "duration": 3000, "cooldown": "60000", "cost": 50, "maxtargets": 3, "mechanic": MECHANIC_FEAR,
                 "familyflags": str(0x2000),
+                "visualization_id": 156,  # Acolyte - Wail of the Lost
                 "effects": [{"type": APPLY_AURA, "aura": MOD_FEAR, "targeta": T_SOURCE_AREA_ENEMY, "radius": 8.0}],
                 **text_fields(("Klage der Verlorenen", "Wail of the Lost", "Plainte des égarés", "Плач потерянных"),
                               ("Stößt ein Klagegeheul aus, das bis zu 3 Gegner im Umkreis von 8 Metern $D lang in Angst fliehen lässt.",
@@ -1093,6 +1099,7 @@ ACOLYTE = {
                 extra=[Spell(1362, {
                     "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 2000,
                     "mechanic": MECHANIC_ROOTED, "icon": ICONS + "Acolyte_GraspingDread.htex",
+                    "visualization_id": 155,  # Acolyte - Grasping Dread
                     "effects": [aura(MOD_ROOT, target=T_ENEMY)],
                     **text_fields(("Greifendes Grauen", "Grasping Dread", "Effroi agrippant", "Цепкий ужас"),
                                   ("", "", "", ""),
@@ -1101,6 +1108,7 @@ ACOLYTE = {
             "C1": talent(179, Spell(1360, {
                 "attributes": [0x4000010, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_TangledTongue.htex",
                 "duration": 20000, "cost": 35, "rangetype": 5, "facing": 1, "familyflags": str(0x1000),
+                "visualization_id": 154,  # Acolyte - Tangled Tongue
                 "stacking_rule": 5, "stacking_category_id": 3,  # Acolyte Curses: one curse per caster and target
                 "effects": [aura(MOD_CASTING_SPEED_PCT, 30, target=T_ENEMY)],
                 **text_fields(("Verknotete Zunge", "Tangled Tongue", "Langue nouée", "Заплетающийся язык"),
@@ -1122,6 +1130,7 @@ ACOLYTE = {
                 extra=[Spell(1365, {
                     "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 30000,
                     "icon": ICONS + "Acolyte_LingeringDread.htex",
+                    "visualization_id": 157,  # Acolyte - Lingering Dread
                     "effects": [aura(MOD_HEALING_TAKEN_PCT, -20, target=T_ENEMY)],
                     **text_fields(("Anhaltendes Grauen", "Lingering Dread", "Effroi persistant", "Затяжной ужас"),
                                   ("", "", "", ""),
