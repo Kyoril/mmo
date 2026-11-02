@@ -106,18 +106,19 @@ state with `GetPet`, `GetPetName`, `GetOwner`, `CountUnitsOwnedBy` and friends (
 
 ## Content and tests
 
-- `tools/pets/author_pet_content.py` authors the first pet content and is the reference for the
-  ids: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121, Barrowfield) raising
-  Risen Skeletons (unit 120); the acolyte's Umbral Shade (pet entry 1, unit 122) with Bind Shadow
-  (301), Summon Shadow (302), Dismiss Shadow (303), its spells 304-307 and
-  Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind Beast 309, Summon
-  Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf unit 44 tamable). It validates by
-  default and writes the editor data and ClientDB with `--apply`.
-- `tools/pets/author_shadow_binding_quests.py` (run it after the script above) authors how an acolyte
-  gets the shade: the quest line 75-77 of Malrik Duskwright, who teaches in the cellar of the
-  Oakenshire Inn. Turning in 77 raises `OnQuestReward` on Malrik, whose trigger casts Bind Shadow on
-  the player. Bind Shadow's effects target the spell's unit target, so `GrantPersistentPet` and
-  `LearnSpell` land on the player; no one learns Bind Shadow itself.
+- The first pet content: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121,
+  Barrowfield) raising Risen Skeletons (unit 120); the acolyte's Duskling, a minor demon (pet
+  entry 1, unit 122), with Bind Duskling (301), Summon Duskling (302), Dismiss Duskling (303), its
+  spells 304-307 and Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind
+  Beast 309, Summon Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf
+  unit 44 tamable). The duskling and its spells were first called Umbral Shade and
+  Bind / Summon / Dismiss Shadow.
+- How an acolyte gets the duskling: Guard Emrik's quest 72 "Noises in the Cellar" sends them to
+  check on the Oakenshire Inn's cellar (he knows nothing of Malrik), where Malrik Duskwright
+  recognises one of his own; his quest line 75-77 (from level 3) ends in the binding. Turning in
+  77 raises `OnQuestReward` on Malrik, whose trigger (117) casts Bind Duskling on the player. Bind
+  Duskling's effects target the spell's unit target, so `GrantPersistentPet` and `LearnSpell` land
+  on the player; no one learns Bind Duskling itself.
 - E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`,
   `acolyte_shadow_binding.lua`.
 - Unit tests: the `[pets]` tag in `game_server_tests`, `realm_server_tests`, `game_protocol_tests`,
