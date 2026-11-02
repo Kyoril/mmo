@@ -509,6 +509,8 @@ namespace mmo
 					case trigger_event::OnSpellAuraRemoved:
 					case trigger_event::OnEmote:
 					case trigger_event::OnSpellCast:
+					case trigger_event::OnQuestAccept:
+					case trigger_event::OnQuestReward:
 						if (triggerEvent.data(0) != 0)
 						{
 							if (data.empty() || data[0] != triggerEvent.data(0))
