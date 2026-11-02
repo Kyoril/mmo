@@ -56,9 +56,6 @@ namespace
 			targets.push_back(unit.get());
 		}
 
-		uint32 Gained(const uint32 before) const { return unit->GetHealth() - before; }
-
-
 		SpellEffectContext MakeCtx(const int32 basePoints)
 		{
 			return SpellEffectContext{
@@ -89,13 +86,17 @@ TEST_CASE_METHOD(HealFixture, "ModHealingTakenPct -20 turns a direct heal of 100
 
 	auto ctx = MakeCtx(100);
 	SpellEffects::HandleHeal(ctx);
-	CHECK(unit->GetHealth() == 580u);
+	// HandleHeal can roll a spell crit (doubles the heal before the aura scales it), so accept both.
+	const uint32 reduced = unit->GetHealth() - 500u;
+	CHECK((reduced == 80u || reduced == 160u));
 
 	aura.HandleEffect(false);
 	CHECK(unit->GetHealingTakenMultiplier() == Approx(1.0f));
+	const uint32 before = unit->GetHealth();
 	auto ctx2 = MakeCtx(100);
 	SpellEffects::HandleHeal(ctx2);
-	CHECK(unit->GetHealth() == 680u);
+	const uint32 restored = unit->GetHealth() - before;
+	CHECK((restored == 100u || restored == 200u));
 }
 
 TEST_CASE_METHOD(HealFixture, "ModHealingTakenPct scales percentage heals", "[healing_taken_pct]")
@@ -168,6 +169,7 @@ TEST_CASE_METHOD(HealFixture, "ModHealingTakenPct scales each periodic heal tick
 	hotEffect.set_aura(static_cast<uint32>(aura_type::PeriodicHeal));
 	hotEffect.set_amplitude(10);
 	auto hot = std::make_shared<AuraEffect>(*hotContainer, hotEffect, timers, 100);
+	REQUIRE(hot->GetMaxTickCount() == 1u);	// duration / amplitude: a slow machine cannot fire a second tick
 	hot->HandleEffect(true);
 
 	io.run_for(std::chrono::milliseconds(200));
