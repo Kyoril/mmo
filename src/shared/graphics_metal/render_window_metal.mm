@@ -74,6 +74,25 @@ namespace
 	}
 }
 
+/// Game window. A borderless NSWindow (the fullscreen mode) refuses to become the key window, which
+/// leaves the application without one: the event loop then releases every held key each frame.
+@interface MMOWindow : NSWindow
+@end
+
+@implementation MMOWindow
+
+- (BOOL)canBecomeKeyWindow
+{
+	return YES;
+}
+
+- (BOOL)canBecomeMainWindow
+{
+	return YES;
+}
+
+@end
+
 /// Content view of the game window. It hosts the Metal layer and swallows key events, which the
 /// event loop has already translated: without it, every key press would make the system beep.
 @interface MMOMetalView : NSView
@@ -152,7 +171,7 @@ namespace mmo
 			style = NSWindowStyleMaskBorderless;
 		}
 
-		m_window = [[NSWindow alloc] initWithContentRect:contentRect styleMask:style backing:NSBackingStoreBuffered defer:NO];
+		m_window = [[MMOWindow alloc] initWithContentRect:contentRect styleMask:style backing:NSBackingStoreBuffered defer:NO];
 		m_window.releasedWhenClosed = NO;
 		m_window.acceptsMouseMovedEvents = YES;
 		m_window.title = @"MMORPG";
