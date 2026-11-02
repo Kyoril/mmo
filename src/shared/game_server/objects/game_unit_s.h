@@ -22,6 +22,7 @@
 #include "game/damage_school.h"
 #include "game/movement_ability.h"
 #include "game/spell.h"
+#include "game/pet_defines.h"
 #include "proto_data/trigger_helper.h"
 #include "shared/proto_data/triggers.pb.h"
 
@@ -1173,6 +1174,23 @@ namespace mmo
 		///	additive across auras, never below 0.
 		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus * 0.01f); }
 
+		/// Gets the multiplier this unit's ModPetStatsPct auras give one stat of its persistent pet:
+		///	1.0 by default, additive across auras, never below 0.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds return 1.0.
+		[[nodiscard]] float GetPetStatMultiplier(const uint8 kind) const
+		{
+			if (kind >= pet_stat_kind::Count_)
+			{
+				return 1.0f;
+			}
+
+			return std::max(0.0f, 1.0f + m_petStatPctBonus[kind] * 0.01f);
+		}
+
+		/// Gets the passive spells PetPassive auras of this unit put on its persistent pet, one
+		///	entry per aura (a spell granted by two auras is listed twice).
+		[[nodiscard]] const std::vector<uint32>& GetPetPassiveSpells() const { return m_petPassiveSpells; }
+
 		/// How far a "say" chat message carries.
 		static constexpr float SayRange = 25.0f;
 
@@ -1520,6 +1538,26 @@ public:
 		///	@param amount The bonus in percentage points (-20.0f = heals received are 20% weaker).
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyHealingTakenPctBonus(float amount, bool apply) { m_healingTakenPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes percentage points to one stat multiplier of this unit's persistent pet,
+		///	driven by the ModPetStatsPct aura. Does not touch a summoned pet; see
+		///	RefreshPersistentPetOwnerStats.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds are ignored.
+		///	@param amount The bonus in percentage points (30.0f = +30%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyPetStatPctBonus(const uint8 kind, const float amount, const bool apply)
+		{
+			if (kind < pet_stat_kind::Count_)
+			{
+				m_petStatPctBonus[kind] += apply ? amount : -amount;
+			}
+		}
+
+		/// Registers or unregisters a passive spell a PetPassive aura puts on the persistent pet.
+		///	Does not touch a summoned pet.
+		///	@param spellId The passive spell.
+		///	@param apply true to add one registration, false to remove one.
+		void ModifyPetPassiveSpell(uint32 spellId, bool apply);
 
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
@@ -2167,6 +2205,12 @@ public:
 
 		/// Accumulated percentage points added to the healing taken multiplier (ModHealingTakenPct).
 		float m_healingTakenPctBonus = 0.0f;
+
+		/// Accumulated percentage points per pet stat (pet_stat_kind) from ModPetStatsPct auras.
+		std::array<float, pet_stat_kind::Count_> m_petStatPctBonus{};
+
+		/// Passive spells PetPassive auras put on the persistent pet, one entry per aura.
+		std::vector<uint32> m_petPassiveSpells;
 
 
 		std::map<uint8, float> m_baseSpeeds;

@@ -433,6 +433,31 @@ namespace mmo
 		return spell_cast_result::CastOkay;
 	}
 
+	SpellCastResult CheckPetTargetEffects(const proto::SpellEntry& spell, const GameUnitS& caster)
+	{
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.targeta() != spell_effect_targets::Pet)
+			{
+				continue;
+			}
+
+			const PetManager* pets = caster.FindPets();
+			const GameCreatureS* pet = pets ? pets->GetPersistentPet() : nullptr;
+			if (!pet)
+			{
+				return spell_cast_result::FailedNoPet;
+			}
+
+			if (!pet->IsAlive())
+			{
+				return spell_cast_result::FailedPetDead;
+			}
+		}
+
+		return spell_cast_result::CastOkay;
+	}
+
 	SpellCastResult PetResultToCastResult(const pet_result::Type result)
 	{
 		switch (result)

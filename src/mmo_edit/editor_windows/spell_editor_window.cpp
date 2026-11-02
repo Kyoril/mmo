@@ -263,7 +263,9 @@ namespace mmo
 		"ModCritChanceTaken",
 		"ModCastingManaRegenPercent",
 		"ModCastingSpeedPct",
-		"ModHealingTakenPct"
+		"ModHealingTakenPct",
+		"ModPetStatsPct",
+		"PetPassive"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");

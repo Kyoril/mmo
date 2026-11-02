@@ -11,7 +11,10 @@
 #include "vector_sink.h"
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
+#include "objects/game_creature_s.h"
 #include "objects/game_player_s.h"
+#include "pets/persistent_pet_spawner.h"
+#include "pets/pet_manager.h"
 #include "objects/game_unit_s.h"
 #include "world/universe.h"
 
@@ -111,6 +114,8 @@ namespace mmo
 			{ AuraType::ModCastingManaRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModCastingManaRegenPercent(apply); } },
 			{ AuraType::ModCastingSpeedPct, [](AuraEffect& self, bool apply){ self.HandleModCastingSpeedPct(apply); } },
 			{ AuraType::ModHealingTakenPct, [](AuraEffect& self, bool apply){ self.HandleModHealingTakenPct(apply); } },
+			{ AuraType::ModPetStatsPct,     [](AuraEffect& self, bool apply){ self.HandleModPetStatsPct(apply); } },
+			{ AuraType::PetPassive,         [](AuraEffect& self, bool apply){ self.HandlePetPassive(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -598,6 +603,54 @@ namespace mmo
 	{
 		// Base points are a percentage added to the owner's healing taken multiplier.
 		m_container.GetOwner().ModifyHealingTakenPctBonus(static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModPetStatsPct(const bool apply) const
+	{
+		// miscvaluea picks the pet stat, base points are a percentage added to its multiplier.
+		GameUnitS& owner = m_container.GetOwner();
+		owner.ModifyPetStatPctBonus(static_cast<uint8>(m_effect.miscvaluea()), static_cast<float>(GetBasePoints()), apply);
+
+		// A summoned pet picks the change up at once; a pet summoned later at its spawn.
+		if (const PetManager* pets = owner.FindPets())
+		{
+			if (GameCreatureS* pet = pets->GetPersistentPet())
+			{
+				RefreshPersistentPetOwnerStats(*pet, owner);
+			}
+		}
+	}
+
+	void AuraEffect::HandlePetPassive(const bool apply) const
+	{
+		const uint32 spellId = m_effect.triggerspell();
+		if (spellId == 0)
+		{
+			return;
+		}
+
+		GameUnitS& owner = m_container.GetOwner();
+		owner.ModifyPetPassiveSpell(spellId, apply);
+
+		const PetManager* pets = owner.FindPets();
+		GameCreatureS* pet = pets ? pets->GetPersistentPet() : nullptr;
+		if (!pet)
+		{
+			return;
+		}
+
+		if (apply)
+		{
+			ApplyPetPassiveSpell(*pet, spellId);
+			return;
+		}
+
+		// Another PetPassive aura of the owner may still grant the same spell.
+		const auto& remaining = owner.GetPetPassiveSpells();
+		if (std::find(remaining.begin(), remaining.end(), spellId) == remaining.end())
+		{
+			RemovePetPassiveSpell(*pet, spellId);
+		}
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

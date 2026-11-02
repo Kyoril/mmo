@@ -41,6 +41,19 @@ New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:
 | `DismissPet` | 60 | - | Dismisses (stores, with health and power) the summoned persistent pet only; temporary pets are not touched. The pet bar's Dismiss command also despawns the temporary pets. |
 | `RevivePet` | 61 | `miscvaluea` = `PetEntry` id (0 = any dead pet), `basepoints` = health % (0 = 100) | Revives a dead stored pet and summons it at that health. |
 
+## Owner auras that empower the persistent pet
+
+Talents and buffs on the *owner* can strengthen its persistent pet (temporary pets are not
+affected):
+
+| Aura | Id | Fields | Behavior |
+|---|---|---|---|
+| `ModPetStatsPct` | 44 | `miscvaluea` = stat (`0` melee damage, `1` max health), `basepoints` = percent | Multiplies the pet's stat on top of the `PetEntry` multipliers (+30 = x1.30; several auras add up). Applied when the pet spawns, and to the summoned pet as soon as the aura comes or goes; the pet keeps its health ratio. |
+| `PetPassive` | 45 | `triggerspell` = a passive spell | The pet casts the spell on itself while the owner has the aura: at once if a pet is summoned, and on every later summon. Removing the owner aura (talent reset, unlearning) removes the spell's aura from the pet. |
+
+A spell effect with target `Pet` (4) hits the caster's summoned, living persistent pet. Without
+one the cast fails with `FailedNoPet` (`FailedPetDead` for a dead pet) before it starts.
+
 Pet cast checks (pet effects fail the cast before it starts, with the `FailedPet*` /
 `FailedTooManyPets` / `FailedNotTamable` / `FailedTargetTooHighLevel` results of
 `spell_cast_result`) run in `CheckPersistentPetEffects`, `CheckTameTarget` and

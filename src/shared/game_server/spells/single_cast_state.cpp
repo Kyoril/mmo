@@ -558,6 +558,13 @@ namespace mmo
 			return false;
 		}
 
+		// A spell aimed at the caster's pet needs a living, summoned persistent pet.
+		if (const SpellCastResult petResult = CheckPetTargetEffects(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
+			return false;
+		}
+
 		// A persistent pet summon, grant or revive that is bound to fail must not spend the cast.
 		if (const GamePlayerS* player = m_context.GetPlayerExecutor())
 		{

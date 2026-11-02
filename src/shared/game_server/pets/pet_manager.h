@@ -182,6 +182,13 @@ namespace mmo
 	/// @return FailedTooManyPets, or CastOkay.
 	SpellCastResult CheckSummonPetLimit(const proto::SpellEntry& spell, const GameUnitS& caster);
 
+	/// Checks the effects of a spell that target the caster's pet (effect target Pet) before the
+	/// cast starts: they need a summoned, living persistent pet.
+	/// @param spell The spell to cast.
+	/// @param caster The caster.
+	/// @return FailedNoPet, FailedPetDead, or CastOkay.
+	SpellCastResult CheckPetTargetEffects(const proto::SpellEntry& spell, const GameUnitS& caster);
+
 	/// Maps the result of a persistent pet action to the spell cast result its spell fails with
 	/// before the cast starts. Ok and Disabled pass (CastOkay): with the PETS subsystem off the
 	/// cast goes through and its effect reports Disabled to the client with a PetResult.

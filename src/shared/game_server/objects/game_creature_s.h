@@ -163,6 +163,13 @@ namespace mmo
 		/// @param armor Armor multiplier.
 		void SetPetStatMultipliers(float health, float mana, float damage, float armor);
 
+		/// Sets the multipliers the owner's ModPetStatsPct auras give a persistent pet, applied on
+		/// top of the PetEntry multipliers on every stat refresh. Takes effect on the next
+		/// RefreshStats; see RefreshPersistentPetOwnerStats.
+		/// @param health Max health multiplier.
+		/// @param damage Melee damage multiplier.
+		void SetPetOwnerStatMultipliers(float health, float damage);
+
 		/// Forgets who dealt the damage taken so far. Called when the creature evades, which ends
 		/// the fight and heals it back up.
 		void ResetDamageContributions();
@@ -390,6 +397,9 @@ namespace mmo
 		float m_petManaMultiplier = 1.0f;
 		float m_petDamageMultiplier = 1.0f;
 		float m_petArmorMultiplier = 1.0f;
+		/// Stat multipliers of a persistent pet from its owner's ModPetStatsPct auras.
+		float m_petOwnerHealthMultiplier = 1.0f;
+		float m_petOwnerDamageMultiplier = 1.0f;
 		/// Unit this creature follows while idle (escort mode). Empty when not following.
 		std::weak_ptr<GameUnitS> m_followTarget;
 		/// Whether a follow target is currently assigned (distinguishes "never followed" from

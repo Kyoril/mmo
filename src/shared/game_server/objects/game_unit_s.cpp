@@ -1390,6 +1390,21 @@ namespace mmo
 		}
 	}
 
+	void GameUnitS::ModifyPetPassiveSpell(const uint32 spellId, const bool apply)
+	{
+		if (apply)
+		{
+			m_petPassiveSpells.push_back(spellId);
+			return;
+		}
+
+		const auto it = std::find(m_petPassiveSpells.begin(), m_petPassiveSpells.end(), spellId);
+		if (it != m_petPassiveSpells.end())
+		{
+			m_petPassiveSpells.erase(it);
+		}
+	}
+
 	void GameUnitS::RemoveAurasFromOtherCasters()
 	{
 		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
