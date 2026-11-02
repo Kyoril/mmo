@@ -852,10 +852,14 @@ CLERIC = {
 ACOLYTE = {
     "class_id": 3, "tab_id": 2, "classmask": 4, "icon": "S_Class_Acolyte.htex",
     "paths": [
-        # Summoner replaced Umbra (2026-11-02) and reuses its talent ids, so learned Umbra ranks
-        # (now retired, see RETIRED_RANK_SPELLS) reset and refund their points.
+        # Summoner replaced Umbra (2026-11-02). Characters save talents as (talent id, rank index),
+        # so the Summoner nodes take fresh ids (240-248) and Umbra's ids (160-167, 2) leave the data:
+        # an unknown saved talent id makes GamePlayerS::InitializeTalents call ResetTalents, which
+        # refunds every point. Reusing Umbra's ids would load Umbra ranks as Summoner talents.
+        # Umbra's rank spells are neutered (RETIRED_RANK_SPELLS). 240+ stays clear of other
+        # branches' new talents (scout rework uses 213-214).
         ("TALENT_PATH_SUMMONER", ("Beschwörer", "Summoner", "Invocateur", "Призыватель"), 0xFFB57AFF, {
-            "A1": talent(160,
+            "A1": talent(240,
                 passive(1340, ("Dunkles Band", "Dark Bond", "Lien obscur", "Тёмная связь"),
                         ("Erhöht den Schaden Eures Dämmerlings um $s0% und seine Gesundheit um $s1%.",
                          "Increases your Duskling's damage by $s0% and its health by $s1%.",
@@ -872,15 +876,15 @@ ACOLYTE = {
                         "Acolyte_DarkBond.htex", SCHOOL_SHADOW,
                         [aura(MOD_PET_STATS_PCT, 30, PET_STAT_DAMAGE), aura(MOD_PET_STATS_PCT, 20, PET_STAT_HEALTH)],
                         rank=2, baseid=1340)),
-            "A2": talent(161, passive(1342,
+            "A2": talent(241, passive(1342,
                 ("Schwarmkunde", "Swarm Lore", "Science de l'essaim", "Знание роя"),
-                ("„Düsterlinge rufen“ ruft einen Düsterling mehr herbei, und Eure Düsterlinge bleiben 5 Sek. länger.",
-                 "Call Gloomlings calls one more Gloomling, and your Gloomlings stay 5 sec longer.",
-                 "Appel des ombrelins appelle un ombrelin de plus, et vos ombrelins restent 5 s de plus.",
-                 "«Зов мрачных бесёнков» призывает на одного бесёнка больше, и они остаются на 5 сек. дольше."),
+                ("„Düsterlinge rufen“ ruft einen Düsterling mehr herbei, und die so gerufenen Düsterlinge bleiben 5 Sek. länger.",
+                 "Call Gloomlings calls one more Gloomling, and the Gloomlings it calls stay 5 sec longer.",
+                 "Appel des ombrelins appelle un ombrelin de plus, et les ombrelins ainsi appelés restent 5 s de plus.",
+                 "«Зов мрачных бесёнков» призывает на одного бесёнка больше, и призванные им бесёнки остаются на 5 сек. дольше."),
                 "Acolyte_SwarmLore.htex", SCHOOL_SHADOW,
                 [mod(OP_ALL_EFFECTS, 0x400, 1), mod(OP_DURATION, 0x400, 5000)])),
-            "A3": talent(162, passive(1343,
+            "A3": talent(242, passive(1343,
                 ("Schattensympathie", "Shadow Sympathy", "Sympathie des ombres", "Теневое родство"),
                 ("Euer Dämmerling erleidet 20% weniger Schaden.", "Your Duskling takes 20% less damage.",
                  "Votre crépusculin subit 20% de dégâts en moins.", "Ваш сумрачный бесёнок получает на 20% меньше урона."),
@@ -889,7 +893,7 @@ ACOLYTE = {
                     ("Schattensympathie", "Shadow Sympathy", "Sympathie des ombres", "Теневое родство"),
                     ("", "", "", ""), "Acolyte_ShadowSympathy.htex", SCHOOL_SHADOW,
                     [aura(DMG_TAKEN_PCT, -20)])]),
-            "B1": talent(163, passive(1346,
+            "B1": talent(243, passive(1346,
                 ("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
                 ("Die Schadenseffekte Eurer Verderblichen Berührung haben eine Chance von 10%, 8 Sek. lang einen Düsterling an Eure Seite zu rufen.",
                  "The damage ticks of your Corrupting Touch have a 10% chance to call a Gloomling to your side for 8 sec.",
@@ -905,7 +909,7 @@ ACOLYTE = {
                     **text_fields(("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
                                   ("Ruft $D lang einen Düsterling herbei.", "Calls a Gloomling for $D.",
                                    "Appelle un ombrelin pendant $D.", "Призывает мрачного бесёнка на $D."))})]),
-            "M": talent(164, Spell(1345, {
+            "M": talent(244, Spell(1345, {
                 "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "positive": 1,
                 "icon": ICONS + "Acolyte_EmpowerDuskling.htex", "duration": 12000, "cooldown": "60000", "cost": 30,
                 "effects": [aura(DMG_DONE_PCT, 30, target=T_PET), aura(MOD_ATTACK_SPEED, 30, target=T_PET)],
@@ -920,7 +924,7 @@ ACOLYTE = {
                                "Урон увеличен на 30%, скорость атаки увеличена на 30%."))})),
             # A proc heal cannot see the damage that triggered it, so Shared Night heals a fixed,
             # level-scaled amount close to half a Drain Essence tick.
-            "B2": talent(2, passive(1348,
+            "B2": talent(245, passive(1348,
                 ("Geteilte Nacht", "Shared Night", "Nuit partagée", "Общая ночь"),
                 ("Jeder Schadenseffekt Eures Essenzentzugs heilt außerdem Euren Dämmerling um $1349s0.",
                  "Every damage tick of your Drain Essence also heals your Duskling for $1349s0.",
@@ -936,7 +940,7 @@ ACOLYTE = {
                                   ("Heilt Euren Dämmerling um $s0.", "Heals your Duskling for $s0.",
                                    "Rend $s0 points de vie à votre crépusculin.",
                                    "Восполняет вашему сумрачному бесёнку $s0 ед. здоровья."))})]),
-            "C1": talent(165, passive(1350,
+            "C1": talent(246, passive(1350,
                 ("Dunkle Lehre", "Dark Tutelage", "Tutelle obscure", "Тёмное наставничество"),
                 ("Verringert die Abklingzeit von „Düsterlinge rufen“ um 30 Sek.",
                  "Reduces the cooldown of Call Gloomlings by 30 sec.",
@@ -945,14 +949,14 @@ ACOLYTE = {
                 "Acolyte_DarkTutelage.htex", SCHOOL_SHADOW, [mod(OP_COOLDOWN, 0x400, -30000)])),
             # The channel length is the cast time and its aura's ticks come from the duration, so
             # both grow by one tick interval.
-            "C2": talent(166, passive(1351,
+            "C2": talent(247, passive(1351,
                 ("Seelenheber", "Soul Siphon", "Siphon d'âme", "Высасывание души"),
                 ("Euer Essenzentzug hält 1 Sek. länger an und verursacht einmal mehr Schaden.",
                  "Your Drain Essence lasts 1 sec longer and deals damage one more time.",
                  "Votre Drain d'essence dure 1 s de plus et inflige des dégâts une fois de plus.",
                  "«Похищение сущности» длится на 1 сек. дольше и наносит урон ещё один раз."),
                 "Acolyte_SoulSiphon.htex", SCHOOL_SHADOW, [mod(OP_CAST, 0x80, 1000), mod(OP_DURATION, 0x80, 1000)])),
-            "CAP": talent(167, Spell(1352, {
+            "CAP": talent(248, Spell(1352, {
                 "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_BroodHorror.htex",
                 "duration": 20000, "cooldown": "180000", "cost": 80, "rangetype": 2,
                 "effects": [{"type": SUMMON, "basepoints": 1, "targeta": T_ENEMY, "radius": 3.0, "summonunit": 124}],

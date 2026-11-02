@@ -275,6 +275,26 @@ TEST_CASE("A saved talent that became a placeholder resets the talents", "[talen
 	CHECK_FALSE(ctx.player->HasTalent(TalentCtx::PlaceholderTalent));
 }
 
+// A redesign may drop a talent (the acolyte's Umbra path). Its saved id is unknown then, which must
+// reset the talents and hand every point back, not keep them spent on nothing.
+TEST_CASE("A saved talent that no longer exists resets the talents and refunds the points", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	ctx.player->ResetTalents();
+	const uint32 allPoints = ctx.player->Get<uint32>(object_fields::TalentPoints);
+	REQUIRE(allPoints > 0);
+
+	auto loaded = MakePlayer(ctx.project, ctx.timers);
+	constexpr uint32 RemovedTalent = 999;
+	loaded->InitializeTalents({ { TalentCtx::RealTalent, 0 }, { RemovedTalent, 0 } });
+
+	CHECK_FALSE(loaded->HasTalent(TalentCtx::RealTalent));
+	CHECK_FALSE(loaded->HasTalent(RemovedTalent));
+	CHECK_FALSE(loaded->HasSpell(500));
+	CHECK(loaded->Get<uint32>(object_fields::TalentPoints) == allPoints);
+}
+
 // A talent may rank in a spell without the Talent attribute (e.g. an existing class spell reused as a
 // talent). Such a spell must still be owned by the talent system: recorded in the persistent known-spell
 // set, it outlived talent resets and made the client show the talent as learned while the server did not.

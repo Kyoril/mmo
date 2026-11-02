@@ -81,7 +81,7 @@ Different acolytes' curses coexist.
 | root | **Shadow Sympathy** *(replaced "Pack Instinct" during planning: a conditional "while the pet is out" aura has no engine support)* | the Duskling takes 20% less damage. |
 | root | **Swarm Lore** | Call Gloomlings summons 3 and they last 5 s longer. |
 | mid | **Gloom Tether** | Corrupting Touch ticks have a 10% chance to spawn one Gloomling for 8 s. |
-| mid | **Shared Night** | Drain Essence also heals the Duskling for 50% of the damage dealt. |
+| mid | **Shared Night** *(changed during build: a proc cannot see the damage that triggered it)* | each Drain Essence tick also heals the Duskling for a fixed, level-scaled amount (about half a tick). |
 | mid | **Empower Duskling** (active, 1 min cd) | Duskling +30% damage and +30% attack speed for 12 s. |
 | late | **Dark Tutelage** (builder's call) | Call Gloomlings cooldown -30 s. |
 | late | **Soul Siphon** (builder's call) | Drain Essence channels 1 s longer. |
@@ -94,7 +94,7 @@ Kept: Rapid Decay, Endless Decay, Withering, Leeching Rot, Void Resurgence.
 Corrupting Touch is applied to up to 2 enemies within 10 yd of the corpse.
 Placeholders become:
 
-- **Miasma** — Rot Field applies Corrupting Touch to enemies it ticks on (once per enemy per field).
+- **Miasma** *(changed during build: no per-field memory in data)* — Rot Field applies Corrupting Touch to enemies it ticks on; every tick refreshes it rather than applying it once per enemy per field.
 - **Creeping Rot** — Rot Field lasts 4 s longer and slows enemies inside by 30%.
 - **Venomous Backlash** — when hit in melee, 20% chance to apply Wasting Plague to the attacker.
 
