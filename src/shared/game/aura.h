@@ -167,6 +167,12 @@ namespace mmo
 			/// mods only reach the owner's own family-flagged spells, which is why this exists.
 			ModCastingSpeedPct = 42,
 
+			/// Scales every heal the owner receives (direct, periodic, percentage and leech heals)
+			/// by a percentage on top of the flat ModHealingTaken. The aura's base points are a
+			/// percentage (-20 = heals x0.80, +30 = x1.30). Several auras add their percentages;
+			/// the multiplier never drops below 0.
+			ModHealingTakenPct = 43,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

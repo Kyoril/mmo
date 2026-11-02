@@ -138,6 +138,7 @@ namespace mmo
 		/// Adds the base points as percentage points to the owner's casting mana regeneration share.
 		void HandleModCastingManaRegenPercent(bool apply) const;
 		void HandleModCastingSpeedPct(bool apply) const;
+		void HandleModHealingTakenPct(bool apply) const;
 
 	private:
 		void HandlePeriodicDamage() const;

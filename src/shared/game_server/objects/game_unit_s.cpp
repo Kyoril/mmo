@@ -1073,6 +1073,10 @@ namespace mmo
 		// Raise unit trigger
 		RaiseTrigger(trigger_event::OnHealed, instigator);
 
+		// Every spell heal (direct, periodic, percentage, leech) flows through here, so the
+		// healing taken percentage is applied once, in this single place.
+		amount = static_cast<uint32>(std::floor(static_cast<float>(amount) * GetHealingTakenMultiplier()));
+
 		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
 		if (health >= maxHealth)
 		{

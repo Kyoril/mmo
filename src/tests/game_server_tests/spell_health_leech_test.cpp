@@ -90,7 +90,11 @@ namespace
 		{
 			SpellEffectContext ctx{
 				*castCtx, effect, basePoints, targets,
-				[](GameUnitS&) -> AuraContainer& { throw std::logic_error("no auras expected"); },
+				[](GameUnitS&) -> AuraContainer&
+				{
+					FAIL("no auras expected");
+					std::abort();
+				},
 				[](GameObjectS&) {}
 			};
 			SpellEffects::HandleHealthLeech(ctx);

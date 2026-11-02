@@ -1169,6 +1169,10 @@ namespace mmo
 			return static_cast<GameTime>(std::max(0.0f, roundf(scaled)));
 		}
 
+		/// Gets the healing taken multiplier from ModHealingTakenPct auras: 1.0 by default,
+		///	additive across auras, never below 0.
+		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus * 0.01f); }
+
 		/// How far a "say" chat message carries.
 		static constexpr float SayRange = 25.0f;
 
@@ -1510,6 +1514,12 @@ public:
 		///	@param amount The bonus in percentage points (30.0f = casts take 30% longer).
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyCastingSpeedPctBonus(float amount, bool apply) { m_castingSpeedPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes percentage points to the healing taken multiplier, driven by the
+		///	ModHealingTakenPct aura.
+		///	@param amount The bonus in percentage points (-20.0f = heals received are 20% weaker).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyHealingTakenPctBonus(float amount, bool apply) { m_healingTakenPctBonus += apply ? amount : -amount; }
 
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
@@ -2154,6 +2164,9 @@ public:
 
 		/// Accumulated percentage points added to the cast time multiplier (ModCastingSpeedPct).
 		float m_castingSpeedPctBonus = 0.0f;
+
+		/// Accumulated percentage points added to the healing taken multiplier (ModHealingTakenPct).
+		float m_healingTakenPctBonus = 0.0f;
 
 
 		std::map<uint8, float> m_baseSpeeds;

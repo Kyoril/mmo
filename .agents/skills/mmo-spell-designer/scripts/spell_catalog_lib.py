@@ -116,6 +116,7 @@ AURA_TYPE_NAMES = {
     40: "ModCritChanceTaken",
     41: "ModCastingManaRegenPercent",
     42: "ModCastingSpeedPct",
+    43: "ModHealingTakenPct",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {

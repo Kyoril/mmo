@@ -189,7 +189,7 @@ namespace mmo
 			damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
 
 			const uint32 dealt = static_cast<uint32>(std::max<int32>(0, unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility)));
-				if (dealt > 0)
+			if (dealt > 0)
 			{
 				float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
 				executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
