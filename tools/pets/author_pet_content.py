@@ -24,10 +24,13 @@ Design notes that are easy to undo by accident:
   caster's own level for an NPC caster. Spell duration 0: the skeletons live as long as she
   does. The effect targets the caster, so the spell is not harmful and the AI may "cast it at"
   its victim (the AI always passes its victim as the unit target).
-* Bind Shadow is the trainer spell (acolyte trainer 4). It grants the stored pet and teaches
-  Summon Shadow and Dismiss Shadow through LearnSpell effects, so the trainer lists one row and
-  nobody owns a summon spell for a pet they do not have. The persistent pet cast check refuses
-  it once the shadow is bound, so the LearnSpell effects never run twice.
+* Bind Shadow is never learned. Malrik Duskwright casts it on the player when they turn in the
+  last quest of his cellar quest line (author_shadow_binding_quests.py, trigger on OnQuestReward).
+  Its effects target the spell's unit target (TargetAny), so they land on the player: the
+  stored pet is granted to the player, and Summon Shadow and Dismiss Shadow are learned by them.
+  No trainer may sell it (RETIRED_TRAINER_SPELLS removes the row it once had at trainer 4).
+* Summon Shadow and Dismiss Shadow carry the Ability attribute, or the spellbook files them
+  under General.
 * Pet abilities (Gloom Dart, Sapping Murk, Umbral Lash, Murkbind) have classmask 0, no
   reagents and no power cost: the shade casts them through its AI and its pet bar, and nothing
   may stop a creature from casting them.
@@ -88,9 +91,10 @@ ACOLYTE_CLASS_ID = 3
 ACOLYTE_CLASSMASK = 1 << (ACOLYTE_CLASS_ID - 1)
 TRAINER_ROWS = [
     # spell, cost (copper), required class level
-    (BIND_SHADOW, 50, 3),
     (SHADOW_LORE_MURKBIND, 800, 8),
 ]
+# Spells a trainer sold once and must not sell again.
+RETIRED_TRAINER_SPELLS = (BIND_SHADOW,)
 
 MAP_ID = 0
 SPAWN_NAME = "Barrowfield - Ilsa Mourne 01"
@@ -103,9 +107,9 @@ SCHOOL_DAMAGE, APPLY_AURA, LEARN_SPELL = 2, 6, 31
 TAME_CREATURE, SUMMON_PET, LEARN_PET_SPELL = 42, 43, 44
 SUMMON_PERSISTENT_PET, GRANT_PERSISTENT_PET, DISMISS_PET, REVIVE_PET_EFFECT = 58, 59, 60, 61
 MOD_DAMAGE_DONE_PCT, MOD_ROOT = 23, 25
-CASTER, TARGET_ENEMY = 0, 5
+CASTER, TARGET_ENEMY, TARGET_ANY = 0, 5, 17
 
-ABILITY, NEGATIVE, NOT_IN_COMBAT = 0x10, 0x04000000, 0x10000000
+ABILITY, NEGATIVE = 0x10, 0x04000000
 
 NAME_FIXED, NAME_RANDOM = 0, 1
 LEVEL_OWN, LEVEL_MASTER = 0, 1
@@ -175,24 +179,25 @@ def spell_definitions():
          "не более пяти; новые заменяют самых старых.")))
     result.append(raise_skeletons)
 
+    # Cast by Malrik Duskwright on the player, see the module notes.
     bind_shadow = spell(
-        BIND_SHADOW, "T_Icon_Shadow_101.htex", classmask=ACOLYTE_CLASSMASK,
-        attributes=(ABILITY | NOT_IN_COMBAT, 0), casttime=3000, interruptflags=5,
+        BIND_SHADOW, "T_Icon_Shadow_101.htex", casttime=3000, rangetype=RANGE_MEDIUM,
         visualization_id=VIS_GLOAMING,
         effects=[
-            {"index": 0, "type": GRANT_PERSISTENT_PET, "targeta": CASTER, "miscvaluea": SHADE_PET},
-            {"index": 1, "type": LEARN_SPELL, "targeta": CASTER, "triggerspell": SUMMON_SHADOW},
-            {"index": 2, "type": LEARN_SPELL, "targeta": CASTER, "triggerspell": DISMISS_SHADOW},
+            {"index": 0, "type": GRANT_PERSISTENT_PET, "targeta": TARGET_ANY,
+             "miscvaluea": SHADE_PET},
+            {"index": 1, "type": LEARN_SPELL, "targeta": TARGET_ANY, "triggerspell": SUMMON_SHADOW},
+            {"index": 2, "type": LEARN_SPELL, "targeta": TARGET_ANY, "triggerspell": DISMISS_SHADOW},
         ])
     bind_shadow.update(spell_texts(
         ("Schatten binden", "Bind Shadow", "Lier une ombre", "Связать тень"),
-        ("Bindet ein Umbralschemen an deinen Willen. Es folgt dir fortan als Begleiter und "
-         "lehrt dich Schatten beschwören und Schatten entlassen.",
-         "Binds an umbral shade to your will. It follows you as a companion from now on and "
-         "teaches you Summon Shadow and Dismiss Shadow.",
-         "Lie une ombre umbrale à votre volonté. Elle vous accompagne désormais et vous "
-         "enseigne Invoquer l'ombre et Renvoyer l'ombre.",
-         "Подчиняет вашей воле умбральную тень. Отныне она сопровождает вас, а вы узнаёте "
+        ("Bindet ein Umbralschemen an den Willen des Ziels. Es folgt ihm fortan als Begleiter, "
+         "und das Ziel lernt Schatten beschwören und Schatten entlassen.",
+         "Binds an umbral shade to the target's will. It follows them as a companion from now "
+         "on, and they learn Summon Shadow and Dismiss Shadow.",
+         "Lie une ombre umbrale à la volonté de la cible. Elle l'accompagne désormais, et la "
+         "cible apprend Invoquer l'ombre et Renvoyer l'ombre.",
+         "Подчиняет воле цели умбральную тень. Отныне она сопровождает цель, а та узнаёт "
          "заклинания «Призвать тень» и «Отпустить тень».")))
     result.append(bind_shadow)
 
@@ -212,6 +217,7 @@ def spell_definitions():
 
     dismiss_shadow = spell(
         DISMISS_SHADOW, "T_Icon_Shadow_104.htex", classmask=ACOLYTE_CLASSMASK,
+        attributes=(ABILITY, 0),
         effects=[{"index": 0, "type": DISMISS_PET, "targeta": CASTER}])
     dismiss_shadow.update(spell_texts(
         ("Schatten entlassen", "Dismiss Shadow", "Renvoyer l'ombre", "Отпустить тень"),
@@ -538,7 +544,7 @@ def upsert_trainer_rows(trainers):
     _require(trainer.classid == ACOLYTE_CLASS_ID and "Acolyte" in trainer.name,
              f"trainer {ACOLYTE_TRAINER} is {trainer.name!r} (class {trainer.classid}), "
              "expected the acolyte trainer")
-    ours = {row[0] for row in TRAINER_ROWS}
+    ours = {row[0] for row in TRAINER_ROWS} | set(RETIRED_TRAINER_SPELLS)
     kept = [row for row in trainer.spells if row.spell not in ours]
     del trainer.spells[:]
     for row in kept:
@@ -611,6 +617,13 @@ def validate(data):
     # Pet abilities are cast by a creature: no class restriction may stand in the way.
     for spell_id in (GLOOM_DART, SAPPING_MURK, UMBRAL_LASH, MURKBIND, RAISE_SKELETONS):
         _require(spells_by_id[spell_id].classmask == 0, f"creature spell {spell_id} has a classmask")
+    for spell_id in (SUMMON_SHADOW, DISMISS_SHADOW):
+        _require(spells_by_id[spell_id].attributes[0] & ABILITY,
+                 f"spell {spell_id} lacks the Ability attribute (the spellbook files it under General)")
+    for spell_id in RETIRED_TRAINER_SPELLS:
+        for trainer in trainers.entry:
+            _require(all(row.spell != spell_id for row in trainer.spells),
+                     f"retired spell {spell_id} is sold by trainer {trainer.id}")
     for spell_id in (BIND_BEAST, SUMMON_COMPANION, REKINDLE_COMPANION):
         _require(spells_by_id[spell_id].classmask == 0, f"test spell {spell_id} has a classmask")
         for trainer in trainers.entry:

@@ -4,8 +4,8 @@
 --
 -- Persistent pets: the acolyte's Umbral Shade (pet entry 1, creature 122).
 --
--- Bind Shadow (spell 301: GrantPersistentPet + LearnSpell Summon Shadow 302 / Dismiss Shadow 303)
--- stores the shade; Summon Shadow calls it. The scenario checks that it follows and assists its
+-- GM.PetAdd stores the shade, the way Malrik Duskwright's Bind Shadow does at the end of the
+-- acolyte's quest line (acolyte_shadow_binding.lua covers that path); Summon Shadow calls it. The scenario checks that it follows and assists its
 -- owner, that dismissing and summoning it again brings back the same pet (guid, name, level), that
 -- a rename sticks and survives a relog (the realm stores the pet, and a pet that was out when its
 -- owner left comes back with them), and the class lock: a class switch dismisses the shade, it
@@ -13,7 +13,6 @@
 --
 -- Own character: it binds a shade and changes class. Acolyte = class 3.
 
-local BIND_SHADOW = 301
 local SUMMON_SHADOW = 302
 local DISMISS_SHADOW = 303
 local GLOOM_DART = 304
@@ -29,7 +28,6 @@ local PET_RESULT_INVALID_NAME = 9
 local NEW_NAME = "Duskmoth"
 -- spell_cast_result, as LastCastResult reports it
 local FAILED_PET_WRONG_CLASS = "failed:26"
-local FAILED_ALREADY_HAVE_PET = "failed:27"
 
 local me = Me()
 local homeX, homeY, homeZ = GetPosX(me), GetPosY(me), GetPosZ(me)
@@ -75,22 +73,16 @@ end
 -- ---------------------------------------------------------------------------------------------
 
 -- A rerun of this scenario (the runner retries infrastructure failures) finds the shade of the
--- first attempt: remove it, so Bind Shadow starts from a character without one.
+-- first attempt: remove it, so the scenario starts from a character without one.
 TargetUnit("0x0")
 GM.PetRemove(SHADE_PET)
 Sleep(500)
 Assert(GetPet() == nil, "the acolyte has no pet out")
-GM.LearnSpell(BIND_SHADOW)
-Assert(WaitUntil(function() return HasSpell(BIND_SHADOW) end, 10000, "Bind Shadow learned"), "Bind Shadow should be learned")
-
-local bind = CastResult(BIND_SHADOW, me)
-Assert(bind == "ok", "Bind Shadow should be cast, got " .. bind)
-Assert(WaitUntil(function() return HasSpell(SUMMON_SHADOW) and HasSpell(DISMISS_SHADOW) end, 10000, "summon spells taught"),
-	"Bind Shadow should teach Summon Shadow and Dismiss Shadow")
-
--- A second Bind is refused: the shade exists already.
-local rebind = CastResult(BIND_SHADOW, me)
-Assert(rebind == FAILED_ALREADY_HAVE_PET, "a second Bind Shadow should be refused with AlreadyHavePet, got " .. rebind)
+GM.PetAdd(SHADE_PET)
+GM.LearnSpell(SUMMON_SHADOW)
+GM.LearnSpell(DISMISS_SHADOW)
+Assert(WaitUntil(function() return HasSpell(SUMMON_SHADOW) and HasSpell(DISMISS_SHADOW) end, 10000, "summon spells learned"),
+	"Summon Shadow and Dismiss Shadow should be learned")
 
 -- The realm creates the stored pet asynchronously; the summon succeeds once it exists.
 local pet = nil

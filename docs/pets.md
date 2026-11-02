@@ -37,7 +37,7 @@ New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:
 | `SummonPet` | 43 | `summonunit` (or `miscvaluea`), `basepoints` = count (min 1), `radius` (spread), spell `duration` (0 = no limit), the four pet fields | Spawns `count` temporary pets around the caster. The spawn is deferred to the next universe tick. With FailAtCap the whole cast fails at the cap; with ReplaceOldest the oldest pets make room. |
 | `LearnPetSpell` | 44 | `triggerspell` | Teaches the spell to the summoned persistent pet and stores it on the pet (sent as `PetLearnedSpell` + `PetSpells`). |
 | `SummonPersistentPet` | 58 | `miscvaluea` = `PetEntry` id, 0 = the stored pet summoned last | Summons a stored pet. The current persistent pet is dismissed first. A dead summon-style pet comes back at full health; a dead *tamed* pet fails with `FailedPetDead` and needs `RevivePet`. |
-| `GrantPersistentPet` | 59 | `miscvaluea` = `PetEntry` id | Adds a stored pet of that entry if the caster has none yet (`FailedAlreadyHavePet` otherwise, `FailedNoFreePetSlot` when full). Does not summon it: the summon spell is separate. The realm creates the database row asynchronously, so the pet is summonable a moment after the cast. |
+| `GrantPersistentPet` | 59 | `miscvaluea` = `PetEntry` id | Adds a stored pet of that entry to each player the effect targets (an NPC can cast it on a player; the cast check covers a casting player only) if they have none yet (`FailedAlreadyHavePet` otherwise, `FailedNoFreePetSlot` when full). Does not summon it: the summon spell is separate. The realm creates the database row asynchronously, so the pet is summonable a moment after the cast. |
 | `DismissPet` | 60 | - | Dismisses (stores, with health and power) the summoned persistent pet only; temporary pets are not touched. The pet bar's Dismiss command also despawns the temporary pets. |
 | `RevivePet` | 61 | `miscvaluea` = `PetEntry` id (0 = any dead pet), `basepoints` = health % (0 = 100) | Revives a dead stored pet and summons it at that health. |
 
@@ -109,11 +109,17 @@ state with `GetPet`, `GetPetName`, `GetOwner`, `CountUnitsOwnedBy` and friends (
 - `tools/pets/author_pet_content.py` authors the first pet content and is the reference for the
   ids: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121, Barrowfield) raising
   Risen Skeletons (unit 120); the acolyte's Umbral Shade (pet entry 1, unit 122) with Bind Shadow
-  (301, at acolyte trainer 4), Summon Shadow (302), Dismiss Shadow (303), its spells 304-307 and
+  (301), Summon Shadow (302), Dismiss Shadow (303), its spells 304-307 and
   Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind Beast 309, Summon
   Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf unit 44 tamable). It validates by
   default and writes the editor data and ClientDB with `--apply`.
-- E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`.
+- `tools/pets/author_shadow_binding_quests.py` (run it after the script above) authors how an acolyte
+  gets the shade: the quest line 75-77 of Malrik Duskwright, who teaches in the cellar of the
+  Oakenshire Inn. Turning in 77 raises `OnQuestReward` on Malrik, whose trigger casts Bind Shadow on
+  the player. Bind Shadow's effects target the spell's unit target, so `GrantPersistentPet` and
+  `LearnSpell` land on the player; no one learns Bind Shadow itself.
+- E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`,
+  `acolyte_shadow_binding.lua`.
 - Unit tests: the `[pets]` tag in `game_server_tests`, `realm_server_tests`, `game_protocol_tests`,
   `game_client_tests` and `client_ui_tests`.
 

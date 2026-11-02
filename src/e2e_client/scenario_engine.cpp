@@ -1900,6 +1900,30 @@ namespace mmo
 			}
 		}
 
+		/// Accepts a quest at the quest giver, the way a player does: the server checks that the giver
+		/// offers it and that the character stands next to it, and raises the giver's OnQuestAccept.
+		void luaAcceptQuestFrom(const std::string& questGiver, const uint32 questId)
+		{
+			g_runtime->session->GetRealm().AcceptQuest(guidFromString(questGiver), questId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AcceptQuestFrom", { { "quest_giver", questGiver }, { "quest_id", questId } });
+			}
+		}
+
+		/// Turns a completed quest in at its quest ender, the way a player does, so the ender's
+		/// OnQuestReward triggers run (GM.TurnInQuest skips the quest ender).
+		void luaTurnInQuestAt(const std::string& questGiver, const uint32 questId, const uint32 rewardChoice)
+		{
+			const uint64 guid = guidFromString(questGiver);
+			g_runtime->session->GetRealm().QuestGiverCompleteQuest(guid, questId);
+			g_runtime->session->GetRealm().QuestGiverChooseQuestReward(guid, questId, rewardChoice);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("TurnInQuestAt", { { "quest_giver", questGiver }, { "quest_id", questId }, { "reward_choice", rewardChoice } });
+			}
+		}
+
 		void luaGmClearInventory()
 		{
 			g_runtime->session->GetRealm().CheatClearInventory();
@@ -2012,6 +2036,8 @@ namespace mmo
 
 				// Actions
 				luabind::def_lambda("TargetUnit", &luaTargetUnit),
+				luabind::def_lambda("AcceptQuestFrom", &luaAcceptQuestFrom),
+				luabind::def_lambda("TurnInQuestAtImpl", &luaTurnInQuestAt),
 				luabind::def_lambda("FaceUnit", &luaFaceUnit),
 				luabind::def_lambda("CastSpellImpl", &luaCastSpell),
 				luabind::def_lambda("CastSpellOnObject", &luaCastSpellOnObject),
@@ -2093,6 +2119,10 @@ namespace mmo
 				local guid = FindUnitByEntryImpl(entry)
 				if guid == "" then return nil end
 				return guid
+			end
+
+			function TurnInQuestAt(questGiver, questId, rewardChoice)
+				TurnInQuestAtImpl(questGiver, questId, rewardChoice or 0)
 			end
 
 			function CountUnitsByEntry(entry, includeDead)
