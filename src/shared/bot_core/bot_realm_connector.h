@@ -307,6 +307,10 @@ namespace mmo
 		/// @param spellId The spell that went off.
 		signal<void(uint64, uint32)> SpellWentOff;
 
+		/// A periodic aura ticked (PeriodicAuraLog): victim, caster, spell, aura type and the amount
+		/// the tick dealt, healed or energized.
+		signal<void(uint64, uint64, uint32, uint32, uint32)> PeriodicAuraTicked;
+
 		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
 		///		a channel has ended, whether it ran out, was interrupted or never got going.
 		/// @param casterGuid The GUID of the channeling unit.
@@ -1154,6 +1158,9 @@ namespace mmo
 
 		/// @brief Handles the NonSpellDamageLog packet from server.
 		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
+
+		/// @brief Handles the PeriodicAuraLog packet from server (raises PeriodicAuraTicked).
+		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
 
 		/// @brief Parses a single object update from the packet stream.
 		/// @param packet The packet to read from.

@@ -71,7 +71,10 @@ for i = 1, 5 do
 	local mage = GM.CreateMonster(BANDIT_MAGE)
 	Assert(mage ~= nil, "Bandit Mage " .. i .. " should spawn")
 	TargetUnit(mage)
-	GM.KillTarget()
+	-- Damage, not GM.KillTarget: Old Harbin attacks a bandit spawned in his common room at once,
+	-- and a creature mostly worn down by NPCs grants no kill credit. A GM kill deals no damage of
+	-- its own, so Harbin's first swing made the kill his.
+	GM.DamageTarget(GetMaxHealth(mage) * 10)
 	Assert(WaitUntil(function() return not IsAlive(mage) end, 15000, "mage " .. i .. " dies"),
 		"Bandit Mage " .. i .. " should die")
 	GM.DestroyMonster(mage)
