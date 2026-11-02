@@ -1063,6 +1063,7 @@ def energize(spell_id, points, name, icon):
     """A triggered Energy gain for the caster (proc result)."""
     return Spell(spell_id, {
         "attributes": ENERGIZE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1, "icon": ICONS + icon,
+        "visualization_id": 115,  # Scout - Energy Gain
         "effects": [{"type": ENERGIZE, "basepoints": points, "miscvaluea": POWER_ENERGY}],
         **text_fields(name, ("", "", "", ""))})
 
@@ -1221,6 +1222,7 @@ SCOUT = {
                 extra=[Spell(1429, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                     "icon": ICONS + "T_Icon_Energy_60.htex", "duration": 8000,
+                    "visualization_id": 113,  # Scout - Riposte
                     "effects": [mod(OP_COST, 0x40, -100, pct=True), mod(OP_DAMAGE, 0x40, 50, pct=True)],
                     "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1, "procfamily": 0x40,
                     **text_fields(("Riposte", "Riposte", "Riposte", "Рипост"), ("", "", "", ""),
@@ -1254,7 +1256,7 @@ SCOUT = {
                 procflags=DONE_NONE_NEG, procchance=100, procfamily=0x4),
                 extra=[Spell(1433, {
                     "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "duration": 6000,
-                    "icon": ICONS + "T_Icon_BloodCombat_60.htex",
+                    "icon": ICONS + "T_Icon_BloodCombat_60.htex", "visualization_id": 116,  # Scout - Cheap Shot
                     "effects": [aura(DMG_TAKEN_PCT, 15, target=T_ENEMY)],
                     **text_fields(("Fieser Trick", "Cheap Shot", "Coup bas", "Подлый приём"), ("", "", "", ""),
                                   ("Erlittener Schaden um $s0% erhöht.", "Damage taken increased by $s0%.",
@@ -1294,6 +1296,7 @@ SCOUT = {
                 extra=[Spell(1434, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                     "icon": ICONS + "T_Icon_Energy_62.htex", "duration": 6000,
+                    "visualization_id": 114,  # Scout - Slip the Blade
                     "effects": [mod(OP_CRIT, 0x53, 100)],
                     "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1, "procfamily": 0x53,
                     **text_fields(("Klingengleiten", "Slip the Blade", "Lame fuyante", "Ускользающий клинок"), ("", "", "", ""),
@@ -1317,7 +1320,7 @@ SCOUT = {
                                "Вероятность уклонения повышена на $s0%. Отвечает на атаки, от которых уклонился."))}),
                 extra=[Spell(1435, {
                     "attributes": STRIKE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "icon": ICONS + "T_Icon_Energy_30.htex",
-                    "powertype": POWER_ENERGY, "cost": 0,
+                    "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 117,  # Scout - Counterstrike
                     "effects": [{"type": WEAPON_PERCENT_DAMAGE, "basepoints": 100, "targeta": T_ENEMY}],
                     **text_fields(("Gegenschlag", "Counterstrike", "Riposte", "Ответный удар"), ("", "", "", ""))})]),
         }),

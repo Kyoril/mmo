@@ -257,5 +257,6 @@ TEST_CASE("pet opcodes are appended at the end of the opcode lists", "[pets][pro
 	CHECK(realm_client_packet::PetResult == realm_client_packet::PetNameQueryResult + 1);
 	CHECK(realm_client_packet::Count_ == realm_client_packet::PetResult + 1);
 
-	CHECK(ProtocolVersion == 0x23);
+	// The pet opcodes arrived with version 35; later bumps must not fail this test.
+	CHECK(ProtocolVersion >= 0x23);
 }

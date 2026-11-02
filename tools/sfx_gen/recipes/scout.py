@@ -177,6 +177,33 @@ SOUNDS = {
         "steady and clear, with a soft airy inhale and a gentle shimmering tail. Only the tone: "
         "no metal, no voice, no music. " + _GAME,
         duration=2.0, target_dbfs=-3.0),
+
+    # --- Trickster talents (2026-11-02): Riposte and Slip the Blade arming, the counterstrike --
+    "Cloak_Flick": SoundSpec(
+        "A rogue twisting away from a blow: a quick leather cloak snapping and flicking through "
+        "the air, a short sharp fabric whip with a soft airy swish. Only the cloth: no blade, "
+        "no footsteps, no voice, no music. " + _GAME,
+        duration=0.8, target_dbfs=-3.0),
+    "Blade_Glint": SoundSpec(
+        "A tiny bright glint of a dagger edge catching the light: a short delicate high steel "
+        "shing, crisp and sparkling, with a thin shimmering ring-out. Only the glint: no "
+        "impact, no whoosh, no voice, no music. " + _GAME,
+        duration=1.0, target_dbfs=-3.0),
+    "Shadow_Shimmer": SoundSpec(
+        "A sly dark magical shimmer: a soft breathy reversed swell rising into a cool glassy "
+        "violet sparkle, mischievous and quick, fading away. Only the shimmer: no metal, no "
+        "whoosh, no voice, no music. " + _GAME,
+        duration=1.2, target_dbfs=-3.0),
+    "Parry_Clang": SoundSpec(
+        "A dagger deflecting an enemy weapon: a sharp bright steel-on-steel clang with a quick "
+        "grinding scrape as the blades slide off each other, punchy and close, short ring. "
+        "Only the clash: no whoosh, no flesh, no voice, no music. " + _GAME,
+        duration=0.9, target_dbfs=-3.0),
+    "Counter_Slash": SoundSpec(
+        "A fast vicious return cut: a thin blade whipping through the air and slicing into "
+        "flesh and leather in one motion, a crisp swish ending in a wet tearing cut. Only the "
+        "slash: no metal clang, no voice, no music. " + _GAME,
+        duration=0.9, target_dbfs=-3.0),
 }
 
 # Finals assembled from the layers above. Strike timing: the slice lands ~0.12-0.15 s into
@@ -296,6 +323,31 @@ MIXES = {
         "layers": [
             MixLayer("Steel_Ring", take=3, offset=0.0, gain_db=0.0),
             MixLayer("Focus_Tone", take=1, offset=0.05, gain_db=-5.0),
+        ],
+    },
+    # Trickster talents. Takes preselected on measurements: Blade_Glint 2 has a 4 ms attack
+    # (1 is the softer glint), Cloak_Flick 3 peaks at 30 % (2 and 4 peak past 70 %),
+    # Parry_Clang 4 and Counter_Slash 3 hit within 10 ms; Shadow_Shimmer 1 is the 0.2 s swell.
+    # The arming cues fire every few seconds in a fight, so they sit well below the strikes.
+    "Riposte": {
+        "target_dbfs": -7.0,
+        "layers": [
+            MixLayer("Cloak_Flick", take=3, offset=0.0, gain_db=0.0, length=0.9),
+            MixLayer("Blade_Glint", take=2, offset=0.30, gain_db=-3.0),
+        ],
+    },
+    "SlipTheBlade": {
+        "target_dbfs": -6.0,
+        "layers": [
+            MixLayer("Shadow_Shimmer", take=1, offset=0.0, gain_db=-2.0),
+            MixLayer("Blade_Glint", take=1, offset=0.20, gain_db=0.0),
+        ],
+    },
+    "Counterstrike": {
+        "target_dbfs": -4.5,
+        "layers": [
+            MixLayer("Parry_Clang", take=4, offset=0.0, gain_db=0.0),
+            MixLayer("Counter_Slash", take=3, offset=0.06, gain_db=-1.0, length=0.9),
         ],
     },
 }
