@@ -2065,7 +2065,7 @@ namespace mmo
 
 		const auto usable = [&controlled](GameUnitS* unit)
 		{
-			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitIsEnemy(*unit) && unit->CanBeSeenBy(controlled);
+			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(controlled);
 		};
 
 		GameUnitS* preferred = nullptr;

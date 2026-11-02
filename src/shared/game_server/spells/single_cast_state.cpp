@@ -2,6 +2,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_server/ai/creature_facing.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
@@ -78,7 +79,8 @@ namespace mmo
 			// which unit or which spell is responsible.
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
-				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid())
+				<< ": result " << static_cast<uint32>(m_endCastFailure));
 			// Report the reason validation gave, so the caller can react to it: creature AI walks
 			// towards a victim it lost line of sight to only when told so. Validation paths that
 			// end without naming a reason still report a generic error.
@@ -588,7 +590,20 @@ namespace mmo
 				return false;
 			}
 
-			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			// Creatures (NPCs and pets) turn to what they cast at, unless crowd control holds them. This
+			// runs again when the cast finishes, so a target that walked past the caster during the
+			// cast no longer throws the finished cast away. Players have to face their target themselves.
+			GameUnitS& executer = m_cast.GetExecuter();
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0
+				&& unitTarget != &executer
+				&& !executer.IsPlayer()
+				&& !executer.IsFacingTowards(*unitTarget)
+				&& CanTurnToFaceTarget(executer))
+			{
+				executer.SetFacing(executer.GetAngle(*unitTarget));
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !executer.IsFacingTowards(*unitTarget))
 			{
 				SendEndCast(spell_cast_result::FailedUnitNotInfront);
 				return false;

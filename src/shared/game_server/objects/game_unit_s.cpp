@@ -902,11 +902,12 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
-			// A harmful spell cast at an enemy is an attack: assisting pets join in. Others (a tame,
-			// a dispel or an inspect cast at an enemy) are not, or pets would attack a tame target.
+			// A harmful spell cast at something attackable (neutral included) is an attack: assisting
+			// pets join in. Others (a tame, a dispel or an inspect cast at an enemy) are not, or pets
+			// would attack a tame target.
 			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
 			{
-				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && UnitCanAttack(*victim))
 				{
 					m_pets->OnOwnerAttack(*victim);
 				}
@@ -1125,12 +1126,22 @@ namespace mmo
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
 								   const proto::SpellEntry &spell, uint32 blocked)
 	{
-		if (!m_netUnitWatcher)
+		if (m_netUnitWatcher)
 		{
+			m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
+		// Pets and summons have no connection of their own: whoever owns them (through any number of
+		// owners, e.g. a pet's summon) sees the numbers.
+		if (GetOwnerGuid() != 0)
+		{
+			const GameUnitS& owner = GetTopOwner();
+			if (&owner != this && owner.m_netUnitWatcher)
+			{
+				owner.m_netUnitWatcher->OnOwnedUnitSpellDamageLog(GetGuid(), targetGuid, amount, school, flags, spell, blocked);
+			}
+		}
 	}
 
 	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
@@ -3080,9 +3091,9 @@ namespace mmo
 		}
 
 		SetTarget(victim ? victim->GetGuid() : 0);
-		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
+		if (!UnitCanAttack(*victim))
 		{
-			// Unit is not an enemy, so we won't attack
+			// Unit is ourselves or friendly, so we won't attack
 			StopAttack();
 			return;
 		}
@@ -3650,6 +3661,11 @@ namespace mmo
 		}
 
 		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitCanAttack(const GameUnitS &other) const
+	{
+		return other.GetGuid() != GetGuid() && !UnitIsFriendly(other);
 	}
 
 	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)

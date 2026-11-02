@@ -32,6 +32,10 @@ namespace mmo
             /// The attack was (partially) blocked. The blocked amount is reported separately;
             /// clients show "X (Y blocked)" or a localized "Blocked" when fully absorbed.
             Block = 0x08,
+
+            /// The damage was dealt by the receiving player's pet (or another unit it owns), not by
+            /// the player. Clients show it in the pet's own colour.
+            Pet = 0x10,
         };
     }
 

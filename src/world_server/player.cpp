@@ -4132,6 +4132,26 @@ namespace mmo
 			});
 	}
 
+	void Player::OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
+	{
+		// The Pet flag tells the client the damage is not the player's own; the dealing unit's guid
+		// follows the regular payload only then.
+		const uint8 petFlags = static_cast<uint8>(flags | damage_flags::Pet);
+		SendPacket([sourceGuid, targetGuid, amount, school, petFlags, &spell, blocked](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(spell.id())
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(school)
+					<< io::write<uint8>(petFlags)
+					<< io::write<uint32>(blocked)
+					<< io::write_packed_guid(sourceGuid);
+				packet.Finish();
+			});
+	}
+
 	void Player::OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags)
 	{
 		RecordCombatEvent(combat_event_type::DamageDone, targetGuid, 0, amount, 0);
