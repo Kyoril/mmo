@@ -25,8 +25,11 @@ target_sources(realm_server_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_spell_cache.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_name.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_order.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/modules/pet_module.cpp
 )
 
+# The realm sources include each other by their plain names ("database.h"), from subfolders too.
 target_include_directories(realm_server_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../..
+	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server
 )

@@ -65,8 +65,9 @@ namespace mmo
 		/// @param usage How the pixels are interpreted (colour, normal map or grayscale).
 		/// @param compress Whether to store block-compressed formats.
 		/// @param generateHeightMap For colour textures, also write a derived "_h" height texture.
+		/// @param generateMipMaps Also generate filtered mip levels for uncompressed non-power-of-two images.
 		/// @return True if every file was imported.
-		bool ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, TextureUsage usage, bool compress, bool generateHeightMap);
+		bool ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, TextureUsage usage, bool compress, bool generateHeightMap, bool generateMipMaps = false);
 
 		/// @brief Draws the import settings UI.
 		void Draw() override;
@@ -135,6 +136,7 @@ namespace mmo
 		bool m_useCompression = false;
 		TextureUsage m_textureUsage = TextureUsage::Color;
 		bool m_generateHeightMap = false;
+		bool m_generateMipMaps = false;
 		int32 m_heightBlurRadius = 2;
 	};
 }

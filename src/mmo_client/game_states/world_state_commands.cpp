@@ -83,6 +83,42 @@ namespace mmo
 		m_realmConnector.LearnSpell(entry);
 	}
 
+	void WorldState::Command_PetAdd(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		uint32 entry = 0;
+		if (tokens.size() != 1 || !ParseUInt(tokens[0], entry))
+		{
+			ELOG("Usage: petadd <petEntry>");
+			return;
+		}
+
+		m_realmConnector.PetAdd(entry);
+	}
+
+	void WorldState::Command_PetRemove(const std::string &cmd, const std::string &args) const
+	{
+		const auto tokens = ParseCommandArgs(args);
+		uint32 entry = 0;
+		if (tokens.size() != 1 || !ParseUInt(tokens[0], entry))
+		{
+			ELOG("Usage: petremove <petEntry>");
+			return;
+		}
+
+		m_realmConnector.PetRemove(entry);
+	}
+
+	void WorldState::Command_PetTame(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.PetTame();
+	}
+
+	void WorldState::Command_PetMake(const std::string &cmd, const std::string &args) const
+	{
+		m_realmConnector.PetMake();
+	}
+
 	void WorldState::Command_LearnEmote(const std::string &cmd, const std::string &args) const
 	{
 		const auto tokens = ParseCommandArgs(args);

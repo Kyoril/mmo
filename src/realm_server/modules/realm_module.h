@@ -9,12 +9,15 @@
 #include "game/chat_type.h"
 #include "game/subsystem.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
 
 namespace mmo
 {
+	class World;
+
 	/// A self-contained gameplay feature of the realm server (friends, bug reports, ...).
 	///
 	/// A module owns its client packet handlers and reacts to the player's session through the hooks
@@ -24,8 +27,8 @@ namespace mmo
 	///
 	/// A module that names a subsystem can be switched off at runtime (GM `subsystem` command, realm
 	/// REST `/subsystem`). Its packet handlers then answer "disabled" instead of acting, but the
-	/// data hooks (OnCharacterDeleting, OnLevelChanged) keep running so switching a feature off never
-	/// leaves its data inconsistent.
+	/// data hooks (OnCharacterLoading, OnJoiningWorld, OnCharacterDeleting, OnLevelChanged) keep
+	/// running so switching a feature off never leaves its data inconsistent.
 	class RealmModule : public NonCopyable
 	{
 	public:
@@ -49,6 +52,19 @@ namespace mmo
 		/// handlers are enabled; everything added to @p handlers is removed again when they are
 		/// disabled (logout, world node lost).
 		virtual void RegisterPacketHandlers(Player& player, Player::PacketHandlerHandleContainer& handlers) {}
+
+		/// The player's character is about to enter the world (login): the module loads the
+		/// per-character state it hands to the world node. The character's world join is requested
+		/// once every module called @p loaded, which each must do exactly once, also when loading
+		/// failed. Runs even while the module is unavailable.
+		/// @param characterGuid The character entering the world (its data is loaded and checked).
+		/// @param loaded Continues the login.
+		virtual void OnCharacterLoading(Player& player, uint64 characterGuid, std::function<void()> loaded) { loaded(); }
+
+		/// The player's character was just asked to join a world node (login or map transfer).
+		/// Packets sent to @p world now arrive there right after the join request, before anything
+		/// of the character is saved. Runs even while the module is unavailable.
+		virtual void OnJoiningWorld(Player& player, World& world) {}
 
 		/// The player's character entered the world after logging in.
 		virtual void OnEnteredWorld(Player& player) {}
@@ -90,6 +106,39 @@ namespace mmo
 			for (const auto& module : m_modules)
 			{
 				module->RegisterPacketHandlers(player, handlers);
+			}
+		}
+
+		/// Lets every module load its per-character state, then calls @p loaded once.
+		void OnCharacterLoading(Player& player, const uint64 characterGuid, std::function<void()> loaded) const
+		{
+			if (m_modules.empty())
+			{
+				loaded();
+				return;
+			}
+
+			// Modules may finish in any order (and asynchronously); the last one continues.
+			auto remaining = std::make_shared<size_t>(m_modules.size());
+			auto continuation = std::make_shared<std::function<void()>>(std::move(loaded));
+			for (const auto& module : m_modules)
+			{
+				module->OnCharacterLoading(player, characterGuid, [remaining, continuation]()
+				{
+					ASSERT(*remaining > 0);
+					if (--*remaining == 0)
+					{
+						(*continuation)();
+					}
+				});
+			}
+		}
+
+		void OnJoiningWorld(Player& player, World& world) const
+		{
+			for (const auto& module : m_modules)
+			{
+				module->OnJoiningWorld(player, world);
 			}
 		}
 

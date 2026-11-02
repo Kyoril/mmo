@@ -41,6 +41,7 @@ namespace mmo
 	class CharSelect;
 	class TalentClient;
 	class TradeClient;
+	class PetInfo;
 	class Discord;
 	class GameTimeComponent;
 	class ClientRuntime;
@@ -104,6 +105,8 @@ namespace mmo
 		std::unique_ptr<CharSelect> charSelect;
 		std::unique_ptr<TalentClient> talentClient;
 		std::unique_ptr<TradeClient> tradeClient;
+		/// @brief The active player's pets (pet bar, pet frame, "pet" unit token).
+		std::unique_ptr<PetInfo> petInfo;
 		/// @brief Availability of server subsystems announced by the realm.
 		std::unique_ptr<SubsystemClient> subsystemClient;
 		/// @brief Files in-game bug reports. Depends on subsystemClient.

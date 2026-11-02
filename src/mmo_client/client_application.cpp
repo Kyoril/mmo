@@ -32,6 +32,7 @@
 #include "systems/inventory_client.h"
 #include "systems/loot_client.h"
 #include "systems/party_info.h"
+#include "systems/pet_info.h"
 #include "systems/quest_client.h"
 #include "systems/spell_cast.h"
 #include "systems/talent_client.h"
@@ -272,6 +273,7 @@ namespace mmo
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 		context.tradeClient = std::make_unique<TradeClient>(realmConnector);
+		context.petInfo = std::make_unique<PetInfo>(realmConnector, context.project->spells);
 		context.subsystemClient = std::make_unique<SubsystemClient>(realmConnector);
 		context.bugReportClient = std::make_unique<BugReportClient>(realmConnector, *context.subsystemClient);
 	}
@@ -294,6 +296,7 @@ namespace mmo
 		context.mailClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.subsystemClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.bugReportClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.petInfo->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		// Runs a Lua chunk in the UI's script state, so scripted sessions (-exec) can drive the UI,
@@ -405,6 +408,7 @@ namespace mmo
 		if (context.inventoryClient) context.inventoryClient->Shutdown();
 		if (context.questClient) context.questClient->Shutdown();
 		if (context.partyInfo) context.partyInfo->Shutdown();
+		if (context.petInfo) context.petInfo->Shutdown();
 		if (context.guildClient) context.guildClient->Shutdown();
 		if (context.friendClient) context.friendClient->Shutdown();
 		if (context.bugReportClient) context.bugReportClient->Shutdown();
@@ -478,6 +482,7 @@ namespace mmo
 	{
 		context.talentClient.reset();
 		context.tradeClient.reset();
+		context.petInfo.reset();
 		context.bugReportClient.reset();
 		context.subsystemClient.reset();
 		context.actionBar.reset();

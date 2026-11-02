@@ -3,14 +3,17 @@
 #include "game_unit_s.h"
 
 #include "game_server/cc_movement_controller.h"
+#include "game_server/pets/pet_manager.h"
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
+#include "game_server/world/world_instance.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/assign_on_exit.h"
 #include "base/utilities.h"
 #include "base/localization.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+#include "game/spell_negativity.h"
 
 #include <map>
 #include <memory>
@@ -399,6 +402,12 @@ namespace mmo
 		// the target leaving the world. Tearing the cast down here happens while the unit is still
 		// fully alive, which drops m_selfHold and every subscription with it.
 		m_spellCast->AbandonCast();
+
+		// Temporary pets never outlive their owner's stay in the world (despawn, logout, map change).
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
 
 		// Capture persistable auras before clearing them: the despawn fires the despawned signal
 		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
@@ -893,6 +902,16 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
+			// A harmful spell cast at an enemy is an attack: assisting pets join in. Others (a tame,
+			// a dispel or an inspect cast at an enemy) are not, or pets would attack a tame target.
+			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
+			{
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
+				{
+					m_pets->OnOwnerAttack(*victim);
+				}
+			}
+
 			startedCasting(spell);
 
 			// NOTE: Cast-interrupt auras (e.g. Stealth) are intentionally NOT removed here. For instant
@@ -3089,6 +3108,12 @@ namespace mmo
 
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
+
+		// Assisting pets join the attack
+		if (m_pets)
+		{
+			m_pets->OnOwnerAttack(*victim);
+		}
 	}
 
 	void GameUnitS::StopAttack()
@@ -3207,6 +3232,25 @@ namespace mmo
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 			m_pvpCombatCountdown.Cancel();
 		}
+
+		// Pet combat is the owner's combat: a player owner is in combat while one of its pets is.
+		// (A creature owner's combat flag belongs to its AI, which NotifyPetOwnerOfAttacker drives.)
+		// Only real pets: other owned units (Summon effect adds) leave their owner alone.
+		if (regenRatesUpdate.changed && GetOwnerGuid() != 0 && m_worldInstance)
+		{
+			GameUnitS* owner = m_worldInstance->FindByGuid<GameUnitS>(GetOwnerGuid());
+			if (owner && owner != this && owner->IsPlayer() && owner->FindPets() && owner->FindPets()->HasPet(*this))
+			{
+				if (inCombat)
+				{
+					owner->SetInCombat(true, pvp);
+				}
+				else
+				{
+					owner->LeaveCombatIfIdle();
+				}
+			}
+		}
 	}
 
 	float GameUnitS::GetMeleeReach() const
@@ -3234,17 +3278,48 @@ namespace mmo
 
 	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
-		m_attackingUnits.add(&attacker);
+		const bool added = m_attackingUnits.optionalAdd(&attacker);
 		SetInCombat(true, attacker.IsPlayer());
+
+		if (added)
+		{
+			// Assisting pets defend their owner
+			if (m_pets)
+			{
+				m_pets->OnOwnerAttacked(attacker.GetGuid());
+			}
+
+			// A pet's fight is its owner's fight
+			if (GetOwnerGuid() != 0)
+			{
+				NotifyPetOwnerOfAttacker(*this, attacker.GetGuid());
+			}
+		}
 	}
 
 	void GameUnitS::RemoveAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.remove(&attacker);
-		if (m_attackingUnits.empty())
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, attacker.IsPlayer());
 		}
+	}
+
+	bool GameUnitS::IsAnyPetInCombat() const
+	{
+		return m_pets && m_pets->IsAnyPetInCombat();
+	}
+
+	void GameUnitS::LeaveCombatIfIdle()
+	{
+		// Still attacked, in a pvp fight, or fighting through a pet
+		if (!IsInCombat() || !m_attackingUnits.empty() || m_pvpCombatCountdown.IsRunning() || IsAnyPetInCombat())
+		{
+			return;
+		}
+
+		SetInCombat(false, false);
 	}
 
 	void GameUnitS::RemoveAllAttackingUnits()
@@ -3499,9 +3574,87 @@ namespace mmo
 		return reducedDamage;
 	}
 
+	uint64 GameUnitS::GetOwnerGuid() const
+	{
+		return Get<uint64>(object_fields::Owner);
+	}
+
+	void GameUnitS::SetOwnerGuid(const uint64 ownerGuid)
+	{
+		Set<uint64>(object_fields::Owner, ownerGuid);
+	}
+
+	const GameUnitS& GameUnitS::GetTopOwner() const
+	{
+		const GameUnitS* current = this;
+		for (uint32 depth = 0; depth < MaxOwnerChainDepth; ++depth)
+		{
+			const uint64 ownerGuid = current->GetOwnerGuid();
+			if (ownerGuid == 0)
+			{
+				break;
+			}
+
+			WorldInstance* world = const_cast<GameUnitS*>(current)->GetWorldInstance();
+			if (!world)
+			{
+				break;
+			}
+
+			const GameUnitS* owner = world->FindByGuid<GameUnitS>(ownerGuid);
+			if (!owner)
+			{
+				break;
+			}
+
+			current = owner;
+		}
+
+		return *current;
+	}
+
+	bool GameUnitS::SharesTopOwnerWith(const GameUnitS& other) const
+	{
+		return &GetTopOwner() == &other.GetTopOwner();
+	}
+
+	PetManager& GameUnitS::GetPets()
+	{
+		if (!m_pets)
+		{
+			m_pets = std::make_unique<PetManager>(*this);
+		}
+
+		return *m_pets;
+	}
+
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return false;
+		}
+
+		return FactionIsEnemy(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	{
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return true;
+		}
+
+		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)
+	{
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
@@ -3541,9 +3694,9 @@ namespace mmo
 		return false;
 	}
 
-	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	bool GameUnitS::FactionIsFriendly(const GameUnitS &unit, const GameUnitS &other)
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
@@ -3616,6 +3769,12 @@ namespace mmo
 
 		Set<uint64>(object_fields::TargetUnit, 0);
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+
+		// Temporary pets die with their owner's life.
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
 
 		killed(killer);
 
@@ -4553,8 +4712,8 @@ namespace mmo
 
 	void GameUnitS::OnPvpCombatTimer()
 	{
-		// Leave combat when no other attacking units
-		if (m_attackingUnits.empty())
+		// Leave combat when no other attacking units (and no pet fighting)
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, true);
 		}

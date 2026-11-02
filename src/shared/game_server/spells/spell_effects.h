@@ -105,6 +105,19 @@ namespace mmo
 		void HandleDispel(SpellEffectContext& ctx);
 		void HandleSummon(SpellEffectContext& ctx);
 		void HandleSummonPet(SpellEffectContext& ctx);
+		/// Tames the creature target of a player caster (GamePlayerS::TameCreature).
+		void HandleTameCreature(SpellEffectContext& ctx);
+		/// Teaches triggerspell to the player caster's summoned persistent pet.
+		void HandleLearnPetSpell(SpellEffectContext& ctx);
+		/// Summons the player caster's stored pet of pet entry miscvaluea (0 = the most recent one).
+		void HandleSummonPersistentPet(SpellEffectContext& ctx);
+		/// Grants the player caster a stored pet of pet entry miscvaluea.
+		void HandleGrantPersistentPet(SpellEffectContext& ctx);
+		/// Dismisses the player caster's summoned persistent pet.
+		void HandleDismissPet(SpellEffectContext& ctx);
+		/// Revives the player caster's dead stored pet of pet entry miscvaluea (0 = the most recent
+		/// one) at basepoints percent of its health, and summons it.
+		void HandleRevivePet(SpellEffectContext& ctx);
 		void HandleWeaponDamage(SpellEffectContext& ctx);
 		void HandleProficiency(SpellEffectContext& ctx);
 		void HandlePowerBurn(SpellEffectContext& ctx);

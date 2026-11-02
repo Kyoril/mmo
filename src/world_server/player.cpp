@@ -101,6 +101,16 @@ namespace mmo
 			// Known-class set changed (e.g. a class-change spell was learned)
 			m_character->knownClassesChanged.connect(*this, &Player::OnKnownClassesChanged),
 
+			// Persistent pets: every change is saved, and new pets are created by the realm
+			m_character->storedPetsChanged.connect([this]()
+			{
+				SaveStoredPets();
+			}),
+			m_character->petCreationRequested.connect([this](const PersistentPetData& request)
+			{
+				m_connector.SendCreatePet(m_character->GetGuid(), request);
+			}),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -878,6 +888,18 @@ namespace mmo
 		case game::client_realm_packet::CheatFollowMe:
 			OnCheatFollowMe(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatPetAdd:
+			OnCheatPetAdd(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetRemove:
+			OnCheatPetRemove(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetTame:
+			OnCheatPetTame(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetMake:
+			OnCheatPetMake(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
@@ -1016,6 +1038,20 @@ namespace mmo
 		case game::client_realm_packet::BuyBackItem:
 			OnBuyBackItem(opCode, buffer.size(), reader);
 			break;
+
+		case game::client_realm_packet::PetCommand:
+			OnPetCommand(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetCastSpell:
+			OnPetCastSpell(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetRename:
+			OnPetRename(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetNameQuery:
+			OnPetNameQuery(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);
 			break;
@@ -1860,6 +1896,34 @@ namespace mmo
 
 		DLOG("Time played: " << GetTimePlayed() << " seconds");
 		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), GetTimePlayed(), *m_character);
+		SaveStoredPets();
+	}
+
+	void Player::SaveStoredPets() const
+	{
+		if (!m_character || !m_storedPetsReceived)
+		{
+			return;
+		}
+
+		m_connector.SendPetData(m_character->GetGuid(), m_character->GetStoredPets());
+	}
+
+	void Player::ApplyStoredPets(std::vector<PersistentPetData> pets)
+	{
+		// Set first: applying them can summon a pet, which is a change to save.
+		m_storedPetsReceived = true;
+		m_character->SetStoredPets(std::move(pets));
+	}
+
+	bool Player::ArePetsAvailable() const
+	{
+		return m_connector.IsSubsystemAvailable(game::subsystem::Pets);
+	}
+
+	bool Player::AreStoredPetsLoaded() const
+	{
+		return m_storedPetsReceived;
 	}
 
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)
@@ -3059,6 +3123,7 @@ namespace mmo
 		}
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
 	}
@@ -3127,6 +3192,7 @@ namespace mmo
 		m_character->Set<uint32>(object_fields::Health, std::min(reviveHealth, maxHealth));
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(reviveMap, revivePosition, reviveFacing);
 	}

@@ -1,0 +1,37 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "localization.proto";
+import "units.proto";
+
+message PetLevelSpell {
+	required uint32 spell = 1;
+	required uint32 level = 2;
+}
+
+message PetEntry {
+	required uint32 id = 1;
+	required string name = 2;
+	repeated LocalizedString name_loc = 200;
+	required uint32 unit_entry = 3;
+	optional uint32 display_id = 4;
+	// See pet_name_mode in src/shared/game/pet_defines.h.
+	optional uint32 name_mode = 5;
+	repeated string random_names = 6;
+	optional bool allow_player_naming = 7;
+	// See pet_level_mode in src/shared/game/pet_defines.h.
+	optional uint32 level_mode = 8;
+	// See pet_level_source in src/shared/game/pet_defines.h.
+	optional uint32 level_source = 9;
+	repeated uint32 default_spells = 10;
+	repeated PetLevelSpell level_spells = 11;
+	repeated UnitSpellEntry ai_spells = 12;
+	optional float health_multiplier = 13 [default = 1.0];
+	optional float mana_multiplier = 14 [default = 1.0];
+	optional float damage_multiplier = 15 [default = 1.0];
+	optional float armor_multiplier = 16 [default = 1.0];
+}
+
+message Pets {
+	repeated PetEntry entry = 1;
+}

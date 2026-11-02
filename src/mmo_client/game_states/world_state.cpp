@@ -89,6 +89,7 @@
 #include "systems/cast_error_voice.h"
 #include "systems/unit_gossip_voice.h"
 #include "systems/party_info.h"
+#include "systems/pet_info.h"
 #include "shared/game_client/spell_visualization_service.h"
 #include "console/console_var.h"
 #include "frame_ui/font_mgr.h"
@@ -2220,6 +2221,10 @@ namespace mmo
 			context.subsystemClient->Initialize();
 			context.bugReportClient->Initialize();
 		}
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->Initialize();
+		}
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("createmonster", [this](const std::string &cmd, const std::string &args)
 								 { Command_CreateMonster(cmd, args); }, ConsoleCommandCategory::Gm, "Spawns a monster from a specific id. The monster will not persist on server restart.");
@@ -2231,6 +2236,14 @@ namespace mmo
 								 { Command_LearnEmote(cmd, args); }, ConsoleCommandCategory::Gm, "Unlocks a given emote for the selected player.");
 		Console::RegisterCommand("followme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FollowMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature follow you.");
+		Console::RegisterCommand("petadd", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetAdd(cmd, args); }, ConsoleCommandCategory::Gm, "Grants the selected player (or yourself) a stored pet: petadd <petEntry>.");
+		Console::RegisterCommand("petremove", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetRemove(cmd, args); }, ConsoleCommandCategory::Gm, "Removes a stored pet from the selected player (or yourself): petremove <petEntry>.");
+		Console::RegisterCommand("pettame", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetTame(cmd, args); }, ConsoleCommandCategory::Gm, "Tames the selected creature, ignoring the level check.");
+		Console::RegisterCommand("petmake", [this](const std::string &cmd, const std::string &args)
+								 { Command_PetMake(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature your temporary pet without a duration.");
 		Console::RegisterCommand("faceme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 		Console::RegisterCommand("level", [this](const std::string &cmd, const std::string &args)
@@ -2293,6 +2306,10 @@ namespace mmo
 		Console::UnregisterCommand("learnemote");
 		Console::UnregisterCommand("followme");
 		Console::UnregisterCommand("faceme");
+		Console::UnregisterCommand("petadd");
+		Console::UnregisterCommand("petremove");
+		Console::UnregisterCommand("pettame");
+		Console::UnregisterCommand("petmake");
 		Console::UnregisterCommand("level");
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");
@@ -2336,6 +2353,10 @@ namespace mmo
 		{
 			context.bugReportClient->Shutdown();
 			context.subsystemClient->Shutdown();
+		}
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->Shutdown();
 		}
 
 		m_worldPacketHandlers.Clear();
@@ -2790,6 +2811,15 @@ namespace mmo
 					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC &>(*object));
 				}
 
+				// Pet state: the persistent pet coming into sight, temporary pets, persistent pet names.
+				if (object->IsUnit())
+				{
+					if (PetInfo* petInfo = GetClientContext().petInfo.get())
+					{
+						petInfo->OnUnitSpawned(object->AsUnit());
+					}
+				}
+
 				// TODO: Don't do it like this, add a special flag to the update object to tell that this is our controlled object!
 				if (!m_playerController->GetControlledUnit() && object->GetTypeId() == ObjectTypeId::Player)
 				{
@@ -2915,6 +2945,7 @@ namespace mmo
 				const bool isUnit = obj->GetTypeId() == ObjectTypeId::Unit || obj->GetTypeId() == ObjectTypeId::Player;
 				const bool wasInCombat = isUnit && (obj->Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0;
 				const bool wasAlive = isUnit && obj->Get<uint32>(object_fields::Health) > 0;
+				const uint64 previousOwner = isUnit ? obj->Get<uint64>(object_fields::Owner) : 0;
 
 				obj->Deserialize(packet, creation);
 				if (!packet)
@@ -2926,6 +2957,18 @@ namespace mmo
 				if (isUnit)
 				{
 					PlayUnitStateSounds(*obj, wasInCombat, wasAlive);
+
+					// A unit can become (or stop being) the player's pet after it spawned, e.g. by
+					// the GM petmake command: the pet bar follows its Owner field.
+					if (obj->Get<uint64>(object_fields::Owner) != previousOwner)
+					{
+						PetInfo* petInfo = GetClientContext().petInfo.get();
+						const auto unit = std::dynamic_pointer_cast<GameUnitC>(obj);
+						if (petInfo && unit)
+						{
+							petInfo->OnUnitOwnerChanged(*unit);
+						}
+					}
 				}
 
 				// Check if this was an item update for the active player
@@ -3030,6 +3073,10 @@ namespace mmo
 			}
 
 			m_partyInfo.OnPlayerDespawned(id);
+			if (PetInfo* petInfo = GetClientContext().petInfo.get())
+			{
+				petInfo->OnUnitDespawned(id);
+			}
 
 			if (m_playerController->GetControlledUnit() &&
 				m_playerController->GetControlledUnit()->GetGuid() == id)
@@ -3956,6 +4003,11 @@ namespace mmo
 			}
 		}
 
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnSpellCooldown(casterId, spellId, cooldownMs);
+		}
+
 		if (m_playerController->GetControlledUnit())
 		{
 			if (casterId == m_playerController->GetControlledUnit()->GetGuid() && castTime > 0)
@@ -4053,6 +4105,11 @@ namespace mmo
 			}
 		}
 
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnSpellCooldown(casterId, spellId, cooldownMs);
+		}
+
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
 		{
 			m_spellCast.OnSpellGo(spellId);
@@ -4132,7 +4189,17 @@ namespace mmo
 			"SPELL_CAST_FAILED_UNIT_NOT_INFRONT",
 			"SPELL_CAST_FAILED_LINE_OF_SIGHT",
 			"SPELL_CAST_FAILED_SKILL_TOO_LOW",
-			"SPELL_CAST_FAILED_INVENTORY_FULL"};
+			"SPELL_CAST_FAILED_INVENTORY_FULL",
+			"SPELL_CAST_FAILED_TOO_MANY_PETS",
+			"SPELL_CAST_FAILED_NO_PET",
+			"SPELL_CAST_FAILED_PET_DEAD",
+			"SPELL_CAST_FAILED_PET_WRONG_CLASS",
+			"SPELL_CAST_FAILED_ALREADY_HAVE_PET",
+			"SPELL_CAST_FAILED_NO_FREE_PET_SLOT",
+			"SPELL_CAST_FAILED_NOT_TAMABLE",
+			"SPELL_CAST_FAILED_TARGET_TOO_HIGH_LEVEL"};
+		static_assert(std::size(s_spellCastResultStrings) == spell_cast_result::FailedTargetTooHighLevel + 1,
+			"s_spellCastResultStrings must have one entry per spell_cast_result value");
 
 		static const char *s_unknown = "UNKNOWN";
 
@@ -4159,6 +4226,18 @@ namespace mmo
 				// this unit had no cast bar running (e.g. instant cast validation failure).
 				casterUnit->NotifyCastFailed(spellId);
 			}
+		}
+
+		// A failed cast of one of the player's pets is shown as a pet error, never as the player's own.
+		if (PetInfo* petInfo = GetClientContext().petInfo.get(); petInfo && casterId != ObjectMgr::GetActivePlayerGuid())
+		{
+			const char *petErrorMessage = result < std::size(s_spellCastResultStrings) ? s_spellCastResultStrings[result] : s_unknown;
+			if (spell && std::strcmp(petErrorMessage, "SPELL_CAST_FAILED_NO_POWER") == 0)
+			{
+				petErrorMessage = GetNoPowerErrorKey(spell->powertype());
+			}
+
+			petInfo->OnSpellFailure(casterId, spellId, result, petErrorMessage);
 		}
 
 		if (casterId == ObjectMgr::GetActivePlayerGuid())
@@ -4545,6 +4624,10 @@ namespace mmo
 		// Remove all objects at once
 		m_playerController->SetControlledUnit(nullptr);
 		ObjectMgr::RemoveAllObjects();
+		if (PetInfo* petInfo = GetClientContext().petInfo.get())
+		{
+			petInfo->OnWorldObjectsCleared();
+		}
 
 		// Voice throttle gates are keyed by guid, which are meaningless in the new world
 		m_combatSoundPlayer.Clear();

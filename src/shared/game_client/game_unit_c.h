@@ -814,9 +814,27 @@ namespace mmo
 
 		const proto_client::FactionTemplateEntry *GetFactionTemplate() const { return m_factionTemplate; }
 
+		/// @brief Checks whether this unit is friendly to another unit. Both units are first resolved to
+		///	the top of their owner chain (object_fields::Owner, see owner_chain::ResolveTopOwner): units with
+		///	the same top owner are friendly, otherwise the top owners' factions decide.
 		bool IsFriendlyTo(const GameUnitC &other) const;
 
+		/// @brief Checks whether this unit is hostile to another unit, resolving owners like IsFriendlyTo.
 		bool IsHostileTo(const GameUnitC &other) const;
+
+		/// @brief Gets the unit at the top of this unit's owner chain, as far as it is known to the client.
+		/// @return The top owner, or this unit if it has no owner in sight.
+		const GameUnitC &GetTopOwner() const;
+
+		/// @brief Checks whether this unit is controlled by a player through its owner chain (a player's
+		///	pet or a summon of it). Units owned by creatures (boss adds, NPC swarms) are not, see
+		///	owner_chain::IsOwnedByPlayer.
+		bool IsOwnedByPlayer() const;
+
+		/// @brief Sets the name of a persistent pet (from PetNameQueryResult). A non-empty pet name
+		///	replaces the creature entry's name.
+		/// @param name The pet's name, empty to use the creature entry's name again.
+		void SetPetName(const String &name);
 
 	protected:
 		virtual void OnDisplayIdChanged();
@@ -945,6 +963,9 @@ namespace mmo
 		float m_unitSpeed[movement_type::Count];
 
 		CreatureInfo m_creatureInfo;
+
+		/// The name of a persistent pet, which replaces the creature entry's name when set.
+		String m_petName;
 
 		SceneNode *m_nameComponentNode{nullptr};
 		std::unique_ptr<WorldTextComponent> m_nameComponent;
