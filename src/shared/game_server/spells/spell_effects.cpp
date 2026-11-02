@@ -449,8 +449,14 @@ namespace mmo
 				position = unitTarget->GetPosition();
 			}
 
+			// The zone lives for the spell duration, which Duration spell mods change like a summon's.
+			// SpellZoneStart carries this modified duration, so the client's visual lasts as long.
+			int32 duration = spell.duration();
+			executer.ApplySpellMod(spell_mod_op::Duration, spell.id(), duration);
+			duration = std::max(duration, 1);
+
 			world->CreateSpellZone(executer, spell.id(), ctx.effect.triggerspell(), position, ctx.effect.radius(),
-				static_cast<GameTime>(spell.duration()), static_cast<GameTime>(std::max(ctx.effect.amplitude(), 0)));
+				static_cast<GameTime>(duration), static_cast<GameTime>(std::max(ctx.effect.amplitude(), 0)));
 		}
 
 		void HandleDrainPower(SpellEffectContext& /*ctx*/) {}

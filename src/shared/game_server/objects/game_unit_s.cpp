@@ -1765,7 +1765,7 @@ namespace mmo
 		const GameTime now = GetAsyncTimeMs();
 
 		// Reduce attack time to parry_haste_min_swing_ms if it's higher
-		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
+		const uint32 swingTime = GetAutoAttackTime(weapon_attack::BaseAttack);
 
 		// This is the ideal time (we want to trigger the next attack swing in parry_haste_min_swing_ms from now on)
 		const uint32 idealLastMainHand = now - swingTime + settings.parry_haste_min_swing_ms();
@@ -4273,11 +4273,37 @@ namespace mmo
 		outMax = Get<float>(object_fields::MaxDamage);
 	}
 
-	uint32 GameUnitS::GetAutoAttackTime(WeaponAttack /*attackType*/) const
+	uint32 GameUnitS::GetBaseAutoAttackTime(WeaponAttack /*attackType*/) const
 	{
 		// Base units swing both hands on the same speed. Players override this to use the
 		// off-hand weapon's own delay.
-		return Get<uint32>(object_fields::BaseAttackTime);
+		return m_baseAttackTime;
+	}
+
+	uint32 GameUnitS::GetAutoAttackTime(const WeaponAttack attackType) const
+	{
+		// Shortest swing time attack speed auras can reach, so a stack of haste never makes a unit
+		// swing on every tick (a base time below it is left alone).
+		constexpr uint32 minAttackTime = 100;
+
+		const uint32 baseTime = GetBaseAutoAttackTime(attackType);
+		const uint32 scaled = static_cast<uint32>(std::lround(static_cast<double>(baseTime) / static_cast<double>(GetAttackSpeedMultiplier())));
+		return std::max(scaled, std::min(baseTime, minAttackTime));
+	}
+
+	void GameUnitS::SetBaseAttackTime(const uint32 attackTime)
+	{
+		m_baseAttackTime = attackTime;
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
+	}
+
+	void GameUnitS::ModifyAttackSpeedPctBonus(const float amount, const bool apply)
+	{
+		m_attackSpeedPctBonus += apply ? amount : -amount;
+
+		// Only the field the client displays changes: the swing already scheduled keeps its time,
+		// and TriggerNextAutoAttack picks the new interval up for the next one.
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
 	}
 
 	bool GameUnitS::ShouldDualWield() const

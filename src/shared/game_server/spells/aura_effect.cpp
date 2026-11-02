@@ -270,10 +270,8 @@ namespace mmo
 
 	void AuraEffect::HandleModAttackSpeed(bool apply) const
 	{
-		m_container.GetOwner().UpdateModifierValue(unit_mods::AttackSpeed,
-			unit_mod_type::TotalValue,
-			GetBasePoints(),
-			apply);
+		// Base points are a percentage of attack speed: +30 swings 30% faster, -15 slower.
+		m_container.GetOwner().ModifyAttackSpeedPctBonus(static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandleModResistance(const bool apply) const

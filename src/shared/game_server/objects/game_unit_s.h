@@ -1662,10 +1662,31 @@ public:
 		/// @param outMax Receives the maximum weapon damage.
 		virtual void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const;
 
-		/// Gets the swing time (in milliseconds) for the given weapon hand.
-		/// Base implementation returns the BaseAttackTime object field for every hand.
+		/// Gets the swing time (in milliseconds) for the given weapon hand: the hand's base swing
+		///	time divided by the attack speed multiplier (ModAttackSpeed auras).
 		/// @param attackType Which weapon hand to source the swing time from.
-		virtual uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+		uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Gets the swing time (in milliseconds) of the given weapon hand before attack speed
+		///	auras. Base implementation returns the main-hand base swing time for every hand.
+		/// @param attackType Which weapon hand to source the swing time from.
+		virtual uint32 GetBaseAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Sets the unmodified main-hand swing time and refreshes the BaseAttackTime field, which
+		///	carries the effective (attack speed modified) main-hand swing time to the client.
+		/// @param attackTime The swing time in milliseconds.
+		void SetBaseAttackTime(uint32 attackTime);
+
+		/// Gets the attack speed multiplier from ModAttackSpeed auras: 1.0 by default, additive
+		///	across auras (+30 and -15 make 1.15), never below 0.1. Swing times are divided by it.
+		[[nodiscard]] float GetAttackSpeedMultiplier() const { return std::max(0.1f, 1.0f + m_attackSpeedPctBonus * 0.01f); }
+
+		/// Adds or removes percentage points to the attack speed multiplier, driven by the
+		///	ModAttackSpeed aura. The swing already scheduled keeps its time; the next one uses the
+		///	new interval.
+		///	@param amount The bonus in percentage points (30.0f = swings 30% faster).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyAttackSpeedPctBonus(float amount, bool apply);
 
 		/// Gets the combat settings containing configurable combat formula parameters.
 		/// Uses the project's combat settings if available, otherwise returns defaults.
@@ -2206,6 +2227,13 @@ public:
 
 		/// Accumulated percentage points added to the cast time multiplier (ModCastingSpeedPct).
 		float m_castingSpeedPctBonus = 0.0f;
+
+		/// Accumulated percentage points added to the attack speed multiplier (ModAttackSpeed).
+		float m_attackSpeedPctBonus = 0.0f;
+
+		/// Unmodified main-hand swing time in milliseconds. The BaseAttackTime field carries the
+		///	attack speed modified value.
+		uint32 m_baseAttackTime = 2000;
 
 		/// Accumulated percentage points added to the healing taken multiplier (ModHealingTakenPct).
 		float m_healingTakenPctBonus = 0.0f;
