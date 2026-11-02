@@ -1153,6 +1153,22 @@ namespace mmo
 			return T(diff);
 		}
 
+		/// Gets the cast time multiplier from ModCastingSpeedPct auras: 1.0 by default, additive
+		///	across auras, never below 0.
+		[[nodiscard]] float GetCastingSpeedMultiplier() const { return std::max(0.0f, 1.0f + m_castingSpeedPctBonus * 0.01f); }
+
+		/// Applies the CastTime spell mods and the casting speed multiplier to a base cast time.
+		/// @param spellId The spell being cast, to match spell mods.
+		/// @param baseCastTime The unmodified cast time in milliseconds.
+		/// @returns The cast time in milliseconds, never negative.
+		[[nodiscard]] GameTime ModifyCastTime(const uint32 spellId, const GameTime baseCastTime) const
+		{
+			int32 castTimeMod = static_cast<int32>(baseCastTime);
+			ApplySpellMod<int32>(spell_mod_op::CastTime, spellId, castTimeMod);
+			const float scaled = static_cast<float>(std::max(0, castTimeMod)) * GetCastingSpeedMultiplier();
+			return static_cast<GameTime>(std::max(0.0f, roundf(scaled)));
+		}
+
 		/// How far a "say" chat message carries.
 		static constexpr float SayRange = 25.0f;
 
@@ -1488,6 +1504,12 @@ public:
 		///	@param amount The bonus in percentage points (e.g. 10.0f for +10% of normal regeneration).
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_castingManaRegenPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes percentage points to the cast time multiplier, driven by the
+		///	ModCastingSpeedPct aura.
+		///	@param amount The bonus in percentage points (30.0f = casts take 30% longer).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCastingSpeedPctBonus(float amount, bool apply) { m_castingSpeedPctBonus += apply ? amount : -amount; }
 
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
@@ -2129,6 +2151,9 @@ public:
 		/// Accumulated percentage points added to the casting mana regeneration share
 		///	(ModCastingManaRegenPercent).
 		float m_castingManaRegenPctBonus = 0.0f;
+
+		/// Accumulated percentage points added to the cast time multiplier (ModCastingSpeedPct).
+		float m_castingSpeedPctBonus = 0.0f;
 
 
 		std::map<uint8, float> m_baseSpeeds;

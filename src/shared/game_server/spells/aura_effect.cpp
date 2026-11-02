@@ -109,6 +109,7 @@ namespace mmo
 			{ AuraType::ModPowerRegenPercent,  [](AuraEffect& self, bool apply){ self.HandleModPowerRegenPercent(apply); } },
 			{ AuraType::ModCritChanceTaken,    [](AuraEffect& self, bool apply){ self.HandleModCritChanceTaken(apply); } },
 			{ AuraType::ModCastingManaRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModCastingManaRegenPercent(apply); } },
+			{ AuraType::ModCastingSpeedPct, [](AuraEffect& self, bool apply){ self.HandleModCastingSpeedPct(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -584,6 +585,12 @@ namespace mmo
 
 		// Not part of RefreshStats(), so refresh the character sheet value here.
 		m_container.GetOwner().UpdateCombatStatFields();
+	}
+
+	void AuraEffect::HandleModCastingSpeedPct(const bool apply) const
+	{
+		// Base points are a percentage added to the owner's cast time multiplier.
+		m_container.GetOwner().ModifyCastingSpeedPctBonus(static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

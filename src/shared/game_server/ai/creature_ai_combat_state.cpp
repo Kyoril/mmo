@@ -1197,11 +1197,12 @@ namespace mmo
 			// This serves as confirmation that casting actually started
 			if (spell.casttime() > 0)
 			{
+				const GameTime modifiedCastTime = GetControlled().ModifyCastTime(spell.id(), spell.casttime());
 				m_isCasting = true;
 				m_lastSpellCastTime = GetAsyncTimeMs();
 
 				// Update timeout with the actual spell's cast time
-				m_castingTimeoutEnd = m_lastSpellCastTime + spell.casttime() + 1000; // 1 second buffer
+				m_castingTimeoutEnd = m_lastSpellCastTime + modifiedCastTime + 1000; // 1 second buffer
 
 				// Ensure movement is stopped (safety check)
 				auto& controlled = GetControlled();
@@ -1547,6 +1548,7 @@ namespace mmo
 
 		const auto* spellEntry = spell.spell;
 		const uint32_t castTime = spellEntry->casttime();
+		const GameTime modifiedCastTime = controlled.ModifyCastTime(spellEntry->id(), castTime);
 		const uint32_t cooldown = spellEntry->cooldown();
 
 		// Stop movement BEFORE calling CastSpell so the CreatureMove(stop) packet
@@ -1590,7 +1592,7 @@ namespace mmo
 			{
 				const auto currentTime = GetAsyncTimeMs();
 				m_lastSpellCastTime = currentTime;
-				m_castingTimeoutEnd = currentTime + castTime + 1000;
+				m_castingTimeoutEnd = currentTime + modifiedCastTime + 1000;
 				controlled.StopAttack();
 			}
 

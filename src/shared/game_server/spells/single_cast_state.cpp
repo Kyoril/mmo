@@ -51,10 +51,8 @@ namespace mmo
 		}
 		else
 		{
-			// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
-			int32 castTimeMod = static_cast<int32>(m_castTime);
-			executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
-			m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
+			// Spell mods and the ModCastingSpeedPct multiplier.
+			m_castTime = executor.ModifyCastTime(spell.id(), m_castTime);
 		}
 
 		const Vector3& location = executor.GetPosition();
