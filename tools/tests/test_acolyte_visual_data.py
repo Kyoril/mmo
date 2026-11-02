@@ -73,7 +73,7 @@ class AcolyteVisualDataTests(unittest.TestCase):
                     cls.particles.setdefault(proj.trail_particle, True)
 
     def test_acolyte_visualizations_are_present(self):
-        self.assertEqual(len(self.acolyte), 9, [v.name for v in self.acolyte])
+        self.assertEqual(len(self.acolyte), 10, [v.name for v in self.acolyte])
 
     def test_every_acolyte_spell_uses_its_own_visualization(self):
         by_id = {v.id: v for v in self.visuals.entry}
@@ -136,8 +136,10 @@ class AcolyteVisualDataTests(unittest.TestCase):
                 if by_id[sound_id].looped:
                     self.assertTrue(kit.loop and event == CASTING, f"{name}: sound {sound_id} loops")
                 for path in by_id[sound_id].files:
-                    self.assertTrue((ROOT / "data/client" / path).is_file(),
-                                    f"{name}: missing sound file {path}")
+                    # Voice lines are locale-relative ("Voice/..."): enUS always has them.
+                    found = ((ROOT / "data/client" / path).is_file()
+                             or (ROOT / "data/client/Locales/Locale_enUS" / path).is_file())
+                    self.assertTrue(found, f"{name}: missing sound file {path}")
 
     def test_particles_pass_the_hpar_validator(self):
         sys.path.insert(0, str(ROOT / "tools/particle_gen"))

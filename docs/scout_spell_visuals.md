@@ -132,6 +132,27 @@ is `generated/scout_visuals/Scout_Audition.wav`.
   40) showed Steady Hand and Fever Pitch rendering as intended. The run was disturbed (manual
   input in the same client), so the strikes, the knife and the ribbons still need an in-game look.
 
+## Trickster talents (2026-11-02)
+
+The Trickster rework (talent tree in `tools/talent_trees/author_talent_trees.py`) added proc
+spells that fire on dodges and on Knockout. Their presentation follows the rules above, plus
+one colour rule: **violet** (the path's accent, 0xA389FF) marks what comes *from a dodge*.
+Recipes: `tools/particle_gen/recipes/scout_trickster.py` (8 effects). Visualizations 113-117,
+sound entries 253-255. The talent script pins each proc spell's `visualization_id`, because it
+rebuilds those spells from scratch.
+
+| Spell (ids) | Cast (CAST_SUCCEEDED, caster) | Impact / aura |
+|---|---|---|
+| Riposte (buff 1429) | `RiposteReady` at `hand_r` (a violet crescent spins once round the hand), quiet cloak-flick + glint | AURA_IDLE `RiposteAura` at `hand_r`: a small violet crescent turning while primed |
+| Slip the Blade (buff 1434) | `SlipTheBladeReady` at `hand_r` (violet smoke, ring, big star flare) + violet light, shimmer + glint | AURA_IDLE `SlipTheBladeAura` at `hand_r`: violet twinkle and a thread of smoke |
+| Opportunist / Slippery (energize 1431, 1432) | `EnergyGain`: a few amber sparks and streaks at the chest, **no sound** (fires every 2 s) | -- |
+| Cheap Shot (debuff 1433) | -- | IMPACT `CheapShotApply` (crimson shards + cracked ring, +180 ms with Knockout's impact) + tint pulse; AURA_IDLE `CheapShotAura`: crimson flakes falling off the chest |
+| Counterstrike (1435) | `Attack_1H_02`, blade arc, parry clang + return cut | `CounterstrikeImpact` at `spine_03` (+280 ms): violet-edged cut, sparks, blood, violet light |
+
+Sounds: five new layers (`Cloak_Flick`, `Blade_Glint`, `Shadow_Shimmer`, `Parry_Clang`,
+`Counter_Slash`), four takes each, preselected on measurements and mixed into `Riposte`,
+`SlipTheBlade` and `Counterstrike`. The arming cues sit 2-3 dB below the strikes.
+
 ## Remaining work
 
 - In-game acceptance of the blade arcs and impact timing on both human rigs; the 280/180 ms
