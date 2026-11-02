@@ -893,9 +893,16 @@ namespace mmo
 
 		void HandleGrantPersistentPet(SpellEffectContext& ctx)
 		{
-			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			// Granted to the effect's player targets, not the caster: a trainer may bind a pet to the
+			// player it casts on. A self-targeted effect still grants to a casting player.
+			const uint32 petEntry = static_cast<uint32>(std::max(0, ctx.effect.miscvaluea()));
+			for (auto* targetObject : ctx.effectTargets)
 			{
-				player->GrantPersistentPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+				if (auto* player = dynamic_cast<GamePlayerS*>(targetObject))
+				{
+					ctx.markAffectedTarget(*player);
+					player->GrantPersistentPet(petEntry);
+				}
 			}
 		}
 

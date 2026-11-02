@@ -99,7 +99,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - occasional waterfalls and streams.
 - In the game, Oakenshire is the first hub (levels 1–6). [C] It has:
   - a **Town Hall** whose ground floor holds the class trainers (q3, q4, q7, q23);
-  - an **Inn** run by Old Harbin, with a rat-infested cellar (q10);
+  - an **Inn** run by Old Harbin, with a rat-infested cellar (q10). The shadowmancer Malrik Duskwright teaches in that cellar, and Harbin is paid to keep quiet about it (q75-q77). [E] (2026-11-02)
   - a **west gate** held by the **Oakenshire Watch** (u46, u47);
   - a **market** east of the Inn's front steps (atlas `oakenshire_market`, placeholder) with Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate) and Derrick Longstride (Leather Armor). On 2026-10-16 the user had them moved here from the buried old-Haven market. [E]
 - Farms and woodcutters lie in the valley south-east of town, and boars trample them (q1, q5, q6). [C]
@@ -315,10 +315,10 @@ Open [?]:
 | Baldric Steelheart | warrior trainer | `oakenshire_hub` (Town Hall) | 10 | 21, 31, 32 / 3, 31, 32 | [E][C] |
 | Vivienne Emberglow | mage trainer | `oakenshire_hub` | 11 | 33, 34 / 4, 33, 34 | [C] |
 | Clarissa Whiteshield | cleric trainer | `oakenshire_hub` | 12 | 8, 35, 36 / 7, 8, 35, 36 | [C] |
-| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38, 72 | [C] |
+| Malrik Duskwright | shadowmancer trainer, in the Inn cellar | `hub_near_old_harbin` | 13 | 37, 38, 75, 77 / 37, 38, 72, 76, 77 | [C] |
 | Elira Hawke | scout trainer | `oakenshire_hub` | 38 | 39, 40 / 23, 39, 40 | [C] |
 | Milly Goldwyn | clothier | `oakenshire_hub` | 20 | – | [C] |
-| Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10 / 10 | [C] |
+| Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10, 76 / 10, 75 | [C] |
 | Lina Groveroot | herbalist; robbed on the trail south of town | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
 | Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 66 | [C] |
 | Gatewarden Elias Rook | Oakenshire Watch, west gate | `briarwatch_west_gate` | 47 | 25 / – | [C] |
@@ -374,7 +374,7 @@ Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
 | Mage | Discipline over raw power ("Power without discipline burns its bearer first", q33); fire and frost. | Vivienne Emberglow; Serah Wren; Ilsa Corvain | [E][C] |
 | Cleric | Healer and holy caster of **the Light** ("The Light is not merely a gift; it is a responsibility", q7). | Clarissa Whiteshield; Almira Deene; Rosalind Merek | [E][C] |
 | Scout | Agile fighter with daggers or one-handed swords: "Eyes open, feet quiet" (q40). | Elira Hawke; Joren Slate; Quinn Aldery | [E][C] |
-| Shadowmancer | Shadow and damage-over-time magic that feeds on the essence released at death ("the shadow takes", q37). Its students are called **Acolytes** (q38). | Malrik Duskwright; Veslin Marr; Nerith Vael | [E][C] |
+| Shadowmancer | Shadow and damage-over-time magic that feeds on the essence released at death ("the shadow takes", q37). Its students are called **Acolytes** (q38). The dark arts are not practised in public: people reach for a torch, so shadowmancers teach in hiding, and an acolyte binds their first shade in secret (q75-q77). | Malrik Duskwright; Veslin Marr; Nerith Vael | [E][C] |
 
 The source of magic, its institutions and its costs are undefined. [E] Whether "the Light" is a faith, a force or a church is open (section 12). [?]
 
