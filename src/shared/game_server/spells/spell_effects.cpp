@@ -124,6 +124,94 @@ namespace mmo
 
 		void HandleDummy(SpellEffectContext& /*ctx*/) {}
 
+		/// Deals the effect's school damage to one unit (immunity, modifiers, crit, block, threat,
+		/// combat log and procs). Shared by SchoolDamage and HealthLeech.
+		/// @returns The damage actually dealt to the target; 0 if it was immune or took nothing.
+		static uint32 DealSchoolDamage(SpellEffectContext& ctx, GameUnitS& unitTarget)
+		{
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+
+			// If the target is immune to this spell's damage school, report the immunity to
+			// clients (so the floating combat text shows "Immune") and skip damage entirely.
+			if (unitTarget.IsImmuneToSchool(spell.spellschool()))
+			{
+				executer.SpellDamageLog(unitTarget.GetGuid(), 0, spell.spellschool(), DamageFlags::Immune, spell);
+				return 0;
+			}
+
+			// TODO: Miss chance and resists.
+			uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
+			executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
+
+			// Add spell power to damage
+			const float spellDamage = executer.GetCalculatedModifierValue(unit_mods::SpellDamage);
+			if (spellDamage > 0.0f && ctx.effect.powerbonusfactor() > 0.0f)
+			{
+				damageAmount += static_cast<uint32>(spellDamage * ctx.effect.powerbonusfactor());
+			}
+
+			// Apply both Damage and SpellDamage mods to the damage amount!
+			damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
+			damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
+
+			// Roll for a critical hit: base chance from the combat settings, the caster's
+			// CritChance modifiers (talents), then the victim's own vulnerability
+			// (ModCritChanceTaken), added last so the caster's percentage modifiers do not
+			// scale it — the same order as the weapon-damage spells below.
+			const auto& combatSettings = executer.GetCombatSettings();
+			float critChance = combatSettings.spell_default_crit_chance();
+			executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
+			critChance += unitTarget.GetCritChanceTakenBonus();
+
+			bool isCrit = false;
+			if (critChance > 0.0f)
+			{
+				std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+				if (critDistribution(randomGenerator) < critChance)
+				{
+					isCrit = true;
+					damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_crit_multiplier()));
+				}
+			}
+
+			// Roll for a block. Only physical damage from the front can be blocked; the helper
+			// returns no block for other schools, so this is a no-op for magical spells.
+			uint32 blockedDamage = 0;
+			const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(spell.spellschool()), damageAmount);
+			if (block.blocked)
+			{
+				blockedDamage = block.blockedAmount;
+				damageAmount -= blockedDamage;
+				unitTarget.OnBlock();
+			}
+
+			damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
+
+			const uint32 dealt = static_cast<uint32>(std::max<int32>(0, unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility)));
+				if (dealt > 0)
+			{
+				float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
+				executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
+				unitTarget.threatened(executer, threat);
+			}
+
+			uint8 damageFlags = DamageFlags::None;
+			if (isCrit) damageFlags |= DamageFlags::Crit;
+			if (block.blocked) damageFlags |= DamageFlags::Block;
+
+			// Log spell damage to client
+			executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
+
+			// Trigger proc events for spell damage. Crits carry CriticalHit so "on critical
+			// strike" procs (procexflags) can fire.
+			const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
+			executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+
+			return dealt;
+		}
+
 		void HandleSchoolDamage(SpellEffectContext& ctx)
 		{
 			if (ctx.effectTargets.empty())
@@ -144,81 +232,58 @@ namespace mmo
 
 				auto& unitTarget = targetObject->AsUnit();
 
-				// If the target is immune to this spell's damage school, report the immunity to
-				// clients (so the floating combat text shows "Immune") and skip damage entirely.
-				if (unitTarget.IsImmuneToSchool(spell.spellschool()))
+				DealSchoolDamage(ctx, unitTarget);
+			}
+		}
+
+		void HandleHealthLeech(SpellEffectContext& ctx)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+				return;
+			}
+
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+
+			// multiplevalue is the share of the damage dealt that heals the caster; 0 means unset (1.0).
+			const float ratio = ctx.effect.multiplevalue() > 0.0f ? ctx.effect.multiplevalue() : 1.0f;
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
 				{
-					executer.SpellDamageLog(unitTarget.GetGuid(), 0, spell.spellschool(), DamageFlags::Immune, spell);
 					continue;
 				}
 
-				// TODO: Miss chance and resists.
-				uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
-				executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
-
-				// Add spell power to damage
-				const float spellDamage = executer.GetCalculatedModifierValue(unit_mods::SpellDamage);
-				if (spellDamage > 0.0f && ctx.effect.powerbonusfactor() > 0.0f)
+				const uint32 dealt = DealSchoolDamage(ctx, targetObject->AsUnit());
+				const uint32 healingAmount = static_cast<uint32>(static_cast<float>(dealt) * ratio);
+				if (healingAmount == 0)
 				{
-					damageAmount += static_cast<uint32>(spellDamage * ctx.effect.powerbonusfactor());
+					continue;
 				}
 
-				// Apply both Damage and SpellDamage mods to the damage amount!
-				damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
-				damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
-
-				// Roll for a critical hit: base chance from the combat settings, the caster's
-				// CritChance modifiers (talents), then the victim's own vulnerability
-				// (ModCritChanceTaken), added last so the caster's percentage modifiers do not
-				// scale it — the same order as the weapon-damage spells below.
-				const auto& combatSettings = executer.GetCombatSettings();
-				float critChance = combatSettings.spell_default_crit_chance();
-				executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
-				critChance += unitTarget.GetCritChanceTakenBonus();
-
-				bool isCrit = false;
-				if (critChance > 0.0f)
+				const int32 effectiveHealing = executer.Heal(healingAmount, &executer);
+				if (effectiveHealing <= 0)
 				{
-					std::uniform_real_distribution critDistribution(0.0f, 100.0f);
-					if (critDistribution(randomGenerator) < critChance)
+					continue;
+				}
+
+				const uint32 spellId = spell.id();
+				const uint32 healed = static_cast<uint32>(effectiveHealing);
+				ctx.castContext.SendPacketFromCaster(
+					[&executer, spellId, healed](game::OutgoingPacket& out_packet)
 					{
-						isCrit = true;
-						damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_crit_multiplier()));
-					}
-				}
-
-				// Roll for a block. Only physical damage from the front can be blocked; the helper
-				// returns no block for other schools, so this is a no-op for magical spells.
-				uint32 blockedDamage = 0;
-				const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(spell.spellschool()), damageAmount);
-				if (block.blocked)
-				{
-					blockedDamage = block.blockedAmount;
-					damageAmount -= blockedDamage;
-					unitTarget.OnBlock();
-				}
-
-				damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
-
-				if (unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility) > 0)
-				{
-					float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
-					executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
-					unitTarget.threatened(executer, threat);
-				}
-
-				uint8 damageFlags = DamageFlags::None;
-				if (isCrit) damageFlags |= DamageFlags::Crit;
-				if (block.blocked) damageFlags |= DamageFlags::Block;
-
-				// Log spell damage to client
-				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
-
-				// Trigger proc events for spell damage. Crits carry CriticalHit so "on critical
-				// strike" procs (procexflags) can fire.
-				const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+						out_packet.Start(game::realm_client_packet::SpellHealLog);
+						out_packet
+							<< io::write_packed_guid(executer.GetGuid())
+							<< io::write_packed_guid(executer.GetGuid())
+							<< io::write<uint32>(spellId)
+							<< io::write<uint32>(healed)
+							<< io::write<uint8>(0);
+						out_packet.Finish();
+					});
 			}
 		}
 

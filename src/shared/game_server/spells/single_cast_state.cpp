@@ -1197,6 +1197,7 @@ namespace mmo
 			{se::ApplyAreaAura,          SpellEffects::HandleApplyAura},
 			{se::PersistentAreaAura,     SpellEffects::HandlePersistentAreaAura},
 			{se::SchoolDamage,           SpellEffects::HandleSchoolDamage},
+			{se::HealthLeech,            SpellEffects::HandleHealthLeech},
 			{se::EnvironmentalDamage,    SpellEffects::HandleEnvironmentalDamage},
 			{se::ResetAttributePoints,   SpellEffects::HandleResetAttributePoints},
 			{se::Parry,                  SpellEffects::HandleParry},

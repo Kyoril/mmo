@@ -88,6 +88,9 @@ namespace mmo
 		void HandleInstantKill(SpellEffectContext& ctx);
 		void HandleDummy(SpellEffectContext& ctx);
 		void HandleSchoolDamage(SpellEffectContext& ctx);
+		/// Deals school damage like SchoolDamage, then heals the caster for the damage dealt times
+		/// the effect's multiplevalue (0 counts as 1.0).
+		void HandleHealthLeech(SpellEffectContext& ctx);
 		void HandleEnvironmentalDamage(SpellEffectContext& ctx);
 		void HandleTeleportUnits(SpellEffectContext& ctx);
 		void HandleApplyAura(SpellEffectContext& ctx);
