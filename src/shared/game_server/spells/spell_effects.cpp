@@ -760,7 +760,14 @@ namespace mmo
 			const std::vector<Vector3> positions = SummonPositions(
 				executer.GetPosition(), executer.GetFacing(), std::max(1, ctx.basePoints),
 				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
-			const int32 duration = ctx.castContext.GetSpell().duration();
+			// The summons live for the spell duration, which Duration spell mods change like an aura's.
+			int32 duration = ctx.castContext.GetSpell().duration();
+			// A negative mod must not turn a timed summon into a permanent one (0 = no despawn).
+			if (duration > 0)
+			{
+				executer.ApplySpellMod(spell_mod_op::Duration, ctx.castContext.GetSpell().id(), duration);
+				duration = std::max(duration, 1);
+			}
 			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
 
 			// The summons join the caster's fight: the caster's victim, or the unit the spell was cast at.

@@ -607,6 +607,10 @@ namespace mmo
 		/// @param despawnDelay Time in milliseconds after which the unit will be despawned.
 		void TriggerDespawnTimer(GameTime despawnDelay);
 
+		/// Gets the time at which the despawn timer set by TriggerDespawnTimer fires.
+		/// @returns The despawn time in milliseconds (GetAsyncTimeMs clock), or 0 if no despawn timer runs.
+		[[nodiscard]] GameTime GetDespawnTimerEnd() const { return m_despawnCountdown.IsRunning() ? m_despawnCountdown.GetEnd() : 0; }
+
 		/// Writes object update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.

@@ -350,8 +350,11 @@ namespace mmo
 
 	void AuraEffect::HandleModRoot(bool apply) const
 	{
+		// weak_from_this, not shared_from_this: ~GameUnitS clears its auras, which removes this
+		// effect while the owner is being destroyed, and shared_from_this then aborts (no exceptions).
+		// The same holds for the other crowd control handlers below.
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -380,7 +383,7 @@ namespace mmo
 	void AuraEffect::HandleModStun(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -409,7 +412,7 @@ namespace mmo
 	void AuraEffect::HandleModFear(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -438,7 +441,7 @@ namespace mmo
 	void AuraEffect::HandleModSleep(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -467,7 +470,7 @@ namespace mmo
 	void AuraEffect::HandleModDisorient(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -496,7 +499,7 @@ namespace mmo
 	void AuraEffect::HandleModVisibility(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -515,7 +518,7 @@ namespace mmo
 	void AuraEffect::HandleModStealth(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;

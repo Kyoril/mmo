@@ -22,6 +22,34 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// Whether a spell has an effect that damages its targets directly. Those effects fire the
+		///	damage class proc events themselves (e.g. DoneSpellMagicDmgClassNeg).
+		bool DealsDirectDamage(const proto::SpellEntry& spell)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				switch (effect.type())
+				{
+				case spell_effects::InstantKill:
+				case spell_effects::SchoolDamage:
+				case spell_effects::EnvironmentalDamage:
+				case spell_effects::HealthLeech:
+				case spell_effects::WeaponDamageNoSchool:
+				case spell_effects::WeaponPercentDamage:
+				case spell_effects::WeaponDamage:
+					return true;
+
+				default:
+					break;
+				}
+			}
+
+			return false;
+		}
+	}
+
 	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc, uint64 itemGuid)
 		: m_cast(cast)
 		, m_spell(spell)
@@ -1113,6 +1141,11 @@ namespace mmo
 			m_delayedCast = true;
 		}
 		
+		// A negative spell that deals no damage (a curse, a snare) fires no damage proc event, so
+		// landing its aura on an enemy is what fires DoneSpellNoneDmgClassNeg for the caster.
+		// Only the caster's side: Taken procs keyed on it (Frost Nova's break) keep their behaviour.
+		const bool firesNoneDmgClassNeg = !DealsDirectDamage(m_spell);
+
 		// Apply aura containers to their respective owners. Lookup by GUID so stale raw
 		// pointers from units that died during effect processing are handled gracefully.
 		for (auto& [targetGuid, auraContainer] : m_targetAuraContainers)
@@ -1121,6 +1154,13 @@ namespace mmo
 			if (targetUnit)
 			{
 				targetUnit->ApplyAura(std::move(auraContainer));
+
+				GameUnitS& executer = m_cast.GetExecuter();
+				if (firesNoneDmgClassNeg && targetUnit != &executer && targetUnit->IsAlive() && !executer.UnitIsFriendly(*targetUnit))
+				{
+					executer.TriggerProcEvent(spell_proc_flags::DoneSpellNoneDmgClassNeg, targetUnit, 0, proc_ex_flags::NormalHit,
+						static_cast<uint8>(m_spell.spellschool()), m_isProc, m_spell.familyflags());
+				}
 			}
 		}
 
