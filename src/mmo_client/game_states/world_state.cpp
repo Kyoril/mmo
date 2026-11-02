@@ -2623,8 +2623,18 @@ namespace mmo
 		// Ensure terrain is properly reloaded
 		PagePosition worldSize(64, 64);
 		const auto pagePos = PagePosition(static_cast<uint32>(GetTerrainPageIndex(position.x)), static_cast<uint32>(GetTerrainPageIndex(position.z)));
+
+		// Everything up to here (connecting, receiving the player) counts as the first 10 %, the
+		// terrain pages as the next 50 % and the entities placed on them as the rest.
+		LoadingScreen::SetProgress(0.1f);
+		LoadingScreen::Present(true);
+
+		size_t pageCount = 0;
+		ForEachPageInSquare(worldSize, pagePos, 1, [&pageCount](const PagePosition&) { ++pageCount; });
+		size_t pagesLoaded = 0;
+
 		ForEachPageInSquare(
-			worldSize, pagePos, 1, [this](const PagePosition &page)
+			worldSize, pagePos, 1, [this, pageCount, &pagesLoaded](const PagePosition &page)
 			{
 				if (m_worldInstance->GetTerrain())
 				{
@@ -2656,6 +2666,7 @@ namespace mmo
 							// An async preparation is in flight: pump the dispatcher so its queued
 							// FinalizePrepare can run, and give the worker thread time to finish.
 							m_dispatcher.poll_one();
+							LoadingScreen::Present();
 							std::this_thread::yield();
 						}
 
@@ -2666,7 +2677,11 @@ namespace mmo
 					}
 				}
 				
-				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
+				m_worldInstance->LoadPageEntities(page.x(), page.y());
+
+				++pagesLoaded;
+				LoadingScreen::SetProgress(0.1f + 0.5f * static_cast<float>(pagesLoaded) / static_cast<float>(pageCount));
+				LoadingScreen::Present(); });
 
 		// Entity files are read on the work queue (here and on the background loader) and world models
 		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
@@ -2675,6 +2690,7 @@ namespace mmo
 		size_t dispatched = 0;
 		size_t jobsDone = 0;
 		const auto waitStart = std::chrono::steady_clock::now();
+		size_t peakPending = 0;
 		while (true)
 		{
 			bool progressed = false;
@@ -2688,6 +2704,16 @@ namespace mmo
 				jobsDone++;
 				progressed = true;
 			}
+
+			// The total is not known up front (entity files spawn world model preparations), so
+			// progress is measured against the most work seen pending at once.
+			const size_t pending = m_worldInstance->GetPendingEntityLoadCount();
+			peakPending = std::max(peakPending, pending);
+			if (peakPending > 0)
+			{
+				LoadingScreen::SetProgress(0.6f + 0.35f * (1.0f - static_cast<float>(pending) / static_cast<float>(peakPending)));
+			}
+			LoadingScreen::Present();
 
 			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
 			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
@@ -2711,6 +2737,9 @@ namespace mmo
 		}
 
 		m_foliage->RebuildAll();
+
+		LoadingScreen::SetProgress(1.0f);
+		LoadingScreen::Present(true);
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
 			{

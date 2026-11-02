@@ -66,6 +66,7 @@
 #include "editor_windows/zone_editor_window.h"
 #include "editor_windows/sound_editor_window.h"
 #include "editor_windows/surface_type_editor_window.h"
+#include "editor_windows/loading_tip_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
 #include "editor_windows/object_display_editor_window.h"
@@ -287,6 +288,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SurfaceTypeEditorWindow>("Surface Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::WaterProfileEditorWindow>("Water Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EnvironmentProfileEditorWindow>("Environment Profile Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::LoadingTipEditorWindow>("Loading Tip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
