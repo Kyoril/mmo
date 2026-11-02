@@ -22,6 +22,7 @@
 #include "material_shader_resolver.h"
 #include "game_states/login_state.h"
 #include "game_states/world_state.h"
+#include "loading_screen.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "systems/action_bar.h"
@@ -227,6 +228,8 @@ namespace mmo
 			ShowStartupError("The game data could not be loaded. The installation appears to be incomplete or damaged.");
 			return false;
 		}
+
+		LoadingScreen::SetTips(&context.project->loadingTips.getTemplates());
 
 		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
 		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
@@ -508,6 +511,7 @@ namespace mmo
 		UnitGossipVoice::Get().Initialize(nullptr, nullptr, nullptr);
 		context.soundEntryPlayer.reset();
 
+		LoadingScreen::SetTips(nullptr);
 		context.project.reset();
 		context.uiRuntime.reset();
 

@@ -992,6 +992,7 @@ namespace mmo
 			"emotes",
 			"water_profiles",
 			"environment_profiles",
+			"loading_tips",
 		};
 
 		const fs::path srcDir = m_config.projectPath;
