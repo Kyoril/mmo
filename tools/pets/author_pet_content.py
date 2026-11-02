@@ -39,8 +39,7 @@ Design notes that are easy to undo by accident:
 * No class learns Bind Beast, Summon Companion or Rekindle Companion (classmask 0, on no
   trainer). They are test spells, learned with the GM command ``learnspell``. They were first
   called Tame Beast, Call Pet and Revive Pet; those echoed another game's hunter kit.
-* All names are original. Placeholder models: the shade uses the undead NPC model at 0.8
-  scale until it gets its own.
+* All names are original. The shade uses the purple demon minion (model 70) at 0.8 scale.
 """
 
 import argparse
@@ -121,7 +120,8 @@ RANGE_MEDIUM, RANGE_25 = 2, 4          # 35 yd, 25 yd
 
 UNDEAD_FACTION = 4                     # "Undead Dungeon" (hostile)
 WARRIOR_UNIT_CLASS, MAGE_UNIT_CLASS = 1, 2
-SKELETON_MODEL, HUMAN_FEMALE_MODEL, UNDEAD_FEMALE_MODEL = 6, 3, 37
+SKELETON_MODEL, HUMAN_FEMALE_MODEL = 6, 3
+DEMON_MINION_PURPLE_MODEL = 70           # stylized demon minion pack, purple skin
 
 # Existing spells reused by the creatures.
 STRIKE, DODGE, PARRY_LIKE_35, PASSIVE_36, SHADOWBOLT_R1 = 8, 37, 35, 36, 23
@@ -393,7 +393,7 @@ def unit_definitions():
 
     shade = {
         "id": UMBRAL_SHADE, "minlevel": 1, "maxlevel": 60, "factionTemplate": UNDEAD_FACTION,
-        "maleModel": UNDEAD_FEMALE_MODEL, "femaleModel": UNDEAD_FEMALE_MODEL, "scale": 0.8,
+        "maleModel": DEMON_MINION_PURPLE_MODEL, "femaleModel": DEMON_MINION_PURPLE_MODEL, "scale": 0.8,
         "type": 0, "family": 0, "minlevelhealth": 60, "maxlevelhealth": 600,
         "minmeleedmg": 3.0, "maxmeleedmg": 5.0, "regeneration": 3,
         "unitClassId": MAGE_UNIT_CLASS, "baseDamageVariance": 0.15, "damagePerLevel": 0.8,

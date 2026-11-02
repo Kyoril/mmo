@@ -83,6 +83,7 @@
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
+#include "import/fbx_animation_import.h"
 
 #include "locale_asset_utils.h"
 
@@ -783,6 +784,82 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(allImported ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--import-fbx-animations")
+			{
+				// mmo_edit --import-fbx-animations <skeleton.skel> <model> [--scale <s>] [--clip <take>=<name>]...
+				// Imports the model's animation takes into the skeleton asset. Without --clip every take keeps its
+				// name; with it, only the listed takes are imported, renamed. A take matches by its full name or by
+				// one of its '|' separated parts ("Minion|Idle01|BaseLayer" matches "Idle01").
+				static std::ofstream importLog("fbx_animation_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-fbx-animations needs <skeleton.skel> <model>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				float scale = 1.0f;
+				std::vector<std::pair<std::string, std::string>> clips;
+				bool badArgs = false;
+				for (int j = i + 3; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--scale" && j + 1 < argCount)
+					{
+						scale = std::stof(args[++j]);
+					}
+					else if (arg == "--clip" && j + 1 < argCount && std::string(args[j + 1]).find('=') != std::string::npos)
+					{
+						const std::string clip = args[++j];
+						const size_t separator = clip.find('=');
+						clips.emplace_back(clip.substr(0, separator), clip.substr(separator + 1));
+					}
+					else
+					{
+						ELOG("--import-fbx-animations: unknown or incomplete option " << arg);
+						badArgs = true;
+					}
+				}
+
+				const auto resolveName = [&clips](const std::string& takeName) -> std::string
+				{
+					std::vector<std::string> parts{ takeName };
+					std::stringstream stream(takeName);
+					for (std::string part; std::getline(stream, part, '|');)
+					{
+						parts.push_back(part);
+					}
+
+					if (clips.empty())
+					{
+						ILOG("Found take '" << takeName << "'");
+						return takeName;
+					}
+
+					for (const auto& [source, target] : clips)
+					{
+						if (std::ranges::find(parts, source) != parts.end())
+						{
+							return target;
+						}
+					}
+
+					ILOG("Skipping take '" << takeName << "'");
+					return {};
+				};
+
+				const bool imported = !badArgs && mmo::ImportFbxAnimationsIntoAsset(args[i + 1], args[i + 2], resolveName, scale);
+				PostQuitMessage(imported ? 0 : 1);
 				break;
 			}
 
