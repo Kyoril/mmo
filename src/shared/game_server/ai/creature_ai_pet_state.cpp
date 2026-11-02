@@ -192,7 +192,7 @@ namespace mmo
 		// What the pet may pick on its own. A staying pet only takes on what comes within its reach.
 		const auto usable = [&](const GameUnitS* unit) -> bool
 		{
-			if (!unit || unit == &controlled || !unit->IsAlive() || !controlled.UnitIsEnemy(*unit) || !unit->CanBeSeenBy(controlled))
+			if (!unit || unit == &controlled || !unit->IsAlive() || !controlled.UnitCanAttack(*unit) || !unit->CanBeSeenBy(controlled))
 			{
 				return false;
 			}
@@ -210,7 +210,7 @@ namespace mmo
 		if (commanded != 0)
 		{
 			const GameUnitS* unit = world->FindByGuid<GameUnitS>(commanded);
-			if (!unit || !unit->IsAlive() || !controlled.UnitIsEnemy(*unit))
+			if (!unit || !unit->IsAlive() || !controlled.UnitCanAttack(*unit))
 			{
 				ai.ClearPetCommandedTarget();
 				commanded = 0;

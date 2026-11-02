@@ -79,7 +79,8 @@ namespace mmo
 			// which unit or which spell is responsible.
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
-				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid())
+				<< ": result " << static_cast<uint32>(m_endCastFailure));
 			// Report the reason validation gave, so the caller can react to it: creature AI walks
 			// towards a victim it lost line of sight to only when told so. Validation paths that
 			// end without naming a reason still report a generic error.

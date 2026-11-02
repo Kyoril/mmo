@@ -1710,6 +1710,14 @@ public:
 		/// @returns true if the other unit is friendly, false otherwise.
 		bool UnitIsFriendly(const GameUnitS &other) const;
 
+		/// Checks if this unit may attack another one when told to: anything that is not itself and
+		/// not friendly, neutral units included. Not an enemy check: creatures pick fights on their own
+		/// only with enemies (UnitIsEnemy), but a player's attack, and a pet acting for its owner,
+		/// may hit a neutral rat as well.
+		/// @param other The other unit to check.
+		/// @returns true if the other unit may be attacked.
+		bool UnitCanAttack(const GameUnitS &other) const;
+
 		/// Maximum number of owner links followed when resolving the top owner of a unit.
 		static constexpr uint32 MaxOwnerChainDepth = 4;
 

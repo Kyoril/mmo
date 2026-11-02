@@ -396,7 +396,7 @@ namespace mmo
 			{
 				WorldInstance* world = m_controlled.GetWorldInstance();
 				GameUnitS* target = world ? world->FindByGuid<GameUnitS>(targetGuid) : nullptr;
-				if (!target || !target->IsAlive() || !m_controlled.UnitIsEnemy(*target))
+				if (!target || !target->IsAlive() || !m_controlled.UnitCanAttack(*target))
 				{
 					return;
 				}
@@ -517,7 +517,7 @@ namespace mmo
 
 	void CreatureAI::EngagePetTarget(GameUnitS& target)
 	{
-		if (!m_state || !m_controlled.IsAlive() || &target == &m_controlled || !target.IsAlive() || !m_controlled.UnitIsEnemy(target))
+		if (!m_state || !m_controlled.IsAlive() || &target == &m_controlled || !target.IsAlive() || !m_controlled.UnitCanAttack(target))
 		{
 			return;
 		}

@@ -902,11 +902,12 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
-			// A harmful spell cast at an enemy is an attack: assisting pets join in. Others (a tame,
-			// a dispel or an inspect cast at an enemy) are not, or pets would attack a tame target.
+			// A harmful spell cast at something attackable (neutral included) is an attack: assisting
+			// pets join in. Others (a tame, a dispel or an inspect cast at an enemy) are not, or pets
+			// would attack a tame target.
 			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
 			{
-				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && UnitCanAttack(*victim))
 				{
 					m_pets->OnOwnerAttack(*victim);
 				}
@@ -3090,9 +3091,9 @@ namespace mmo
 		}
 
 		SetTarget(victim ? victim->GetGuid() : 0);
-		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
+		if (!UnitCanAttack(*victim))
 		{
-			// Unit is not an enemy, so we won't attack
+			// Unit is ourselves or friendly, so we won't attack
 			StopAttack();
 			return;
 		}
@@ -3660,6 +3661,11 @@ namespace mmo
 		}
 
 		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitCanAttack(const GameUnitS &other) const
+	{
+		return other.GetGuid() != GetGuid() && !UnitIsFriendly(other);
 	}
 
 	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)

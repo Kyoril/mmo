@@ -175,3 +175,42 @@ TEST_CASE_METHOD(PersistentPetFixture, "spell damage of every unit a player owns
 
 	player->SetNetUnitWatcher(nullptr);
 }
+
+namespace
+{
+	/// A faction nobody is an enemy or a friend of, like the Cellar Rats'.
+	constexpr uint32 NeutralTemplate = 3;
+
+	void AddNeutralFaction(proto::Project& project)
+	{
+		auto* neutral = project.factionTemplates.add(NeutralTemplate);
+		neutral->set_name("Neutral Critters");
+		neutral->set_flags(0);
+		neutral->set_faction(3);
+	}
+}
+
+TEST_CASE_METHOD(PersistentPetFixture, "a pet attacks a neutral creature its owner sends it at", "[pets][persistent]")
+{
+	AddNeutralFaction(project);
+	proto::UnitEntry* critterEntry = AddUnitEntry(9100, "Cellar Rat", 2);
+	critterEntry->set_factiontemplate(NeutralTemplate);
+	const auto player = SpawnPlayer(4);
+	player->SetStoredPets({ MakeStoredPet(ImpPetId) });
+	GameCreatureS* pet = Summon(*player, ImpPetId);
+	const auto rat = SpawnCreature(*critterEntry, Vector3(6.0f, 0.0f, 0.0f));
+	REQUIRE_FALSE(player->UnitIsEnemy(*rat));
+	REQUIRE(player->UnitCanAttack(*rat));
+
+	SECTION("the Attack command")
+	{
+		player->GetPets().Command(pet_command::Attack, rat->GetGuid(), 0);
+		CHECK(RunUntil([&] { return pet->GetVictim() == rat.get(); }));
+	}
+
+	SECTION("assisting the owner's harmful cast")
+	{
+		REQUIRE(CastAt(*player, BiteSpellId, rat.get()) == spell_cast_result::CastOkay);
+		CHECK(RunUntil([&] { return pet->GetVictim() == rat.get(); }));
+	}
+}
