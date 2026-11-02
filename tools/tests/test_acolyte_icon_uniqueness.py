@@ -12,6 +12,10 @@ What counts as an ability ("a spell" for this test):
 * A spell triggered by exactly one other spell (a proc or follow-up effect, found through the
   effects' triggerspell) belongs to the triggering ability's group and may share its icon.
 * The Duskling's spells 301-308 always count (Summon / Dismiss / Bind are cast from the pet UI).
+* A proc is a spell any ability triggers (triggerspell of an effect, transitively). With exactly one
+  trigger it joins that group; with several it is a group of its own. Procs and every classmask-4
+  spell that is not a creature copy (a spell some creature casts and no player can reach) are
+  checked like abilities: icon present, file exists, no icon shared across groups.
 * Retired spells (author_talent_trees.RETIRED_RANK_SPELLS, which includes the neutered Umbra path
   and Abyssal Reach) are ignored on both sides.
 
@@ -119,14 +123,49 @@ def build_groups(spells_by_id, abilities):
     return find
 
 
+def creature_spell_ids(catalog):
+    """Spells that creatures cast. Unreachable ones among them are creature copies of player spells."""
+    ids = set()
+    for unit in catalog["units"].entry:
+        ids.update(entry.spellid for entry in unit.creaturespells)
+        if unit.HasField("auto_attack_spell"):
+            ids.add(unit.auto_attack_spell)
+    return ids
+
+
+def triggered_closure(spells_by_id, roots):
+    """Every spell triggered (triggerspell of any effect, transitively) by one of `roots`."""
+    found, queue = set(), list(roots)
+    while queue:
+        spell = spells_by_id.get(queue.pop())
+        if spell is None:
+            continue
+        for effect in spell.effects:
+            target = effect.triggerspell
+            if target and target in spells_by_id and target not in found:
+                found.add(target)
+                queue.append(target)
+    return found
+
+
 def analyse(att, catalog):
-    """Returns (acolyte_collisions, other_collisions) as lists of (icon, [(id, name), ...])."""
+    """
+    Returns (acolyte_collisions, other_collisions, acolyte_ids). Collisions are lists of
+    (icon, [(id, name), ...]); acolyte_ids are the checked spells that belong to an acolyte group.
+    """
     spells_by_id = {spell.id: spell for spell in catalog["spells"].entry}
     retired = set(att.RETIRED_RANK_SPELLS)
     # Summon / Dismiss / Bind Duskling are cast from the pet UI and a bind item, so they count
     # even though no trainer or pet entry lists them.
     abilities = {spell_id for spell_id in reachable_spells(catalog) | set(DUSKLING_SPELLS)
                  if spell_id in spells_by_id and spell_id not in retired}
+    creature_only = creature_spell_ids(catalog) - abilities
+    # Checked spells: abilities, everything they trigger (procs; a proc with several triggers is
+    # a group of its own), and every other classmask-4 spell that is not a creature copy.
+    checked = abilities | triggered_closure(spells_by_id, abilities)
+    checked |= {spell.id for spell in spells_by_id.values()
+                if spell.classmask & ACOLYTE_MASK and spell.id not in creature_only}
+    checked = {spell_id for spell_id in checked if spell_id not in retired}
     find = build_groups(spells_by_id, abilities)
 
     acolyte_units = {unit.id: unit for unit in catalog["units"].entry
@@ -138,8 +177,11 @@ def analyse(att, catalog):
     def is_acolyte(spell):
         return bool(spell.classmask & ACOLYTE_MASK) or spell.id in acolyte_extra
 
-    group_icon_users = defaultdict(lambda: defaultdict(set))  # icon -> group -> ability ids
-    for spell_id in abilities:
+    acolyte_groups = {find(spell_id) for spell_id in checked if is_acolyte(spells_by_id[spell_id])}
+    acolyte_ids = {spell_id for spell_id in checked if find(spell_id) in acolyte_groups}
+
+    group_icon_users = defaultdict(lambda: defaultdict(set))  # icon -> group -> spell ids
+    for spell_id in checked:
         spell = spells_by_id[spell_id]
         if spell.icon:
             group_icon_users[normalize_icon(spell.icon)][find(spell_id)].add(spell_id)
@@ -150,11 +192,11 @@ def analyse(att, catalog):
             continue
         members = sorted(spell_id for ids in groups.values() for spell_id in ids)
         described = [(spell_id, spells_by_id[spell_id].name) for spell_id in members]
-        if any(is_acolyte(spells_by_id[spell_id]) for spell_id in members):
+        if any(group in acolyte_groups for group in groups):
             acolyte_collisions.append((icon, described))
         else:
             other_collisions.append((icon, described))
-    return acolyte_collisions, other_collisions
+    return acolyte_collisions, other_collisions, acolyte_ids
 
 
 class AcolyteIconUniquenessTests(unittest.TestCase):
@@ -169,28 +211,20 @@ class AcolyteIconUniquenessTests(unittest.TestCase):
         except (FileNotFoundError, OSError, SystemExit, ImportError) as exc:
             raise unittest.SkipTest(f"data or protoc unavailable: {exc}")
         cls.spells_by_id = {spell.id: spell for spell in cls.catalog["spells"].entry}
-        cls.acolyte, cls.other = analyse(att, cls.catalog)
+        cls.acolyte, cls.other, cls.acolyte_ids = analyse(att, cls.catalog)
 
-    def test_acolyte_abilities_have_an_icon(self):
-        retired = set(self.att.RETIRED_RANK_SPELLS)
-        missing = []
-        for spell_id in reachable_spells(self.catalog) | set(DUSKLING_SPELLS):
-            spell = self.spells_by_id.get(spell_id)
-            if spell is None or spell_id in retired:
-                continue
-            if (spell.classmask & ACOLYTE_MASK or spell_id in DUSKLING_SPELLS) and not spell.icon:
-                missing.append((spell_id, spell.name))
-        self.assertEqual(missing, [], "acolyte abilities without an icon")
+    def test_acolyte_spells_have_an_icon(self):
+        missing = [(i, self.spells_by_id[i].name) for i in sorted(self.acolyte_ids)
+                   if not self.spells_by_id[i].icon]
+        self.assertEqual(missing, [], "acolyte abilities or their procs without an icon")
 
     def test_acolyte_icon_files_exist(self):
         client = ROOT / "data/client"
         if not (client / "Interface").is_dir():
             self.skipTest("data/client submodule is not checked out")
-        missing = []
-        for spell in self.spells_by_id.values():
-            if spell.classmask & ACOLYTE_MASK and spell.icon and \
-                    not (client / spell.icon).is_file():
-                missing.append((spell.id, spell.name, spell.icon))
+        missing = [(i, self.spells_by_id[i].name, self.spells_by_id[i].icon)
+                   for i in sorted(self.acolyte_ids)
+                   if self.spells_by_id[i].icon and not (client / self.spells_by_id[i].icon).is_file()]
         self.assertEqual(missing, [], "icon files missing from data/client")
 
     def test_no_acolyte_ability_shares_an_icon(self):
