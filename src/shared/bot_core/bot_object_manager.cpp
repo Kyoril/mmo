@@ -203,7 +203,7 @@ namespace mmo
 		return result;
 	}
 
-	const BotUnit* BotObjectManager::GetNearestHostile(const float maxRange) const
+	const BotUnit* BotObjectManager::GetNearestHostile(const Vector3& position, const float maxRange) const
 	{
 		const BotUnit* self = GetSelf();
 		if (!self)
@@ -211,7 +211,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
 		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos](const BotUnit& unit)
@@ -239,7 +239,10 @@ namespace mmo
 		});
 	}
 
-	const BotUnit* BotObjectManager::GetNearestAttackable(const float maxRange) const
+	const BotUnit* BotObjectManager::GetNearestAttackable(
+		const Vector3& position,
+		const float maxRange,
+		const std::function<bool(const BotUnit&)>& exclude) const
 	{
 		const BotUnit* self = GetSelf();
 		if (!self)
@@ -247,13 +250,30 @@ namespace mmo
 			return nullptr;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
-		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos](const BotUnit& unit)
+		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos, &exclude](const BotUnit& unit)
 		{
+			// Skip self
+			if (unit.GetGuid() == m_selfGuid)
+			{
+				return false;
+			}
+
+			// Must be alive
+			if (!unit.IsAlive())
+			{
+				return false;
+			}
+
 			// Must be within range
 			if (unit.GetDistanceToSquared(selfPos) > maxRangeSq)
+			{
+				return false;
+			}
+
+			if (exclude && exclude(unit))
 			{
 				return false;
 			}
@@ -263,7 +283,7 @@ namespace mmo
 		});
 	}
 
-	const BotUnit* BotObjectManager::GetNearestFriendly(const float maxRange) const
+	const BotUnit* BotObjectManager::GetNearestFriendly(const Vector3& position, const float maxRange) const
 	{
 		const BotUnit* self = GetSelf();
 		if (!self)
@@ -271,7 +291,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
 		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos](const BotUnit& unit)
@@ -299,7 +319,7 @@ namespace mmo
 		});
 	}
 
-	const BotUnit* BotObjectManager::GetNearestFriendlyPlayer(const float maxRange) const
+	const BotUnit* BotObjectManager::GetNearestFriendlyPlayer(const Vector3& position, const float maxRange) const
 	{
 		const BotUnit* self = GetSelf();
 		if (!self)
@@ -307,7 +327,7 @@ namespace mmo
 			return nullptr;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
 		return GetNearestUnit(selfPos, [this, self, maxRangeSq, &selfPos](const BotUnit& unit)
@@ -341,7 +361,7 @@ namespace mmo
 		});
 	}
 
-	std::vector<const BotUnit*> BotObjectManager::GetHostilesInRange(const float maxRange) const
+	std::vector<const BotUnit*> BotObjectManager::GetHostilesInRange(const Vector3& position, const float maxRange) const
 	{
 		std::vector<const BotUnit*> result;
 
@@ -351,7 +371,7 @@ namespace mmo
 			return result;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
 		for (const auto& [guid, unit] : m_units)
@@ -384,7 +404,7 @@ namespace mmo
 		return result;
 	}
 
-	std::vector<const BotUnit*> BotObjectManager::GetFriendlyPlayersInRange(const float maxRange) const
+	std::vector<const BotUnit*> BotObjectManager::GetFriendlyPlayersInRange(const Vector3& position, const float maxRange) const
 	{
 		std::vector<const BotUnit*> result;
 
@@ -394,7 +414,7 @@ namespace mmo
 			return result;
 		}
 
-		const Vector3& selfPos = self->GetPosition();
+		const Vector3& selfPos = position;
 		const float maxRangeSq = maxRange * maxRange;
 
 		for (const auto& [guid, unit] : m_units)
@@ -433,7 +453,7 @@ namespace mmo
 		return result;
 	}
 
-	std::vector<const BotUnit*> BotObjectManager::GetUnitsTargetingSelf(const float maxRange) const
+	std::vector<const BotUnit*> BotObjectManager::GetUnitsTargetingSelf(const Vector3& position, const float maxRange) const
 	{
 		std::vector<const BotUnit*> result;
 
@@ -442,9 +462,8 @@ namespace mmo
 			return result;
 		}
 
-		const BotUnit* self = GetSelf();
 		const float maxRangeSq = maxRange * maxRange;
-		const bool checkRange = maxRange > 0.0f && self != nullptr;
+		const bool checkRange = maxRange > 0.0f;
 
 		for (const auto& [guid, unit] : m_units)
 		{
@@ -461,7 +480,7 @@ namespace mmo
 			}
 
 			// Range check if requested
-			if (checkRange && unit.GetDistanceToSquared(self->GetPosition()) > maxRangeSq)
+			if (checkRange && unit.GetDistanceToSquared(position) > maxRangeSq)
 			{
 				continue;
 			}
