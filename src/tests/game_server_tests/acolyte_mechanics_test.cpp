@@ -475,3 +475,39 @@ TEST_CASE_METHOD(AcolyteMechanicsFixture, "Summon effects honour AllEffects and 
 		}
 	}
 }
+
+TEST_CASE_METHOD(AcolyteMechanicsFixture, "Damage dealt by a proc cast still fires DoneSpellMagicDmgClassNeg procs of its family", "[acolyte_mechanics]")
+{
+	// Rot Field's zone ticks and Drain Essence's channel ticks are proc casts. Miasma, Creeping Rot
+	// and Shared Night key on their damage, which works because the damage effects fire their proc
+	// event as a regular one (only proc casts' own non-damage proc events are suppressed).
+	constexpr uint32 TickSpellId = 940;
+	constexpr uint32 TickPassiveSpellId = 941;
+	constexpr uint32 TickSlowSpellId = 942;
+	constexpr uint64 RotFamily = 0x800;
+
+	auto* tick = AddSpell(TickSpellId, "Rot Field Tick", RotFamily | 0x1);
+	auto* damage = tick->add_effects();
+	damage->set_index(0);
+	damage->set_type(spell_effects::SchoolDamage);
+	damage->set_basepoints(10);
+	damage->set_targeta(spell_effect_targets::TargetEnemy);
+
+	AddProcPassive(TickPassiveSpellId, spell_proc_flags::DoneSpellMagicDmgClassNeg, RotFamily, TickSlowSpellId);
+	auto* slow = AddSpell(TickSlowSpellId, "Creeping Rot", 0);
+	slow->set_duration(4000);
+	AddAuraEffect(*slow, aura_type::ModDecreaseSpeed, -30, spell_effect_targets::TargetEnemy);
+
+	const auto caster = SpawnPlayer(4);
+	const auto victim = SpawnEnemy(Vector3(5.0f, 0.0f, 0.0f));
+	const uint64 casterId = caster->GetGuid();
+	caster->AddSpell(TickPassiveSpellId);
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(victim->GetGuid());
+	REQUIRE(caster->CastSpell(targetMap, *project.spells.getById(TickSpellId), 0, true) == spell_cast_result::CastOkay);
+
+	REQUIRE(RunUntil([&] { return victim->GetHealth() < 1000; }));
+	CHECK(RunUntil([&] { return CountAuras(*victim, TickSlowSpellId, casterId) == 1; }));
+}

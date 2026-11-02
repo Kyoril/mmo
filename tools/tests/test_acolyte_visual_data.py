@@ -41,7 +41,8 @@ ACOLYTE_SPELLS = {
     1306: "Gloaming Trance", 1314: "Leeching Rot",
     119: "Void Resurgence", 120: "Void Resurgence", 121: "Void Resurgence",
 }
-TALENT_SPELLS = (1306, 1309, 1314, 1328)
+# Umbral Bloom (1309) and Gloaming Trance (1306) left the trees with Umbra; their visualizations stay.
+TALENT_SPELLS = (1314, 1328)
 
 
 class AcolyteVisualDataTests(unittest.TestCase):
