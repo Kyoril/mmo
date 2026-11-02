@@ -209,8 +209,16 @@ namespace mmo
         ComputeNodesDerivedTransform(scene, scene->mRootNode, scene->mRootNode->mTransformation);
 
         const auto filenameWithoutExtension = m_fileToImport.filename().replace_extension();
+        m_skeletonScale = 1.0f;
         if (!mBonesByName.empty())
         {
+            // Skinned meshes are scaled together with their skeleton, which only supports a uniform scale
+            m_skeletonScale = m_importScale.x;
+            if (m_importScale.y != m_skeletonScale || m_importScale.z != m_skeletonScale)
+            {
+                WLOG("Skinned meshes only support a uniform import scale; using " << m_skeletonScale);
+            }
+
             const std::filesystem::path p = (m_importAssetPath / filenameWithoutExtension).string();
 
             String skeletonName = p.string();
@@ -221,6 +229,27 @@ namespace mmo
             CreateBonesFromNode(scene, scene->mRootNode);
             msBoneCount = 0;
             CreateBoneHierarchy(scene, scene->mRootNode);
+
+            // Every bone translation is already scaled. The root bones also take the import rotation and offset,
+            // the same transform the skinned vertices get, so the bind pose keeps matching the mesh.
+            const Matrix4 rootTransform = importTransform * Matrix4::GetScale(Vector3(1.0f / m_skeletonScale, 1.0f / m_skeletonScale, 1.0f / m_skeletonScale));
+            for (uint16 i = 0; i < m_skeleton->GetNumBones(); ++i)
+            {
+                Bone* bone = m_skeleton->GetBone(i);
+                if (bone->GetParent() != nullptr)
+                {
+                    continue;
+                }
+
+                Matrix4 local;
+                local.MakeTransform(bone->GetPosition(), Vector3::UnitScale, bone->GetOrientation());
+
+                Vector3 position, scale;
+                Quaternion orientation;
+                (rootTransform * local).Decomposition(position, scale, orientation);
+                bone->SetPosition(position);
+                bone->SetOrientation(orientation);
+            }
 
             // The mesh has skin deformers, but none of the referenced bones exist as
             // nodes in the scene graph, so no bones could be created. This typically
@@ -349,7 +378,9 @@ namespace mmo
         offset += declaration->AddElement(source, offset, VertexElementType::Float3, VertexElementSemantic::Tangent).GetSize();
         offset += declaration->AddElement(source, offset, VertexElementType::Float2, VertexElementSemantic::TextureCoordinate).GetSize();
 
-        Matrix4 aiM = mNodeDerivedTransformByName.find(pNode->mName.data)->second * transform;
+        // Skinned vertices are transformed in skeleton space, after their node transforms, like the root bones
+        const Matrix4& nodeTransform = mNodeDerivedTransformByName.find(pNode->mName.data)->second;
+        Matrix4 aiM = m_skeleton ? transform * nodeTransform : nodeTransform * transform;
         Matrix3 normalMatrix = aiM.Linear().Inverse().Transpose();
 
         std::vector<POS_COL_NORMAL_BINORMAL_TANGENT_TEX_VERTEX> vertexData(aiMesh->mNumVertices);
@@ -668,7 +699,7 @@ namespace mmo
                     Quaternion rot;
                     boneMatrix.Decomposition(pos, scale, rot);
 
-                    bone->SetPosition(pos);
+                    bone->SetPosition(pos * m_skeletonScale);
                     bone->SetOrientation(rot);
 
                     DLOG("(" << msBoneCount << ") Creating bone '" << boneName << "'");
