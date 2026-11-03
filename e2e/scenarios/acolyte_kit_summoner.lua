@@ -122,9 +122,13 @@ Log("Duskling max health without Dark Bond: " .. baseHealth)
 Learn(DARK_BOND_1)
 Assert(WaitUntil(function() return GetMaxHealth(pet) >= math.floor(baseHealth * 1.10) end, 5000, "dark bond 1"),
 	"Dark Bond rank 1 should raise the Duskling's max health by 10% (" .. baseHealth .. " -> " .. GetMaxHealth(pet) .. ")")
+Assert(GetMaxHealth(pet) <= math.floor(baseHealth * 1.10) + 1,
+	"Dark Bond rank 1 should raise the Duskling's max health by no more than 10% (" .. baseHealth .. " -> " .. GetMaxHealth(pet) .. ")")
 Learn(DARK_BOND_2)
 Assert(WaitUntil(function() return GetMaxHealth(pet) >= math.floor(baseHealth * 1.20) end, 5000, "dark bond 2"),
 	"Dark Bond rank 2 should raise the Duskling's max health by 20% (" .. baseHealth .. " -> " .. GetMaxHealth(pet) .. ")")
+Assert(GetMaxHealth(pet) <= math.floor(baseHealth * 1.20) + 1,
+	"Dark Bond rank 2 should raise the Duskling's max health by no more than 20%, not stack with rank 1 (" .. baseHealth .. " -> " .. GetMaxHealth(pet) .. ")")
 Log("Duskling max health with Dark Bond: " .. GetMaxHealth(pet))
 
 -- ---------------------------------------------------------------------------------------------
