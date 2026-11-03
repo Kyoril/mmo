@@ -90,6 +90,11 @@ namespace mmo
 		[[nodiscard]] bool IsUsingLocalTransform() const { return m_isLocal; }
 
 	private:
+		/// False only if the selection has objects that opt in (Selectable::HidesUnsupportedTransformModes)
+		/// and none of them supports the current mode; the widget then hides and ignores the mouse.
+		/// Selections without such objects always report true (unchanged widget behaviour).
+		[[nodiscard]] bool IsModeSupported() const;
+
 		void UpdateTanslationAxisLines();
 
 		void SetupTranslation();
@@ -207,6 +212,7 @@ namespace mmo
 		Vector3 m_camDir{};
 		bool m_visible{true};
 		scoped_connection m_objectMovedCon{};
+		scoped_connection m_objectRotatedCon{};
 		scoped_connection m_onSelectionChanged{};
 
 		// Translation-Mode variables

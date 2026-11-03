@@ -59,11 +59,20 @@ namespace mmo
 		/// @brief Called when a new world should be created.
 		void CreateNewWorld();
 
+		/// @brief Draws the "New Section" popup and creates the section world on confirm.
+		void DrawNewSectionDialog();
+
 	private:
 		proto::Project& m_project;
 		std::map<Path, std::shared_ptr<EditorInstance>> m_instances;
 		bool m_showWorldNameDialog { false };
 		String m_worldName;
+
+		/// @brief State of the "New Section" popup (see CreateSectionWorld).
+		bool m_showSectionDialog { false };
+		String m_sectionName;
+		String m_sectionMaterial;
+		String m_sectionError;
 
 		/// @brief A pending camera target (asset path + world location) applied to the next matching
 		///        instance that is opened. Set via SetPendingCameraTarget.

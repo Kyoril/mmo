@@ -3,6 +3,7 @@
 #pragma once
 
 #include "base/typedefs.h"
+#include "math/path_spline.h"
 
 #include <vector>
 
@@ -24,6 +25,12 @@ namespace mmo
 
 			/// @brief A river path in downstream order.
 			typedef std::vector<FlowPoint> FlowPath;
+
+			/// @brief Converts a flow path to an open linear spline whose point width is the half width.
+			PathSpline ToSpline(const FlowPath& path);
+
+			/// @brief Converts a spline back to a flow path (exact inverse of ToSpline for linear splines).
+			FlowPath FromSpline(const PathSpline& spline);
 
 			/// @brief Parameters shared by all paths of a world.
 			struct FlowSettings

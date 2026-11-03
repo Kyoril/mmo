@@ -276,6 +276,58 @@ namespace mmo
 			}
 		}
 
+		void Terrain::SetLayersAt(const uint32 x, const uint32 z, const uint32 packed) const
+		{
+			const uint32 totalPixels = m_width * (constants::PixelsPerPage - 1) + 1;
+			if (x >= totalPixels || z >= totalPixels)
+			{
+				return;
+			}
+
+			uint32 pageX, pageY, localPixelX, localPixelY;
+			GetPageAndLocalPixel(x, pageX, localPixelX);
+			GetPageAndLocalPixel(z, pageY, localPixelY);
+
+			const bool isLeftEdge = localPixelX == 0 && pageX > 0;
+			const bool isTopEdge = localPixelY == 0 && pageY > 0;
+
+			Page *page = GetPage(pageX, pageY);
+			if (page && page->IsPrepared())
+			{
+				page->SetLayersAt(localPixelX, localPixelY, packed);
+			}
+
+			// Pixel on a left page seam: the left neighbour holds a copy in its last column.
+			if (isLeftEdge)
+			{
+				page = GetPage(pageX - 1, pageY);
+				if (page && page->IsPrepared())
+				{
+					page->SetLayersAt(constants::PixelsPerPage - 1, localPixelY, packed);
+				}
+			}
+
+			// Pixel on a top page seam: the upper neighbour holds a copy in its last row.
+			if (isTopEdge)
+			{
+				page = GetPage(pageX, pageY - 1);
+				if (page && page->IsPrepared())
+				{
+					page->SetLayersAt(localPixelX, constants::PixelsPerPage - 1, packed);
+				}
+			}
+
+			// Page corner: the diagonal neighbour holds a copy as well.
+			if (isLeftEdge && isTopEdge)
+			{
+				page = GetPage(pageX - 1, pageY - 1);
+				if (page && page->IsPrepared())
+				{
+					page->SetLayersAt(constants::PixelsPerPage - 1, constants::PixelsPerPage - 1, packed);
+				}
+			}
+		}
+
 		float Terrain::GetSmoothHeightAt(const float x, const float z)
 		{
 			int32 pageX, pageY;
@@ -506,6 +558,7 @@ namespace mmo
 
 			m_seaLevel = seaLevel;
 			NotifyOceanMaskChanged();
+			NotifyDataChanged();
 		}
 
 		void Terrain::SetOceanRenderedExternally(const bool external)
@@ -724,7 +777,14 @@ namespace mmo
 
 		void Terrain::SetDefaultMaterial(MaterialPtr material)
 		{
+			if (m_defaultMaterial == material)
+			{
+				return;
+			}
+
+			// Tiles without their own material use it, so their paint layers change with it.
 			m_defaultMaterial = std::move(material);
+			NotifyDataChanged();
 		}
 
 		Scene &Terrain::GetScene() const
