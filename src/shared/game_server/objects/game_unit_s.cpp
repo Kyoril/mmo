@@ -905,12 +905,14 @@ namespace mmo
 		{
 			// A harmful spell cast at something attackable (neutral included) is an attack: assisting
 			// pets join in. Others (a tame, a dispel or an inspect cast at an enemy) are not, or pets
-			// would attack a tame target.
-			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
+			// would attack a tame target. A player's target is remembered even before it has pets, so
+			// pets it summons into the fight know what to attack.
+			PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get();
+			if (pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
 			{
 				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && UnitCanAttack(*victim))
 				{
-					m_pets->OnOwnerAttack(*victim);
+					pets->OnOwnerAttack(*victim);
 				}
 			}
 
@@ -3157,10 +3159,10 @@ namespace mmo
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
 
-		// Assisting pets join the attack
-		if (m_pets)
+		// Assisting pets join the attack. A player's target is remembered even before it has pets.
+		if (PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get())
 		{
-			m_pets->OnOwnerAttack(*victim);
+			pets->OnOwnerAttack(*victim);
 		}
 	}
 

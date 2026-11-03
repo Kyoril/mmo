@@ -148,6 +148,8 @@ namespace mmo
 
 	void PetManager::OnOwnerAttack(GameUnitS& victim)
 	{
+		m_ownerTarget = std::static_pointer_cast<GameUnitS>(victim.shared_from_this());
+
 		if (m_temporaryPets.empty() && m_persistentPet.expired())
 		{
 			return;
@@ -216,6 +218,17 @@ namespace mmo
 						}
 					});
 			});
+	}
+
+	GameUnitS* PetManager::GetOwnerTarget() const
+	{
+		GameUnitS* target = m_ownerTarget.lock().get();
+		if (!target || !target->IsAlive() || !m_owner.GetWorldInstance() || target->GetWorldInstance() != m_owner.GetWorldInstance())
+		{
+			return nullptr;
+		}
+
+		return target;
 	}
 
 	bool PetManager::HasPet(const GameUnitS& unit) const

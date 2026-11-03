@@ -370,6 +370,9 @@ namespace mmo
 		m_petRecalled = false;
 		m_petNaturalRunBaseSpeed = m_controlled.GetBaseSpeed(movement_type::Run);
 
+		// Temporary pets (a swarm called into a fight) only fight what their owner attacks.
+		m_petOwnerTargetOnly = m_controlled.GetPetGroup() != 0;
+
 		// The pet state does the following; an escort follow target would fight it.
 		m_controlled.ClearFollowedUnit();
 
@@ -482,7 +485,7 @@ namespace mmo
 
 	void CreatureAI::OnOwnerAttacked(GameUnitS& attacker)
 	{
-		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist || m_petOwnerTargetOnly)
 		{
 			return;
 		}
@@ -503,7 +506,7 @@ namespace mmo
 
 	void CreatureAI::OnPetAttacked(GameUnitS& attacker)
 	{
-		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist || m_petOwnerTargetOnly)
 		{
 			return;
 		}
@@ -513,6 +516,31 @@ namespace mmo
 		{
 			EngagePetTarget(attacker);
 		}
+	}
+
+	GameUnitS* CreatureAI::FindPetOwnerTarget() const
+	{
+		const auto owner = m_petOwner.lock();
+		if (!m_petMode || !owner)
+		{
+			return nullptr;
+		}
+
+		const auto usable = [this](GameUnitS* unit)
+		{
+			return unit && unit != &m_controlled && unit->IsAlive() && m_controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(m_controlled);
+		};
+
+		if (const PetManager* pets = owner->FindPets())
+		{
+			if (GameUnitS* target = pets->GetOwnerTarget(); usable(target))
+			{
+				return target;
+			}
+		}
+
+		GameUnitS* victim = owner->GetVictim();
+		return usable(victim) ? victim : nullptr;
 	}
 
 	void CreatureAI::EngagePetTarget(GameUnitS& target)
