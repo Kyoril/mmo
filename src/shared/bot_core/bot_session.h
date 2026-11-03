@@ -94,6 +94,9 @@ namespace mmo
 		/// Guid of the unit a heard sound came from, or 0.
 		[[nodiscard]] uint64 GetHeardSoundSource(const uint32 soundId) const { return m_realm->GetHeardSoundSource(soundId); }
 
+		/// The despawn_reason of the last DestroyObjects for the object, or -1 if none arrived.
+		[[nodiscard]] int32 GetLastDespawnReason(const uint64 guid) const { return m_realm->GetLastDespawnReason(guid); }
+
 		/// How often the sound entry was heard since the last clear.
 		[[nodiscard]] uint32 GetHeardSoundCount(const uint32 soundId) const { return m_realm->GetHeardSoundCount(soundId); }
 

@@ -102,7 +102,7 @@ namespace
 		}
 
 		void NotifyObjectsSpawned(const std::vector<GameObjectS*>&) override {}
-		void NotifyObjectsDespawned(const std::vector<GameObjectS*>&) override {}
+		void NotifyObjectsDespawned(const std::vector<GameObjectS*>&, game::despawn_reason::Type) override {}
 		GameTime ClientToServerTime(const GameTime clientTimestamp) const override { return clientTimestamp; }
 		GameTime ServerToClientTime(const GameTime serverTimestamp) const override { return serverTimestamp; }
 		bool HasReceivedTimeSyncResponse() const override { return true; }

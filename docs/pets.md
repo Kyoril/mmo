@@ -109,6 +109,12 @@ and unit entry.
 - **Lifetimes.** Logout and map changes store the summoned pet; it comes back with its owner when
   they enter a world again. If the owner dies, the pet is dismissed alive and returns when they are
   resurrected. A persistent pet that dies is stored dead.
+- **Despawn effect.** A pet removed from the world (expired, dismissed, owner gone) plays its
+  display model's `despawn_effect` (model editor, section "Despawn Effect") before it vanishes:
+  a clip, a sound and a dissolve parameter driven from 0 to 1, optionally on a swapped-in
+  material that inherits the unit's textures. Gloomlings (model 80) and the Brood Horror (model 77)
+  dissolve with `DemonCreatureDissolve.hmat`. Leaving sight never plays it, and a unit spawned again
+  under the same guid mid-effect (a resummoned persistent pet) ends the old effect at once.
 - **Identity.** A persistent pet's guid is derived from its database id, so the same pet comes back
   with the same guid, name and level after a dismiss, a relog or a class round trip.
 - **Commands** (`PetCommand`, the pet bar): Attack (the owner's target), Follow, Stay, strategy

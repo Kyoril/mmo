@@ -88,6 +88,22 @@ namespace mmo
 			};
 		}
 
+		/// Why the objects of a DestroyObjects packet disappear from the client. Sent once per
+		/// packet, right after the object count.
+		namespace despawn_reason
+		{
+			enum Type
+			{
+				/// The objects left the client's sight (moved away, became invisible) but still exist.
+				/// The client removes them at once.
+				OutOfSight = 0,
+
+				/// The objects were removed from the world instance (expired, dismissed, despawned).
+				/// The client may play a unit's despawn effect before it removes the unit.
+				Destroyed = 1,
+			};
+		}
+
 		constexpr uint32 MAX_FRIENDS = 50;
 
 		/// Version of the game protocol this binary speaks.
@@ -103,7 +119,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000024;
+		constexpr uint32 ProtocolVersion = 0x00000025;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.

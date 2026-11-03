@@ -1721,6 +1721,14 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Bots drop destroyed objects at once, whatever the reason.
+		uint8 reason;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			ELOG("Failed to read DestroyObjects reason");
+			return PacketParseResult::Disconnect;
+		}
+
 		for (uint16 i = 0; i < objectCount; ++i)
 		{
 			uint64 guid;
@@ -1729,6 +1737,8 @@ namespace mmo
 				ELOG("Failed to read destroyed object GUID #" << i);
 				return PacketParseResult::Disconnect;
 			}
+
+			m_despawnReasons[guid] = reason;
 
 			if (const BotUnit* gone = m_objectManager.GetUnit(guid); gone && gone->IsPlayer())
 			{

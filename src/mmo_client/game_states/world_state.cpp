@@ -3083,7 +3083,8 @@ namespace mmo
 	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket &packet)
 	{
 		uint16 objectCount = 0;
-		if (!(packet >> io::read<uint16>(objectCount)))
+		uint8 reason = game::despawn_reason::OutOfSight;
+		if (!(packet >> io::read<uint16>(objectCount) >> io::read<uint8>(reason)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -3128,7 +3129,16 @@ namespace mmo
 			// A caster that despawns or leaves view mid-channel never sends ChannelUpdate(0) to us.
 			SpellVisualizationService::Get().EndChannel(id);
 
-			ObjectMgr::RemoveObject(id);
+			// Units destroyed in the world may play their model's despawn effect first; units that
+			// only left our sight vanish at once.
+			if (reason == game::despawn_reason::Destroyed)
+			{
+				ObjectMgr::DespawnObject(id);
+			}
+			else
+			{
+				ObjectMgr::RemoveObject(id);
+			}
 
 			// Trigger UI event after the object has been removed from ObjectMgr
 			if (shouldTriggerItemEvent)

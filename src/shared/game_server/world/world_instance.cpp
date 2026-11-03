@@ -796,7 +796,7 @@ namespace mmo
 									continue;
 								}
 
-								subscriber->NotifyObjectsDespawned(objects);
+								subscriber->NotifyObjectsDespawned(objects, game::despawn_reason::Destroyed);
 							}
 						});
 				}
@@ -1242,7 +1242,7 @@ namespace mmo
 							continue;
 						}
 
-						subscriber->NotifyObjectsDespawned(objects);
+						subscriber->NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
 					}
 				});
 

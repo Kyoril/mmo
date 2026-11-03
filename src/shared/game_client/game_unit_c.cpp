@@ -167,7 +167,9 @@ namespace mmo
 
 	void GameUnitC::UpdateSparkEmitter(const bool active)
 	{
-		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid());
+		// Unique per emitter: see the entity name in OnDisplayIdChanged (despawning units overlap).
+		static uint64 s_emitterCounter = 0;
+		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid()) + "_" + std::to_string(s_emitterCounter++);
 
 		if (active)
 		{
@@ -2963,7 +2965,11 @@ namespace mmo
 		// Update or create entity
 		if (!m_entity)
 		{
-			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), meshFile);
+			// The name carries a per-process counter besides the guid: a unit playing its despawn
+			// effect still owns its entity when the server spawns the same guid again, and scene
+			// names must be unique.
+			static uint64 s_entityCounter = 0;
+			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()) + "_" + std::to_string(s_entityCounter++), meshFile);
 			m_entity->SetUserObject(this);
 			m_entity->SetQueryFlags(0x00000002);
 			// Units never block movement, whatever collision their model was authored with (a
@@ -3686,6 +3692,12 @@ namespace mmo
 
 	void GameUnitC::AddSpellTint(uint32 spellId, const Vector4& tintColor)
 	{
+		// The despawn effect owns the unit's materials until it is destroyed.
+		if (m_despawning)
+		{
+			return;
+		}
+
 		// Add or update the tint for this spell
 		m_spellTints[spellId] = tintColor;
 		
@@ -3701,6 +3713,12 @@ namespace mmo
 
 	void GameUnitC::RemoveSpellTint(uint32 spellId)
 	{
+		// Restoring the original materials would undo the dissolve mid-effect.
+		if (m_despawning)
+		{
+			return;
+		}
+
 		// Remove the tint for this spell
 		auto it = m_spellTints.find(spellId);
 		if (it != m_spellTints.end())
@@ -3838,6 +3856,176 @@ namespace mmo
 				state.tintInstance->SetVectorParameter("Tint", blendedTint);
 			}
 		}
+	}
+
+	bool GameUnitC::BeginDespawnEffect()
+	{
+		if (m_despawning)
+		{
+			return true;
+		}
+
+		const proto_client::ModelDataEntry* model = GetDisplayModel();
+		if (!model || !model->has_despawn_effect() || !m_entity)
+		{
+			return false;
+		}
+
+		const proto_client::DespawnEffect& effect = model->despawn_effect();
+
+		// No longer an interactive unit: it cannot be picked, shows no name, ring or quest marker,
+		// and stops where it stands.
+		m_entity->SetQueryFlags(0);
+		if (m_nameComponent)
+		{
+			m_nameComponent->SetVisible(false);
+		}
+		if (m_selectionRing)
+		{
+			m_selectionRing->SetVisible(false);
+		}
+		if (m_questGiverEntity)
+		{
+			m_questGiverEntity->SetVisible(false);
+		}
+		UpdateSparkEmitter(false);
+		m_movementInfo.movementFlags = 0;
+		m_movementPath.clear();
+		ConsumeInputVector();
+
+		float clipLength = 0.0f;
+		if (!effect.animation().empty() && m_animationController)
+		{
+			if (AnimationState* state = m_entity->GetAnimationState(effect.animation()))
+			{
+				clipLength = state->GetLength();
+				PlayOneShotAnimation(state);
+			}
+			else
+			{
+				WLOG("Despawn animation '" << effect.animation() << "' not found on model " << model->id());
+			}
+		}
+
+		m_despawnDuration = effect.duration() > 0.0f ? effect.duration() : clipLength;
+		if (m_despawnDuration <= 0.0f)
+		{
+			m_despawnDuration = 1.0f;
+		}
+
+		// Tint instances are dropped: the dissolve instances below are built on the materials
+		// currently assigned, and tints are ignored from now on.
+		m_spellTints.clear();
+		m_tintMaterialStates.clear();
+
+		m_despawnParameter = effect.dissolve_parameter();
+		m_despawnMaterials.clear();
+
+		MaterialPtr effectMaterial;
+		if (!effect.material().empty())
+		{
+			effectMaterial = MaterialManager::Get().Load(effect.material());
+			if (!effectMaterial)
+			{
+				WLOG("Despawn material '" << effect.material() << "' of model " << model->id() << " could not be loaded");
+			}
+		}
+
+		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+		{
+			SubEntity* subEntity = m_entity->GetSubEntity(i);
+			if (!subEntity || !subEntity->IsVisible() || !subEntity->GetMaterial())
+			{
+				continue;
+			}
+
+			const MaterialPtr current = subEntity->GetMaterial();
+			const MaterialPtr base = effectMaterial ? effectMaterial : current;
+
+			float value = 0.0f;
+			if (!base->GetScalarParameter(m_despawnParameter, value))
+			{
+				continue;
+			}
+
+			auto instance = std::make_shared<MaterialInstance>(String(m_entity->GetName()) + "_Despawn_" + std::to_string(i), base);
+
+			// A swapped-in dissolve material takes over the skin: every parameter it shares by name
+			// with the unit's material keeps the unit's value (textures, tint, scalars).
+			if (effectMaterial && current != effectMaterial)
+			{
+				for (const auto& parameter : current->GetTextureParameters())
+				{
+					String existing;
+					if (instance->GetTextureParameter(parameter.name, existing))
+					{
+						instance->SetTextureParameter(parameter.name, parameter.texture);
+					}
+				}
+
+				for (const auto& parameter : current->GetVectorParameters())
+				{
+					Vector4 existing;
+					if (instance->GetVectorParameter(parameter.name, existing))
+					{
+						instance->SetVectorParameter(parameter.name, parameter.value);
+					}
+				}
+
+				for (const auto& parameter : current->GetScalarParameters())
+				{
+					float existing = 0.0f;
+					if (parameter.name != m_despawnParameter && instance->GetScalarParameter(parameter.name, existing))
+					{
+						instance->SetScalarParameter(parameter.name, parameter.value);
+					}
+				}
+			}
+
+			instance->SetScalarParameter(m_despawnParameter, 0.0f);
+			subEntity->SetMaterial(instance);
+			m_despawnMaterials.push_back(std::move(instance));
+		}
+
+		if (effect.sound_id() != 0 && s_soundEntryPlayer)
+		{
+			s_soundEntryPlayer->PlayEntry(effect.sound_id(), GetPosition());
+		}
+
+		m_despawnElapsed = 0.0f;
+		m_despawning = true;
+		return true;
+	}
+
+	bool GameUnitC::UpdateDespawnEffect(const float deltaTime)
+	{
+		if (!m_despawning)
+		{
+			return true;
+		}
+
+		m_despawnElapsed += deltaTime;
+		const float progress = std::clamp(m_despawnElapsed / m_despawnDuration, 0.0f, 1.0f);
+
+		for (const auto& material : m_despawnMaterials)
+		{
+			material->SetScalarParameter(m_despawnParameter, progress);
+		}
+
+		// Keeps the clip (and a corpse's death pose) blending; the unit itself no longer moves.
+		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
+		UpdateAnimation(deltaTime, isDead);
+
+		if (progress >= 1.0f)
+		{
+			if (m_entity)
+			{
+				m_entity->SetVisible(false);
+			}
+			return true;
+		}
+
+		return false;
 	}
 
 	void GameUnitC::SetSpellMod(const uint8 type, const uint8 effectIndex, const uint8 op, const int32 value)

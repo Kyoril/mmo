@@ -644,6 +644,22 @@ namespace mmo
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
 
+		/// @brief Starts the despawn effect of the unit's display model (ModelDataEntry::despawn_effect):
+		///        the unit stops moving, can no longer be picked, hides its name and selection ring,
+		///        plays the effect's clip and sound, and dissolves over the effect's duration. The
+		///        caller keeps the unit alive (outside ObjectMgr's object list) until UpdateDespawnEffect
+		///        reports the effect finished.
+		/// @return False if the model has no despawn effect or the unit has no entity yet; the caller
+		///         removes the unit at once then.
+		bool BeginDespawnEffect();
+
+		/// @brief Advances a running despawn effect: animation, dissolve parameter, notifies.
+		/// @return True once the effect has finished and the unit can be destroyed.
+		bool UpdateDespawnEffect(float deltaTime);
+
+		/// @brief Returns true while the unit plays its despawn effect.
+		[[nodiscard]] bool IsDespawning() const { return m_despawning; }
+
 		/// @brief Returns true if a one-shot animation is currently playing.
 		bool IsPlayingOneShotAnimation() const;
 
@@ -1072,6 +1088,21 @@ namespace mmo
 
 		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
 		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
+
+		/// @brief True while the despawn effect plays (see BeginDespawnEffect).
+		bool m_despawning = false;
+
+		/// @brief Seconds the despawn effect has been playing.
+		float m_despawnElapsed = 0.0f;
+
+		/// @brief Total seconds the despawn effect lasts.
+		float m_despawnDuration = 0.0f;
+
+		/// @brief Name of the scalar material parameter the despawn effect drives from 0 to 1.
+		String m_despawnParameter;
+
+		/// @brief Per-unit material instances exposing m_despawnParameter, set up when the effect starts.
+		std::vector<std::shared_ptr<class MaterialInstance>> m_despawnMaterials;
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;

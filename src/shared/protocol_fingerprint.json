@@ -141,8 +141,8 @@
 		]
 	},
 	"game": {
-		"version": 36,
-		"fingerprint": "sha256:7d166794c1fc349d77a8c8346ba2f446edb61a79265b37d6555b03688708f33e",
+		"version": 37,
+		"fingerprint": "sha256:272d87045269fe8656347f34acbc582cb894972c4a7680217d65d5773d378e74",
 		"files": {
 			"src/shared/game/character_view.cpp": "sha256:496d9b6be2910f485b504d0ed2f229c31f744138587b023c59097793b9e67779",
 			"src/shared/game/character_view.h": "sha256:f1a9ae5206af3f338d029285e36a911aa0661f71c68dfbd4350c9a512a0d395d",
@@ -160,7 +160,7 @@
 			"src/shared/game_protocol/game_outgoing_packet.cpp": "sha256:88913638e0f40f87ce2ae660f55b276960decab26e51d958e3411553a47b602a",
 			"src/shared/game_protocol/game_outgoing_packet.h": "sha256:68d468d9ec1032ae3b5ec62b9e6866af8ff76ad7f55c52d12785f71df22f2f1d",
 			"src/shared/game_protocol/game_protocol.cpp": "sha256:dc0d41e47fbd35491fca6f5960cad376c1ba961ee8be8734a4db96cfbf03a3e3",
-			"src/shared/game_protocol/game_protocol.h": "sha256:9609715ee01d92866163719963074dce52248c2ec2a25bf1566066f627fe9289"
+			"src/shared/game_protocol/game_protocol.h": "sha256:500277d4c23c2f005d30306161e542ed6a82ec6bc361f2c3c2172df6749a098c"
 		},
 		"symbols": [
 			"game::ObjectTypeId::Container = 2",
@@ -376,6 +376,8 @@
 			"game::client_realm_packet::TrainerMenu = 70",
 			"game::client_realm_packet::UseItem = 31",
 			"game::client_realm_packet::UseObject = 122",
+			"game::despawn_reason::Destroyed = 1",
+			"game::despawn_reason::OutOfSight = 0",
 			"game::friend_command_result::AlreadyFriends = 1",
 			"game::friend_command_result::CannotAddSelf = 5",
 			"game::friend_command_result::Disabled = 8",

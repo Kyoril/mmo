@@ -28,7 +28,12 @@ namespace mmo
 
 		virtual void NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) = 0;
 
-		virtual void NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects) = 0;
+		/// Tells the subscriber that objects it knows disappear from its view.
+		/// @param objects The objects that disappear.
+		/// @param reason game::despawn_reason::Destroyed when the objects are removed from the world
+		///        instance, OutOfSight when they still exist but can no longer be seen. Clients play a
+		///        unit's despawn effect only for Destroyed.
+		virtual void NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects, game::despawn_reason::Type reason) = 0;
 
 		virtual GameTime ClientToServerTime(GameTime clientTimestamp) const = 0;
 

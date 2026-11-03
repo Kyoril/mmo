@@ -176,6 +176,11 @@ Assert(WaitUntil(function()
 end, 8000, "gloomlings attack"), "both Gloomlings should attack the caster's target")
 Assert(WaitUntil(function() return CountUnitsOwnedBy(me, GLOOMLING) == 0 end, 20000, "gloomlings leave"),
 	"the Gloomlings should leave after 15 s")
+-- Expiring is a removal from the world, so clients play the Gloomling's despawn effect.
+for _, gloomling in ipairs(gloomlings) do
+	Assert(DespawnReason(gloomling) == "destroyed",
+		"an expired Gloomling should be destroyed, not leave sight, got " .. DespawnReason(gloomling))
+end
 Log("Two Gloomlings attacked the dummy and left")
 
 TargetUnit("0x0")

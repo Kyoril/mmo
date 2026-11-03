@@ -403,6 +403,9 @@ namespace mmo
 		/// Sound entry id -> guid of the unit it came from (0 for a sound without a source unit), for
 		/// every PlaySoundById since the last clear.
 		std::map<uint32, uint64> m_heardSounds;
+
+		/// Reason of the last DestroyObjects per object guid (game::despawn_reason), for scenarios.
+		std::map<uint64, uint8> m_despawnReasons;
 		std::map<uint32, uint32> m_heardSoundCounts;
 
 		// Ground zones by id
@@ -485,6 +488,14 @@ namespace mmo
 		{
 			const auto it = m_heardSounds.find(soundId);
 			return it != m_heardSounds.end() ? it->second : 0;
+		}
+
+		/// The game::despawn_reason of the last DestroyObjects that removed the object, or -1 if it
+		/// was never destroyed for this client.
+		[[nodiscard]] int32 GetLastDespawnReason(const uint64 guid) const
+		{
+			const auto it = m_despawnReasons.find(guid);
+			return it != m_despawnReasons.end() ? static_cast<int32>(it->second) : -1;
 		}
 
 		/// How often the server told this client to play the sound entry since the last clear.

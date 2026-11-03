@@ -41,6 +41,33 @@ message ModelDataEntry {
 	// their (sheathed) bone. Purely client-side visuals. Players ignore it; their look comes
 	// from their equipment.
 	repeated uint32 item_displays = 11;
+
+	// Effect a unit using this display model plays when it is removed from the world (a
+	// temporary pet expiring, a corpse despawning), instead of vanishing at once. Not played
+	// when the unit merely leaves the client's sight. Missing = the unit vanishes at once.
+	optional DespawnEffect despawn_effect = 12;
+}
+
+// A unit's despawn effect. The client keeps the unit (no longer targetable) until it ends.
+message DespawnEffect {
+	// Seconds the effect lasts; the unit is removed afterwards. 0 = the length of `animation`.
+	optional float duration = 1 [default = 0.0];
+
+	// Skeleton clip played once when the effect starts (empty = none). Sounds and other events
+	// belong on the clip as animation notifies (PlaySound notifies play at the unit).
+	optional string animation = 2;
+
+	// Material (.hmat) swapped onto every visible sub mesh while the effect plays (empty = keep
+	// the unit's materials). Parameters of the unit's material with the same name and type
+	// (textures, colours, scalars) are copied over, so one dissolve material serves every skin.
+	optional string material = 3;
+
+	// Scalar material parameter driven from 0 to 1 over the effect's duration, on every sub mesh
+	// whose (possibly swapped) material exposes it.
+	optional string dissolve_parameter = 4 [default = "Dissolve"];
+
+	// SoundEntry id played at the unit when the effect starts. 0 = none.
+	optional uint32 sound_id = 5 [default = 0];
 }
 
 message ModelDatas {

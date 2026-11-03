@@ -293,6 +293,21 @@ namespace mmo
 			g_runtime->session->ClearLastSpellVisual();
 		}
 
+		/// Why the server last removed the object from this client: "destroyed" (removed from the
+		/// world, despawn_reason::Destroyed), "out_of_sight" (left our view) or "none".
+		std::string luaDespawnReason(const std::string& guid)
+		{
+			switch (g_runtime->session->GetLastDespawnReason(guidFromString(guid)))
+			{
+			case game::despawn_reason::Destroyed:
+				return "destroyed";
+			case game::despawn_reason::OutOfSight:
+				return "out_of_sight";
+			default:
+				return "none";
+			}
+		}
+
 		/// A voice line has no gameplay side effect either: returns the guid of the unit a
 		/// PlaySoundById came from since the last clear, "0x0" for a sound without a unit, or "" if the
 		/// sound was not heard at all.
@@ -1994,6 +2009,7 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
 				luabind::def_lambda("SoundSource", &luaSoundSource),
+				luabind::def_lambda("DespawnReason", &luaDespawnReason),
 				luabind::def_lambda("SoundCount", &luaSoundCount),
 				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
