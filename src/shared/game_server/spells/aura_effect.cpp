@@ -597,13 +597,13 @@ namespace mmo
 	void AuraEffect::HandleModCastingSpeedPct(const bool apply) const
 	{
 		// Base points are a percentage added to the owner's cast time multiplier.
-		m_container.GetOwner().ModifyCastingSpeedPctBonus(static_cast<float>(GetBasePoints()), apply);
+		m_container.GetOwner().ModifyCastingSpeedPctBonus(m_container.GetSpellId(), static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandleModHealingTakenPct(const bool apply) const
 	{
 		// Base points are a percentage added to the owner's healing taken multiplier.
-		m_container.GetOwner().ModifyHealingTakenPctBonus(static_cast<float>(GetBasePoints()), apply);
+		m_container.GetOwner().ModifyHealingTakenPctBonus(m_container.GetSpellId(), static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandleModPetStatsPct(const bool apply) const

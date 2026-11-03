@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
+#include "game_server/objects/aura_pct_bonus.h"
 #include "game_server/persistent_aura.h"
 #include "game/attribute.h"
 #include "game/auto_attack.h"
@@ -1159,8 +1160,8 @@ namespace mmo
 		}
 
 		/// Gets the cast time multiplier from ModCastingSpeedPct auras: 1.0 by default, additive
-		///	across auras, never below 0.
-		[[nodiscard]] float GetCastingSpeedMultiplier() const { return std::max(0.0f, 1.0f + m_castingSpeedPctBonus * 0.01f); }
+		///	across auras, never below 0. The same spell's slow from several casters counts once.
+		[[nodiscard]] float GetCastingSpeedMultiplier() const { return std::max(0.0f, 1.0f + m_castingSpeedPctBonus.GetTotal() * 0.01f); }
 
 		/// Applies the CastTime spell mods and the casting speed multiplier to a base cast time.
 		/// @param spellId The spell being cast, to match spell mods.
@@ -1175,8 +1176,9 @@ namespace mmo
 		}
 
 		/// Gets the healing taken multiplier from ModHealingTakenPct auras: 1.0 by default,
-		///	additive across auras, never below 0.
-		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus * 0.01f); }
+		///	additive across auras, never below 0. The same spell's reduction from several casters
+		///	counts once.
+		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus.GetTotal() * 0.01f); }
 
 		/// Scales a heal by the healing taken multiplier, rounded exactly as Heal() applies it. Combat
 		///	text and heal procs report this amount, so they match what lands (before over-heal).
@@ -1538,16 +1540,18 @@ public:
 		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_castingManaRegenPctBonus += apply ? amount : -amount; }
 
 		/// Adds or removes percentage points to the cast time multiplier, driven by the
-		///	ModCastingSpeedPct aura.
+		///	ModCastingSpeedPct aura. Slows of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
 		///	@param amount The bonus in percentage points (30.0f = casts take 30% longer).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyCastingSpeedPctBonus(float amount, bool apply) { m_castingSpeedPctBonus += apply ? amount : -amount; }
+		void ModifyCastingSpeedPctBonus(uint32 spellId, float amount, bool apply) { m_castingSpeedPctBonus.Modify(spellId, amount, apply); }
 
 		/// Adds or removes percentage points to the healing taken multiplier, driven by the
-		///	ModHealingTakenPct aura.
+		///	ModHealingTakenPct aura. Reductions of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
 		///	@param amount The bonus in percentage points (-20.0f = heals received are 20% weaker).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyHealingTakenPctBonus(float amount, bool apply) { m_healingTakenPctBonus += apply ? amount : -amount; }
+		void ModifyHealingTakenPctBonus(uint32 spellId, float amount, bool apply) { m_healingTakenPctBonus.Modify(spellId, amount, apply); }
 
 		/// Adds or removes percentage points to one stat multiplier of this unit's persistent pet,
 		///	driven by the ModPetStatsPct aura. Does not touch a summoned pet; see
@@ -2231,8 +2235,8 @@ public:
 		///	(ModCastingManaRegenPercent).
 		float m_castingManaRegenPctBonus = 0.0f;
 
-		/// Accumulated percentage points added to the cast time multiplier (ModCastingSpeedPct).
-		float m_castingSpeedPctBonus = 0.0f;
+		/// Percentage points added to the cast time multiplier (ModCastingSpeedPct); positive is harmful.
+		AuraPctBonus m_castingSpeedPctBonus{ 1.0f };
 
 		/// Accumulated percentage points added to the attack speed multiplier (ModAttackSpeed).
 		float m_attackSpeedPctBonus = 0.0f;
@@ -2241,8 +2245,8 @@ public:
 		///	attack speed modified value.
 		uint32 m_baseAttackTime = 2000;
 
-		/// Accumulated percentage points added to the healing taken multiplier (ModHealingTakenPct).
-		float m_healingTakenPctBonus = 0.0f;
+		/// Percentage points added to the healing taken multiplier (ModHealingTakenPct); negative is harmful.
+		AuraPctBonus m_healingTakenPctBonus{ -1.0f };
 
 		/// Accumulated percentage points per pet stat (pet_stat_kind) from ModPetStatsPct auras.
 		std::array<float, pet_stat_kind::Count_> m_petStatPctBonus{};

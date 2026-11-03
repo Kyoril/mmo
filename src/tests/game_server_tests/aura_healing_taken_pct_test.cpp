@@ -1,7 +1,8 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 //
 // ModHealingTakenPct scales every spell heal its owner receives (direct, periodic, percentage and
-// leech heals). Several auras add their percentages; the multiplier never drops below zero.
+// leech heals). Auras of different spells add their percentages; reductions of the same spell from
+// several casters do not stack (the strongest counts). The multiplier never drops below zero.
 
 #include "test_unit_factory.h"
 
@@ -145,14 +146,21 @@ TEST_CASE_METHOD(HealFixture, "ModHealingTakenPct scales the self-heal of a leec
 
 TEST_CASE_METHOD(HealFixture, "Healing taken auras add their percentages and never go below zero", "[healing_taken_pct]")
 {
+	proto::SpellEntry otherSpell = MakeSpell();
+	otherSpell.set_id(2);
+	proto::SpellEntry thirdSpell = MakeSpell();
+	thirdSpell.set_id(3);
+	AuraContainer otherContainer{ *unit, 0, otherSpell, 0, 0 };
+	AuraContainer thirdContainer{ *unit, 0, thirdSpell, 0, 0 };
+
 	AuraEffect a(container, auraEffect, timers, -20);
-	AuraEffect b(container, auraEffect, timers, -10);
+	AuraEffect b(otherContainer, auraEffect, timers, -10);
 	a.HandleEffect(true);
 	b.HandleEffect(true);
 	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.7f));
 	CHECK(unit->Heal(100, healer.get()) == 70);
 
-	AuraEffect c(container, auraEffect, timers, -200);
+	AuraEffect c(thirdContainer, auraEffect, timers, -200);
 	c.HandleEffect(true);
 	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.0f));
 	CHECK(unit->Heal(100, healer.get()) == 0);
@@ -189,4 +197,44 @@ TEST_CASE_METHOD(HealFixture, "The scaled heal amount matches what Heal applies"
 
 	aura.HandleEffect(false);
 	CHECK(unit->ScaleHealingTaken(333) == 333u);
+}
+
+// Lingering Dread from five acolytes must not cut healing to nothing: the same spell's reduction
+// counts once, from its strongest instance, while a different spell still adds.
+TEST_CASE_METHOD(HealFixture, "The same healing reduction from two casters does not stack", "[healing_taken_pct]")
+{
+	spell.set_id(1365);
+	AuraContainer firstCaster{ *unit, 0x4001, spell, 0, 0 };
+	AuraContainer secondCaster{ *unit, 0x4002, spell, 0, 0 };
+	AuraEffect first(firstCaster, auraEffect, timers, -20);
+	AuraEffect second(secondCaster, auraEffect, timers, -20);
+	first.HandleEffect(true);
+	second.HandleEffect(true);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.8f));
+	CHECK(unit->Heal(100, healer.get()) == 80);
+
+	// A weaker instance of the same spell changes nothing; the strongest one counts.
+	AuraContainer thirdCaster{ *unit, 0x4003, spell, 0, 0 };
+	AuraEffect weaker(thirdCaster, auraEffect, timers, -10);
+	weaker.HandleEffect(true);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.8f));
+
+	// Removing one of the strongest keeps the other; removing both falls back to the weaker one.
+	first.HandleEffect(false);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.8f));
+	second.HandleEffect(false);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(0.9f));
+	weaker.HandleEffect(false);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(1.0f));
+}
+
+TEST_CASE_METHOD(HealFixture, "Healing bonuses of the same spell from two casters still add", "[healing_taken_pct]")
+{
+	AuraContainer firstCaster{ *unit, 0x4001, spell, 0, 0 };
+	AuraContainer secondCaster{ *unit, 0x4002, spell, 0, 0 };
+	AuraEffect first(firstCaster, auraEffect, timers, 10);
+	AuraEffect second(secondCaster, auraEffect, timers, 10);
+	first.HandleEffect(true);
+	second.HandleEffect(true);
+	CHECK(unit->GetHealingTakenMultiplier() == Approx(1.2f));
 }
