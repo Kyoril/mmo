@@ -868,7 +868,14 @@ namespace mmo
 			const std::vector<Vector3> positions = SummonPositions(
 				executer.GetPosition(), executer.GetFacing(), static_cast<int32>(count),
 				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
-			const int32 duration = spell.duration();
+			// Duration spell mods change the pets' lifetime like an aura's (Swarm Lore).
+			int32 duration = spell.duration();
+			if (duration > 0)
+			{
+				// A negative mod must not turn a timed summon into a permanent one (0 = no despawn).
+				executer.ApplySpellMod(spell_mod_op::Duration, spell.id(), duration);
+				duration = std::max(duration, 1);
+			}
 			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
 
 			std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(executer.shared_from_this());
