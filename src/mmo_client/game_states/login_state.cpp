@@ -10,6 +10,7 @@
 #include "world_state.h"
 #include "console/console.h"
 #include "console/console_var.h"
+#include "login_account_memory.h"
 #include "game_client/sound_entry_player.h"
 #include "net/login_connector.h"
 #include "net/realm_connector.h"
@@ -31,6 +32,29 @@ namespace mmo
 {
 	extern ConsoleVar* s_lastRealmVar;
 
+	namespace
+	{
+		/// Stores or forgets the account name of a login attempt, depending on the login screen's
+		/// "remember account name" setting, and persists the change.
+		/// @param accountName The account name the player just logged in with.
+		void RememberAccountName(const std::string& accountName)
+		{
+			const ConsoleVar* rememberVar = ConsoleVarMgr::FindConsoleVar(RememberAccountNameCVar);
+			ConsoleVar* nameVar = ConsoleVarMgr::FindConsoleVar(RememberedAccountNameCVar);
+			if (rememberVar == nullptr || nameVar == nullptr)
+			{
+				return;
+			}
+
+			// Nothing writes the config on shutdown, so a remembered name only survives the
+			// session if it is saved right here.
+			if (ApplyRememberedAccountName(*rememberVar, *nameVar, accountName))
+			{
+				Console::ExecuteCommand("saveconfig");
+			}
+		}
+	}
+
 	uint32 g_mapId = 0;
 
 	const std::string LoginState::Name = "login";
@@ -48,9 +72,15 @@ namespace mmo
 			return;
 		}
 
+		const std::string accountName = arguments.substr(0, spacePos);
+
+		// Keep the account name for the next launch if the login screen asked for it. Only the
+		// account name is ever written to the config, never the password.
+		RememberAccountName(accountName);
+
 		// Try to connect
-		m_loginConnector.Connect(arguments.substr(0, spacePos), arguments.substr(spacePos + 1));
-		
+		m_loginConnector.Connect(accountName, arguments.substr(spacePos + 1));
+
 		FrameManager::Get().TriggerLuaEvent("LOGIN_CONNECT");
 	}
 

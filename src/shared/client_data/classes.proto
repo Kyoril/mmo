@@ -4,13 +4,13 @@ package mmo.proto_client;
 message ClassBaseValues {
 	required uint32 health = 1;
 	required uint32 mana = 2;
-	required uint32 stamina = 3;
-	required uint32 strength = 4;
-	required uint32 agility = 5;
-	required uint32 intellect = 6;
-	required uint32 spirit = 7;
+	// Fields 3-7 held the five hard-coded attributes before attributes became data.
+	reserved 3 to 7;
 	optional uint32 attributePoints = 8;
 	optional uint32 talentPoints = 9;
+
+	// Base value of every attribute at this level, indexed by attribute id.
+	repeated uint32 attributes = 10;
 }
 
 message ClassSpell {
@@ -70,17 +70,15 @@ message ClassEntry {
 
 	repeated AttackPowerStatSource attackPowerStatSources = 11;
 
-	// How much mana is regenerated per tick. If this value is 10, then 10 mana is regenerated every tick (+ spirit).
+	// How much mana is regenerated per tick, on top of the server-side manaRegenSources.
 	optional float baseManaRegenPerTick = 12;
 
-	// How much spirit is converted to 1 mana per tick. If this value is 5, then 10 spirit will regenerate 2 mana per regen tick.
-	optional float spiritPerManaRegen = 13;
-
-	// How much health is regnerated per tick.
+	// How much health is regnerated per tick, on top of the server-side healthRegenSources.
 	optional float healthRegenPerTick = 14;
 
-	// How much spirit is converted to 1 health per tick.
-	optional float spiritPerHealthRegen = 15;
+	// Fields 13 and 15 were spiritPerManaRegen / spiritPerHealthRegen. Fields 29-32 are server-side
+	// attribute sources (proto_data/classes.proto) - do not reuse them here.
+	reserved 13, 15;
 	
 	repeated AttackPowerStatSource armorStatSources = 16;
 

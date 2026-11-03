@@ -1278,7 +1278,7 @@ namespace mmo
 
 		// Resolving the camera position here primes the camera node's lazy caches on the main
 		// thread, so RunSimulation never touches scene nodes from a worker.
-		m_cachedCamera = m_scene ? m_scene->GetCamera(0) : nullptr;
+		m_cachedCamera = m_scene ? m_scene->GetCamera(static_cast<uint32>(0)) : nullptr;
 		m_cachedSortCameraPos = m_cachedCamera ? m_cachedCamera->GetDerivedPosition() : Vector3::Zero;
 	}
 

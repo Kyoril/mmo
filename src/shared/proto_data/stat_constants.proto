@@ -5,15 +5,8 @@ package mmo.proto;
 // to ensure consistency across unit classes and player classes
 
 message StatConstants {
-	// Base stat IDs - these must match the values used in the game code
-	enum StatType {
-		STRENGTH = 0;
-		AGILITY = 1;
-		STAMINA = 2;
-		INTELLECT = 3;
-		SPIRIT = 4;
-	}
-	
+	// Attributes are data now (see attributes.proto); stat sources reference attribute ids.
+
 	// Power types - consistent with unit classes and player classes
 	enum PowerType {
 		MANA = 0;

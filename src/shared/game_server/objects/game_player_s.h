@@ -12,6 +12,9 @@
 #include "game_server/character_data.h"
 #include "game_server/trade_skill_book.h"
 #include "game_server/quest_status_data.h"
+#include "game_server/pets/persistent_pet.h"
+#include "game/pet_defines.h"
+#include "game/pet_packets.h"
 #include "game/quest.h"
 #include "game/group.h"
 #include "game/character_customization/customizable_avatar_definition.h"
@@ -20,6 +23,7 @@ namespace mmo
 {
 	struct QuestStatusData;
 	class GameItemS;
+	class GameCreatureS;
 		class PlayerGroup;
 
 	namespace proto
@@ -27,6 +31,7 @@ namespace mmo
 		class QuestEntry;
 		class RaceEntry;
 		class ClassEntry;
+		class PetEntry;
 	}
 
 	class NetPlayerWatcher : public NonCopyable
@@ -70,6 +75,48 @@ namespace mmo
 		virtual void OnClassXpGained(uint32 classId, uint32 xpGained, uint8 classLevel, uint32 classXp, uint32 xpToNextLevel, bool leveledUp, uint32 talentPointsGained)
 		{
 		}
+
+		/// Called when the summoned persistent pet changed as a whole: it was summoned or
+		/// dismissed (or died), leveled up, learned a spell or was renamed. Implementations send the
+		/// pet's state (or that there is no persistent pet) to the client.
+		virtual void OnPetSpellsChanged()
+		{
+		}
+
+		/// Called when the experience of the summoned persistent pet changed (OwnLevel pets only).
+		/// @param xp The pet's experience towards its next level.
+		/// @param nextLevelXp The experience its next level needs.
+		virtual void OnPetXpChanged(uint32 xp, uint32 nextLevelXp)
+		{
+		}
+
+		/// Called when the summoned persistent pet learned a spell (LearnPetSpell or a level spell).
+		/// @param spellId The learned spell.
+		virtual void OnPetLearnedSpell(uint32 spellId)
+		{
+		}
+
+		/// Called when a pet action of the player failed, so the player can be told why.
+		/// @param result Why the action failed.
+		virtual void OnPetResult(pet_result::Type result)
+		{
+		}
+
+		/// Whether persistent pets are available (the PETS subsystem of the world node). While
+		/// they are not, summoning, granting, taming, reviving and teaching pets fail with
+		/// pet_result::Disabled and no stored pet changes; dismissing still works.
+		[[nodiscard]] virtual bool ArePetsAvailable() const
+		{
+			return true;
+		}
+
+		/// Whether the realm's list of the character's stored pets has arrived. Until it has,
+		/// persistent pet actions fail with pet_result::Disabled like with the subsystem off, so
+		/// a grant or tame cannot duplicate a stored pet the world node does not know about yet.
+		[[nodiscard]] virtual bool AreStoredPetsLoaded() const
+		{
+			return true;
+		}
 	};
 
 	/// @brief Represents a playable character in the game world.
@@ -97,6 +144,15 @@ namespace mmo
 		signal<void()> knownClassesChanged;
 		/// Fired when the character's spent attribute points have been refunded.
 		signal<void()> attributePointsReset;
+
+		/// Fired on every change of the stored pets that has to be saved (GetStoredPets is the new
+		/// state): summon, dismiss, death, experience, levels, learned spells, created pets.
+		signal<void()> storedPetsChanged;
+
+		/// Fired when a new stored pet has to be created (granted or tamed). The realm creates it
+		/// with a database id and answers with OnPetCreated. The request has dbId 0. A pet that is
+		/// to be summoned as soon as it exists (a tamed pet) has wasSummoned set.
+		signal<void(const PersistentPetData&)> petCreationRequested;
 
 	public:
 		GamePlayerS(const proto::Project &project, TimerQueue &timerQueue);
@@ -188,6 +244,16 @@ namespace mmo
 		bool AddAttributePoint(uint32 attribute);
 
 		void ResetAttributePoints();
+
+		/// Applies a known class's saved attribute-point spending by replaying point allocations from a
+		///	clean slate. Spending made under a different attribute layout (see GetAttributeLayout), or
+		///	that no longer fits the point budget, is discarded entirely via ResetAttributePoints.
+		/// @returns false if the saved spending was discarded and all points are unspent again.
+		bool ApplyAttributeSpending(const CharacterClassData& classData);
+
+		/// Gets the hash of the currently defined attribute set (see ComputeAttributeLayoutHash). Saved
+		///	attribute spending carries the layout it was made under.
+		[[nodiscard]] uint32 GetAttributeLayout() const;
 
 		void ResetTalents();
 
@@ -452,14 +518,142 @@ namespace mmo
 		/// @brief Sources the weapon damage range from the equipped weapon for the given hand.
 		void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const override;
 
-		/// @brief Returns the equipped weapon's swing time for the given hand.
-		uint32 GetAutoAttackTime(WeaponAttack attackType) const override;
+		/// @brief Returns the equipped weapon's swing time for the given hand, before attack speed auras.
+		uint32 GetBaseAutoAttackTime(WeaponAttack attackType) const override;
 
 		float GetUnitMissChance() const override;
 
 		bool HasOffhandWeapon() const override;
 
 	public:
+		// === Persistent pets ===
+
+		/// @return The character's stored (persistent) pets, including the summoned one.
+		[[nodiscard]] const std::vector<PersistentPetData>& GetStoredPets() const { return m_storedPets; }
+
+		/// Replaces the stored pets (loaded by the realm). A pet that was summoned when it was stored
+		/// is summoned again if the character is in a world and alive.
+		/// @param pets The stored pets.
+		void SetStoredPets(std::vector<PersistentPetData> pets);
+
+		/// @return The stored pet of a pet entry, or nullptr.
+		/// @param petEntry Id of the pet entry.
+		[[nodiscard]] PersistentPetData* FindStoredPet(uint32 petEntry);
+
+		/// @copydoc FindStoredPet
+		[[nodiscard]] const PersistentPetData* FindStoredPet(uint32 petEntry) const;
+
+		/// Checks whether SummonStoredPet would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param petEntry As for SummonStoredPet.
+		/// @return Ok or the result SummonStoredPet would fail with.
+		[[nodiscard]] pet_result::Type CanSummonStoredPet(uint32 petEntry) const;
+
+		/// Checks whether TameCreature would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param target The creature to tame.
+		/// @param ignoreLevel Whether the creature may be above the character's level (GM command).
+		/// @return Ok or the result TameCreature would fail with.
+		[[nodiscard]] pet_result::Type CanTameCreature(const GameCreatureS& target, bool ignoreLevel = false) const;
+
+		/// Checks whether GrantPersistentPet would succeed, without changing anything or telling the
+		/// client (spell cast validation).
+		/// @param petEntry Id of the pet entry.
+		/// @return Ok or the result GrantPersistentPet would fail with.
+		[[nodiscard]] pet_result::Type CanGrantPersistentPet(uint32 petEntry) const;
+
+		/// Checks whether RevivePet would succeed, without changing anything or telling the client
+		/// (spell cast validation).
+		/// @param petEntry As for RevivePet.
+		/// @return Ok or the result RevivePet would fail with.
+		[[nodiscard]] pet_result::Type CanRevivePet(uint32 petEntry) const;
+
+		/// Renames the summoned persistent pet. The name must be valid (IsValidPetName) and the
+		/// pet's entry must allow player naming; it is normalized (NormalizePetName). On success the
+		/// stored and the live name change, the client is told (OnPetSpellsChanged) and the change
+		/// is saved (storedPetsChanged). On failure nothing changes and the client is told why.
+		/// @param name The new name.
+		/// @param changed If not null, set to whether the name changed (false for a rename to the
+		///	       current name, which also returns Ok).
+		/// @return Ok, Disabled, NoPet, NamingNotAllowed or InvalidName.
+		pet_result::Type RenamePersistentPet(const String& name, bool* changed = nullptr);
+
+		/// @return The state of the summoned persistent pet as the PetSpells packet carries it; a
+		///	        petGuid of 0 if no persistent pet is summoned (or it has not spawned yet).
+		[[nodiscard]] game::PetSpellsData GetPetSpellsData() const;
+
+		/// Summons a stored pet. The currently summoned persistent pet is dismissed first. The pet
+		/// enters the world shortly after (the spawn is posted).
+		/// @param petEntry Pet entry of the stored pet, or 0 for the most recently summoned one of
+		///	       the active class.
+		/// @return Ok, NoPet, WrongClass (the pet belongs to another class), PetDead (a dead tamed
+		///	        pet) or TooManyPets (the class may not summon persistent pets).
+		pet_result::Type SummonStoredPet(uint32 petEntry);
+
+		/// Dismisses the summoned persistent pet: its state is written into the stored list and it
+		/// leaves the world. Does nothing if no persistent pet is summoned.
+		/// @param keepWasSummoned Whether the pet comes back by itself (logout, map change, owner
+		///	       death) or stays stored (dismiss, class switch).
+		void DismissPersistentPet(bool keepWasSummoned);
+
+		/// Gives experience to the summoned persistent pet if it levels on its own (OwnLevel). It
+		/// levels up to its master's level (its level source) and keeps gaining when that rises.
+		/// @param xp The experience.
+		void AddPetExperience(uint32 xp);
+
+		/// Called when the PETS subsystem of the world node is switched off or on. Switched off, the
+		/// summoned persistent pet is dismissed (it stays wasSummoned) and the temporary pets are
+		/// despawned; switched on, the dismissed pet comes back.
+		/// @param available Whether pets are available now.
+		void OnPetsAvailabilityChanged(bool available);
+
+		/// Called with the realm's answer to petCreationRequested: the pet now exists with a
+		/// database id and is added to the stored pets (and summoned if wasSummoned is set).
+		/// @param pet The created pet.
+		void OnPetCreated(const PersistentPetData& pet);
+
+		/// Tames a creature: it leaves the world and becomes a stored pet of the active class, which
+		/// is summoned once the realm created it.
+		/// @param target The creature to tame.
+		/// @param ignoreLevel Whether the creature may be above the character's level (GM command).
+		/// @return Ok, NotTamable, TooHighLevel or NoFreeSlot.
+		pet_result::Type TameCreature(GameCreatureS& target, bool ignoreLevel = false);
+
+		/// Removes the stored pet of a pet entry for good (GM command): a summoned pet is dismissed
+		/// first, then the pet leaves the stored list and the change is saved, which makes the realm
+		/// delete it. Not reported to the client.
+		/// @param petEntry Id of the pet entry.
+		/// @return Ok, or NoPet if the character has no stored pet of that entry.
+		pet_result::Type RemoveStoredPet(uint32 petEntry);
+
+		/// Grants the character a stored pet of a pet entry for the active class (not summoned).
+		/// @param petEntry Id of the pet entry.
+		/// @return Ok, NoPet (unknown entry), AlreadyHavePet or NoFreeSlot.
+		pet_result::Type GrantPersistentPet(uint32 petEntry);
+
+		/// Revives a dead stored pet and summons it.
+		/// @param petEntry Pet entry of the stored pet, or 0 for the most recently summoned one.
+		/// @param healthPercent The health the pet comes back with, in percent of its max health.
+		/// @return Ok, NoPet (no such dead pet), or a SummonStoredPet failure.
+		pet_result::Type RevivePet(uint32 petEntry, uint32 healthPercent);
+
+		/// Teaches a spell to the summoned persistent pet.
+		/// @param spellId The spell.
+		/// @return Ok or NoPet.
+		pet_result::Type LearnPetSpell(uint32 spellId);
+
+		/// Called when the character came back to life. A persistent pet that was summoned when it
+		/// died comes back.
+		void OnResurrected();
+
+		/// Tells the player's client that a pet action failed (NetPlayerWatcher::OnPetResult).
+		/// @param result Why it failed.
+		void NotifyPetResult(pet_result::Type result);
+
+		/// Leaving the world (logout, map change) dismisses the persistent pet, keeping wasSummoned
+		/// so it comes back in the next world.
+		void OnDespawn() override;
+
 		void RewardExperience(const uint32 xp);
 
 		/// Grants class XP to the ACTIVE class and levels it up against the class's classlevels
@@ -483,6 +677,15 @@ namespace mmo
 		/// Adds per-class attribute scaling (critblockchancestatsources) on top of the base chance.
 		float CriticalBlockChance() const override;
 
+	protected:
+		/// Melee crit chance from the active class's meleeCritSources.
+		float GetMeleeCritChanceFromAttributes() const override;
+
+		/// Dodge chance from the active class's dodgeSources.
+		float GetDodgeChanceFromAttributes() const override;
+
+	public:
+
 		void UpdateAttributePoints();
 
 		void UpdateTalentPoints();
@@ -496,7 +699,7 @@ namespace mmo
 
 		uint32 GetAttributePointsByAttribute(const uint32 attribute) const
 		{
-			ASSERT(attribute < 5);
+			ASSERT(attribute < MaxAttributes);
 			return m_attributePointEnhancements[attribute];
 		}
 
@@ -523,9 +726,6 @@ namespace mmo
 
 		/// Grants all of the active class's spells whose required level is met by the character level.
 		void GrantClassSpells();
-
-		/// Applies an attribute-point spending profile by replaying point allocations from a clean slate.
-		void ApplyAttributeSpending(const std::array<uint32, 5>& enhancements);
 
 		/// Writes the live talents and attribute spending back into the active class's known-class entry.
 		void SyncActiveClassData();
@@ -584,6 +784,63 @@ namespace mmo
 		/// Fails all quests in the quest log that have the StayAlive flag set. Called on death.
 		void FailQuestsOnDeath();
 
+		// === Persistent pets (game_player_s_pets.cpp) ===
+
+		/// @return The stored pet with a database id, or nullptr.
+		PersistentPetData* FindStoredPetByDbId(uint64 dbId);
+
+		/// @copydoc FindStoredPetByDbId
+		const PersistentPetData* FindStoredPetByDbId(uint64 dbId) const;
+
+		/// @return The stored pet a request without a pet entry means: the most recently summoned
+		///	        pet of the active class, else one that was summoned, else the first of the active
+		///	        class, else the first one. With deadOnly, only dead pets are considered.
+		PersistentPetData* SelectStoredPet(bool deadOnly);
+
+		/// @copydoc SelectStoredPet
+		const PersistentPetData* SelectStoredPet(bool deadOnly) const;
+
+		/// The checks of SummonPet that can fail: Disabled, WrongClass, PetDead, NoPet (unknown pet
+		/// or creature entry) and TooManyPets.
+		/// @param pet The stored pet to summon.
+		/// @return Ok or why the summon fails.
+		[[nodiscard]] pet_result::Type CheckSummonPet(const PersistentPetData& pet) const;
+
+		/// Summons a stored pet (see SummonStoredPet).
+		pet_result::Type SummonPet(PersistentPetData& pet);
+
+		/// Spawns the pet SummonPet asked for, unless the request was cancelled since (token).
+		void SpawnSummonedPet(uint32 token);
+
+		/// Summons the stored pet that was summoned when it was stored, if the character is alive
+		/// in a world and has no persistent pet summoned.
+		void ResummonPersistentPet();
+
+		/// Called when the summoned persistent pet died: it is stored dead.
+		void OnPersistentPetKilled(GameCreatureS& pet);
+
+		/// Called when the summoned persistent pet left the world without being dismissed.
+		void OnPersistentPetDespawned(GameCreatureS& pet);
+
+		/// Brings a MasterLevel pet to its master's level after the master's level changed.
+		void RefreshPersistentPetLevel();
+
+		/// Changes the summoned pet's level, teaching it the level spells it reached.
+		void ApplyPersistentPetLevel(GameCreatureS& pet, const proto::PetEntry& entry, PersistentPetData& data, uint32 oldLevel, uint32 newLevel);
+
+		/// @return Whether another stored pet can be created (stored plus pending creations).
+		[[nodiscard]] bool HasFreePetSlot() const;
+
+		/// @return Whether persistent pets are available (NetPlayerWatcher::ArePetsAvailable and
+		///	        NetPlayerWatcher::AreStoredPetsLoaded).
+		[[nodiscard]] bool ArePetsAvailable() const;
+
+		/// Asks the realm to create a stored pet (petCreationRequested).
+		void RequestPetCreation(const PersistentPetData& pet);
+
+		/// Tells the client that a pet action failed, and returns the result.
+		pet_result::Type PetActionFailed(pet_result::Type result);
+
 	private:
 		String m_name;
 		Inventory m_inventory;
@@ -604,8 +861,8 @@ namespace mmo
 		/// are suppressed (a single refresh is sent afterwards instead).
 		bool m_classSwitchInProgress = false;
 		const proto::RaceEntry *m_raceEntry;
-		std::array<uint32, 5> m_attributePointEnhancements;
-		std::array<uint32, 5> m_attributePointsSpent;
+		std::array<uint32, MaxAttributes> m_attributePointEnhancements;
+		std::array<uint32, MaxAttributes> m_attributePointsSpent;
 		uint32 m_totalAvailablePointsAtLevel;
 		uint32 m_totalTalentPointsAtLevel;
 		std::map<uint32, QuestStatusData> m_quests;
@@ -644,6 +901,25 @@ namespace mmo
 		/// character (realm side). Live auras/cooldowns are accessed via GameUnitS instead.
 		std::vector<PersistentAuraData> m_deserializedAuras;
 		std::vector<PersistentCooldownData> m_deserializedCooldowns;
+
+		/// The character's stored pets (authoritative while the character is in the world).
+		std::vector<PersistentPetData> m_storedPets;
+		/// Pet entries of pets the realm was asked to create and has not answered yet.
+		std::vector<uint32> m_pendingPetCreations;
+		/// Database id of the summoned persistent pet (or the one about to be spawned), 0 if none.
+		uint64 m_summonedPetDbId = 0;
+		/// The summoned persistent pet creature, once spawned.
+		std::weak_ptr<GameCreatureS> m_summonedPet;
+		/// Database id of the persistent pet summoned last, for summons without a pet entry.
+		uint64 m_lastSummonedPetDbId = 0;
+		/// Increased on every summon and dismiss, so a posted spawn can tell it was cancelled.
+		uint32 m_petSummonToken = 0;
+		/// A revived pet's health in percent, applied when it spawns (m_reviveHealthPetDbId).
+		uint32 m_reviveHealthPercent = 0;
+		uint64 m_reviveHealthPetDbId = 0;
+		scoped_connection m_summonedPetKilled;
+		scoped_connection m_summonedPetDespawned;
+		scoped_connection m_onSpawnedPets;
 
 	private:
 		friend io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);

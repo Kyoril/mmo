@@ -13,6 +13,9 @@ function(PROTOBUF_GENERATE_CPP SRCS HDRS)
   set(${SRCS})
   set(${HDRS})
 
+  # protoc does not create its output directory, and Makefile generators do not either.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/proto_client")
+
   foreach(FIL ${ARGN})
     get_filename_component(ABS_FIL ${FIL} ABSOLUTE)
     get_filename_component(FIL_WE ${FIL} NAME_WE)

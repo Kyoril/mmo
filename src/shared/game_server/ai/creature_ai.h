@@ -3,10 +3,20 @@
 #pragma once
 
 #include "base/signal.h"
+#include "base/typedefs.h"
+#include "game/pet_defines.h"
 #include "math/vector3.h"
+
+#include <memory>
+#include <vector>
 
 namespace mmo
 {
+	namespace proto
+	{
+		class UnitSpellEntry;
+	}
+
 	class WorldInstance;
 	class GameCreatureS;
 	class GameObjectS;
@@ -63,6 +73,10 @@ namespace mmo
 
 		/// Gets a reference of the controlled units home.
 		[[nodiscard]] const Home& GetHome() const;
+
+		/// Whether the controlled creature may die: false while a combat script forbids it
+		/// (e.g. a training dummy in combat).
+		[[nodiscard]] bool CanControlledDie() const;
 
 		/// Sets a new home position
 		/// @param home The new home position of the controlled unit.
@@ -134,6 +148,93 @@ namespace mmo
 		CreatureAIState* GetCurrentState() const { return m_state.get(); }
 
 	public:
+		// === Pet mode ===
+		// A creature owned by a unit runs in pet mode: out of combat it follows its owner (or
+		// stays where it was told to) instead of idling at a home point, it engages what its
+		// strategy picks from its owner's fight, and it never resets home or evade-heals.
+
+		/// Switches the AI into pet mode for an owner and enters the pet state. Called by
+		/// every pet spawn (SummonPet effect, and persistent pets) after the pet entered the world.
+		/// @param owner The pet's owner.
+		void EnterPetMode(GameUnitS& owner);
+
+		/// @return Whether the AI runs in pet mode.
+		[[nodiscard]] bool IsPetMode() const { return m_petMode; }
+
+		/// @return The owner of the pet, or nullptr if not in pet mode or the owner is gone.
+		[[nodiscard]] std::shared_ptr<GameUnitS> GetPetOwner() const { return m_petOwner.lock(); }
+
+		/// @return The pet's strategy.
+		[[nodiscard]] pet_strategy::Type GetPetStrategy() const { return m_petStrategy; }
+
+		/// @return Whether the pet was told to stay where it is.
+		[[nodiscard]] bool IsPetStaying() const { return m_petStaying; }
+
+		/// @return Where the pet stays while IsPetStaying().
+		[[nodiscard]] const Vector3& GetPetStayPosition() const { return m_petStayPosition; }
+
+		/// @return Guid of the unit the owner commanded the pet to attack, or 0.
+		[[nodiscard]] uint64 GetPetCommandedTarget() const { return m_petCommandedTarget; }
+
+		/// Forgets the commanded attack target (it died or is gone).
+		void ClearPetCommandedTarget() { m_petCommandedTarget = 0; }
+
+		/// @return Whether the pet was called back with Follow and does not engage on its own until
+		///         something new happens (the owner attacks or is attacked, the pet is hit, or a command).
+		[[nodiscard]] bool IsPetRecalled() const { return m_petRecalled; }
+
+		/// @return Whether the pet only ever fights what its owner attacks (or what it is commanded
+		///         to): it neither defends its owner nor itself. Temporary pets work this way.
+		[[nodiscard]] bool IsPetOwnerTargetOnly() const { return m_petOwnerTargetOnly; }
+
+		/// @return What the owner fights, for a pet that only fights its owner's target: the unit the
+		///         owner attacked last, else the owner's auto attack victim, if the pet can attack and
+		///         see it. nullptr if there is none or the AI is not in pet mode.
+		[[nodiscard]] GameUnitS* FindPetOwnerTarget() const;
+
+		/// Executes a command of the pet's owner. Dismiss is handled by the PetManager.
+		/// @param command The command.
+		/// @param targetGuid The target of an Attack command, otherwise ignored.
+		/// @param param SetStrategy: the new pet_strategy, otherwise ignored.
+		void OnPetCommand(pet_command::Type command, uint64 targetGuid, uint32 param);
+
+		/// Called when the owner starts attacking a unit: auto attack, or a harmful spell cast at it.
+		/// An assisting pet joins in, unless it has a commanded target.
+		/// @param victim The unit the owner attacks.
+		void OnOwnerAttack(GameUnitS& victim);
+
+		/// Called when a unit starts attacking the owner. An assisting pet that is not fighting yet
+		/// defends its owner, unless it only fights its owner's target.
+		/// @param attacker The unit attacking the owner.
+		void OnOwnerAttacked(GameUnitS& attacker);
+
+		/// Called when a unit attacks or threatens the pet itself. An assisting pet defends itself,
+		/// unless it only fights its owner's target.
+		/// @param attacker The unit attacking the pet.
+		void OnPetAttacked(GameUnitS& attacker);
+
+		/// Engages a unit: enters combat against it, or makes the combat state reconsider its
+		/// victim when already fighting. Does nothing for friendly, dead or invalid targets.
+		/// @param target The unit to attack.
+		void EngagePetTarget(GameUnitS& target);
+
+		/// @return Whether a unit is within reach of a staying pet's stay position (melee reach), or
+		///         true if the pet is not staying. A staying pet only takes on what comes within reach.
+		[[nodiscard]] bool IsWithinPetStayReach(const GameUnitS& unit) const;
+
+		/// Sets combat spells the pet uses in addition to its creature entry's `creaturespells`
+		/// (hook for persistent pets: their known spells plus the pet entry's `ai_spells` tuning).
+		/// Takes effect when the pet enters combat next.
+		/// @param spells The extra spells, chosen like creature spells (priority, cooldowns, ranges).
+		void SetPetSpells(std::vector<proto::UnitSpellEntry> spells);
+
+		/// @return The extra combat spells set with SetPetSpells.
+		[[nodiscard]] const std::vector<proto::UnitSpellEntry>& GetPetSpells() const { return m_petSpells; }
+
+		/// The base run speed the pet had before it started matching its owner's speed.
+		[[nodiscard]] float GetPetNaturalRunBaseSpeed() const { return m_petNaturalRunBaseSpeed; }
+
+	public:
 		// These methods are meant to be called by the AI states on specific events.
 		void OnThreatened(GameUnitS& threat, float amount);
 
@@ -168,6 +269,18 @@ namespace mmo
 		bool m_hasPatrolReturnPosition;
 		size_t m_savedPatrolWaypointIndex;
 		bool m_hasPatrolWaypointSaved;
-		
+
+		// === Pet mode ===
+		bool m_petMode = false;
+		std::weak_ptr<GameUnitS> m_petOwner;
+		pet_strategy::Type m_petStrategy = pet_strategy::Assist;
+		bool m_petStaying = false;
+		Vector3 m_petStayPosition;
+		uint64 m_petCommandedTarget = 0;
+		bool m_petRecalled = false;
+		bool m_petOwnerTargetOnly = false;
+		float m_petNaturalRunBaseSpeed = 0.0f;
+		std::vector<proto::UnitSpellEntry> m_petSpells;
+
 	};
 }

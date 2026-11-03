@@ -22,6 +22,7 @@
 #include "shared/proto_data/skinning_loot.pb.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/emotes.pb.h"
+#include "shared/proto_data/pets.pb.h"
 #include "shared/proto_data/objects.pb.h"
 #include "shared/proto_data/skills.pb.h"
 #include "shared/proto_data/talents.pb.h"
@@ -37,6 +38,7 @@
 #include "shared/proto_data/item_sets.pb.h"
 #include "shared/proto_data/races.pb.h"
 #include "shared/proto_data/classes.pb.h"
+#include "shared/proto_data/attributes.pb.h"
 #include "shared/proto_data/unit_classes.pb.h"
 #include "shared/proto_data/levels.pb.h"
 #include "shared/proto_data/factions.pb.h"
@@ -64,6 +66,7 @@
 #include "shared/proto_data/surface_types.pb.h"
 #include "shared/proto_data/water_profiles.pb.h"
 #include "shared/proto_data/environment_profiles.pb.h"
+#include "shared/proto_data/loading_tips.pb.h"
 
 namespace mmo
 {
@@ -73,6 +76,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Units, mmo::proto::UnitEntry> UnitManager;
 		typedef TemplateManager<mmo::proto::Maps, mmo::proto::MapEntry> MapManager;
 		typedef TemplateManager<mmo::proto::Emotes, mmo::proto::EmoteEntry> EmoteManager;
+		typedef TemplateManager<mmo::proto::Pets, mmo::proto::PetEntry> PetManager;
 		typedef TemplateManager<mmo::proto::UnitLoot, mmo::proto::LootEntry> UnitLootManager;
 		typedef TemplateManager<mmo::proto::ObjectLoot, mmo::proto::LootEntry> ObjectLootManager;
 		typedef TemplateManager<mmo::proto::ItemLoot, mmo::proto::LootEntry> ItemLootManager;
@@ -87,6 +91,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Items, mmo::proto::ItemEntry> ItemManager;
 		typedef TemplateManager<mmo::proto::ItemSets, mmo::proto::ItemSetEntry> ItemSetManager;
 		typedef TemplateManager<mmo::proto::Classes, mmo::proto::ClassEntry> ClassManager;
+		typedef TemplateManager<mmo::proto::Attributes, mmo::proto::AttributeEntry> AttributeManager;
 		typedef TemplateManager<mmo::proto::UnitClasses, mmo::proto::UnitClassEntry> UnitClassManager;
 		typedef TemplateManager<mmo::proto::Races, mmo::proto::RaceEntry> RaceManager;
 		typedef TemplateManager<mmo::proto::Levels, mmo::proto::LevelEntry> LevelManager;
@@ -121,6 +126,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::SurfaceTypes, mmo::proto::SurfaceType> SurfaceTypeManager;
 		typedef TemplateManager<mmo::proto::WaterProfiles, mmo::proto::WaterProfile> WaterProfileManager;
 		typedef TemplateManager<mmo::proto::EnvironmentProfiles, mmo::proto::EnvironmentProfile> EnvironmentProfileManager;
+		typedef TemplateManager<mmo::proto::LoadingTips, mmo::proto::LoadingTip> LoadingTipManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -154,6 +160,7 @@ namespace mmo
 			UnitManager units;
 			MapManager maps;
 			EmoteManager emotes;
+			PetManager pets;
 			UnitLootManager unitLoot;
 			ObjectLootManager objectLoot;
 			ItemLootManager itemLoot;
@@ -167,6 +174,9 @@ namespace mmo
 			ItemManager items;
 			ItemSetManager itemSets;
 			ClassManager classes;
+
+			/// Primary attributes (Stamina, Strength, ...). Entry ids are attribute slots < MaxAttributes.
+			AttributeManager attributes;
 			UnitClassManager unitClasses;
 			RaceManager races;
 			LevelManager levels;
@@ -219,6 +229,9 @@ namespace mmo
 			/// Per-zone lighting and mood profiles. Authored here and consumed by the client and
 			/// the world editor viewport.
 			EnvironmentProfileManager environmentProfiles;
+
+			/// Tips shown on the client's loading screen. Authored here, consumed by the client only.
+			LoadingTipManager loadingTips;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -307,6 +320,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("objects", objects));
 				managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("emotes", emotes));
+				managers.push_back(ManagerEntry("pets", pets, true));
 				managers.push_back(ManagerEntry("unit_loot", unitLoot));
 				managers.push_back(ManagerEntry("object_loot", objectLoot));
 				managers.push_back(ManagerEntry("item_loot", itemLoot));
@@ -319,6 +333,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("items", items));
 				managers.push_back(ManagerEntry("item_sets", itemSets));
 				managers.push_back(ManagerEntry("classes", classes));
+				managers.push_back(ManagerEntry("attributes", attributes));
 				managers.push_back(ManagerEntry("unit_classes", unitClasses));
 				managers.push_back(ManagerEntry("races", races));
 				managers.push_back(ManagerEntry("levels", levels));
@@ -353,6 +368,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
 				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
+				managers.push_back(ManagerEntry("loading_tips", loadingTips, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -397,6 +413,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("objects", "objects", objects));
 				managers.push_back(ManagerEntry("maps", "maps", maps));
 				managers.push_back(ManagerEntry("emotes", "emotes", emotes));
+				managers.push_back(ManagerEntry("pets", "pets", pets));
 				managers.push_back(ManagerEntry("unit_loot", "unit_loot", unitLoot));
 				managers.push_back(ManagerEntry("object_loot", "object_loot", objectLoot));
 				managers.push_back(ManagerEntry("item_loot", "item_loot", itemLoot));
@@ -410,6 +427,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("item_sets", "item_sets", itemSets));
 				managers.push_back(ManagerEntry("unit_classes", "unit_classes", unitClasses));
 				managers.push_back(ManagerEntry("classes", "classes", classes));
+				managers.push_back(ManagerEntry("attributes", "attributes", attributes));
 				managers.push_back(ManagerEntry("races", "races", races));
 				managers.push_back(ManagerEntry("levels", "levels", levels));
 				managers.push_back(ManagerEntry("triggers", "triggers", triggers));
@@ -443,6 +461,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("surface_types", "surface_types", surfaceTypes));
 				managers.push_back(ManagerEntry("water_profiles", "water_profiles", waterProfiles));
 				managers.push_back(ManagerEntry("environment_profiles", "environment_profiles", environmentProfiles));
+				managers.push_back(ManagerEntry("loading_tips", "loading_tips", loadingTips));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

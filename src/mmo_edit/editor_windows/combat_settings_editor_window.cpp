@@ -191,16 +191,6 @@ namespace mmo
 			}
 		}
 
-		// === Block ===
-		if (const auto section = ScopedEditorSection("Block", ImGuiTreeNodeFlags_DefaultOpen))
-		{
-			uint32 blockValue = settings.default_block_value();
-			if (DrawUint32Setting("Default Block Value", blockValue, defaults.default_block_value()))
-			{
-				settings.set_default_block_value(blockValue);
-			}
-		}
-
 		// === Rage Generation ===
 		if (const auto section = ScopedEditorSection("Rage Generation", ImGuiTreeNodeFlags_DefaultOpen))
 		{
@@ -345,6 +335,44 @@ namespace mmo
 			if (DrawFloatSetting("Casting Regen % of Normal##ManaRegen", castingRegen, defaults.casting_mana_regen_percent()))
 			{
 				settings.set_casting_mana_regen_percent(castingRegen);
+			}
+		}
+
+		// === Regeneration ===
+		if (const auto section = ScopedEditorSection("Regeneration", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::TextDisabled("Regeneration is continuous; the sync interval only sets how often clients receive it.");
+			ImGui::TextDisabled("Per-tick regeneration in class data is an amount per two seconds, independent of the interval.");
+			ImGui::Spacing();
+
+			uint32 syncInterval = settings.regen_sync_interval_ms();
+			if (DrawUint32Setting("Sync Interval (ms)##Regen", syncInterval, defaults.regen_sync_interval_ms()))
+			{
+				settings.set_regen_sync_interval_ms(std::max<uint32>(syncInterval, 100));
+			}
+
+			uint32 fiveSecondRule = settings.five_second_rule_ms();
+			if (DrawUint32Setting("Casting Window After Spending Mana (ms)##Regen", fiveSecondRule, defaults.five_second_rule_ms()))
+			{
+				settings.set_five_second_rule_ms(fiveSecondRule);
+			}
+
+			float energyRegen = settings.energy_regen_per_second();
+			if (DrawFloatSetting("Energy per Second##Regen", energyRegen, defaults.energy_regen_per_second()))
+			{
+				settings.set_energy_regen_per_second(energyRegen);
+			}
+
+			float rageDecay = settings.rage_decay_per_second();
+			if (DrawFloatSetting("Rage Decay per Second (out of combat)##Regen", rageDecay, defaults.rage_decay_per_second()))
+			{
+				settings.set_rage_decay_per_second(rageDecay);
+			}
+
+			float inCombatHealth = settings.in_combat_health_regen_percent();
+			if (DrawFloatSetting("In-Combat Health Regen % of Normal##Regen", inCombatHealth, defaults.in_combat_health_regen_percent()))
+			{
+				settings.set_in_combat_health_regen_percent(inCombatHealth);
 			}
 		}
 

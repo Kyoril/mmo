@@ -9,7 +9,9 @@
 #include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
+#include "game_server/objects/aura_pct_bonus.h"
 #include "game_server/persistent_aura.h"
+#include "game/attribute.h"
 #include "game/auto_attack.h"
 #include "game_object_s.h"
 #include "game_server/i_player_validator_context.h"
@@ -19,7 +21,9 @@
 #include "base/countdown.h"
 #include "game/chat_type.h"
 #include "game/damage_school.h"
+#include "game/movement_ability.h"
 #include "game/spell.h"
+#include "game/pet_defines.h"
 #include "proto_data/trigger_helper.h"
 #include "shared/proto_data/triggers.pb.h"
 
@@ -129,23 +133,14 @@ namespace mmo
 	{
 		enum Type
 		{
-			/// Strength stat value modifier.
-			StatStrength,
+			/// First attribute value modifier. Attribute id i uses AttributeStart + i (see GetUnitModByStat).
+			AttributeStart,
 
-			/// Agility stat value modifier.
-			StatAgility,
-
-			/// Stamina stat value modifier.
-			StatStamina,
-
-			/// Intellect stat value modifier.
-			StatIntellect,
-
-			/// Spirit stat value modifier.
-			StatSpirit,
+			/// One past the last attribute value modifier.
+			AttributeEnd = AttributeStart + MaxAttributes,
 
 			/// Health value modifier.
-			Health,
+			Health = AttributeEnd,
 
 			/// Mana power value modifier.
 			Mana,
@@ -307,10 +302,6 @@ namespace mmo
 	{
 	public:
 		static uint32 DeriveFromBaseWithFactor(const uint32 statValue, const uint32 baseValue, const uint32 factor);
-
-		static uint32 GetMaxHealthFromStamina(const uint32 stamina);
-
-		static uint32 GetMaxManaFromIntellect(const uint32 intellect);
 	};
 
 	class NetUnitWatcherS
@@ -326,6 +317,11 @@ namespace mmo
 		virtual void OnXpLog(uint32 amount) = 0;
 
 		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0) = 0;
+
+		/// Spell damage dealt by a unit this one owns (a pet, a summoned swarm). Such units have no
+		/// connection of their own, so their owner is told. Does nothing unless overridden.
+		/// @param sourceGuid The owned unit that dealt the damage.
+		virtual void OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked) {}
 
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
@@ -351,7 +347,9 @@ namespace mmo
 		/// character. The client has to acknowledge before the movement is started.
 		virtual void OnPendingCharge(float speed, uint32 ackId) = 0;
 
-		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints) = 0;
+		/// Called when the player gained a level.
+		/// @param attributeDiffs Base value gained per attribute, indexed by attribute id.
+		virtual void OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, const std::array<int32, MaxAttributes>& attributeDiffs, int32 talentPoints, int32 attributePoints) = 0;
 
 		virtual void OnSpellModChanged(SpellModType type, uint8 effectIndex, SpellModOp op, int32 value) = 0;
 
@@ -517,6 +515,7 @@ namespace mmo
 
 	// Forward declaration for the CC movement controller
 	class CCMovementController;
+	class PetManager;
 
 	/// Result of rolling a block against an incoming physical attack.
 	struct BlockResult
@@ -609,6 +608,10 @@ namespace mmo
 		/// @param despawnDelay Time in milliseconds after which the unit will be despawned.
 		void TriggerDespawnTimer(GameTime despawnDelay);
 
+		/// Gets the time at which the despawn timer set by TriggerDespawnTimer fires.
+		/// @returns The despawn time in milliseconds (GetAsyncTimeMs clock), or 0 if no despawn timer runs.
+		[[nodiscard]] GameTime GetDespawnTimerEnd() const { return m_despawnCountdown.IsRunning() ? m_despawnCountdown.GetEnd() : 0; }
+
 		/// Writes object update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.
@@ -649,6 +652,41 @@ namespace mmo
 		float GetCalculatedModifierValue(UnitMods mod) const;
 
 		float CalculateModifiedValue(UnitMods mod, float baseValue) const;
+
+		/// Sums (calculated attribute modifier value / pointsPer) over attribute ratio sources
+		///	(proto AttributeRatioSource / UnitClassAttributeRatioSource). Sources naming an attribute
+		///	slot out of range or a pointsPer of 0 are ignored.
+		template<typename TSources>
+		float SumAttributeModifierRatios(const TSources& sources) const
+		{
+			float sum = 0.0f;
+			for (const auto& source : sources)
+			{
+				if (source.attribute() < MaxAttributes && source.pointsper() != 0.0f)
+				{
+					sum += GetCalculatedModifierValue(GetUnitModByStat(static_cast<uint8>(source.attribute()))) / source.pointsper();
+				}
+			}
+
+			return sum;
+		}
+
+		/// Sums (replicated attribute value / pointsPer) over attribute ratio sources. Unlike
+		///	SumAttributeModifierRatios this reads the whole-number attribute fields.
+		template<typename TSources>
+		float SumAttributeFieldRatios(const TSources& sources) const
+		{
+			float sum = 0.0f;
+			for (const auto& source : sources)
+			{
+				if (source.attribute() < MaxAttributes && source.pointsper() != 0.0f)
+				{
+					sum += static_cast<float>(Get<uint32>(object_fields::Stat + source.attribute())) / source.pointsper();
+				}
+			}
+
+			return sum;
+		}
 
 		/// Sets the unit modifier value to the given value.
 		/// @param mod The unit modifier to set.
@@ -747,8 +785,8 @@ namespace mmo
 		/// @returns The power type as a PowerType enum.
 		static PowerType GetPowerTypeByUnitMod(UnitMods mod);
 
-		/// Gets the unit modifier associated with a stat.
-		/// @param stat The stat index.
+		/// Gets the unit modifier associated with an attribute.
+		/// @param stat The attribute id (must be smaller than MaxAttributes).
 		/// @returns The unit modifier as a UnitMods enum.
 		static UnitMods GetUnitModByStat(uint8 stat);
 
@@ -901,9 +939,14 @@ namespace mmo
 		/// @param type The type of environmental damage.
 		void EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type);
 
-		/// Kills the unit.
+		/// Kills the unit. A unit that can not die (see CanDie) is refilled to full health instead.
 		/// @param killer The unit that killed this unit.
 		void Kill(GameUnitS *killer);
+
+		/// Whether this unit may die right now. A unit that can not die (a training dummy in combat)
+		/// is refilled to full health by lethal damage instead of being killed, so nothing reacts to
+		/// a death: casts aimed at it, death and kill procs, kill credit.
+		[[nodiscard]] virtual bool CanDie() const { return true; }
 
 		/// Gets the current health of the unit.
 		/// @returns The current health as a uint32.
@@ -1043,6 +1086,10 @@ namespace mmo
 		/// Notifies that mana has been used.
 		void NotifyManaUsed();
 
+		/// @copydoc NotifyManaUsed
+		/// @param now The time mana was spent.
+		void NotifyManaUsed(GameTime now);
+
 		/// Sets the regeneration flags for the unit.
 		/// @param regenerationFlags The regeneration flags to set.
 		void SetRegeneration(uint32 regenerationFlags) { m_regeneration = regenerationFlags; }
@@ -1116,6 +1163,50 @@ namespace mmo
 
 			return T(diff);
 		}
+
+		/// Gets the cast time multiplier from ModCastingSpeedPct auras: 1.0 by default, additive
+		///	across auras, never below 0. The same spell's slow from several casters counts once.
+		[[nodiscard]] float GetCastingSpeedMultiplier() const { return std::max(0.0f, 1.0f + m_castingSpeedPctBonus.GetTotal() * 0.01f); }
+
+		/// Applies the CastTime spell mods and the casting speed multiplier to a base cast time.
+		/// @param spellId The spell being cast, to match spell mods.
+		/// @param baseCastTime The unmodified cast time in milliseconds.
+		/// @returns The cast time in milliseconds, never negative.
+		[[nodiscard]] GameTime ModifyCastTime(const uint32 spellId, const GameTime baseCastTime) const
+		{
+			int32 castTimeMod = static_cast<int32>(baseCastTime);
+			ApplySpellMod<int32>(spell_mod_op::CastTime, spellId, castTimeMod);
+			const float scaled = static_cast<float>(std::max(0, castTimeMod)) * GetCastingSpeedMultiplier();
+			return static_cast<GameTime>(std::max(0.0f, roundf(scaled)));
+		}
+
+		/// Gets the healing taken multiplier from ModHealingTakenPct auras: 1.0 by default,
+		///	additive across auras, never below 0. The same spell's reduction from several casters
+		///	counts once.
+		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus.GetTotal() * 0.01f); }
+
+		/// Scales a heal by the healing taken multiplier, rounded exactly as Heal() applies it. Combat
+		///	text and heal procs report this amount, so they match what lands (before over-heal).
+		///	@param amount The heal before the healing taken percentage.
+		///	@returns The heal after the healing taken percentage.
+		[[nodiscard]] uint32 ScaleHealingTaken(uint32 amount) const;
+
+		/// Gets the multiplier this unit's ModPetStatsPct auras give one stat of its persistent pet:
+		///	1.0 by default, additive across auras, never below 0.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds return 1.0.
+		[[nodiscard]] float GetPetStatMultiplier(const uint8 kind) const
+		{
+			if (kind >= pet_stat_kind::Count_)
+			{
+				return 1.0f;
+			}
+
+			return std::max(0.0f, 1.0f + m_petStatPctBonus[kind] * 0.01f);
+		}
+
+		/// Gets the passive spells PetPassive auras of this unit put on its persistent pet, one
+		///	entry per aura (a spell granted by two auras is listed twice).
+		[[nodiscard]] const std::vector<uint32>& GetPetPassiveSpells() const { return m_petPassiveSpells; }
 
 		/// How far a "say" chat message carries.
 		static constexpr float SayRange = 25.0f;
@@ -1320,7 +1411,7 @@ public:
 		float CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const;
 
 		/// Gets the victim-independent part of the melee critical hit chance: the base chance plus
-		///	the agility contribution. This is what the character sheet shows; CriticalHitChance()
+		///	the attribute contribution. This is what the character sheet shows; CriticalHitChance()
 		///	adds the per-attack terms (level difference, talents, the victim's vulnerability) on top.
 		/// @returns The critical hit chance in percent, not clamped.
 		[[nodiscard]] float GetBaseMeleeCritChance() const;
@@ -1353,6 +1444,15 @@ public:
 
 		/// Returns the dodge chance in percent, ranging from 0 to 100.0f. If the unit can't dodge at all, this will always return 0.
 		float DodgeChance() const;
+
+	protected:
+		/// Gets the melee critical hit chance in percent granted by attributes (class data).
+		[[nodiscard]] virtual float GetMeleeCritChanceFromAttributes() const { return 0.0f; }
+
+		/// Gets the dodge chance in percent granted by attributes (class data).
+		[[nodiscard]] virtual float GetDodgeChanceFromAttributes() const { return 0.0f; }
+
+	public:
 
 		/// Returns the parry chance in percent, ranging from 0 to 100.0f. If the unit can't parry at all, this will always return 0.
 		float ParryChance() const;
@@ -1414,7 +1514,7 @@ public:
 		///	driven by the ModHealthRegenPercent aura.
 		///	@param amount The bonus in percent (e.g. 50.0f for +50%).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyHealthRegenPercentBonus(float amount, bool apply) { m_healthRegenPctBonus += apply ? amount : -amount; }
+		void ModifyHealthRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_healthRegenPctBonus += apply ? amount : -amount; }
 
 		/// Adds or removes a percentage bonus to this unit's regeneration of one power type,
 		///	driven by the ModPowerRegenPercent aura.
@@ -1428,6 +1528,7 @@ public:
 				return;
 			}
 
+			SettleRegeneration();
 			m_powerRegenPctBonus[static_cast<uint8>(powerType)] += apply ? amount : -amount;
 		}
 
@@ -1441,7 +1542,41 @@ public:
 		///	flowing while casting, driven by the ModCastingManaRegenPercent aura.
 		///	@param amount The bonus in percentage points (e.g. 10.0f for +10% of normal regeneration).
 		///	@param apply true to add the bonus, false to remove it again.
-		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { m_castingManaRegenPctBonus += apply ? amount : -amount; }
+		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_castingManaRegenPctBonus += apply ? amount : -amount; }
+
+		/// Adds or removes percentage points to the cast time multiplier, driven by the
+		///	ModCastingSpeedPct aura. Slows of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
+		///	@param amount The bonus in percentage points (30.0f = casts take 30% longer).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCastingSpeedPctBonus(uint32 spellId, float amount, bool apply) { m_castingSpeedPctBonus.Modify(spellId, amount, apply); }
+
+		/// Adds or removes percentage points to the healing taken multiplier, driven by the
+		///	ModHealingTakenPct aura. Reductions of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
+		///	@param amount The bonus in percentage points (-20.0f = heals received are 20% weaker).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyHealingTakenPctBonus(uint32 spellId, float amount, bool apply) { m_healingTakenPctBonus.Modify(spellId, amount, apply); }
+
+		/// Adds or removes percentage points to one stat multiplier of this unit's persistent pet,
+		///	driven by the ModPetStatsPct aura. Does not touch a summoned pet; see
+		///	RefreshPersistentPetOwnerStats.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds are ignored.
+		///	@param amount The bonus in percentage points (30.0f = +30%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyPetStatPctBonus(const uint8 kind, const float amount, const bool apply)
+		{
+			if (kind < pet_stat_kind::Count_)
+			{
+				m_petStatPctBonus[kind] += apply ? amount : -amount;
+			}
+		}
+
+		/// Registers or unregisters a passive spell a PetPassive aura puts on the persistent pet.
+		///	Does not touch a summoned pet.
+		///	@param spellId The passive spell.
+		///	@param apply true to add one registration, false to remove one.
+		void ModifyPetPassiveSpell(uint32 spellId, bool apply);
 
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
@@ -1467,30 +1602,14 @@ public:
 		}
 
 		/// Gets the raw mana regenerated per tick while casting (within five seconds after mana
-		///	was spent), before the ModPowerRegenPercent aura modifier.
-		///	It is a share of the whole points normal regeneration restores per tick, so the
-		///	character sheet's casting value is exactly that share of its normal value.
+		///	was spent), before the ModPowerRegenPercent aura modifier: the casting share of the
+		///	normal per-tick regeneration.
 		///	@remark Public for the same testability reason as GetManaRegenPerTick().
 		[[nodiscard]] float GetCastingManaRegenPerTick() const
 		{
-			return std::floor(m_manaRegenPerTick) * GetCastingManaRegenPercent() / 100.0f;
+			return m_manaRegenPerTick * GetCastingManaRegenPercent() / 100.0f;
 		}
 
-		/// Applies the aura percentage modifier for a power type to a per-tick amount.
-		///	@param powerType The power type being regenerated.
-		///	@param amount The unmodified amount for this tick.
-		///	@return The modified amount. Non-positive amounts are returned unchanged: rage
-		///	regenerates by decaying, and scaling that would make a regeneration bonus drain it.
-		[[nodiscard]] int32 GetEffectivePowerRegenPerTick(const PowerType powerType, const int32 amount) const
-		{
-			if (amount <= 0 || static_cast<uint8>(powerType) >= static_cast<uint8>(power_type::Count_))
-			{
-				return amount;
-			}
-
-			return static_cast<int32>(static_cast<float>(amount)
-				* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f));
-		}
 
 		/// Returns true if the unit can critically block attacks (unlocked via a CriticalBlock spell effect).
 		bool CanCriticalBlock() const { return (m_combatCapabilities & combat_capabilities::CanCriticalBlock) != 0; }
@@ -1558,10 +1677,31 @@ public:
 		/// @param outMax Receives the maximum weapon damage.
 		virtual void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const;
 
-		/// Gets the swing time (in milliseconds) for the given weapon hand.
-		/// Base implementation returns the BaseAttackTime object field for every hand.
+		/// Gets the swing time (in milliseconds) for the given weapon hand: the hand's base swing
+		///	time divided by the attack speed multiplier (ModAttackSpeed auras).
 		/// @param attackType Which weapon hand to source the swing time from.
-		virtual uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+		uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Gets the swing time (in milliseconds) of the given weapon hand before attack speed
+		///	auras. Base implementation returns the main-hand base swing time for every hand.
+		/// @param attackType Which weapon hand to source the swing time from.
+		virtual uint32 GetBaseAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Sets the unmodified main-hand swing time and refreshes the BaseAttackTime field, which
+		///	carries the effective (attack speed modified) main-hand swing time to the client.
+		/// @param attackTime The swing time in milliseconds.
+		void SetBaseAttackTime(uint32 attackTime);
+
+		/// Gets the attack speed multiplier from ModAttackSpeed auras: 1.0 by default, additive
+		///	across auras (+30 and -15 make 1.15), never below 0.1. Swing times are divided by it.
+		[[nodiscard]] float GetAttackSpeedMultiplier() const { return std::max(0.1f, 1.0f + m_attackSpeedPctBonus * 0.01f); }
+
+		/// Adds or removes percentage points to the attack speed multiplier, driven by the
+		///	ModAttackSpeed aura. The swing already scheduled keeps its time; the next one uses the
+		///	new interval.
+		///	@param amount The bonus in percentage points (30.0f = swings 30% faster).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyAttackSpeedPctBonus(float amount, bool apply);
 
 		/// Gets the combat settings containing configurable combat formula parameters.
 		/// Uses the project's combat settings if available, otherwise returns defaults.
@@ -1596,6 +1736,14 @@ public:
 
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
+
+		/// Checks whether one of this unit's pets is in combat (and so this unit is, too).
+		/// @returns true if a pet of this unit is in combat.
+		[[nodiscard]] bool IsAnyPetInCombat() const;
+
+		/// Leaves combat unless something still keeps the unit in it: attacking units, a running
+		/// pvp combat timer or a pet in combat. Called when a pet of this unit leaves combat.
+		void LeaveCombatIfIdle();
 
 		/// Gets the number of units currently attacking this unit.
 		/// @returns The number of attacking units.
@@ -1638,6 +1786,11 @@ public:
 		/// @param movementMode Walk or run mode.
 		void SetMovementMode(UnitMovementMode movementMode);
 
+		/// @brief Gets the kinds of movement this unit is capable of. Water deep enough to swim
+		///	in blocks the movement of a unit which is not able to swim.
+		/// @return Combination of movement_ability flags.
+		[[nodiscard]] virtual MovementAbilityFlags GetMovementAbilities() const { return movement_ability::Default; }
+
 		/// Called by spell auras to notify that a speed aura has been applied or misapplied.
 		/// If this unit is player controlled, a client notification is sent and the speed is
 		/// only changed after the client has acknowledged this change. Otherwise, the speed
@@ -1666,6 +1819,41 @@ public:
 		/// @param other The other unit to check.
 		/// @returns true if the other unit is friendly, false otherwise.
 		bool UnitIsFriendly(const GameUnitS &other) const;
+
+		/// Checks if this unit may attack another one when told to: anything that is not itself and
+		/// not friendly, neutral units included. Not an enemy check: creatures pick fights on their own
+		/// only with enemies (UnitIsEnemy), but a player's attack, and a pet acting for its owner,
+		/// may hit a neutral rat as well.
+		/// @param other The other unit to check.
+		/// @returns true if the other unit may be attacked.
+		bool UnitCanAttack(const GameUnitS &other) const;
+
+		/// Maximum number of owner links followed when resolving the top owner of a unit.
+		static constexpr uint32 MaxOwnerChainDepth = 4;
+
+		/// Gets the guid of the unit which owns this unit (a pet's owner), or 0 if it has none.
+		[[nodiscard]] uint64 GetOwnerGuid() const;
+
+		/// Sets the guid of the unit which owns this unit.
+		/// @param ownerGuid Guid of the owner, or 0 to clear it.
+		void SetOwnerGuid(uint64 ownerGuid);
+
+		/// Follows the owner chain (at most MaxOwnerChainDepth links) to the unit at its top.
+		/// @returns The top owner, or this unit if it has no owner or the owner cannot be resolved.
+		[[nodiscard]] const GameUnitS& GetTopOwner() const;
+
+		/// Checks whether this unit and another one share the same top owner. Units without an
+		/// owner are their own top owner, so a unit also shares it with its own pets.
+		/// @param other The other unit to check.
+		[[nodiscard]] bool SharesTopOwnerWith(const GameUnitS& other) const;
+
+		/// Gets the pets of this unit, creating the (empty) pet manager on first use.
+		/// @returns The pet manager of this unit.
+		PetManager& GetPets();
+
+		/// Gets the pets of this unit without creating the pet manager.
+		/// @returns The pet manager, or nullptr if this unit never had pets.
+		[[nodiscard]] PetManager* FindPets() const { return m_pets.get(); }
 
 		/// Gets the faction template of the unit.
 		/// @returns A pointer to the faction template entry.
@@ -1702,6 +1890,12 @@ public:
 		const Radian &GetBindFacing() const { return m_bindFacing; }
 
 	protected:
+		/// Called whenever this unit actually lost health to damage, after the new health value was
+		/// applied. Lets subclasses keep track of who wore this unit down.
+		/// @param instigator The unit that dealt the damage, or nullptr for environmental damage.
+		/// @param damage The amount of health that was actually lost.
+		virtual void OnDamageTaken(GameUnitS *instigator, uint32 damage) {}
+
 		/// Called when the unit is killed.
 		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS *killer);
@@ -1724,21 +1918,70 @@ public:
 		/// why only casts with a cast time go through here.
 		void StopSwingForCast();
 
-		/// Called when the unit regenerates.
+		/// Called by the regeneration sync timer: settles regeneration, which replicates the values.
 		virtual void OnRegeneration();
 
-		/// Regenerates the unit's health.
-		virtual void RegenerateHealth();
+		/// Arms the regeneration sync timer if regeneration is active and some resource is moving,
+		///	or if regenerated values were settled silently and not sent yet.
+		void ScheduleRegenSync() const;
 
-		/// Regenerates the unit's power.
-		/// @param powerType The type of power to regenerate.
-		virtual void RegeneratePower(PowerType powerType);
+		/// Settles regeneration up to now.
+		/// @param replicate Queue an object update for changed values (the sync) or not (every other settle).
+		void SettleRegeneration(GameTime now, bool replicate);
+
+
+		/// Replicates the current regeneration rates (HealthRegen, PowerRegen, ManaRegen fields).
+		void UpdateRegenRateFields();
+
+		/// Checks whether only the casting share of mana regeneration flows at the given time.
+		[[nodiscard]] bool IsInFiveSecondRule(GameTime now) const;
 
 	public:
 		/// Adds power to the unit.
 		/// @param powerType The type of power to add.
 		/// @param amount The amount of power to add.
 		virtual void AddPower(PowerType powerType, int32 amount);
+
+		/// Sets a field value. Hides GameObjectS::Set so that any change of a health or power field
+		///	re-arms the regeneration sync timer, which stops while nothing regenerates.
+		template<class T>
+		void Set(ObjectFieldMap::FieldIndexType index, T value, bool notify = true)
+		{
+			GameObjectS::Set<T>(index, value, notify);
+			if (index >= object_fields::MaxHealth && index <= object_fields::MaxEnergy)
+			{
+				ScheduleRegenSync();
+			}
+		}
+
+		/// Brings health and power up to date with everything regenerated since the last settle.
+		///	Regeneration is continuous; this has to run before anything reads health or power to
+		///	decide something (spell costs, damage) and before anything changes a regeneration rate.
+		///	Settling is silent: it updates the values without queueing an object update for nearby
+		///	clients. They receive the regenerated values with the next update that is sent anyway,
+		///	at the latest with the regeneration sync (regen_sync_interval_ms).
+		void SettleRegeneration();
+
+		/// @copydoc SettleRegeneration
+		/// @param now The time to settle up to. Times before the last settle are ignored.
+		void SettleRegeneration(GameTime now);
+
+		/// Checks whether settled health or power values are still waiting to be sent.
+		[[nodiscard]] bool HasUnsentRegeneration() const;
+
+		/// Gets the time up to which health and power include their regeneration.
+		[[nodiscard]] GameTime GetRegenSettledAt() const { return m_regenSettledAt; }
+
+		/// Checks whether any health or power value would change by regenerating right now.
+		[[nodiscard]] bool IsRegenerationMoving() const;
+
+		/// Gets the health regenerated per second right now (after auras and combat state).
+		[[nodiscard]] float GetHealthRegenPerSecond() const;
+
+		/// Gets the power regenerated per second right now (after auras and combat state).
+		/// @param powerType The power type.
+		/// @param casting For mana: the rate within the five second rule window instead of the normal one.
+		[[nodiscard]] float GetPowerRegenPerSecond(PowerType powerType, bool casting = false) const;
 
 	protected:
 		/// Called with the outcome of every auto attack swing this unit resolves.
@@ -1826,6 +2069,12 @@ public:
 		}
 
 	private:
+		/// Faction based hostility check, ignoring ownership.
+		static bool FactionIsEnemy(const GameUnitS& unit, const GameUnitS& other);
+
+		/// Faction based friendliness check, ignoring ownership.
+		static bool FactionIsFriendly(const GameUnitS& unit, const GameUnitS& other);
+
 		/// Called when the despawn timer expires.
 		void OnDespawnTimer();
 
@@ -1883,6 +2132,8 @@ public:
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
 		std::unique_ptr<CCMovementController> m_ccMovementController;
+		/// Pets of this unit, created on first use.
+		std::unique_ptr<PetManager> m_pets;
 		Countdown m_attackSwingCountdown;
 		Countdown m_offhandSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;
@@ -1897,8 +2148,18 @@ public:
 		/// whenever the victim changes -- the remembered outcome describes a swing against the
 		/// previous one.
 		AttackSwingEvent m_lastAttackSwingEvent = attack_swing_event::Unknown;
-		Countdown m_regenCountdown;
+		mutable Countdown m_regenCountdown;
 		GameTime m_lastManaUse = 0;
+
+		/// Whether regeneration runs (StartRegeneration / StopRegeneration): always for living
+		///	players, only in combat for creatures.
+		mutable bool m_regenActive = false;
+
+		/// Time up to which health and power include their regeneration (see SettleRegeneration).
+		GameTime m_regenSettledAt = 0;
+
+		/// Fraction of a point regenerated but not yet applied: [0] health, [1 + power type] power.
+		std::array<float, 1 + power_type::Count_> m_regenRemainder{};
 
 		std::weak_ptr<GameUnitS> m_victim;
 
@@ -1979,10 +2240,25 @@ public:
 		///	(ModCastingManaRegenPercent).
 		float m_castingManaRegenPctBonus = 0.0f;
 
-		/// Fraction of a mana point left over by casting regeneration ticks. The casting share of
-		///	a small per-tick regeneration is often below one point, and dropping the fraction
-		///	every tick would make the configured percentage meaningless at low levels.
-		float m_castingManaRegenRemainder = 0.0f;
+		/// Percentage points added to the cast time multiplier (ModCastingSpeedPct); positive is harmful.
+		AuraPctBonus m_castingSpeedPctBonus{ 1.0f };
+
+		/// Accumulated percentage points added to the attack speed multiplier (ModAttackSpeed).
+		float m_attackSpeedPctBonus = 0.0f;
+
+		/// Unmodified main-hand swing time in milliseconds. The BaseAttackTime field carries the
+		///	attack speed modified value.
+		uint32 m_baseAttackTime = 2000;
+
+		/// Percentage points added to the healing taken multiplier (ModHealingTakenPct); negative is harmful.
+		AuraPctBonus m_healingTakenPctBonus{ -1.0f };
+
+		/// Accumulated percentage points per pet stat (pet_stat_kind) from ModPetStatsPct auras.
+		std::array<float, pet_stat_kind::Count_> m_petStatPctBonus{};
+
+		/// Passive spells PetPassive auras put on the persistent pet, one entry per aura.
+		std::vector<uint32> m_petPassiveSpells;
+
 
 		std::map<uint8, float> m_baseSpeeds;
 

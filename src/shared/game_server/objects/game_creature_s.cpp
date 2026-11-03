@@ -10,9 +10,57 @@
 #include "binary_io/vector_sink.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
+	namespace
+	{
+		/// How many owner links are followed before giving up. A summon of a summon still belongs
+		/// to the player who started the chain, but the walk must not be able to loop forever.
+		constexpr int MaxOwnerChainDepth = 4;
+
+		/// Whether the given unit fights on a player's behalf: the player itself, a creature a
+		/// player summoned, or a creature escorting / following a player.
+		bool fightsForPlayer(const GameUnitS& unit, const int depth)
+		{
+			if (unit.IsPlayer())
+			{
+				return true;
+			}
+
+			if (depth >= MaxOwnerChainDepth)
+			{
+				return false;
+			}
+
+			const auto* creature = dynamic_cast<const GameCreatureS*>(&unit);
+			if (!creature)
+			{
+				return false;
+			}
+
+			if (const auto owner = creature->GetSummonOwner())
+			{
+				return fightsForPlayer(*owner, depth + 1);
+			}
+
+			if (const auto followed = creature->GetFollowedUnit())
+			{
+				return fightsForPlayer(*followed, depth + 1);
+			}
+
+			// Pets (and anything else with an Owner) fight for whoever owns them, however they got linked.
+			const GameUnitS& topOwner = creature->GetTopOwner();
+			if (&topOwner != &unit)
+			{
+				return fightsForPlayer(topOwner, depth + 1);
+			}
+
+			return false;
+		}
+	}
+
 	GameCreatureS::GameCreatureS(
 		const proto::Project& project,
 		TimerQueue& timers,
@@ -41,6 +89,11 @@ namespace mmo
 		{
 			m_loot.reset();
 		}
+	}
+
+	bool GameCreatureS::CanDie() const
+	{
+		return !m_ai || m_ai->CanControlledDie();
 	}
 
 	void GameCreatureS::Initialize()
@@ -176,6 +229,18 @@ namespace mmo
 		return genderDist(generator) == 0 ? entry.malemodel() : entry.femalemodel();
 	}
 
+	MovementAbilityFlags GameCreatureS::MovementAbilitiesOf(const proto::UnitEntry& entry)
+	{
+		MovementAbilityFlags abilities = movement_ability::Default;
+
+		if ((entry.extraflags() & unit_extra_flags::CannotSwim) != 0)
+		{
+			abilities &= ~movement_ability::CanSwim;
+		}
+
+		return abilities;
+	}
+
 	void GameCreatureS::AddLootRecipient(uint64 guid)
 	{
 		m_lootRecipients.add(guid);
@@ -184,6 +249,51 @@ namespace mmo
 	void GameCreatureS::RemoveLootRecipients()
 	{
 		m_lootRecipients.clear();
+	}
+
+	void GameCreatureS::OnDamageTaken(GameUnitS* instigator, const uint32 damage)
+	{
+		GameUnitS::OnDamageTaken(instigator, damage);
+
+		// Damage nobody is responsible for - falling, a lava pool, a caster that already left the
+		// world - belongs to neither side and must not tip the kill reward balance either way.
+		if (damage == 0 || !instigator)
+		{
+			return;
+		}
+
+		// A player's own units fight for the player: what a summon or an escorted quest NPC takes
+		// off is work the player brought into the fight and is paid for like the player's own.
+		if (fightsForPlayer(*instigator, 0))
+		{
+			m_playerDamageTaken += damage;
+		}
+		else
+		{
+			m_npcDamageTaken += damage;
+		}
+	}
+
+	void GameCreatureS::SetSummonOwner(const std::shared_ptr<GameUnitS>& owner)
+	{
+		m_summonOwner = owner;
+	}
+
+	float GameCreatureS::GetPlayerDamageShare() const
+	{
+		const uint64 attributedDamage = m_playerDamageTaken + m_npcDamageTaken;
+		if (attributedDamage == 0)
+		{
+			return 1.0f;
+		}
+
+		return static_cast<float>(m_playerDamageTaken) / static_cast<float>(attributedDamage);
+	}
+
+	void GameCreatureS::ResetDamageContributions()
+	{
+		m_playerDamageTaken = 0;
+		m_npcDamageTaken = 0;
 	}
 
 	bool GameCreatureS::IsLootRecipient(const GamePlayerS& character) const
@@ -404,6 +514,8 @@ namespace mmo
 					case trigger_event::OnSpellAuraRemoved:
 					case trigger_event::OnEmote:
 					case trigger_event::OnSpellCast:
+					case trigger_event::OnQuestAccept:
+					case trigger_event::OnQuestReward:
 						if (triggerEvent.data(0) != 0)
 						{
 							if (data.empty() || data[0] != triggerEvent.data(0))
@@ -647,6 +759,60 @@ namespace mmo
 			Set<uint32>(object_fields::Armor, m_entry->armor());
 			Set<float>(object_fields::MinDamage, m_entry->minmeleedmg());
 			Set<float>(object_fields::MaxDamage, m_entry->maxmeleedmg());
+
+			// SetEntry sets a legacy creature's max health and mana once. A pet scales them, so it
+			// recomputes them from the entry on every refresh instead of compounding its multipliers.
+			if (m_isPet)
+			{
+				Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth());
+				Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana());
+			}
+		}
+
+		if (m_isPet)
+		{
+			ApplyPetStats();
+		}
+	}
+
+	void GameCreatureS::SetPetStatMultipliers(const float health, const float mana, const float damage, const float armor)
+	{
+		m_petHealthMultiplier = health;
+		m_petManaMultiplier = mana;
+		m_petDamageMultiplier = damage;
+		m_petArmorMultiplier = armor;
+	}
+
+	void GameCreatureS::SetPetOwnerStatMultipliers(const float health, const float damage)
+	{
+		m_petOwnerHealthMultiplier = health;
+		m_petOwnerDamageMultiplier = damage;
+	}
+
+	void GameCreatureS::ApplyPetStats()
+	{
+		const auto scale = [](const uint32 value, const float multiplier)
+		{
+			return static_cast<uint32>(std::max(0.0f, std::round(static_cast<float>(value) * multiplier)));
+		};
+
+		const float healthMultiplier = m_petHealthMultiplier * m_petOwnerHealthMultiplier;
+		const float damageMultiplier = m_petDamageMultiplier * m_petOwnerDamageMultiplier;
+
+		Set<uint32>(object_fields::MaxHealth, std::max<uint32>(1, scale(Get<uint32>(object_fields::MaxHealth), healthMultiplier)));
+		Set<uint32>(object_fields::MaxMana, scale(Get<uint32>(object_fields::MaxMana), m_petManaMultiplier));
+		Set<uint32>(object_fields::Armor, scale(Get<uint32>(object_fields::Armor), m_petArmorMultiplier));
+		Set<float>(object_fields::MinDamage, Get<float>(object_fields::MinDamage) * damageMultiplier);
+		Set<float>(object_fields::MaxDamage, Get<float>(object_fields::MaxDamage) * damageMultiplier);
+
+		// Creatures have no health regeneration of their own: they heal by evading. A pet never
+		// evades, so it regenerates like a player out of combat - at its unit class rate, or a share
+		// of its max health per tick if the class has none.
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		m_healthRegenPerTick = unitClass ? unitClass->healthregenpertick() : 0.0f;
+		if (m_healthRegenPerTick <= 0.0f)
+		{
+			m_healthRegenPerTick = static_cast<float>(GetMaxHealth()) * PetHealthRegenShare;
 		}
 	}
 
@@ -667,30 +833,28 @@ namespace mmo
 
 		const float eliteMultiplier = m_entry->elitestatmultiplier();
 
-		// Calculate base stats with level scaling
+		// Calculate base attributes with level scaling
 		const auto& base = unitClass->levelbasevalues(level - 1);
-		const uint32 baseStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
-		const uint32 baseStrength = static_cast<uint32>(base.strength() * eliteMultiplier);
-		const uint32 baseAgility = static_cast<uint32>(base.agility() * eliteMultiplier);
-		const uint32 baseIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
-		const uint32 baseSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
-		SetModifierValue(GetUnitModByStat(0), unit_mod_type::BaseValue, baseStamina);
-		SetModifierValue(GetUnitModByStat(1), unit_mod_type::BaseValue, baseStrength);
-		SetModifierValue(GetUnitModByStat(2), unit_mod_type::BaseValue, baseAgility);
-		SetModifierValue(GetUnitModByStat(3), unit_mod_type::BaseValue, baseIntellect);
-		SetModifierValue(GetUnitModByStat(4), unit_mod_type::BaseValue, baseSpirit);
+		std::array<float, MaxAttributes> attributeTotals{};
+		for (uint8 attribute = 0; attribute < MaxAttributes; ++attribute)
+		{
+			const uint32 baseValue = attribute < base.attributes_size() ? static_cast<uint32>(base.attributes(attribute) * eliteMultiplier) : 0;
+			SetModifierValue(GetUnitModByStat(attribute), unit_mod_type::BaseValue, baseValue);
 
-		// Apply the base stats
-		const float totalStamina = GetCalculatedModifierValue(unit_mods::StatStamina);
-		const float totalStrength = GetCalculatedModifierValue(unit_mods::StatStrength);
-		const float totalAgility = GetCalculatedModifierValue(unit_mods::StatAgility);
-		const float totalIntellect = GetCalculatedModifierValue(unit_mods::StatIntellect);
-		const float totalSpirit = GetCalculatedModifierValue(unit_mods::StatSpirit);
-		Set<uint32>(object_fields::StatStamina, static_cast<uint32>(totalStamina));
-		Set<uint32>(object_fields::StatStrength, static_cast<uint32>(totalStrength));
-		Set<uint32>(object_fields::StatAgility, static_cast<uint32>(totalAgility));
-		Set<uint32>(object_fields::StatIntellect, static_cast<uint32>(totalIntellect));
-		Set<uint32>(object_fields::StatSpirit, static_cast<uint32>(totalSpirit));
+			attributeTotals[attribute] = GetCalculatedModifierValue(GetUnitModByStat(attribute));
+			Set<uint32>(object_fields::Stat + attribute, static_cast<uint32>(attributeTotals[attribute]));
+		}
+
+		// Every point of an attribute above 20 contributes factor to the derived value
+		auto fromAttribute = [&attributeTotals](const uint32 attribute, const float factor) -> uint32
+		{
+			if (attribute >= MaxAttributes)
+			{
+				return 0;
+			}
+
+			return static_cast<uint32>((std::max<int32>(attributeTotals[attribute], 20) - 20) * factor);
+		};
 
 		// Calculate health (base + per level + stamina modifier)
 		uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
@@ -701,24 +865,7 @@ namespace mmo
 		{
 			for (const auto& healthSource : unitClass->healthstatsources())
 			{
-				switch (healthSource.statid())
-				{
-					case 2: // STAMINA
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * healthSource.factor());
-						break;
-					case 0: // STRENGTH
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20U) - 20) * healthSource.factor());
-						break;
-					case 1: // AGILITY
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20U) - 20) * healthSource.factor());
-						break;
-					case 3: // INTELLECT
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20U) - 20) * healthSource.factor());
-						break;
-					case 4: // SPIRIT
-						healthFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20U) - 20) * healthSource.factor());
-						break;
-				}
+				healthFromStats += fromAttribute(healthSource.statid(), healthSource.factor());
 			}
 		}
 
@@ -734,24 +881,7 @@ namespace mmo
 		{
 			for (const auto& manaSource : unitClass->manastatsources())
 			{
-				switch (manaSource.statid())
-				{
-					case 2: // STAMINA
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * manaSource.factor());
-						break;
-					case 0: // STRENGTH
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * manaSource.factor());
-						break;
-					case 1: // AGILITY
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * manaSource.factor());
-						break;
-					case 3: // INTELLECT
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * manaSource.factor());
-						break;
-					case 4: // SPIRIT
-						manaFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * manaSource.factor());
-						break;
-				}
+				manaFromStats += fromAttribute(manaSource.statid(), manaSource.factor());
 			}
 		}
 
@@ -767,24 +897,7 @@ namespace mmo
 		{
 			for (const auto& armorSource : unitClass->armorstatsources())
 			{
-				switch (armorSource.statid())
-				{
-					case 2: // STAMINA
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * armorSource.factor());
-						break;
-					case 0: // STRENGTH
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * armorSource.factor());
-						break;
-					case 1: // AGILITY
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * armorSource.factor());
-						break;
-					case 3: // INTELLECT
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * armorSource.factor());
-						break;
-					case 4: // SPIRIT
-						armorFromStats += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * armorSource.factor());
-						break;
-				}
+				armorFromStats += fromAttribute(armorSource.statid(), armorSource.factor());
 			}
 		}
 
@@ -800,24 +913,7 @@ namespace mmo
 			// Add attack power from unit class stat sources
 			for (const auto& attackPowerSource : unitClass->attackpowerstatsources())
 			{
-				switch (attackPowerSource.statid())
-				{
-					case 2: // STAMINA
-						attackPower += static_cast<uint32>((std::max<int32>(totalStamina, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 0: // STRENGTH
-						attackPower += static_cast<uint32>((std::max<int32>(totalStrength, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 1: // AGILITY
-						attackPower += static_cast<uint32>((std::max<int32>(totalAgility, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 3: // INTELLECT
-						attackPower += static_cast<uint32>((std::max<int32>(totalIntellect, 20) - 20) * attackPowerSource.factor());
-						break;
-					case 4: // SPIRIT
-						attackPower += static_cast<uint32>((std::max<int32>(totalSpirit, 20) - 20) * attackPowerSource.factor());
-						break;
-				}
+				attackPower += fromAttribute(attackPowerSource.statid(), attackPowerSource.factor());
 			}
 		}
 
@@ -863,20 +959,41 @@ namespace mmo
 			Set<uint32>(object_fields::PowerType, gamePowerType);
 		}
 
-		// Rebuilt from scratch on every refresh: the spirit term is conditional, so without
-		// this reset the flat term below would be added again on every call.
-		m_manaRegenPerTick = 0.0f;
-
-		if (unitClass->spiritpermanaregen() != 0.0f)
-		{
-			m_manaRegenPerTick = (static_cast<float>(Get<uint32>(object_fields::StatSpirit)) / unitClass->spiritpermanaregen());
-		}
+		// Rebuilt from scratch on every refresh, so the flat term below is not added again on every call.
+		m_manaRegenPerTick = SumAttributeFieldRatios(unitClass->manaregensources());
 		m_manaRegenPerTick += unitClass->basemanaregenpertick();
 		m_manaRegenPerTick = std::max(m_manaRegenPerTick, 0.0f);
 	}
 
+	const proto::UnitClassEntry* GameCreatureS::GetStatUnitClass() const
+	{
+		if (!m_entry || !m_entry->usestatbasedsystem() || m_entry->unitclassid() == 0)
+		{
+			return nullptr;
+		}
+
+		return GetProject().unitClasses.getById(m_entry->unitclassid());
+	}
+
+	float GameCreatureS::GetMeleeCritChanceFromAttributes() const
+	{
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		return unitClass ? SumAttributeModifierRatios(unitClass->meleecritsources()) : 0.0f;
+	}
+
+	float GameCreatureS::GetDodgeChanceFromAttributes() const
+	{
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		return unitClass ? SumAttributeModifierRatios(unitClass->dodgesources()) : 0.0f;
+	}
+
 	const String& GameCreatureS::GetName() const
 	{
+		if (!m_customName.empty())
+		{
+			return m_customName;
+		}
+
 		return m_entry ? m_entry->name() : m_originalEntry.name();
 	}
 

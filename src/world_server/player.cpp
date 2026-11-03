@@ -101,6 +101,16 @@ namespace mmo
 			// Known-class set changed (e.g. a class-change spell was learned)
 			m_character->knownClassesChanged.connect(*this, &Player::OnKnownClassesChanged),
 
+			// Persistent pets: every change is saved, and new pets are created by the realm
+			m_character->storedPetsChanged.connect([this]()
+			{
+				SaveStoredPets();
+			}),
+			m_character->petCreationRequested.connect([this](const PersistentPetData& request)
+			{
+				m_connector.SendCreatePet(m_character->GetGuid(), request);
+			}),
+
 			// Inventory signals
 			inventory.itemInstanceCreated.connect(this, &Player::OnItemCreated),
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
@@ -878,6 +888,18 @@ namespace mmo
 		case game::client_realm_packet::CheatFollowMe:
 			OnCheatFollowMe(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::CheatPetAdd:
+			OnCheatPetAdd(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetRemove:
+			OnCheatPetRemove(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetTame:
+			OnCheatPetTame(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPetMake:
+			OnCheatPetMake(opCode, buffer.size(), reader);
+			break;
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
 			break;
@@ -1013,6 +1035,23 @@ namespace mmo
 		case game::client_realm_packet::SellItem:
 			OnSellItem(opCode, buffer.size(), reader);
 			break;
+		case game::client_realm_packet::BuyBackItem:
+			OnBuyBackItem(opCode, buffer.size(), reader);
+			break;
+
+		case game::client_realm_packet::PetCommand:
+			OnPetCommand(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetCastSpell:
+			OnPetCastSpell(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetRename:
+			OnPetRename(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::PetNameQuery:
+			OnPetNameQuery(opCode, buffer.size(), reader);
+			break;
+
 		case game::client_realm_packet::BuyItem:
 			OnBuyItem(opCode, buffer.size(), reader);
 			break;
@@ -1698,6 +1737,12 @@ namespace mmo
     	m_sessionStartTime = std::chrono::steady_clock::now();
 		m_spawned = true;
 
+		if (m_notifyAttributeRefundOnSpawn)
+		{
+			m_notifyAttributeRefundOnSpawn = false;
+			OnAttributePointsReset();
+		}
+
 		// Allow the client to transition into falling state without a jump packet.
 		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
 		m_pendingFallStart = true;
@@ -1851,6 +1896,34 @@ namespace mmo
 
 		DLOG("Time played: " << GetTimePlayed() << " seconds");
 		m_connector.SendCharacterData(m_worldInstance->GetMapId(), m_worldInstance->GetId(), GetTimePlayed(), *m_character);
+		SaveStoredPets();
+	}
+
+	void Player::SaveStoredPets() const
+	{
+		if (!m_character || !m_storedPetsReceived)
+		{
+			return;
+		}
+
+		m_connector.SendPetData(m_character->GetGuid(), m_character->GetStoredPets());
+	}
+
+	void Player::ApplyStoredPets(std::vector<PersistentPetData> pets)
+	{
+		// Set first: applying them can summon a pet, which is a change to save.
+		m_storedPetsReceived = true;
+		m_character->SetStoredPets(std::move(pets));
+	}
+
+	bool Player::ArePetsAvailable() const
+	{
+		return m_connector.IsSubsystemAvailable(game::subsystem::Pets);
+	}
+
+	bool Player::AreStoredPetsLoaded() const
+	{
+		return m_storedPetsReceived;
 	}
 
 	void Player::OpenLootDialog(std::shared_ptr<LootInstance> lootInstance, std::shared_ptr<GameObjectS> source)
@@ -3050,6 +3123,7 @@ namespace mmo
 		}
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(m_character->GetBindMap(), m_character->GetBindPosition(), m_character->GetBindFacing());
 	}
@@ -3118,6 +3192,7 @@ namespace mmo
 		m_character->Set<uint32>(object_fields::Health, std::min(reviveHealth, maxHealth));
 
 		m_character->StartRegeneration();
+		m_character->OnResurrected();
 
 		m_character->Teleport(reviveMap, revivePosition, reviveFacing);
 	}
@@ -3514,14 +3589,11 @@ namespace mmo
 			return;
 		}
 
-		if (attributeId >= 5)
+		// AddAttributePoint rejects ids that are no defined attribute and points the character cannot afford
+		if (!m_character->AddAttributePoint(attributeId))
 		{
-			ELOG("Invalid attribute id referenced, failed to add attribute point");
-			return;
+			DLOG("Could not add attribute point to attribute " << attributeId);
 		}
-
-		// TODO: Add attribute point to character
-		m_character->AddAttributePoint(attributeId);
 	}
 
 	void Player::OnSpellLearned(GameUnitS& unit, const proto::SpellEntry& spellEntry)
@@ -3893,6 +3965,10 @@ namespace mmo
 
 			packet.Finish();
 		});
+
+		// The vendor window shows the buyback offers next to the vendor's own stock, so both lists
+		// are sent together.
+		SendBuyBackList(vendorUnit.GetGuid());
 	}
 
 	void Player::SendVendorInventoryError(uint64 vendorGuid, vendor_result::Type result)
@@ -4056,6 +4132,26 @@ namespace mmo
 			});
 	}
 
+	void Player::OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
+	{
+		// The Pet flag tells the client the damage is not the player's own; the dealing unit's guid
+		// follows the regular payload only then.
+		const uint8 petFlags = static_cast<uint8>(flags | damage_flags::Pet);
+		SendPacket([sourceGuid, targetGuid, amount, school, petFlags, &spell, blocked](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(spell.id())
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(school)
+					<< io::write<uint8>(petFlags)
+					<< io::write<uint32>(blocked)
+					<< io::write_packed_guid(sourceGuid);
+				packet.Finish();
+			});
+	}
+
 	void Player::OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags)
 	{
 		RecordCombatEvent(combat_event_type::DamageDone, targetGuid, 0, amount, 0);
@@ -4193,21 +4289,32 @@ namespace mmo
 		m_manager.RemovePlayer(shared_from_this());
 	}
 
-	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, int32 staminaDiff, int32 strengthDiff, int32 agilityDiff, int32 intDiff, int32 spiritDiff, int32 talentPoints, int32 attributePoints)
+	void Player::OnLevelUp(uint32 newLevel, int32 healthDiff, int32 manaDiff, const std::array<int32, MaxAttributes>& attributeDiffs, int32 talentPoints, int32 attributePoints)
 	{
-		SendPacket([newLevel, healthDiff, manaDiff, staminaDiff, strengthDiff, agilityDiff, intDiff, spiritDiff, talentPoints, attributePoints](game::OutgoingPacket& packet) {
+		// One (attribute id, gain) pair per defined attribute, in attribute id order
+		std::vector<std::pair<uint8, int32>> attributeGains;
+		for (const auto& attribute : m_project.attributes.getTemplates().entry())
+		{
+			if (attribute.id() < MaxAttributes)
+			{
+				attributeGains.emplace_back(static_cast<uint8>(attribute.id()), attributeDiffs[attribute.id()]);
+			}
+		}
+		std::sort(attributeGains.begin(), attributeGains.end());
+
+		SendPacket([newLevel, healthDiff, manaDiff, &attributeGains, talentPoints, attributePoints](game::OutgoingPacket& packet) {
 			packet.Start(game::realm_client_packet::LevelUp);
 			packet
 				<< io::write<uint8>(newLevel)
 				<< io::write<int32>(healthDiff)
 				<< io::write<int32>(manaDiff)
-				<< io::write<int32>(staminaDiff)
-				<< io::write<int32>(strengthDiff)
-				<< io::write<int32>(agilityDiff)
-				<< io::write<int32>(intDiff)
-				<< io::write<int32>(spiritDiff)
 				<< io::write<int32>(talentPoints)
-				<< io::write<int32>(attributePoints);
+				<< io::write<int32>(attributePoints)
+				<< io::write<uint8>(attributeGains.size());
+			for (const auto& [attributeId, gain] : attributeGains)
+			{
+				packet << io::write<uint8>(attributeId) << io::write<int32>(gain);
+			}
 			packet.Finish();
 			});
 

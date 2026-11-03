@@ -133,6 +133,12 @@ namespace mmo
 			m_heardSoundCounts.clear();
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
+			m_lastFriendCommandResult = -1;
+			m_friendListUpdates = 0;
+			m_lastGuildCommandResult = -1;
+			m_petSpells = game::PetSpellsData();
+			m_petSpellsPackets = 0;
+			m_lastPetResult = -1;
 
 			// Accept LogonChallenge packets from here on
 			RegisterPacketHandler(game::realm_client_packet::AuthChallenge, *this, &BotRealmConnector::OnAuthChallenge);
@@ -144,6 +150,9 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::PlaySoundById, *this, &BotRealmConnector::OnPlaySoundById);
 			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
+			RegisterPacketHandler(game::realm_client_packet::FriendCommandResult, *this, &BotRealmConnector::OnFriendCommandResult);
+			RegisterPacketHandler(game::realm_client_packet::FriendListUpdate, *this, &BotRealmConnector::OnFriendListUpdate);
+			RegisterPacketHandler(game::realm_client_packet::GuildCommandResult, *this, &BotRealmConnector::OnGuildCommandResult);
 		}
 		else
 		{
@@ -674,6 +683,14 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::SetFlightBackSpeed, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::GameTimeInfo, *this, &BotRealmConnector::OnGameTimeInfo);
 		RegisterPacketHandler(game::realm_client_packet::ShutdownCountdown, *this, &BotRealmConnector::OnShutdownCountdown);
+
+		// Pet packets. Experience and learned-spell notices are followed by a PetSpells that carries
+		// what the bot needs.
+		RegisterPacketHandler(game::realm_client_packet::PetSpells, *this, &BotRealmConnector::OnPetSpells);
+		RegisterPacketHandler(game::realm_client_packet::PetResult, *this, &BotRealmConnector::OnPetResult);
+		RegisterPacketHandler(game::realm_client_packet::PetNameQueryResult, *this, &BotRealmConnector::OnPetNameQueryResult);
+		RegisterPacketHandler(game::realm_client_packet::PetXp, *this, &BotRealmConnector::OnIgnoredPacket);
+		RegisterPacketHandler(game::realm_client_packet::PetLearnedSpell, *this, &BotRealmConnector::OnIgnoredPacket);
 		RegisterPacketHandler(game::realm_client_packet::CastFailed, *this, &BotRealmConnector::OnIgnoredPacket);
 
 		// Combat packet handlers
@@ -682,6 +699,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
 		RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
 		RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
+		RegisterPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &BotRealmConnector::OnPeriodicAuraLog);
 	}
 
 	PacketParseResult BotRealmConnector::OnAuthChallenge(game::IncomingPacket& packet)
@@ -829,6 +847,83 @@ namespace mmo
 		sendSinglePacket([&payload](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::BugReport);
 			packet << payload;
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnFriendCommandResult(game::IncomingPacket& packet)
+	{
+		uint8 result = 0;
+		String playerName;
+		if (!(packet >> io::read<uint8>(result) >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastFriendCommandResult = result;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnFriendListUpdate(game::IncomingPacket& packet)
+	{
+		// Only counted: scenarios check that a list arrived, not what is on it.
+		++m_friendListUpdates;
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::FriendInvite(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::FriendInvite);
+			packet << io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::RequestFriendList()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::FriendListRequest);
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnGuildCommandResult(game::IncomingPacket& packet)
+	{
+		uint8 command = 0;
+		uint8 result = 0;
+		String playerName;
+		if (!(packet >> io::read<uint8>(command) >> io::read<uint8>(result) >> io::read_container<uint8>(playerName)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastGuildCommandResult = result;
+		return PacketParseResult::Pass;
+	}
+
+	void BotRealmConnector::GuildInvite(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildInvite);
+			packet << io::write_dynamic_range<uint8>(name);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::GuildLeave()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildLeave);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatCreateGuild(const String& name)
+	{
+		sendSinglePacket([&name](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildCreate);
+			packet << io::write_dynamic_range<uint8>(name);
 			packet.Finish();
 			});
 	}
@@ -2063,6 +2158,10 @@ namespace mmo
 		{
 			unit.SetTargetGuid(fieldMap.GetFieldValue<uint64>(object_fields::TargetUnit));
 		}
+		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Owner))
+		{
+			unit.SetOwnerGuid(fieldMap.GetFieldValue<uint64>(object_fields::Owner));
+		}
 		if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::StandState))
 		{
 			unit.SetStandState(fieldMap.GetFieldValue<uint32>(object_fields::StandState));
@@ -2162,6 +2261,18 @@ namespace mmo
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::TalentPoints))
 			{
 				unit.SetTalentPoints(fieldMap.GetFieldValue<uint32>(object_fields::TalentPoints));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::AvailableAttributePoints))
+			{
+				unit.SetAvailableAttributePoints(fieldMap.GetFieldValue<uint32>(object_fields::AvailableAttributePoints));
+			}
+			for (uint32 attribute = 0; attribute < MaxAttributes; ++attribute)
+			{
+				const auto field = static_cast<FieldMap<uint32>::FieldIndexType>(object_fields::Stat + attribute);
+				if (creation || fieldMap.IsFieldMarkedAsChanged(field))
+				{
+					unit.SetAttribute(attribute, fieldMap.GetFieldValue<int32>(field));
+				}
 			}
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Class))
 			{
@@ -2966,6 +3077,26 @@ namespace mmo
 		return PacketParseResult::Pass;
 	}
 
+	PacketParseResult BotRealmConnector::OnPeriodicAuraLog(game::IncomingPacket& packet)
+	{
+		// Damage, heal and energize ticks share this prefix; the damage variant appends school,
+		// absorbed and resisted amounts, which nothing reads yet.
+		uint64 victimGuid = 0;
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		uint32 auraType = 0;
+		uint32 amount = 0;
+		if (!(packet >> io::read_packed_guid(victimGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId)
+			>> io::read<uint32>(auraType) >> io::read<uint32>(amount)))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		PeriodicAuraTicked(victimGuid, casterGuid, spellId, auraType, amount);
+
+		return PacketParseResult::Pass;
+	}
+
 	void BotRealmConnector::SetSelection(const uint64 guid)
 	{
 		sendSinglePacket([guid](game::OutgoingPacket& packet) {
@@ -3129,6 +3260,101 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::CheatPetAdd(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetAdd);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatPetRemove(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetRemove);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatPetTame()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetTame);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatPetMake()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetMake);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::PetCommand(const uint8 command, const uint64 target, const uint32 param)
+	{
+		game::PetCommandRequest request;
+		request.command = command;
+		request.target = target;
+		request.param = param;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCommand);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::PetRename(const String& name)
+	{
+		game::PetRenameRequest request;
+		request.name = name;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetRename);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	PacketParseResult BotRealmConnector::OnPetSpells(game::IncomingPacket& packet)
+	{
+		game::PetSpellsData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_petSpells = std::move(data);
+		++m_petSpellsPackets;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPetResult(game::IncomingPacket& packet)
+	{
+		game::PetResultData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		m_lastPetResult = data.result;
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPetNameQueryResult(game::IncomingPacket& packet)
+	{
+		game::PetNameQueryResultData data;
+		if (!(packet >> data))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		// Sent to every client in sight of a renamed pet. Pet names are not mirrored by the bot.
+		return PacketParseResult::Pass;
+	}
+
 	void BotRealmConnector::SendEmote(const uint32 emoteId, const uint64 targetGuid)
 	{
 		sendSinglePacket([emoteId, targetGuid](game::OutgoingPacket& packet) {
@@ -3151,6 +3377,15 @@ namespace mmo
 		sendSinglePacket([levels](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatLevelUp);
 			packet << io::write<uint8>(levels);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::AddAttributePoint(const uint32 attributeId)
+	{
+		sendSinglePacket([attributeId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::AttributePoint);
+			packet << io::write<uint32>(attributeId);
 			packet.Finish();
 			});
 	}

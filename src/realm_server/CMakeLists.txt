@@ -1,6 +1,7 @@
 
 # Add default executable
-add_exe(realm_server)
+add_exe_recurse(realm_server)
+target_include_directories(realm_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(realm_server crash_upload assets base log simple_file_format_hdrs binary_io_hdrs network_hdrs sql_wrapper mysql_wrapper auth_protocol game_protocol game game_server game_common math web_services proto_data virtual_dir)
 target_link_libraries(realm_server ${OPENSSL_LIBRARIES})
 set_property(TARGET realm_server PROPERTY FOLDER "servers")

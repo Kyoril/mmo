@@ -3,7 +3,9 @@
 #include "mesh_sound_emitter_spec.h"
 
 #include <charconv>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 namespace mmo
@@ -43,8 +45,22 @@ namespace mmo
 		{
 			const char* begin = text.data();
 			const char* end = begin + text.size();
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
 			const auto [ptr, ec] = std::from_chars(begin, end, out);
 			return ec == std::errc() && ptr == end && std::isfinite(out);
+#else
+			// Apple's libc++ has no floating-point from_chars; strtof needs a terminated string,
+			// which String::c_str() provides.
+			if (begin == end)
+			{
+				return false;
+			}
+
+			char* parsedEnd = nullptr;
+			errno = 0;
+			out = std::strtof(text.c_str(), &parsedEnd);
+			return errno == 0 && parsedEnd == text.c_str() + text.size() && std::isfinite(out);
+#endif
 		}
 
 		bool ParseUInt(const String& text, uint32& out)

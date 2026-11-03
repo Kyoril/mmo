@@ -18,6 +18,7 @@
 #include "game/mail.h"
 #include "game/trade_skill.h"
 #include "game_server/character_data.h"
+#include "game_server/pets/persistent_pet.h"
 #include "math/angle.h"
 
 
@@ -362,6 +363,31 @@ namespace mmo
 		virtual void MarkMailRead(uint64 characterId, uint64 mailId) = 0;
 	};
 
+	/// Stored (persistent) pet operations: the character_pets and character_pet_spells tables.
+	/// Every operation is scoped to one character, so callers key them by its id.
+	struct IPetDatabase
+	{
+		virtual ~IPetDatabase() = default;
+
+		/// Loads the stored pets of a character with their learned spells.
+		/// @returns Empty optional on error.
+		virtual std::optional<std::vector<PersistentPetData>> LoadCharacterPets(uint64 characterId) = 0;
+
+		/// Saves stored pets of a character in one transaction. Each pet's row is updated by its id
+		/// (rows are never deleted and reinserted: the id is part of the pet's guid) and its learned
+		/// spells are replaced. Pets of other characters are never touched.
+		/// @param pets The pets whose state changed.
+		/// @param removedPetIds Pets the character no longer has; their rows and spells are deleted.
+		virtual void SaveCharacterPets(uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds) = 0;
+
+		/// Creates a stored pet of a character with its learned spells. It is stored as not summoned.
+		/// @returns The new pet's database id, or 0 if it could not be created.
+		virtual uint64 CreateCharacterPet(uint64 characterId, const PersistentPetData& pet) = 0;
+
+		/// Deletes every stored pet of a character with their spells (character deletion).
+		virtual void DeleteCharacterPets(uint64 characterId) = 0;
+	};
+
 	// -------------------------------------------------------------------------
 	// Composite interface — still used by MySQLDatabase and legacy call sites
 	// that depend on a single database reference.
@@ -380,6 +406,7 @@ namespace mmo
 		, public IChatDatabase
 		, public IChatChannelDatabase
 		, public IMailDatabase
+		, public IPetDatabase
 	{
 		virtual ~IDatabase() override;
 	};
@@ -403,6 +430,7 @@ namespace mmo
 	using AsyncWorldNodeDatabase = AsyncDatabaseT<IWorldNodeDatabase>;
 	using AsyncChatDatabase     = AsyncDatabaseT<IChatDatabase>;
 	using AsyncChatChannelDatabase = AsyncDatabaseT<IChatChannelDatabase>;
+	using AsyncPetDatabase      = AsyncDatabaseT<IPetDatabase>;
 
 	typedef std::function<void()> Action;
 }

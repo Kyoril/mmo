@@ -441,14 +441,69 @@ namespace mmo
 			}
 		} while (++slot < player_buy_back_slots::End);
 
-		// No free slot available, discard the oldest one
-		if (const auto itemInst = m_itemsBySlot[oldestFieldSlot])
-		{
-			itemInstanceDestroyed(std::cref(itemInst), oldestFieldSlot);
-			m_itemsBySlot.erase(oldestFieldSlot);
-		}
+		// No free slot available, discard the oldest one. The item instance was already despawned
+		// for the client when it was sold, so it is only dropped here.
+		m_itemsBySlot.erase(oldestFieldSlot);
 
 		return oldestFieldSlot;
+	}
+
+	std::shared_ptr<GameItemS> Inventory::GetBuyBackItem(const uint8 buyBackSlot) const
+	{
+		if (buyBackSlot >= player_buy_back_slots::Count_)
+		{
+			return nullptr;
+		}
+
+		const auto it = m_itemsBySlot.find(static_cast<uint16>(player_buy_back_slots::Start + buyBackSlot));
+		if (it == m_itemsBySlot.end())
+		{
+			return nullptr;
+		}
+
+		return it->second;
+	}
+
+	uint32 Inventory::GetBuyBackPrice(const uint8 buyBackSlot) const
+	{
+		if (buyBackSlot >= player_buy_back_slots::Count_)
+		{
+			return 0;
+		}
+
+		return m_owner.Get<uint32>(object_fields::BuybackPrice_1 + buyBackSlot);
+	}
+
+	InventoryChangeFailure Inventory::BuyBackItem(const uint8 buyBackSlot)
+	{
+		const auto item = GetBuyBackItem(buyBackSlot);
+		if (!item)
+		{
+			return inventory_change_failure::ItemNotFound;
+		}
+
+		// The whole item instance is handed back, so it needs a free slot of its own.
+		const uint16 targetSlot = FindEmptySlot();
+		if (targetSlot == 0)
+		{
+			return inventory_change_failure::InventoryFull;
+		}
+
+		// Release the buyback slot before the item is handed back
+		m_itemsBySlot.erase(static_cast<uint16>(player_buy_back_slots::Start + buyBackSlot));
+		m_owner.Set<uint64>(object_fields::VendorBuybackSlot_1 + (buyBackSlot * 2), 0);
+		m_owner.Set<uint32>(object_fields::BuybackPrice_1 + buyBackSlot, 0);
+		m_owner.Set<uint32>(object_fields::BuybackTimestamp_1 + buyBackSlot, 0);
+
+		const uint16 stacks = static_cast<uint16>(item->GetStackCount());
+		m_itemCounter[item->GetEntry().id()] += stacks;
+
+		AddItemToSlot(item, targetSlot);
+
+		// Quest check
+		m_owner.OnQuestItemAddedCredit(item->GetEntry(), stacks);
+
+		return inventory_change_failure::Okay;
 	}
 
 	InventoryChangeFailure Inventory::RemoveItem(uint16 absoluteSlot, uint16 stacks /* = 0*/, bool sold /* = false*/)
@@ -462,6 +517,7 @@ namespace mmo
 
 		// Updated cached item counter
 		const uint32 stackCount = it->second->GetStackCount();
+		bool removedCompletely = false;
 		if (stacks == 0 || stacks > stackCount)
 		{
 			stacks = stackCount;
@@ -472,6 +528,8 @@ namespace mmo
 		auto item = it->second;
 		if (stackCount == stacks)
 		{
+			removedCompletely = true;
+
 			// No longer watch for item despawn
 			m_itemDespawnSignals.erase(item->GetGuid());
 
@@ -482,15 +540,9 @@ namespace mmo
 			// Cleanup equipment/bag effects
 			CleanupRemovedEquipment(item, absoluteSlot);
 
-			// Notify about destruction or update
-			if (!sold)
-			{
-				itemInstanceDestroyed(item, absoluteSlot);
-			}
-			else
-			{
-				itemInstanceUpdated(item, absoluteSlot);
-			}
+			// The item leaves the owner's inventory either way: a sold item only lives on in a
+			// buyback slot on the server, so the client has to drop its object in both cases.
+			itemInstanceDestroyed(item, absoluteSlot);
 		}
 		else
 		{
@@ -498,8 +550,10 @@ namespace mmo
 			itemInstanceUpdated(it->second, absoluteSlot);
 		}
 		
-		// Handle sold items (buyback logic)
-		if (sold)
+		// Handle sold items (buyback logic). Only a completely removed stack may enter a buyback
+		// slot: a partially sold stack keeps its item instance in the inventory, so storing the
+		// very same instance in a buyback slot as well would hand it out twice.
+		if (sold && removedCompletely)
 		{
 			const uint16 slot = FindOrCreateBuybackSlot();
 			const uint32 slotTime = ::time(nullptr);
@@ -1207,10 +1261,26 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 	{
 		if (object.m_realmData.empty())
 		{
-			// Inventory has actual item instances, so we serialize this object for realm usage
-			w << io::write<uint16>(object.m_itemsBySlot.size());
+			// Inventory has actual item instances, so we serialize this object for realm usage.
+			// Buyback slots only exist for the duration of a world session: they are dropped here
+			// so that neither a logout nor a world node change carries them over.
+			uint16 itemCount = 0;
 			for (const auto &pair : object.m_itemsBySlot)
 			{
+				if (!InventorySlot::FromAbsolute(pair.first).IsBuyBack())
+				{
+					++itemCount;
+				}
+			}
+
+			w << io::write<uint16>(itemCount);
+			for (const auto &pair : object.m_itemsBySlot)
+			{
+				if (InventorySlot::FromAbsolute(pair.first).IsBuyBack())
+				{
+					continue;
+				}
+
 				ItemData data;
 				data.entry = pair.second->GetEntry().id();
 				data.slot = pair.first;
@@ -1779,10 +1849,10 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 	// IRemoveItemCommandContext Implementation
 	// ============================================================================
 
-	void Inventory::RemoveItemFromSlot(uint16 slot, uint16 stacks)
+	void Inventory::RemoveItemFromSlot(uint16 slot, uint16 stacks, bool sold)
 	{
 		// Delegate to existing RemoveItem method
-		RemoveItem(slot, stacks, false);
+		RemoveItem(slot, stacks, sold);
 	}
 
 	// Note: GetItemAtSlot is already implemented and now has override keyword

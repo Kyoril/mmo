@@ -6,10 +6,14 @@
 
 // --- Shader bytecode seam ---------------------------------------------------------------
 // The only backend-bound fact in this file: which compiled blob to hand CreateShader. Mirrors
-// the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/PS_Underwater.h"
+// the seam in ssao_pass.cpp; the Metal build generates the same symbols from the HLSL (hlsl2msl).
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/PS_Underwater.h"
+#	else
+#		include "PS_Underwater.metal.h"
+#	endif
 #	define MMO_UNDERWATER_PS_BYTECODE g_PS_Underwater
 #	define MMO_UNDERWATER_PS_SIZE std::size(g_PS_Underwater)
 #else

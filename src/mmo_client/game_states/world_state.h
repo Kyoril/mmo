@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "shared/audio/audio.h"
 #include "mmo_client/char_creation//char_select.h"
 #include "mmo_client/data/client_cache.h"
@@ -31,9 +33,13 @@
 
 #include "base/id_generator.h"
 #include "world_deserializer.h"
+#include "world_render_settings.h"
+#include "systems/movement_client.h"
+#include "systems/combat_log_client.h"
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
+#include "game/spell.h"
 #include "paging/loaded_page_section.h"
 #include "paging/page_loader_listener.h"
 #include "paging/page_pov_partitioner.h"
@@ -112,7 +118,9 @@ namespace mmo
 	class WorldState final
 		: public GameState,
 		  public NetClient,
-		  public IPageLoaderListener
+		  public IPageLoaderListener,
+		  public IMovementClientListener,
+		  public ICombatLogListener
 	{
 	public:
 		/// @brief Creates a new instance of the WorldState class and initializes it.
@@ -184,11 +192,15 @@ namespace mmo
 		/// @param attackerGuid GUID of the unit that dealt the damage.
 		/// @param amount Damage amount applied.
 		/// @param isCritical True if the hit was a critical strike.
-		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical);
+		void TriggerCombatCameraShake(ObjectGuid victimGuid, ObjectGuid attackerGuid, uint32 amount, bool isCritical) override;
 
 		/// Recomputes the low-health combat vignette intensity from the controlled player's current
 		/// health, honoring the CombatVignette gameplay option.
 		void UpdateCombatVignette();
+
+		/// Raises PLAYER_HEALTH_CHANGED / PLAYER_POWER_CHANGED when the own player's predicted
+		///	(regenerating) health or power reaches another whole point between server syncs.
+		void UpdatePredictedResources();
 
 		void OnMoneyChanged(uint64 monitoredGuid);
 
@@ -229,57 +241,8 @@ namespace mmo
 
 		void OnRenderShadowsChanged(ConsoleVar &var, const std::string &oldValue);
 
-		void OnShadowBiasChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowTextureSizeChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnShadowTemporalChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the ShadowLightStep console variable changed.
-		void OnShadowLightStepChanged(ConsoleVar &var, const std::string &oldValue);
-
-		void OnDepthPrepassChanged(ConsoleVar &var, const std::string &oldValue);
-
 		/// @brief Called when the gxUnderwaterGodRays console variable changed.
 		void OnUnderwaterGodRaysChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsao console variable changed.
-		void OnSsaoEnabledChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoQuality console variable changed.
-		void OnSsaoQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoHalfRes console variable changed.
-		void OnSsaoHalfResChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when any of the gxSsaoRadius / gxSsaoIntensity / gxSsaoThickness
-		///        console variables changed.
-		void OnSsaoParametersChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxSsaoDebug console variable changed.
-		void OnSsaoDebugChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadows console variable changed.
-		void OnContactShadowsEnabledChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadowQuality console variable changed.
-		void OnContactShadowQualityChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when any of the gxContactShadowLength / gxContactShadowThickness /
-		///        gxContactShadowIntensity / gxContactShadowFade / gxContactShadowBias console
-		///        variables changed.
-		void OnContactShadowParametersChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when the gxContactShadowDebug console variable changed.
-		void OnContactShadowDebugChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when gxAtmosphereQuality, gxVolumetricFogRange or gxAtmosphereDebug changed.
-		void OnAtmosphereRenderingChanged(ConsoleVar &var, const std::string &oldValue);
-
-		/// @brief Called when gxBloomQuality changed.
-		void OnBloomChanged(ConsoleVar &var, const std::string &oldValue);
 
 		void OnCombatVignetteChanged(ConsoleVar &var, const std::string &oldValue);
 
@@ -418,8 +381,6 @@ namespace mmo
 		/// as a 3D sound at the given world position.
 		void PlayStealthAlertSound(const String &soundFile, const Vector3 &position);
 
-		PacketParseResult OnMovement(game::IncomingPacket &packet);
-
 		PacketParseResult OnChatMessage(game::IncomingPacket &packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket &packet);
@@ -449,8 +410,6 @@ namespace mmo
 
 		PacketParseResult OnClassXpUpdate(game::IncomingPacket &packet);
 
-		PacketParseResult OnCreatureMove(game::IncomingPacket &packet);
-
 		PacketParseResult OnSpellLearnedOrUnlearned(game::IncomingPacket &packet);
 
 		PacketParseResult OnSpellStart(game::IncomingPacket &packet);
@@ -473,28 +432,12 @@ namespace mmo
 
 		PacketParseResult OnAttackSwingError(game::IncomingPacket &packet);
 
-		PacketParseResult OnXpLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnSpellDamageLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket &packet);
-
-		PacketParseResult OnAttackerStateUpdate(game::IncomingPacket &packet);
-
 		/// @brief Plays a unit's aggro or death sound when a field update moved it into combat
 		///	or killed it.
 		/// @param unit The unit or player whose fields were just updated.
 		/// @param wasInCombat Whether the unit carried the combat flag before the update.
 		/// @param wasAlive Whether the unit had health left before the update.
 		void PlayUnitStateSounds(const GameObjectC& unit, bool wasInCombat, bool wasAlive);
-
-		PacketParseResult OnLogEnvironmentalDamage(game::IncomingPacket &packet);
-
-		PacketParseResult OnMovementSpeedChanged(game::IncomingPacket &packet);
-
-		PacketParseResult OnForceMovementSpeedChange(game::IncomingPacket &packet);
-
-		PacketParseResult OnMoveTeleport(game::IncomingPacket &packet);
 
 		PacketParseResult OnLevelUp(game::IncomingPacket &packet);
 
@@ -506,13 +449,9 @@ namespace mmo
 
 		PacketParseResult OnAuraUpdate(game::IncomingPacket &packet);
 
-		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket &packet);
-
 		PacketParseResult OnActionButtons(game::IncomingPacket &packet);
 
 		PacketParseResult OnQuestGiverStatus(game::IncomingPacket &packet);
-
-		PacketParseResult OnSpellEnergizeLog(game::IncomingPacket &packet);
 
 		PacketParseResult OnTransferPending(game::IncomingPacket &packet);
 
@@ -531,8 +470,6 @@ namespace mmo
 
 		PacketParseResult OnRandomRollResult(game::IncomingPacket &packet);
 
-		PacketParseResult OnSpellHealLog(game::IncomingPacket &packet);
-
 		PacketParseResult OnItemPushResult(game::IncomingPacket &packet);
 
 		PacketParseResult OnLogoutResponse(game::IncomingPacket &packet);
@@ -540,17 +477,6 @@ namespace mmo
 		PacketParseResult OnMessageOfTheDay(game::IncomingPacket &packet);
 
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket &packet);
-
-		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
-		PacketParseResult OnMoveStun(game::IncomingPacket &packet);
-		PacketParseResult OnMoveSleep(game::IncomingPacket &packet);
-		PacketParseResult OnMoveFear(game::IncomingPacket &packet);
-		PacketParseResult OnMoveDisorient(game::IncomingPacket &packet);
-
-		/// @brief Handles the MoveCharge packet: the server announces that it is about to move
-		/// the character along a charge path. Stops local movement, suppresses further movement
-		/// packets and acknowledges so the server can start the movement.
-		PacketParseResult OnMoveCharge(game::IncomingPacket &packet);
 
 		/// @brief Handles the GameTimeInfo packet.
 		/// @param packet The incoming packet.
@@ -577,6 +503,14 @@ namespace mmo
 		void Command_LearnSpell(const std::string &cmd, const std::string &args) const;
 
 		void Command_LearnEmote(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetAdd(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetRemove(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetTame(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetMake(const std::string &cmd, const std::string &args) const;
 
 		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;
 
@@ -656,7 +590,7 @@ namespace mmo
 
 	private:
 		/// Adds a floating world text UI element with a duration to the world.
-		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration, WorldTextAnimation animation = WorldTextAnimation::Normal);
+		void AddWorldTextFrame(const Vector3 &position, const String &text, const Color &color, float duration, WorldTextAnimation animation = WorldTextAnimation::Normal) override;
 
 		/// Adds a speech bubble which follows the speaking unit.
 		void AddChatBubble(ObjectGuid speakerGuid, ChatType chatType, const String& text);
@@ -669,6 +603,12 @@ namespace mmo
 		[[nodiscard]] bool AreChatBubblesEnabled(ChatType chatType) const;
 
 		void OnPageAvailabilityChanged(const PageNeighborhood &page, bool isAvailable) override;
+
+		/// @copydoc IMovementClientListener::OnCreaturePathReceived
+		void OnCreaturePathReceived(uint64 guid, const std::vector<Vector3> &path) override;
+
+		/// @copydoc IMovementClientListener::OnControlledUnitTeleported
+		void OnControlledUnitTeleported(const Vector3 &previousPosition, const Vector3 &newPosition) override;
 
 		PagePosition GetPagePositionFromCamera() const;
 
@@ -704,6 +644,10 @@ namespace mmo
 		IAudio &m_audio;
 
 		bool m_combatMode = false;
+
+		/// Last predicted health / power the UI was told about (see UpdatePredictedResources).
+		uint32 m_predictedHealth = 0;
+		std::array<int32, power_type::Health> m_predictedPower{};
 		SceneNode *m_worldRootNode;
 		std::shared_ptr<ClientWorldInstance> m_worldInstance;
 
@@ -818,7 +762,18 @@ namespace mmo
 		std::unique_ptr<asio::io_service::work> m_work;
 		asio::io_service m_workQueue;
 		asio::io_service m_dispatcher;
+		/// Keeps m_dispatcher from stopping when a poll finds it empty (see OnEnter).
+		std::unique_ptr<asio::io_service::work> m_dispatcherWork;
 		std::thread m_backgroundLoader;
+
+		/// Bumped by OnLeave() whenever the world (and its Terrain/Page objects) is torn down.
+		/// m_workQueue and m_dispatcher are stopped and reset there, not recreated, so a handler
+		/// queued before the stop can still be lying in one of their queues the next time this
+		/// state is entered; such a handler captures raw Page pointers that are dangling by then.
+		/// Async continuations that hold a raw Page pointer across m_workQueue/m_dispatcher must
+		/// capture the generation at post time and compare it here before touching that pointer.
+		std::atomic<uint64> m_worldGeneration{ 0 };
+
 		std::unique_ptr<LoadedPageSection> m_visibleSection;
 		std::unique_ptr<WorldPageLoader> m_pageLoader;
 		std::unique_ptr<PagePOVPartitioner> m_memoryPointOfView;
@@ -867,6 +822,15 @@ namespace mmo
 		GuildClient &m_guildClient;
 		FriendClient &m_friendClient;
 		ChannelClient &m_channelClient;
+
+		/// Console variables that configure the world's deferred renderer.
+		WorldRenderSettings m_renderSettings;
+
+		/// Handles the movement packets of all units and the controlled unit's movement states.
+		MovementClient m_movementClient;
+
+		/// Handles the combat log packets and their floating text, sounds and camera shake.
+		CombatLogClient m_combatLogClient;
 
 		scoped_connection_container m_cvarChangedSignals;
 		Discord &m_discord;

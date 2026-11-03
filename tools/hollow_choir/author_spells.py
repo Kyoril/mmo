@@ -22,6 +22,8 @@ Rules that are easy to break by accident:
   Grave are the interruptible ones.
 * Dirge of the Grave is channeled: its channel length is `casttime`, its caster aura lasts
   `duration`, and the periodic trigger on that aura deals the damage. The two must match.
+* Every player-visible string needs its TRANSLATIONS entry, like every other spell in the
+  dataset: a spell without them shows English in a German, French or Russian client.
 """
 
 import argparse
@@ -37,6 +39,11 @@ from proto_runtime import load_modules  # noqa: E402
 EDITOR_SPELLS = ROOT / "data/editor/data/spells.data"
 CLIENT_SPELLS = ROOT / "data/client/ClientDB/spells.data"
 ICONS = ROOT / "data/client"
+
+# LocaleIndex values (src/shared/base/localization.h). enUS is the base field itself and is
+# never stored as an override; enGB repeats the English text, as it does for every other spell.
+LOCALE_INDEX = {"deDE": 1, "enGB": 2, "frFR": 3, "ruRU": 4}
+TRANSLATED_LOCALES = ("deDE", "frFR", "ruRU")
 
 # spell_effects (src/shared/game/spell.h)
 SCHOOL_DAMAGE, APPLY_AURA, PERSISTENT_AREA_AURA, SUMMON = 2, 6, 24, 25
@@ -198,6 +205,220 @@ SPELLS = [
           attributes=(NEGATIVE, IGNORE_LOS), range_type=RANGE_INFINITE),
 ]
 
+# Player-visible text per locale, keyed by spell id: (name, description) and a third entry for
+# the spells that carry an aura text. Damage and duration placeholders ($s0, $254s0, $D, ...)
+# are resolved by the client and have to survive translation unchanged.
+TRANSLATIONS = {
+    251: {
+        "deDE": ("Grabesschlag",
+                 "Lässt das zerbrochene Weihrauchfass in einem zermalmenden Bogen niederfahren und "
+                 "verursacht $s0 physischen Schaden bei allen vor dem Zauberer."),
+        "frFR": ("Frappe sépulcrale",
+                 "Abat l'encensoir brisé en un arc écrasant, infligeant $s0 points de dégâts "
+                 "physiques à tous ceux qui se trouvent devant l'incantateur."),
+        "ruRU": ("Могильный удар",
+                 "Обрушивает сломанное кадило сокрушительной дугой, нанося $s0 ед. физического "
+                 "урона всем перед заклинателем."),
+    },
+    252: {
+        "deDE": ("Letzte Totenwache",
+                 "Ruft zwei Novizen von ihren Bahren, um mit dem Zauberer die Totenwache zu halten."),
+        "frFR": ("Dernière veillée",
+                 "Appelle deux novices hors de leurs civières pour veiller aux côtés de l'incantateur."),
+        "ruRU": ("Последнее бдение",
+                 "Поднимает с катафалков двух послушников, чтобы они бдели вместе с заклинателем."),
+    },
+    253: {
+        "deDE": ("Flackernde Kerze",
+                 "Entzündet eine flackernde Kerzenflamme am Boden unter dem Ziel. Nach 2 Sek. lodert "
+                 "sie auf und verursacht $254s0 Feuerschaden bei allen, die noch darin stehen."),
+        "frFR": ("Bougie vacillante",
+                 "Dépose une flamme de bougie vacillante sur le sol sous la cible. Après 2 s, elle "
+                 "s'embrase et inflige $254s0 points de dégâts de feu à tous ceux qui s'y trouvent encore."),
+        "ruRU": ("Чадящая свеча",
+                 "Зажигает чадящее пламя свечи на земле под целью. Через 2 сек. оно вспыхивает, нанося "
+                 "$254s0 ед. урона от огня всем, кто ещё стоит в нём."),
+    },
+    254: {
+        "deDE": ("Flackernde Kerze",
+                 "Die Kerze lodert auf und verursacht $s0 Feuerschaden."),
+        "frFR": ("Bougie vacillante",
+                 "La bougie s'embrase et inflige $s0 points de dégâts de feu."),
+        "ruRU": ("Чадящая свеча",
+                 "Свеча вспыхивает, нанося $s0 ед. урона от огня."),
+    },
+    255: {
+        "deDE": ("Klagelied",
+                 "Ein Klagelied für die Unbestatteten, das allen Gegnern im Umkreis von 40 Metern "
+                 "$s0 Schattenschaden verursacht."),
+        "frFR": ("Complainte",
+                 "Une complainte pour les sans-sépulture, infligeant $s0 points de dégâts d'ombre à "
+                 "tous les ennemis dans un rayon de 40 mètres."),
+        "ruRU": ("Плач",
+                 "Плач по непогребённым, наносящий $s0 ед. урона от тьмы всем врагам в радиусе "
+                 "40 метров."),
+    },
+    256: {
+        "deDE": ("Trauernde Stimmen",
+                 "Ruft zwei Trauernde Choristen an gegenüberliegende Seiten der Halle."),
+        "frFR": ("Voix endeuillées",
+                 "Appelle deux choristes endeuillés aux côtés opposés de la salle."),
+        "ruRU": ("Скорбные голоса",
+                 "Призывает двух скорбящих хористов к противоположным сторонам зала."),
+    },
+    257: {
+        "deDE": ("Trauerchor",
+                 "Die Trauer der Choristen hüllt den Zauberer ein und verringert den erlittenen "
+                 "Schaden um $s0 %.",
+                 "Erlittener Schaden um 40 % verringert."),
+        "frFR": ("Chœur de deuil",
+                 "Le chagrin des choristes enveloppe l'incantateur, réduisant les dégâts subis de $s0%.",
+                 "Dégâts subis réduits de 40%."),
+        "ruRU": ("Скорбный хор",
+                 "Горе хористов окутывает заклинателя, снижая получаемый урон на $s0%.",
+                 "Получаемый урон снижен на 40%."),
+    },
+    258: {
+        "deDE": ("Stiller Ort",
+                 "Bringt den Boden unter dem Ziel für 12 Sek. zum Schweigen. Wer in der Stille steht, "
+                 "erleidet jede Sekunde $259s0 Schattenschaden und wird um 50 % verlangsamt."),
+        "frFR": ("Lieu silencieux",
+                 "Fait taire le sol sous la cible pendant 12 s. Quiconque se tient dans le silence "
+                 "subit $259s0 points de dégâts d'ombre par seconde et est ralenti de 50%."),
+        "ruRU": ("Безмолвное место",
+                 "Заставляет землю под целью умолкнуть на 12 сек. Все, кто стоит в тишине, получают "
+                 "$259s0 ед. урона от тьмы каждую секунду и замедляются на 50%."),
+    },
+    259: {
+        "deDE": ("Stiller Ort",
+                 "Die Stille verursacht $s0 Schattenschaden und verlangsamt die Bewegung um 50 %.",
+                 "Bewegung um 50 % verlangsamt."),
+        "frFR": ("Lieu silencieux",
+                 "Le silence inflige $s0 points de dégâts d'ombre et réduit la vitesse de déplacement "
+                 "de 50%.",
+                 "Déplacement ralenti de 50%."),
+        "ruRU": ("Безмолвное место",
+                 "Тишина наносит $s0 ед. урона от тьмы и замедляет передвижение на 50%.",
+                 "Передвижение замедлено на 50%."),
+    },
+    260: {
+        "deDE": ("Dissonanz",
+                 "Schlägt einen misstönenden Ton unter dem Ziel an. Nach 2 Sek. bricht eine Schallwelle "
+                 "daraus hervor und verursacht $261s0 Schattenschaden bei allen, die noch darin stehen."),
+        "frFR": ("Dissonance",
+                 "Frappe une note discordante sous la cible. Après 2 s, une onde sonore en jaillit, "
+                 "infligeant $261s0 points de dégâts d'ombre à tous ceux qui s'y trouvent encore."),
+        "ruRU": ("Диссонанс",
+                 "Берёт нестройную ноту под целью. Через 2 сек. из неё вырывается звуковая волна, "
+                 "нанося $261s0 ед. урона от тьмы всем, кто ещё стоит в ней."),
+    },
+    261: {
+        "deDE": ("Dissonanz",
+                 "Eine Welle misstönenden Klangs verursacht $s0 Schattenschaden."),
+        "frFR": ("Dissonance",
+                 "Une onde sonore discordante inflige $s0 points de dégâts d'ombre."),
+        "ruRU": ("Диссонанс",
+                 "Волна нестройного звука наносит $s0 ед. урона от тьмы."),
+    },
+    262: {
+        "deDE": ("Grabesklage",
+                 "Dirigiert 5 Sek. lang den Hohlen Chor und verursacht jede Sekunde $263s0 "
+                 "Schattenschaden bei allen Gegnern im Umkreis von 40 Metern."),
+        "frFR": ("Complainte de la tombe",
+                 "Dirige le chœur creux pendant 5 s, infligeant chaque seconde $263s0 points de dégâts "
+                 "d'ombre à tous les ennemis dans un rayon de 40 mètres."),
+        "ruRU": ("Плач могилы",
+                 "Дирижирует Пустым хором 5 сек., нанося каждую секунду $263s0 ед. урона от тьмы всем "
+                 "врагам в радиусе 40 метров."),
+    },
+    263: {
+        "deDE": ("Grabesklage",
+                 "Die Klage verursacht $s0 Schattenschaden."),
+        "frFR": ("Complainte de la tombe",
+                 "La complainte inflige $s0 points de dégâts d'ombre."),
+        "ruRU": ("Плач могилы",
+                 "Плач наносит $s0 ед. урона от тьмы."),
+    },
+    264: {
+        "deDE": ("Der Chor erhebt sich",
+                 "Erhebt zwei Hohle Choristen aus dem Dunkel der Apsis."),
+        "frFR": ("Le chœur se lève",
+                 "Relève deux choristes creux des ténèbres de l'abside."),
+        "ruRU": ("Хор восстаёт",
+                 "Поднимает двух пустых хористов из тьмы апсиды."),
+    },
+    265: {
+        "deDE": ("Chorresonanz",
+                 "Ein lebender Chorist verstärkt die Stimme des Ziels und erhöht den verursachten "
+                 "Schaden für $D um $s0 %. Jeder Chorist erhält seine eigene Resonanz aufrecht.",
+                 "Verursachter Schaden um 12 % erhöht."),
+        "frFR": ("Résonance chorale",
+                 "Un choriste vivant enfle la voix de la cible, augmentant les dégâts infligés de $s0% "
+                 "pendant $D. Chaque choriste entretient sa propre résonance.",
+                 "Dégâts infligés augmentés de 12%."),
+        "ruRU": ("Хоровой резонанс",
+                 "Живой хорист усиливает голос цели, увеличивая наносимый урон на $s0% на $D. Каждый "
+                 "хорист поддерживает собственный резонанс.",
+                 "Наносимый урон увеличен на 12%."),
+    },
+    266: {
+        "deDE": ("Spaltschlag des Wärters",
+                 "Schwingt einen Grabspaten in weitem Bogen und verursacht $s0 physischen Schaden bei "
+                 "allen vor dem Zauberer."),
+        "frFR": ("Taillade du gardien",
+                 "Fait tournoyer une bêche de fossoyeur en un large arc, infligeant $s0 points de "
+                 "dégâts physiques à tous ceux qui se trouvent devant l'incantateur."),
+        "ruRU": ("Рассекающий удар стража",
+                 "Размашисто бьёт могильной лопатой, нанося $s0 ед. физического урона всем перед "
+                 "заклинателем."),
+    },
+    267: {
+        "deDE": ("Trauriges Klagelied",
+                 "Ein Klagelied für die Unbestatteten, das allen Gegnern im Umkreis von 30 Metern "
+                 "$s0 Schattenschaden verursacht."),
+        "frFR": ("Complainte funèbre",
+                 "Une complainte pour les sans-sépulture, infligeant $s0 points de dégâts d'ombre à "
+                 "tous les ennemis dans un rayon de 30 mètres."),
+        "ruRU": ("Скорбный плач",
+                 "Плач по непогребённым, наносящий $s0 ед. урона от тьмы всем врагам в радиусе "
+                 "30 метров."),
+    },
+    268: {
+        "deDE": ("Verschüttetes Wachs",
+                 "Die gefallene Kerze verschüttet brennendes Wachs und verursacht 6 Sek. lang jede "
+                 "Sekunde $269s0 Feuerschaden bei allen, die darin stehen."),
+        "frFR": ("Cire renversée",
+                 "La bougie tombée répand de la cire brûlante, infligeant $269s0 points de dégâts de "
+                 "feu par seconde pendant 6 s à quiconque s'y tient."),
+        "ruRU": ("Разлитый воск",
+                 "Упавшая свеча разливает горящий воск, нанося $269s0 ед. урона от огня каждую секунду "
+                 "в течение 6 сек. всем, кто стоит в нём."),
+    },
+    269: {
+        "deDE": ("Verschüttetes Wachs",
+                 "Brennendes Wachs verursacht $s0 Feuerschaden."),
+        "frFR": ("Cire renversée",
+                 "La cire brûlante inflige $s0 points de dégâts de feu."),
+        "ruRU": ("Разлитый воск",
+                 "Горящий воск наносит $s0 ед. урона от огня."),
+    },
+}
+
+
+def add_loc(loc_array, locale, value):
+    override = loc_array.add()
+    override.locale = LOCALE_INDEX[locale]
+    override.value = value
+
+
+def localized(spec, locale):
+    """Returns (name, description, aura text) for a locale; enGB repeats the English base."""
+    if locale == "enGB":
+        return spec["name"], spec["description"], spec["aura_text"]
+
+    texts = TRANSLATIONS[spec["id"]][locale]
+    return texts[0], texts[1], texts[2] if len(texts) > 2 else None
+
 
 def build(spells_pb, spec):
     entry = spells_pb.SpellEntry()
@@ -234,6 +455,13 @@ def build(spells_pb, spec):
         entry.stackamount = spec["stack_amount"]
     # Same as every other creature spell in this project: no global cooldown, no school lockout.
     entry.cooldownflags = 3
+    # Overrides in ascending LocaleIndex order, the layout the rest of spells.data uses.
+    for locale in sorted(LOCALE_INDEX, key=LOCALE_INDEX.get):
+        name, description, aura_text = localized(spec, locale)
+        add_loc(entry.name_loc, locale, name)
+        add_loc(entry.description_loc, locale, description)
+        if spec["aura_text"]:
+            add_loc(entry.auratext_loc, locale, aura_text)
     return entry
 
 
@@ -255,6 +483,13 @@ def validate(spells, units):
                     sys.exit(f"spell {spec['id']}: a zone needs a duration and a radius")
         if spec["attributes"][0] & CHANNELED and spec["cast_ms"] != spec["duration"]:
             sys.exit(f"spell {spec['id']}: channel length and aura duration differ")
+        # A missing translation is invisible in the editor and shows English to the player.
+        for locale in TRANSLATED_LOCALES:
+            texts = TRANSLATIONS.get(spec["id"], {}).get(locale)
+            if not texts or len(texts) < 2 or not all(texts[:2]):
+                sys.exit(f"spell {spec['id']}: no {locale} name and description")
+            if bool(spec["aura_text"]) != (len(texts) > 2 and bool(texts[2])):
+                sys.exit(f"spell {spec['id']}: {locale} aura text does not match the English one")
 
 
 def main():

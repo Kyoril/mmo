@@ -971,6 +971,7 @@ namespace mmo
 			"model_data",
 			"races",
 			"classes",
+			"attributes",
 			"factions",
 			"faction_templates",
 			"item_displays",
@@ -991,6 +992,7 @@ namespace mmo
 			"emotes",
 			"water_profiles",
 			"environment_profiles",
+			"loading_tips",
 		};
 
 		const fs::path srcDir = m_config.projectPath;

@@ -24,6 +24,7 @@ namespace mmo
 
 		controlled.RaiseTrigger(trigger_event::OnReset);
 		controlled.RemoveLootRecipients();
+		controlled.ResetDamageContributions();
 		controlled.SetTarget(0);
 
 		// Drop what attackers left on us: a damage over time effect still ticking once we are home

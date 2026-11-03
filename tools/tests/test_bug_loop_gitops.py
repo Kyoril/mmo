@@ -257,6 +257,46 @@ class GitopsTests(unittest.TestCase):
 		git(self.main, "commit", "-m", "note\n\nMerge bugfix/x (not really)")
 		self.assertIsNone(self.wt.merged("bugfix/x"))
 
+	def push_to_develop(self, name):
+		"""Someone else pushes develop, e.g. while the loop's gate runs."""
+		write(os.path.join(self.main, name), name + "\n")
+		git(self.main, "add", "-A")
+		git(self.main, "commit", "-m", "elsewhere: " + name)
+		git(self.main, "push", "origin", "develop")
+
+	def test_ship_starts_over_when_develop_moves_during_the_gate(self):
+		# 2026-10-24: develop was pushed while the loop gated b36cfb9b; its push was rejected
+		# ("tip is behind its remote counterpart") and the fix parked.
+		_, head = self.make_fix()
+		self.push_to_develop("first.txt")
+		gates = []
+
+		def gate():
+			gates.append(True)
+			if len(gates) == 1:
+				self.push_to_develop("during_gate.txt")
+			return True
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", gate)
+		self.assertTrue(result.ok, result.reason)
+		self.assertEqual(len(gates), 2)
+		self.assertEqual(git(self.origin, "rev-parse", "develop"), result.commit)
+		self.assertEqual(git(self.origin, "show", "develop:during_gate.txt"), "during_gate.txt")
+		self.assertEqual(git(self.origin, "rev-parse", "develop^2"), head)
+
+	def test_ship_gives_up_when_develop_keeps_moving(self):
+		_, head = self.make_fix()
+		self.push_to_develop("first.txt")
+		gates = []
+
+		def gate():
+			gates.append(True)
+			self.push_to_develop("during_gate_{}.txt".format(len(gates)))
+			return True
+		result = self.wt.ship("bugfix/x", head, "Merge bugfix/x", gate, attempts=2)
+		self.assertFalse(result.ok)
+		self.assertIn("develop kept moving: 2 attempts", result.reason)
+		self.assertEqual(len(gates), 2)
+
 	def test_ship_gates_the_merge_when_develop_moved(self):
 		_, head = self.make_fix()
 		write(os.path.join(self.main, "README.md"), "moved\n")

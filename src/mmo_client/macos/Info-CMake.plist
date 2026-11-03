@@ -14,8 +14,8 @@
         <string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
         <key>CFBundleName</key>
         <string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
-        <key>NSMainNibFile</key>
-        <string>${MACOSX_BUNDLE_NSMAIN_NIB_FILE}</string>
+        <key>NSHighResolutionCapable</key>
+        <true/>
         <key>NSPrincipalClass</key>
         <string>${MACOSX_BUNDLE_NSPRINCIPAL_CLASS}</string>
     </dict>

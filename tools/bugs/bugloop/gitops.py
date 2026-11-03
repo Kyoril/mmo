@@ -23,6 +23,8 @@ BACKUP_PREFIX = "refs/bugloop/"
 # conflicting instead, so merge_resolve merges it by entry.
 MERGE_ATTRIBUTES = "*.data -merge\n"
 # conflict: the merge with develop (or a submodule master) had a conflict nothing could resolve.
+# Rounds of merge, gate and push one ship may take when develop moves under it.
+SHIP_ATTEMPTS = 3
 ShipResult = collections.namedtuple("ShipResult", "ok commit reason conflict", defaults=(False,))
 
 
@@ -49,6 +51,12 @@ def _merge_config():
 	with open(path, "w", encoding="utf-8", newline="\n") as handle:
 		handle.write(MERGE_ATTRIBUTES)
 	return "core.attributesFile=" + path.replace("\\", "/")
+
+
+def _rejected(push):
+	"""The push failed only because the remote branch moved on (not fast-forward)."""
+	text = push.stderr or ""
+	return "non-fast-forward" in text or "fetch first" in text or "tip is behind" in text or "[rejected]" in text
 
 
 def _count(text):
@@ -340,16 +348,29 @@ class Worktree:
 		completed = run_git(repo, "show", "{}:{}".format(rev, relative), check=False, binary=True)
 		return completed.stdout if completed.returncode == 0 else None
 
-	def ship(self, branch, head, message, fast_gate):
+	def ship(self, branch, head, message, fast_gate, attempts=SHIP_ATTEMPTS):
 		"""Merges `head`, the commit that was guarded, proved and gated, onto the current
 		origin/develop and pushes: changed submodules first (fast-forward of their master only),
 		then develop. Refuses when `branch` no longer points at `head`. A submodule master that moved
 		past the fix is merged into the fix's submodule commit here; a conflict refuses. fast_gate()
 		runs only when develop or a submodule master moved since the branch was cut, because then
-		the merge result was never gated."""
+		the merge result was never gated.
+
+		A push rejected because develop or a submodule master moved while the merge was gated (the
+		gate takes many minutes) starts over: fetch, merge onto the new tip, gate again, push. At
+		most `attempts` rounds; on 2026-10-24 a ship parked after one such race."""
 		current = run_git(self.path, "rev-parse", "--verify", "-q", branch + "^{commit}", check=False).stdout.strip()
 		if current != head:
 			return ShipResult(False, "", "branch moved after gating ({} is at {}, gated {})".format(branch, current[:8] or "nothing", head[:8]))
+		for _ in range(attempts):
+			result, raced = self._ship_once(branch, head, message, fast_gate)
+			if not raced:
+				return result
+		return result._replace(reason="{} (develop kept moving: {} attempts)".format(result.reason, attempts))
+
+	def _ship_once(self, branch, head, message, fast_gate):
+		"""One merge, gate and push of ship(); returns (result, raced): raced is True when a push was
+		rejected because its target moved in the meantime."""
 		self.resolutions = []
 		run_git(self.main_repo, "fetch", self.remote)
 		tip = self.head(self.target)
@@ -363,7 +384,7 @@ class Worktree:
 			{"ours": "{} at {}, the changes that landed after the fix was cut".format(self.target, tip[:8]),
 			"theirs": "the fix {} at {}".format(branch, head[:8])})
 		if reason:
-			return ShipResult(False, "", reason, self._conflicted)
+			return (ShipResult(False, "", reason, self._conflicted), False)
 		# After the merge: a pointer both sides moved now names a submodule merge commit.
 		pushes = []
 		caught_up = False
@@ -380,7 +401,7 @@ class Worktree:
 				if reason:
 					self.git("checkout", "--detach", "--force", tip)
 					self._sync_submodules()
-					return ShipResult(False, "", "{}: the fix's data change conflicts with {}: {}".format(sub, master, reason), self._conflicted)
+					return (ShipResult(False, "", "{}: the fix's data change conflicts with {}: {}".format(sub, master, reason), self._conflicted), False)
 				sha = merged
 				self.git("update-index", "--cacheinfo", "160000,{},{}".format(sha, sub))
 				caught_up = True
@@ -389,17 +410,17 @@ class Worktree:
 			# HEAD is the local, unpushed merge commit of the fix; it takes the new pointers.
 			self.git("commit", "--amend", "--no-edit")
 		if (moved or caught_up) and not fast_gate():
-			return ShipResult(False, "", "the fast gate on the merge is red ({} or submodule master moved)".format(self.target))
+			return (ShipResult(False, "", "the fast gate on the merge is red ({} or submodule master moved)".format(self.target)), False)
 		for sub_dir, sha in pushes:
 			push = run_git(sub_dir, "push", self.sub_remote, "{}:refs/heads/{}".format(sha, self.master), check=False)
 			if push.returncode != 0:
-				return ShipResult(False, "", "push to {} failed: {}".format(sub_dir, push.stderr.strip()[-300:]))
+				return (ShipResult(False, "", "push to {} failed: {}".format(sub_dir, push.stderr.strip()[-300:])), _rejected(push))
 		commit = self.head()
 		push = run_git(self.path, "push", self.remote, "HEAD:refs/heads/" + self.develop, check=False)
 		if push.returncode != 0:
-			return ShipResult(False, "", "push of develop failed: " + push.stderr.strip()[-300:])
+			return (ShipResult(False, "", "push of develop failed: " + push.stderr.strip()[-300:]), _rejected(push))
 		run_git(self.main_repo, "fetch", self.remote)
-		return ShipResult(True, commit, "")
+		return (ShipResult(True, commit, ""), False)
 
 	def merged(self, branch):
 		"""The merge commit of `branch` on develop or origin/develop, found by its message

@@ -27,22 +27,50 @@ TEST_CASE("ScaleQuestClassXp - class level equal to quest level grants full XP",
 	REQUIRE(ScaleQuestClassXp(1000, 10, 10, entry) == 1000);
 }
 
-TEST_CASE("ScaleQuestClassXp - under-leveled class is rewarded as if the quest targeted its own level", "[quest_class_xp]")
+TEST_CASE("ScaleQuestClassXp - under-leveled class within the grace window grants full XP", "[quest_class_xp]")
 {
-	const proto::ClassEntry entry = makeLinearCurveClass(10);
+	const proto::ClassEntry entry = makeLinearCurveClass(40);
 
-	// Level-10 quest turned in at class level 1: same fraction of the level-1 bar
-	// that the full reward would have been of the level-10 bar (400 / 4000).
-	REQUIRE(ScaleQuestClassXp(1000, 1, 10, entry) == 100);
+	// The reported case: a level-6 quest worth 800 class XP turned in by a level-1 class.
+	REQUIRE(ScaleQuestClassXp(800, 1, 6, entry) == 800);
 
-	// Class level 5: 2000 / 4000 of the reward.
-	REQUIRE(ScaleQuestClassXp(1000, 5, 10, entry) == 500);
+	// Exactly five levels below the quest level is still inside the grace window.
+	REQUIRE(ScaleQuestClassXp(3000, 5, 10, entry) == 3000);
+}
+
+TEST_CASE("ScaleQuestClassXp - a moderately higher level quest is only mildly reduced", "[quest_class_xp]")
+{
+	const proto::ClassEntry entry = makeLinearCurveClass(40);
+
+	// A level-10 quest at class level 3 is seven levels below the quest level: two levels past the
+	// grace window, so two thirtieths of the reward are lost - not the bulk of it.
+	REQUIRE(ScaleQuestClassXp(900, 3, 10, entry) == 840);
+
+	// Nine levels below: four thirtieths lost.
+	REQUIRE(ScaleQuestClassXp(3000, 1, 10, entry) == 2600);
+}
+
+TEST_CASE("ScaleQuestClassXp - a far higher level quest bottoms out at a third of the reward", "[quest_class_xp]")
+{
+	const proto::ClassEntry entry = makeLinearCurveClass(40);
+
+	// Twenty-five levels below the quest level is the floor...
+	REQUIRE(ScaleQuestClassXp(3000, 5, 30, entry) == 1000);
+
+	// ...and banking level-40 quests for a level-10 class does not go below it.
+	REQUIRE(ScaleQuestClassXp(3000, 10, 40, entry) == 1000);
+	REQUIRE(ScaleQuestClassXp(3000, 1, 40, entry) == 1000);
 }
 
 TEST_CASE("ScaleQuestClassXp - scaled reward never drops to zero", "[quest_class_xp]")
 {
-	const proto::ClassEntry entry = makeLinearCurveClass(10);
-	REQUIRE(ScaleQuestClassXp(3, 1, 10, entry) == 1);
+	const proto::ClassEntry entry = makeLinearCurveClass(40);
+
+	// A reward small enough that a third of it rounds away still grants a single point.
+	REQUIRE(ScaleQuestClassXp(1, 1, 40, entry) == 1);
+
+	// A reward inside the grace window is passed through whole.
+	REQUIRE(ScaleQuestClassXp(3, 1, 5, entry) == 3);
 }
 
 TEST_CASE("ScaleQuestClassXp - over-leveled class within grace window grants full XP", "[quest_class_xp]")

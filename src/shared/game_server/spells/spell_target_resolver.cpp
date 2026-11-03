@@ -5,6 +5,8 @@
 #include "game_server/spells/spell_cast_context.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/objects/game_object_s.h"
+#include "game_server/objects/game_creature_s.h"
+#include "game_server/pets/pet_manager.h"
 #include "game/spell.h"
 #include "log/default_log_levels.h"
 #include "math/math_utils.h"
@@ -89,9 +91,33 @@ namespace mmo
 
 				return unit;
 			}
+		case spell_effect_targets::Pet:
+			{
+				GameCreatureS* pet = FindLivingPersistentPet();
+				return pet ? std::static_pointer_cast<GameUnitS>(pet->shared_from_this()) : nullptr;
+			}
 		default:
 			return nullptr;
 		}
+	}
+
+	GameCreatureS* SpellTargetResolver::FindLivingPersistentPet() const
+	{
+		const PetManager* pets = m_context.GetExecutor().FindPets();
+		GameCreatureS* pet = pets ? pets->GetPersistentPet() : nullptr;
+		return pet && pet->IsAlive() ? pet : nullptr;
+	}
+
+	bool SpellTargetResolver::ResolvePetTarget(std::vector<GameObjectS*>& targets) const
+	{
+		GameCreatureS* pet = FindLivingPersistentPet();
+		if (!pet)
+		{
+			return false;
+		}
+
+		targets.push_back(pet);
+		return true;
 	}
 
 	void SpellTargetResolver::PrepareTargetsBuffer(std::vector<GameObjectS*>& targets) const
@@ -467,6 +493,8 @@ namespace mmo
 			return ResolveSecondaryEnemyTargets(effect, targets);
 		case spell_effect_targets::ConeEnemy:
 			return ResolveConeEnemyTargets(effect, targets);
+		case spell_effect_targets::Pet:
+			return ResolvePetTarget(targets);
 		default:
 			return false;
 		}

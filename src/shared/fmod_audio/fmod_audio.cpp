@@ -8,7 +8,7 @@
 #include <thread>
 #include <unordered_set>
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 
 #include "assets/asset_registry.h"
 #include "base/profiler.h"
@@ -976,7 +976,7 @@ namespace mmo
 		}
 	}
 
-	FMOD_RESULT F_CALLBACK FMODAudio::FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata)
+	FMOD_RESULT F_CALL FMODAudio::FMODFileOpenCallback(const char *name, unsigned int *filesize, void **handle, void *userdata)
 	{
 		assert(name);
 
@@ -1005,7 +1005,7 @@ namespace mmo
 		return FMOD_OK;
 	}
 
-	FMOD_RESULT F_CALLBACK FMODAudio::FMODFileCloseCallback(void* handle, void* userdata)
+	FMOD_RESULT F_CALL FMODAudio::FMODFileCloseCallback(void* handle, void* userdata)
 	{
 		FMODSoundInstance *soundInstance;
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
@@ -1014,7 +1014,7 @@ namespace mmo
 		return FMOD_OK;
 	}
 
-	FMOD_RESULT F_CALLBACK FMODAudio::FMODFileReadCallback(void* handle, void* buffer, unsigned int sizebytes, unsigned int* bytesread, void* userdata)
+	FMOD_RESULT F_CALL FMODAudio::FMODFileReadCallback(void* handle, void* buffer, unsigned int sizebytes, unsigned int* bytesread, void* userdata)
 	{
 		FMODSoundInstance *soundInstance;
 		soundInstance = static_cast<FMODSoundInstance *>(handle);
@@ -1036,7 +1036,7 @@ namespace mmo
 		return FMOD_OK;
 	}
 
-	FMOD_RESULT F_CALLBACK FMODAudio::FMODFileSeekCallback(void* handle, unsigned int pos, void* userdata)
+	FMOD_RESULT F_CALL FMODAudio::FMODFileSeekCallback(void* handle, unsigned int pos, void* userdata)
 	{
 		FMODSoundInstance *soundInstance;
 

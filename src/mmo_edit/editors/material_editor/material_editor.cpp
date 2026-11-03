@@ -20,8 +20,10 @@
 #include "scene_graph/material_serializer.h"
 #include "graphics/shader_compiler.h"
 #include "scene_graph/material_instance_serializer.h"
-#include "editors/material_editor/material_graph.h"
-#include "editors/material_editor/material_node.h"
+#include "material_graph/material_graph.h"
+#include "material_graph/material_graph_hash.h"
+#include "material_graph/material_node.h"
+#include "material_graph/material_shader_build.h"
 #include "base/chunk_writer.h"
 #include "preview_providers/preview_provider_manager.h"
 
@@ -180,6 +182,17 @@ namespace mmo
 
 		const auto shaderCompiler = GraphicsDevice::Get().CreateShaderCompiler();
 		materialCompiler->Compile(*material, *shaderCompiler);
+
+		// Other platforms keep their shaders; record what this platform's were built from.
+		std::vector<FunctionHash> functions;
+		if (CollectFunctionHashes(graph, functions))
+		{
+			RecordShaderBuildInfo(*material, graph, shaderCompiler->GetPlatform(), std::move(functions));
+		}
+		else
+		{
+			WLOG("Material " << assetPath << ": a material function is missing, shader build info not updated");
+		}
 
 		// Re-save the material chunks, then append the original graph chunk unchanged.
 		const auto outFile = AssetRegistry::CreateNewFile(assetPath);

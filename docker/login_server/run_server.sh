@@ -46,5 +46,7 @@ crashReport =
 )
 EOF
 
-# Start the server
-./login_server
+# Start the server. exec replaces this shell, so the server is PID 1 and gets docker's SIGTERM
+# itself: bash as PID 1 neither forwards it nor dies of it, and docker would SIGKILL the server
+# after the grace period instead of letting it save and stop.
+exec ./login_server

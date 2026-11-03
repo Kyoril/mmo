@@ -112,11 +112,11 @@ namespace
 				auto* levelValues = classEntry->add_levelbasevalues();
 				levelValues->set_health(100);
 				levelValues->set_mana(100);
-				levelValues->set_stamina(10);
-				levelValues->set_strength(10);
-				levelValues->set_agility(10);
-				levelValues->set_intellect(10);
-				levelValues->set_spirit(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
+				levelValues->add_attributes(10);
 
 				// Far more than one kill grants, so no reward in this suite levels the character
 				// up (which would consume the experience field this suite reads).
@@ -154,6 +154,15 @@ namespace
 			auto creature = world->CreateCreature(*preyEntry, position, 0.0f, 0.0f);
 			world->AddGameObject(*creature);
 			creature->AddLootRecipient(tagger.GetGuid());
+			return creature;
+		}
+
+		/// Spawns an untagged creature, standing in for a guard or any other NPC that joins a
+		/// player's fight.
+		std::shared_ptr<GameCreatureS> SpawnCreature(const Vector3& position)
+		{
+			auto creature = world->CreateCreature(*preyEntry, position, 0.0f, 0.0f);
+			world->AddGameObject(*creature);
 			return creature;
 		}
 
@@ -287,4 +296,96 @@ TEST_CASE_METHOD(KillRewardFixture, "A player far away when the creature dies do
 	RunPosted();
 
 	CHECK_FALSE(prey->IsLootRecipient(*player));
+}
+
+// A kill belongs to whoever wore the creature down, not to whoever landed the last hit. A player
+// who pulls a creature onto a guard and lets the guard do the work earns nothing, and NPC help
+// that falls short of that costs the player the share of the experience the NPCs worked for.
+
+TEST_CASE_METHOD(KillRewardFixture, "An NPC killing blow does not cost the player its kill", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto guard = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	// The player does nearly all of the work and the guard happens to land the final blow.
+	prey->Damage(prey->GetHealth() - 1, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, guard.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) > 0);
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "A creature NPCs did most of the damage to rewards nobody", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto guard = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	// The player pulls the creature, chips a quarter off it and lets the guard finish the fight.
+	prey->Damage(prey->GetHealth() / 4, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, guard.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) == 0);
+	CHECK(watcher.killCredits == 0);
+	CHECK_FALSE(prey->IsLootRecipient(*player));
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "NPC support reduces the experience a kill grants", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto guard = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	const uint32 npcDamage = prey->GetHealth() / 4;
+	prey->Damage(npcDamage, 0, guard.get(), damage_type::MagicalAbility);
+
+	const uint32 playerDamage = prey->GetHealth();
+	prey->Damage(playerDamage, 0, player.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	const float playerShare = static_cast<float>(playerDamage) / static_cast<float>(playerDamage + npcDamage);
+	const uint32 expectedXp = static_cast<uint32>(static_cast<float>(CreatureXp) * playerShare);
+	REQUIRE(expectedXp > 0);
+	REQUIRE(expectedXp < CreatureXp);
+	CHECK(player->Get<uint32>(object_fields::Xp) == expectedXp);
+}
+
+// Units a player brought into the fight themselves are the player: a summon and an escorted quest
+// NPC fight on the player's behalf, so what they take off costs neither experience nor kill credit.
+
+TEST_CASE_METHOD(KillRewardFixture, "Damage from a player's summon counts as the player's own", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto summon = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	summon->SetSummonOwner(player);
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	// The player pulls the creature and its summon does almost all of the work.
+	prey->Damage(prey->GetHealth() / 4, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, summon.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) == CreatureXp);
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
+}
+
+TEST_CASE_METHOD(KillRewardFixture, "Damage from an NPC escorting a player counts as the player's own", "[kill_reward][xp][npc_support]")
+{
+	const auto player = SpawnQuestingPlayer(Vector3(2.0f, 0.0f, 0.0f));
+	const auto escort = SpawnCreature(Vector3(1.0f, 0.0f, 0.0f));
+	escort->SetFollowedUnit(player, 2.5f);
+	const auto prey = SpawnTaggedPrey(Vector3(0.0f, 0.0f, 0.0f), *player);
+
+	prey->Damage(prey->GetHealth() / 4, 0, player.get(), damage_type::MagicalAbility);
+	prey->Damage(prey->GetHealth(), 0, escort.get(), damage_type::MagicalAbility);
+	RunPosted();
+
+	CHECK(player->Get<uint32>(object_fields::Xp) == CreatureXp);
+	CHECK(watcher.killCredits == 1);
+	CHECK(prey->IsLootRecipient(*player));
 }

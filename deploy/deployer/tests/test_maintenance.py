@@ -5,9 +5,10 @@ import http.client
 import itertools
 import tempfile
 import unittest
+import urllib.error
 
 from mmo_deployer.backup import BackupError
-from mmo_deployer.maintenance import EXIT_GRACE_S, VERIFY_TIMEOUT_S, Maintenance, Outcome
+from mmo_deployer.maintenance import EXIT_GRACE_S, REDEPLOY_SETTLE_S, VERIFY_TIMEOUT_S, Maintenance, Outcome
 from mmo_deployer.state import State
 from mmo_deployer.web import HttpError
 
@@ -131,6 +132,49 @@ class MaintenanceTests(unittest.TestCase):
 		self.portainer.redeploy_error = OSError("timeout")
 		self.assertEqual(self.make().run(self.state), Outcome.FAILED)
 		self.assertEqual(self.portainer.deploys, ["new", "old"])
+
+	def test_failed_health_check_says_so(self):
+		self.realm_a.health = lambda: self.portainer.tag != "new"
+		self.make().run(self.state)
+		self.assertTrue(any("new failed its health check; rolling back to old" in m for m in self.notifier.messages))
+
+	def test_redeploy_error_names_the_error(self):
+		self.portainer.redeploy_error = HttpError(500, "compose failed", "x")
+		self.portainer.redeploy_error_tags = {"new"}
+		self.assertEqual(self.make().run(self.state), Outcome.ROLLED_BACK)
+		self.assertTrue(any("new could not be deployed (HTTP 500" in m for m in self.notifier.messages))
+		self.assertFalse(any("health check" in m for m in self.notifier.messages))
+
+	def test_timed_out_redeploy_that_finishes_is_deployed(self):
+		# 2026-10-25: the stack update outlived the HTTP timeout and the release was rolled back
+		# although Portainer went on to bring it up.
+		self.portainer.redeploy_error = TimeoutError("timed out")
+		self.portainer.redeploy_error_tags = {"new"}
+		self.portainer.redeploy_applies_despite_error = True
+		self.assertEqual(self.make().run(self.state), Outcome.DEPLOYED)
+		self.assertEqual(self.portainer.deploys, ["new"])
+
+	def test_connect_timeout_counts_as_a_timeout(self):
+		self.portainer.redeploy_error = urllib.error.URLError(TimeoutError("timed out"))
+		self.portainer.redeploy_error_tags = {"new"}
+		self.portainer.redeploy_applies_despite_error = True
+		self.assertEqual(self.make().run(self.state), Outcome.DEPLOYED)
+
+	def test_timed_out_redeploy_that_never_finishes_rolls_back(self):
+		self.portainer.redeploy_error = TimeoutError("timed out")
+		self.portainer.redeploy_error_tags = {"new"}
+		start = self.clock.now()
+		self.assertEqual(self.make().run(self.state), Outcome.ROLLED_BACK)
+		self.assertEqual(self.portainer.deploys, ["new", "old"])
+		self.assertGreaterEqual((self.clock.now() - start).total_seconds(), REDEPLOY_SETTLE_S)
+		self.assertTrue(any("new never finished its redeploy" in m for m in self.notifier.messages))
+
+	def test_timed_out_rollback_that_finishes_is_rolled_back(self):
+		self.realm_a.health = lambda: self.portainer.tag != "new"
+		self.portainer.redeploy_error = TimeoutError("timed out")
+		self.portainer.redeploy_error_tags = {"old"}
+		self.portainer.redeploy_applies_despite_error = True
+		self.assertEqual(self.make().run(self.state), Outcome.ROLLED_BACK)
 
 	def test_no_previous_release_means_failed(self):
 		self.realm_a.health = lambda: self.portainer.tag != "new"

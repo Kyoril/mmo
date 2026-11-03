@@ -12,6 +12,11 @@
 #include "web_service.h"
 #include "guild_mgr.h"
 #include "friend_mgr.h"
+#include "modules/bug_report_module.h"
+#include "modules/friend_module.h"
+#include "modules/guild_module.h"
+#include "modules/pet_module.h"
+#include "modules/realm_module.h"
 #include "chat_channel_mgr.h"
 #include "motd_manager.h"
 #include "time_of_day_manager.h"
@@ -217,6 +222,7 @@ namespace mmo
 		AsyncFriendDatabase asyncFriendDb{ makeWorker(InterfaceTag<IFriendDatabase>{}), sync };
 		AsyncMOTDDatabase   asyncMotdDb{ makeWorker(InterfaceTag<IMOTDDatabase>{}), sync };
 		AsyncChatChannelDatabase asyncChatChannelDb{ makeWorker(InterfaceTag<IChatChannelDatabase>{}), sync };
+		AsyncPetDatabase    asyncPetDb{ makeWorker(InterfaceTag<IPetDatabase>{}), sync };
 
 		IdGenerator<uint64> groupIdGenerator{ 1 };
 
@@ -290,8 +296,12 @@ namespace mmo
 			return 1;
 		}
 
+		// The pet module is added to the other modules below; world nodes report pet data to it.
+		auto petModuleOwner = std::make_unique<PetModule>(asyncPetDb);
+		PetModule& petModule = *petModuleOwner;
+
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config, &timeOfDayManager](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config, &timeOfDayManager, &petModule](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -313,7 +323,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project, timeOfDayManager);
+			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project, timeOfDayManager, petModule);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 
@@ -332,6 +342,14 @@ namespace mmo
 		// Initialize friend manager
 		FriendMgr friendMgr{ asyncFriendDb, playerManager };
 		friendMgr.LoadAllFriendships();
+
+		// Gameplay modules. Each owns its client packet handlers and reacts to player sessions;
+		// see modules/realm_module.h for adding one.
+		RealmModules modules;
+		modules.Add(std::make_unique<BugReportModule>());
+		modules.Add(std::make_unique<FriendModule>(friendMgr, playerManager, asyncDatabase));
+		modules.Add(std::make_unique<GuildModule>(guildMgr, playerManager, asyncDatabase));
+		modules.Add(std::move(petModuleOwner));
 
 		// Initialize chat channel manager from game data
 		ChannelMgr channelMgr{ project, asyncChatChannelDb, playerManager, timerQueue };
@@ -384,7 +402,7 @@ namespace mmo
 		}
 
 		// Careful: Called by multiple threads!
-		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &friendMgr, &channelMgr, &config, &timeOfDayManager](std::shared_ptr<Player::Client> connection)
+		const auto createPlayer = [&playerManager, &worldManager, &asyncDatabase, &loginConnector, &project, &timerQueue, &groupIdGenerator, &guildMgr, &modules, &channelMgr, &config, &timeOfDayManager](std::shared_ptr<Player::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -410,7 +428,7 @@ namespace mmo
 			// 64 KiB is generous. Server<->server links keep the 16 MiB default.
 			connection->SetMaxReceiveBufferSize(64 * 1024);
 
-			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, friendMgr, channelMgr, timeOfDayManager);
+			auto player = std::make_shared<Player>(timerQueue, playerManager, worldManager, *loginConnector, asyncDatabase, connection, address.to_string(), project, groupIdGenerator, guildMgr, modules, channelMgr, timeOfDayManager);
 			ILOG("Incoming player connection from " << address);
 			playerManager.AddPlayer(std::move(player));
 

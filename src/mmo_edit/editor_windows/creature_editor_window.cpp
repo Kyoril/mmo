@@ -4,11 +4,18 @@
 #include "asset_picker_widget.h"
 #include "editor_imgui_helpers.h"
 #include "loot_assignment_widget.h"
+#include "proto_entry_picker.h"
+#include "unit_spell_entry_table.h"
 
 #include <imgui.h>
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
+#include <array>
+#include <vector>
+
 #include "assets/asset_registry.h"
+#include "game/attribute.h"
+#include "game/movement_ability.h"
 #include "game/object_type_id.h"
 #include "game_server/objects/game_unit_s.h"
 #include "log/default_log_levels.h"
@@ -667,6 +674,18 @@ namespace mmo
 		if (const auto section = ScopedEditorSection("Movement", ImGuiTreeNodeFlags_None))
 		{
 			SLIDER_FLOAT_PROP(runspeed, "Run Speed", 0.1f, 50.0f);
+
+			bool canSwim = (currentEntry.extraflags() & unit_extra_flags::CannotSwim) == 0;
+			if (ImGui::Checkbox("Can Swim", &canSwim))
+			{
+				currentEntry.set_extraflags(canSwim
+					? (currentEntry.extraflags() & ~static_cast<uint32>(unit_extra_flags::CannotSwim))
+					: (currentEntry.extraflags() | static_cast<uint32>(unit_extra_flags::CannotSwim)));
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("The unit swims at the surface of water deep enough to swim in.\nWhen off, water that deep blocks its movement like a wall.");
+			}
 		}
 
 		bool useStatSystem = currentEntry.usestatbasedsystem();
@@ -826,155 +845,116 @@ namespace mmo
 					{
 						ImGui::TextWrapped("Preview of final stats at different levels (calculated from unit class + base stats + scaling):");
 					
-						if (ImGui::BeginTable("calculated_preview_table", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+						// Attributes in display order. Ids outside the slot range are invalid data and not shown.
+						std::vector<const proto::AttributeEntry*> previewAttributes;
+						for (const auto& attribute : m_project.attributes.getTemplates().entry())
 						{
-						ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 50.0f);
-						ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Stamina", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Strength", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Agility", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Intellect", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Spirit", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableSetupColumn("Attack Power", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-						ImGui::TableHeadersRow();
-
-						// Show preview for min level, mid level, and max level
-						std::vector previewLevels = { currentEntry.minlevel() };
-						if (currentEntry.maxlevel() > currentEntry.minlevel())
-						{
-							// Add mid level if it exists
-							uint32 midLevel = (currentEntry.minlevel() + currentEntry.maxlevel()) / 2;
-							if (midLevel > currentEntry.minlevel() && midLevel < currentEntry.maxlevel())
-								previewLevels.push_back(midLevel);
-							
-							// Always add max level
-							previewLevels.push_back(currentEntry.maxlevel());
+							if (attribute.id() < MaxAttributes)
+							{
+								previewAttributes.push_back(&attribute);
+							}
 						}
-						
-						for (uint32 level : previewLevels)
+
+						if (unitClass->levelbasevalues_size() == 0)
 						{
-							ImGui::TableNextRow();
+							ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.3f, 1.0f), "The unit class has no base values per level.");
+						}
+						else if (ImGui::BeginTable("calculated_preview_table", 5 + static_cast<int>(previewAttributes.size()), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+						{
+							ImGui::TableSetupColumn("Level", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+							ImGui::TableSetupColumn("Health", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+							ImGui::TableSetupColumn("Mana", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+							ImGui::TableSetupColumn("Armor", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+							for (const auto* attribute : previewAttributes)
+							{
+								ImGui::TableSetupColumn(attribute->name().c_str(), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+							}
+							ImGui::TableSetupColumn("Attack Power", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+							ImGui::TableHeadersRow();
+
+							// Show preview for min level, mid level, and max level
+							std::vector previewLevels = { currentEntry.minlevel() };
+							if (currentEntry.maxlevel() > currentEntry.minlevel())
+							{
+								// Add mid level if it exists
+								uint32 midLevel = (currentEntry.minlevel() + currentEntry.maxlevel()) / 2;
+								if (midLevel > currentEntry.minlevel() && midLevel < currentEntry.maxlevel())
+								{
+									previewLevels.push_back(midLevel);
+								}
+
+								// Always add max level
+								previewLevels.push_back(currentEntry.maxlevel());
+							}
 
 							const float eliteMultiplier = currentEntry.elitestatmultiplier();
 
-							// Calculate base stats with level scaling
-							const auto& base = unitClass->levelbasevalues(level - 1);
-							const uint32 finalStamina = static_cast<uint32>(base.stamina() * eliteMultiplier);
-							const uint32 finalStrength = static_cast<uint32>(base.stamina() * eliteMultiplier);
-							const uint32 finalAgility = static_cast<uint32>(base.stamina() * eliteMultiplier);
-							const uint32 finalIntellect = static_cast<uint32>(base.intellect() * eliteMultiplier);
-							const uint32 finalSpirit = static_cast<uint32>(base.spirit() * eliteMultiplier);
-
-							// Calculate health (base + per level + stamina modifier)
-							uint32 baseHealth = static_cast<uint32>(base.health() * eliteMultiplier);
-							uint32 healthFromStats = 0;
-
-							// Add health from unit class stat sources
-							if (unitClass != nullptr)
+							for (const uint32 displayLevel : previewLevels)
 							{
-								for (const auto& healthSource : unitClass->healthstatsources())
+								ImGui::TableNextRow();
+
+								// Mirrors GameCreatureS::CalculateStatBasedStats: the level is clamped to the unit class's level table
+								const int32 level = std::max<int32>(1, std::min(static_cast<int32>(displayLevel), unitClass->levelbasevalues_size()));
+								const auto& base = unitClass->levelbasevalues(level - 1);
+
+								// Attribute totals (base value scaled by the elite multiplier; auras and items are not included)
+								std::array<float, MaxAttributes> attributeTotals{};
+								for (uint32 attribute = 0; attribute < MaxAttributes; ++attribute)
 								{
-									switch (healthSource.statid())
-									{
-									case 2: // STAMINA
-										healthFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * healthSource.factor());
-										break;
-									case 0: // STRENGTH
-										healthFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * healthSource.factor());
-										break;
-									case 1: // AGILITY
-										healthFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * healthSource.factor());
-										break;
-									case 3: // INTELLECT
-										healthFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * healthSource.factor());
-										break;
-									case 4: // SPIRIT
-										healthFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * healthSource.factor());
-										break;
-									}
+									const uint32 baseValue = static_cast<int>(attribute) < base.attributes_size() ? static_cast<uint32>(base.attributes(static_cast<int>(attribute)) * eliteMultiplier) : 0;
+									attributeTotals[attribute] = static_cast<float>(baseValue);
 								}
+
+								// Every point of an attribute above 20 contributes factor to the derived value
+								auto fromAttribute = [&attributeTotals](const uint32 attribute, const float factor) -> uint32
+								{
+									if (attribute >= MaxAttributes)
+									{
+										return 0;
+									}
+
+									return static_cast<uint32>((std::max<int32>(static_cast<int32>(attributeTotals[attribute]), 20) - 20) * factor);
+								};
+
+								uint32 finalHealth = static_cast<uint32>(base.health() * eliteMultiplier);
+								for (const auto& source : unitClass->healthstatsources())
+								{
+									finalHealth += fromAttribute(source.statid(), source.factor());
+								}
+
+								uint32 finalMana = static_cast<uint32>(base.mana() * eliteMultiplier);
+								for (const auto& source : unitClass->manastatsources())
+								{
+									finalMana += fromAttribute(source.statid(), source.factor());
+								}
+
+								uint32 finalArmor = static_cast<uint32>((currentEntry.basearmor() + currentEntry.armorperlevel() * (level - 1)) * eliteMultiplier);
+								for (const auto& source : unitClass->armorstatsources())
+								{
+									finalArmor += fromAttribute(source.statid(), source.factor());
+								}
+
+								uint32 attackPower = static_cast<uint32>((unitClass->attackpoweroffset() + unitClass->attackpowerperlevel() * (level - 1)) * eliteMultiplier);
+								for (const auto& source : unitClass->attackpowerstatsources())
+								{
+									attackPower += fromAttribute(source.statid(), source.factor());
+								}
+
+								if (ImGui::TableNextColumn()) ImGui::Text("%u", displayLevel);
+								if (ImGui::TableNextColumn()) ImGui::Text("%u", finalHealth);
+								if (ImGui::TableNextColumn()) ImGui::Text("%u", finalMana);
+								if (ImGui::TableNextColumn()) ImGui::Text("%u", finalArmor);
+								for (const auto* attribute : previewAttributes)
+								{
+									if (ImGui::TableNextColumn()) ImGui::Text("%u", static_cast<uint32>(attributeTotals[attribute->id()]));
+								}
+								if (ImGui::TableNextColumn()) ImGui::Text("%u", attackPower);
 							}
 
-							const uint32 finalHealth = baseHealth + healthFromStats;
-
-							// Calculate mana (base + per level + intellect modifier)
-							uint32 baseMana = static_cast<uint32>(base.mana() * eliteMultiplier);
-							uint32 manaFromStats = 0;
-
-							// Add mana from unit class stat sources
-							if (unitClass != nullptr)
-							{
-								for (const auto& manaSource : unitClass->manastatsources())
-								{
-									switch (manaSource.statid())
-									{
-									case 2: // STAMINA
-										manaFromStats += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * manaSource.factor());
-										break;
-									case 0: // STRENGTH
-										manaFromStats += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * manaSource.factor());
-										break;
-									case 1: // AGILITY
-										manaFromStats += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * manaSource.factor());
-										break;
-									case 3: // INTELLECT
-										manaFromStats += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * manaSource.factor());
-										break;
-									case 4: // SPIRIT
-										manaFromStats += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * manaSource.factor());
-										break;
-									}
-								}
-							}
-
-							const uint32 finalMana = baseMana + manaFromStats;
-
-							// Calculate attack power
-							uint32 attackPower = 0;
-							if (unitClass != nullptr)
-							{
-								attackPower = static_cast<uint32>((unitClass->attackpoweroffset() + unitClass->attackpowerperlevel() * (level - 1)) * eliteMultiplier);
-
-								// Add attack power from unit class stat sources
-								for (const auto& attackPowerSource : unitClass->attackpowerstatsources())
-								{
-									switch (attackPowerSource.statid())
-									{
-									case 2: // STAMINA
-										attackPower += static_cast<uint32>((std::max(finalStamina, 20U) - 20) * attackPowerSource.factor());
-										break;
-									case 0: // STRENGTH
-										attackPower += static_cast<uint32>((std::max(finalStrength, 20U) - 20) * attackPowerSource.factor());
-										break;
-									case 1: // AGILITY
-										attackPower += static_cast<uint32>((std::max(finalAgility, 20U) - 20) * attackPowerSource.factor());
-										break;
-									case 3: // INTELLECT
-										attackPower += static_cast<uint32>((std::max(finalIntellect, 20U) - 20) * attackPowerSource.factor());
-										break;
-									case 4: // SPIRIT
-										attackPower += static_cast<uint32>((std::max(finalSpirit, 20U) - 20) * attackPowerSource.factor());
-										break;
-									}
-								}
-							}
-
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", level);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalHealth);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalMana);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalStamina);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalStrength);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalAgility);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalIntellect);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", finalSpirit);
-							if (ImGui::TableNextColumn()) ImGui::Text("%u", attackPower);
+							ImGui::EndTable();
 						}
-						
-						ImGui::EndTable();
-					}
 					
-					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Note: This is a simplified preview. Actual calculations will include unit class formulas.");
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Note: Same formulas as the server at spawn time; auras and equipment are not included.");
 				}
 			}
 			else
@@ -985,122 +965,18 @@ namespace mmo
 
 		if (const auto section = ScopedEditorSection("Creature Spells", ImGuiTreeNodeFlags_None))
 		{
-			static const char* s_itemNone = "<None>";
+			DrawUnitSpellEntryTable("creaturespells", m_project, *currentEntry.mutable_creaturespells());
+		}
+				}
 
-			// Add button
-			if (DrawSuccessButton("Add", ImVec2(-1, 0)))
+		if (const auto section = ScopedEditorSection("Taming", ImGuiTreeNodeFlags_None))
+		{
+			int tamePetEntry = static_cast<int>(currentEntry.tame_pet_entry());
+			if (DrawEntryPicker("##tamePetEntry", "Tame Pet Entry", tamePetEntry, m_project.pets, "The pet entry a player gets when taming this creature. None means the creature cannot be tamed."))
 			{
-				auto* newEntry = currentEntry.add_creaturespells();
-				newEntry->set_spellid(0);
+				currentEntry.set_tame_pet_entry(static_cast<uint32>(tamePetEntry));
 			}
-
-			if (ImGui::BeginTable("creaturespells", 7, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable | ImGuiTableFlags_NoSavedSettings))
-			{
-				ImGui::TableSetupColumn("Spell", ImGuiTableColumnFlags_DefaultSort);
-				ImGui::TableSetupColumn("Priority", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Min Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Max Initial Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Min Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Max Cooldown", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn("Probability", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				for (int index = 0; index < currentEntry.creaturespells_size(); ++index)
-				{
-					auto* currentItem = currentEntry.mutable_creaturespells(index);
-
-					ImGui::PushID(index);
-					ImGui::TableNextRow();
-
-					ImGui::TableNextColumn();
-
-					const uint32 spell = currentItem->spellid();
-
-					const auto* spellEntry = m_project.spells.getById(spell);
-					if (ImGui::BeginCombo("##spell", spellEntry != nullptr ? spellEntry->name().c_str() : s_itemNone, ImGuiComboFlags_None))
-					{
-						for (int i = 0; i < m_project.spells.count(); i++)
-						{
-							ImGui::PushID(i);
-							const bool item_selected = m_project.spells.getTemplates().entry(i).id() == spell;
-							const char* item_text = m_project.spells.getTemplates().entry(i).name().c_str();
-							if (ImGui::Selectable(item_text, item_selected))
-							{
-								currentItem->set_spellid(m_project.spells.getTemplates().entry(i).id());
-							}
-							if (item_selected)
-							{
-								ImGui::SetItemDefaultFocus();
-							}
-							ImGui::PopID();
-						}
-
-						ImGui::EndCombo();
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 priority = currentItem->priority();
-					if (ImGui::InputInt("##priority", &priority))
-					{
-						currentItem->set_priority(priority);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 mininitialcooldown = currentItem->mininitialcooldown();
-					if (ImGui::InputInt("ms##mininitialcooldown", &mininitialcooldown))
-					{
-						currentItem->set_mininitialcooldown(mininitialcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 maxinitialcooldown = currentItem->maxinitialcooldown();
-					if (ImGui::InputInt("ms##maxinitialcooldown", &maxinitialcooldown))
-					{
-						currentItem->set_maxinitialcooldown(maxinitialcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 mincooldown = currentItem->mincooldown();
-					if (ImGui::InputInt("ms##mininitialcooldown", &mincooldown))
-					{
-						currentItem->set_mincooldown(mincooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 maxcooldown = currentItem->maxcooldown();
-					if (ImGui::InputInt("ms##maxinitialcooldown", &maxcooldown))
-					{
-						currentItem->set_maxcooldown(maxcooldown);
-					}
-
-					ImGui::TableNextColumn();
-
-					int32 probability = currentItem->probability();
-					if (ImGui::InputInt("%##probability", &probability))
-					{
-						currentItem->set_probability(probability);
-					}
-
-					ImGui::SameLine();
-
-					if (DrawDangerButton("Remove"))
-					{
-						currentEntry.mutable_creaturespells()->erase(currentEntry.mutable_creaturespells()->begin() + index);
-						index--;
-					}
-
-					ImGui::PopID();
-				}
-
-							ImGui::EndTable();
-						}
-					}
-				}
+		}
 
 		if (const auto section = ScopedEditorSection("Scripting", ImGuiTreeNodeFlags_None))
 		{

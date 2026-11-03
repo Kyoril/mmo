@@ -54,6 +54,9 @@ namespace mmo
 		/// Singleton getter method.
 		static FrameManager& Get();
 
+		/// @brief Whether Initialize was called and Destroy has not been called since.
+		static bool IsInitialized();
+
 	public:
 		/// Initializes the frame manager by registering default frame factories.
 		static void Initialize(lua_State* state, const Localization& localization);
@@ -240,6 +243,10 @@ namespace mmo
 	private:
 		/// A map of mouse-down frames.
 		std::map<MouseButton, FramePtr> m_mouseDownFrames;
+
+		/// Mask of mouse buttons whose press was swallowed by a ui element. Their release is
+		/// swallowed as well, so a click on the ui never acts on the game world behind it.
+		int32 m_consumedPressButtons = 0;
 
 		/// A map of all frames, keyed by their case insensitive name.
 		std::map<std::string, FramePtr, StrCaseIComp> m_framesByName;

@@ -3,6 +3,11 @@
 #include "cache_provider.h"
 #include "base/non_copyable.h"
 
+// The caches own their entries by value, so whoever destroys a ClientCache needs the full types.
+#include "game/creature_data.h"
+#include "game/item.h"
+#include "game/quest_info.h"
+
 namespace mmo
 {
 	class RealmConnector;

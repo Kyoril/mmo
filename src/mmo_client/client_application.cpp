@@ -11,6 +11,7 @@
 #include "client_ui_runtime.h"
 #include "client_data/project.h"
 #include "console/console.h"
+#include "console/console_var.h"
 #include "cursor.h"
 #include "data/client_cache.h"
 #include "discord.h"
@@ -18,8 +19,10 @@
 #include "game/game_time_component.h"
 #include "game_script.h"
 #include "game_states/game_state_mgr.h"
+#include "material_shader_resolver.h"
 #include "game_states/login_state.h"
 #include "game_states/world_state.h"
+#include "loading_screen.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "systems/action_bar.h"
@@ -30,6 +33,7 @@
 #include "systems/inventory_client.h"
 #include "systems/loot_client.h"
 #include "systems/party_info.h"
+#include "systems/pet_info.h"
 #include "systems/quest_client.h"
 #include "systems/spell_cast.h"
 #include "systems/talent_client.h"
@@ -51,7 +55,7 @@
 
 #include <filesystem>
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 #include "fmod_audio/fmod_audio.h"
 #else
 #include "null_audio/null_audio.h"
@@ -154,6 +158,12 @@ namespace mmo
 			return false;
 		}
 
+		// Console::Initialize validated the data path, so it is usable here.
+		if (const ConsoleVar* dataPath = ConsoleVarMgr::FindConsoleVar("dataPath"))
+		{
+			InstallMaterialShaderResolver(std::filesystem::absolute(dataPath->GetStringValue(), error));
+		}
+
 		PerfCapture::Initialize();
 		GraphicsPresets::Initialize();
 		FramePacing::Initialize();
@@ -167,7 +177,7 @@ namespace mmo
 		context.runtime = std::make_unique<ClientRuntime>();
 		context.runtime->Initialize();
 
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 		context.audio = std::make_unique<FMODAudio>();
 #else
 		context.audio = std::make_unique<NullAudio>();
@@ -219,6 +229,8 @@ namespace mmo
 			return false;
 		}
 
+		LoadingScreen::SetTips(&context.project->loadingTips.getTemplates());
+
 		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
 		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
 		UnitGossipVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->models, context.timerQueue.get());
@@ -264,6 +276,7 @@ namespace mmo
 		context.actionBar = std::make_unique<ActionBar>(realmConnector, context.project->spells, context.project->emotes, context.clientCache->GetItemCache(), *context.spellCast);
 		context.talentClient = std::make_unique<TalentClient>(context.project->talentTabs, context.project->talents, context.project->spells, realmConnector);
 		context.tradeClient = std::make_unique<TradeClient>(realmConnector);
+		context.petInfo = std::make_unique<PetInfo>(realmConnector, context.project->spells);
 		context.subsystemClient = std::make_unique<SubsystemClient>(realmConnector);
 		context.bugReportClient = std::make_unique<BugReportClient>(realmConnector, *context.subsystemClient);
 	}
@@ -286,6 +299,7 @@ namespace mmo
 		context.mailClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.subsystemClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.bugReportClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.petInfo->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		// Runs a Lua chunk in the UI's script state, so scripted sessions (-exec) can drive the UI,
@@ -397,6 +411,7 @@ namespace mmo
 		if (context.inventoryClient) context.inventoryClient->Shutdown();
 		if (context.questClient) context.questClient->Shutdown();
 		if (context.partyInfo) context.partyInfo->Shutdown();
+		if (context.petInfo) context.petInfo->Shutdown();
 		if (context.guildClient) context.guildClient->Shutdown();
 		if (context.friendClient) context.friendClient->Shutdown();
 		if (context.bugReportClient) context.bugReportClient->Shutdown();
@@ -449,6 +464,7 @@ namespace mmo
 		PerfCapture::Destroy();
 		Console::Destroy();
 		EventLoop::Destroy();
+		UninstallMaterialShaderResolver();
 		AssetRegistry::Destroy();
 
 		// Stop the worker pool after all systems that might still hold parallel work are gone.
@@ -469,6 +485,7 @@ namespace mmo
 	{
 		context.talentClient.reset();
 		context.tradeClient.reset();
+		context.petInfo.reset();
 		context.bugReportClient.reset();
 		context.subsystemClient.reset();
 		context.actionBar.reset();
@@ -494,6 +511,7 @@ namespace mmo
 		UnitGossipVoice::Get().Initialize(nullptr, nullptr, nullptr);
 		context.soundEntryPlayer.reset();
 
+		LoadingScreen::SetTips(nullptr);
 		context.project.reset();
 		context.uiRuntime.reset();
 

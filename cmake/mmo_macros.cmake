@@ -450,3 +450,40 @@ MACRO(remove_pch_cpp sources pch_cpp)
 	endif()
 ENDMACRO()
 
+
+# Converts HLSL shaders into Metal shader blobs (macOS only). Each shader becomes a header
+# <Name>.metal.h in the target's binary dir holding the array g_<Name>, the same symbol fxc
+# generates for the D3D11 build, so code includes either header under one name. The stage is
+# taken from the file name prefix (VS_, PS_ or CS_).
+function(mmo_add_metal_shaders target)
+	set(outDir "${CMAKE_CURRENT_BINARY_DIR}/metal_shaders")
+	set(outputs "")
+	foreach(shader ${ARGN})
+		get_filename_component(shaderName ${shader} NAME_WE)
+		get_filename_component(shaderDir ${shader} DIRECTORY)
+		string(SUBSTRING ${shaderName} 0 3 prefix)
+		if (prefix STREQUAL "VS_")
+			set(stage vs)
+		elseif (prefix STREQUAL "PS_")
+			set(stage ps)
+		elseif (prefix STREQUAL "CS_")
+			set(stage cs)
+		else()
+			message(FATAL_ERROR "Unable to tell the stage of shader ${shader}")
+		endif()
+
+		file(GLOB shaderIncludes "${shaderDir}/*.hlsli")
+		set(outFile "${outDir}/${shaderName}.metal.h")
+		add_custom_command(
+			OUTPUT ${outFile}
+			COMMAND $<TARGET_FILE:hlsl2msl> ${shader} ${stage} ${outFile} g_${shaderName}
+			DEPENDS hlsl2msl ${shader} ${shaderIncludes}
+			COMMENT "Converting ${shaderName} to Metal"
+			VERBATIM
+		)
+		list(APPEND outputs ${outFile})
+	endforeach()
+
+	target_sources(${target} PRIVATE ${outputs})
+	target_include_directories(${target} PRIVATE ${outDir})
+endfunction()

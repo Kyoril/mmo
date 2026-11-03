@@ -1,0 +1,28 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "localization.proto";
+
+// NOTE: Keep this file in sync with src/shared/client_data/loading_tips.proto!
+// The client reads the exported binary data with the mirrored proto_client schema,
+// so every field number in here has to match the mirror exactly.
+//
+// Nothing on the server consumes these; the client shows a random one on each loading screen.
+
+message LoadingTip
+{
+	required uint32 id = 1;
+
+	// Editor-only label shown in the entry list.
+	required string name = 2;
+
+	// The tip as shown on the loading screen (base English text).
+	optional string text = 3;
+
+	repeated LocalizedString text_loc = 200;
+}
+
+message LoadingTips
+{
+	repeated LoadingTip entry = 1;
+}

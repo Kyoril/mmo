@@ -12,6 +12,9 @@
 #include "data/cache_provider.h"
 
 #include "base/typedefs.h"
+#include "game/attribute.h"
+
+#include <array>
 
 
 namespace mmo
@@ -90,7 +93,15 @@ namespace mmo
 
 		void GetVendorItemInfo(int32 slot, const ItemInfo*& outItem, String& outIcon, int32& outPrice, int32& outQuantity, int32& outNumAvailable, bool& outUsable) const;
 
+		/// Provides the lua ui with one entry of the vendor's buyback list.
+		///	@param slot Zero based index into the buyback list.
+		void GetVendorBuybackItemInfo(int32 slot, const ItemInfo*& outItem, String& outIcon, int32& outPrice, int32& outQuantity) const;
+
 		void GetTrainerSpellInfo(int32 slot, int32& outSpellId, String& outName, String& outIcon, int32& outPrice, bool& outKnown) const;
+
+		/// Remembers the attribute gains of the most recent level up for GetLevelUpAttributeGain().
+		/// @param gains Gain per attribute id.
+		static void SetLevelUpAttributeGains(const std::array<int32, MaxAttributes>& gains);
 
 	private:
 		/// Registers global functions to the internal lua state.
@@ -128,6 +139,7 @@ namespace mmo
 		void BuyVendorItem(uint32 slot, uint8 count) const;
 
 		void AddAttributePoint(uint32 attribute) const;
+
 
 		const char* GetItemSpellTriggerType(const ItemInfo* item, int32 index);
 

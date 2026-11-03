@@ -18,6 +18,7 @@
 #include "game/bug_report.h"
 #include "game/mail.h"
 #include "game/subsystem.h"
+#include "game/pet_packets.h"
 
 #include "binary_io/reader.h"
 
@@ -306,6 +307,10 @@ namespace mmo
 		/// @param spellId The spell that went off.
 		signal<void(uint64, uint32)> SpellWentOff;
 
+		/// A periodic aura ticked (PeriodicAuraLog): victim, caster, spell, aura type and the amount
+		/// the tick dealt, healed or energized.
+		signal<void(uint64, uint64, uint32, uint32, uint32)> PeriodicAuraTicked;
+
 		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
 		///		a channel has ended, whether it ran out, was interrupted or never got going.
 		/// @param casterGuid The GUID of the channeling unit.
@@ -367,6 +372,24 @@ namespace mmo
 		std::array<game::SubsystemStatus, game::subsystem::Count_> m_subsystemStatus{};
 		uint32 m_subsystemStatusPackets = 0;
 		std::string m_lastBugReportResult;
+
+		/// Last FriendCommandResult received (game::friend_command_result), or -1 for none.
+		int32 m_lastFriendCommandResult = -1;
+
+		/// Number of FriendListUpdate packets received.
+		uint32 m_friendListUpdates = 0;
+
+		/// Result of the last GuildCommandResult received (game::guild_command_result), or -1 for none.
+		int32 m_lastGuildCommandResult = -1;
+
+		/// The summoned persistent pet as the last PetSpells described it (petGuid 0 = none).
+		game::PetSpellsData m_petSpells;
+
+		/// Number of PetSpells packets received, so a scenario can wait for the next one.
+		uint32 m_petSpellsPackets = 0;
+
+		/// Result of the last PetResult received (pet_result), or -1 for none.
+		int32 m_lastPetResult = -1;
 
 		/// Last spell visualization the server told us to play, if any.
 		struct SpellVisual
@@ -495,6 +518,54 @@ namespace mmo
 
 		/// Files a bug report with the given (uncompressed) client JSON.
 		void SubmitBugReport(const game::BugReportPayload& payload);
+
+		/// Last friend command result (game::friend_command_result), or -1 for none.
+		[[nodiscard]] int32 GetLastFriendCommandResult() const { return m_lastFriendCommandResult; }
+
+		/// Forgets the last friend command result.
+		void ClearLastFriendCommandResult() { m_lastFriendCommandResult = -1; }
+
+		/// Number of friend lists received, so a scenario can wait for the next one.
+		[[nodiscard]] uint32 GetFriendListUpdateCount() const { return m_friendListUpdates; }
+
+		/// Adds a character to the friend list by name.
+		void FriendInvite(const String& name);
+
+		/// Asks the realm for the friend list.
+		void RequestFriendList();
+
+		/// Result of the last guild command (game::guild_command_result), or -1 for none.
+		[[nodiscard]] int32 GetLastGuildCommandResult() const { return m_lastGuildCommandResult; }
+
+		/// Forgets the last guild command result.
+		void ClearLastGuildCommandResult() { m_lastGuildCommandResult = -1; }
+
+		/// The summoned persistent pet as the last PetSpells described it; petGuid is 0 if there is none.
+		[[nodiscard]] const game::PetSpellsData& GetPetSpells() const { return m_petSpells; }
+
+		/// Number of PetSpells packets received in this session.
+		[[nodiscard]] uint32 GetPetSpellsPacketCount() const { return m_petSpellsPackets; }
+
+		/// Result of the last pet action that failed (pet_result), or -1 for none.
+		[[nodiscard]] int32 GetLastPetResult() const { return m_lastPetResult; }
+
+		/// Forgets the last pet result.
+		void ClearLastPetResult() { m_lastPetResult = -1; }
+
+		/// Gives a command (pet_command) to all pets of the character.
+		void PetCommand(uint8 command, uint64 target, uint32 param);
+
+		/// Renames the summoned persistent pet.
+		void PetRename(const String& name);
+
+		/// Invites a character to the own guild by name.
+		void GuildInvite(const String& name);
+
+		/// Leaves the own guild (disbands it if the character leads it).
+		void GuildLeave();
+
+		/// GAME MASTER only. Creates a guild led by this character.
+		void CheatCreateGuild(const String& name);
 
 		/// GAME MASTER only. Switches a subsystem realm-wide.
 		void CheatSetSubsystem(game::Subsystem subsystem, bool enabled);
@@ -752,6 +823,18 @@ namespace mmo
 		/// GAME MASTER only. Unlocks the given emote.
 		void CheatLearnEmote(uint32 emoteId);
 
+		/// GAME MASTER only. Grants the selected player (the sender if none) a stored pet.
+		void CheatPetAdd(uint32 petEntry);
+
+		/// GAME MASTER only. Removes a stored pet from the selected player (the sender if none).
+		void CheatPetRemove(uint32 petEntry);
+
+		/// GAME MASTER only. Tames the selected creature, ignoring the level check.
+		void CheatPetTame();
+
+		/// GAME MASTER only. Makes the selected creature the sender's temporary pet.
+		void CheatPetMake();
+
 		/// Performs an animated emote (one-shot, pose or mood).
 		void SendEmote(uint32 emoteId, uint64 targetGuid);
 
@@ -760,6 +843,9 @@ namespace mmo
 
 		/// GAME MASTER only. Increases the player level by the given amount.
 		void CheatLevelUp(uint8 levels);
+
+		/// Spends one attribute point on the attribute with the given id.
+		void AddAttributePoint(uint32 attributeId);
 
 		/// GAME MASTER only. Increases the active class level by the given amount.
 		void CheatClassLevelUp(uint8 levels);
@@ -945,6 +1031,12 @@ namespace mmo
 
 		PacketParseResult OnBugReportResult(game::IncomingPacket& packet);
 
+		PacketParseResult OnFriendCommandResult(game::IncomingPacket& packet);
+
+		PacketParseResult OnFriendListUpdate(game::IncomingPacket& packet);
+
+		PacketParseResult OnGuildCommandResult(game::IncomingPacket& packet);
+
 		PacketParseResult OnCharEnum(game::IncomingPacket& packet);
 
 		PacketParseResult OnLoginVerifyWorld(game::IncomingPacket& packet);
@@ -992,6 +1084,10 @@ namespace mmo
 		PacketParseResult OnGameTimeInfo(game::IncomingPacket& packet);
 
 		PacketParseResult OnShutdownCountdown(game::IncomingPacket& packet);
+
+		PacketParseResult OnPetSpells(game::IncomingPacket& packet);
+		PacketParseResult OnPetResult(game::IncomingPacket& packet);
+		PacketParseResult OnPetNameQueryResult(game::IncomingPacket& packet);
 
 		PacketParseResult OnNameQueryResult(game::IncomingPacket& packet);
 		PacketParseResult OnChatMessage(game::IncomingPacket& packet);
@@ -1062,6 +1158,9 @@ namespace mmo
 
 		/// @brief Handles the NonSpellDamageLog packet from server.
 		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
+
+		/// @brief Handles the PeriodicAuraLog packet from server (raises PeriodicAuraTicked).
+		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
 
 		/// @brief Parses a single object update from the packet stream.
 		/// @param packet The packet to read from.

@@ -4,8 +4,11 @@ Guards the acolyte visualization data invariants (docs/acolyte_spell_visuals.md)
 
 Reuses the warrior suite's loader. Acolyte rules on top of the shared ones:
 
-* Only CASTING kits may loop (the cast-bar channels); cast end tears them down.
-* No sound on aura events, including AURA_TICK (Corrupting Touch ticks every 2 s).
+* Only CASTING and CHANNELING kits may loop (the cast-bar and channel loops); cast or channel
+  end tears them down.
+* No sound on aura events, including AURA_TICK (Corrupting Touch ticks every 2 s), and none on
+  procs and ticks (Drain Essence, Rot Field, Shared Night, ...).
+* Every curse idles with its own particle, so players can tell them apart.
 * Every acolyte spell points at its own "Acolyte - ..." visualization, so a later edit cannot
   silently send it back to the shared creature "Shadow Bolt" entry, the default
   visualization or the mage's Arcane Pulse.
@@ -26,7 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_scout_visual_data import SCOUT_PARTICLE_MATERIALS, _load_spells  # noqa: E402
 from test_warrior_visual_data import _load  # noqa: E402
 
-CASTING, CAST, AURA_APPLIED, AURA_TICK, AURA_IDLE = 2, 3, 5, 7, 8
+CASTING, CAST, IMPACT, AURA_APPLIED, AURA_TICK, AURA_IDLE = 2, 3, 4, 5, 7, 8
+CHANNELING, GROUND_ACTIVE, GROUND_EXPIRED = 9, 10, 11
+LOCALES = ROOT / "data/client/Locales"
 
 # The acolyte adds a skull, a ghost wisp and an occult ground sigil (make_sprites.py).
 ACOLYTE_PARTICLE_MATERIALS = SCOUT_PARTICLE_MATERIALS | {
@@ -37,11 +42,35 @@ ACOLYTE_PARTICLE_MATERIALS = SCOUT_PARTICLE_MATERIALS | {
 
 ACOLYTE_SPELLS = {
     23: "Shadowbolt", 74: "Shadowbolt", 24: "Corrupting Touch", 73: "Fear",
-    38: "Veil of Shadows", 1309: "Umbral Bloom", 1328: "Embrace of Dread",
-    1306: "Gloaming Trance", 1314: "Leeching Rot",
+    38: "Veil of Shadows", 1328: "Embrace of Dread", 1314: "Leeching Rot",
     119: "Void Resurgence", 120: "Void Resurgence", 121: "Void Resurgence",
+    # Kit overhaul (2026-11-02): trainer spells and their ticks.
+    1330: "Curse of Frailty", 1331: "Drain Essence", 1332: "Drain Essence",
+    1333: "Curse of the Mire", 1334: "Wasting Plague", 1335: "Call Gloomlings",
+    1336: "Rot Field", 1337: "Rot Field",
+    # Talent actives and procs (passives show nothing).
+    1345: "Empower Duskling", 1347: "Gloom Tether", 1349: "Shared Night", 1352: "Brood Horror",
+    1357: "Creeping Rot", 1360: "Tangled Tongue", 1362: "Grasping Dread",
+    1363: "Wail of the Lost", 1365: "Lingering Dread",
 }
-TALENT_SPELLS = (1306, 1309, 1314, 1328)
+# Umbral Bloom (1309) and Gloaming Trance (1306) left the trees with Umbra: they are neutered (no
+# visualization, see author_talent_trees.py), while their visualization entries stay in the catalog.
+TALENT_SPELLS = (1314, 1328, 1345, 1347, 1349, 1352, 1357, 1360, 1362, 1363, 1365)
+# Procs and per-tick spells fire often and must stay silent.
+SILENT_SPELLS = (1314, 1332, 1337, 1349, 1357, 1362, 1365)
+# The acolyte curses: each needs its own AURA_IDLE look.
+CURSES = (1330, 1333, 1360)
+# The acolyte visualizations; "Summon Duskling" (140) is authored with the pet system.
+ACOLYTE_VISUALIZATION_COUNT = 27
+
+
+def _sound_file_exists(path):
+    """Locale-relative assets ("Voice/...") live under Locales/Locale_<code>/, which the client
+    mounts as an asset root; voice lines are recorded per locale (only enUS has some so far),
+    so one locale carrying the file is enough. Everything else is relative to data/client."""
+    if path.startswith("Voice/"):
+        return any((d / path).is_file() for d in LOCALES.iterdir() if d.is_dir())
+    return (ROOT / "data/client" / path).is_file()
 
 
 class AcolyteVisualDataTests(unittest.TestCase):
@@ -65,7 +94,7 @@ class AcolyteVisualDataTests(unittest.TestCase):
         cls.particles = {}
         for _, event, kit in cls.kits:
             for particle in kit.particles:
-                may_loop = event in (CASTING, AURA_IDLE)
+                may_loop = event in (CASTING, CHANNELING, AURA_IDLE, GROUND_ACTIVE)
                 cls.particles[particle] = cls.particles.get(particle, True) and may_loop
         for vis in cls.acolyte:
             for proj in vis.projectiles:
@@ -73,7 +102,8 @@ class AcolyteVisualDataTests(unittest.TestCase):
                     cls.particles.setdefault(proj.trail_particle, True)
 
     def test_acolyte_visualizations_are_present(self):
-        self.assertEqual(len(self.acolyte), 9, [v.name for v in self.acolyte])
+        self.assertEqual(len(self.acolyte), ACOLYTE_VISUALIZATION_COUNT,
+                         [v.name for v in self.acolyte])
 
     def test_every_acolyte_spell_uses_its_own_visualization(self):
         by_id = {v.id: v for v in self.visuals.entry}
@@ -109,7 +139,8 @@ class AcolyteVisualDataTests(unittest.TestCase):
     def test_only_cast_bar_kits_loop(self):
         for name, event, kit in self.kits:
             if kit.loop:
-                self.assertEqual(event, CASTING, f"{name}: event {event} kit loops and nothing stops it")
+                self.assertIn(event, (CASTING, CHANNELING),
+                              f"{name}: event {event} kit loops and nothing stops it")
 
     def test_no_sound_on_aura_events(self):
         for name, event, kit in self.kits:
@@ -124,7 +155,7 @@ class AcolyteVisualDataTests(unittest.TestCase):
 
     def test_cast_kits_are_caster_scoped(self):
         for name, event, kit in self.kits:
-            if event in (CASTING, CAST):
+            if event in (CASTING, CAST, CHANNELING):
                 self.assertEqual(kit.scope, 0, f"{name}: cast events have no target list")
 
     def test_every_referenced_sound_exists_with_its_files(self):
@@ -132,12 +163,59 @@ class AcolyteVisualDataTests(unittest.TestCase):
         for name, event, kit in self.kits:
             for sound_id in kit.sound_ids:
                 self.assertIn(sound_id, by_id, f"{name}: unknown sound id {sound_id}")
-                # Only a looping cast-bar kit may carry a looping sound.
+                # Only a looping cast-bar or channel kit may carry a looping sound.
                 if by_id[sound_id].looped:
-                    self.assertTrue(kit.loop and event == CASTING, f"{name}: sound {sound_id} loops")
+                    self.assertTrue(kit.loop and event in (CASTING, CHANNELING),
+                                    f"{name}: sound {sound_id} loops")
                 for path in by_id[sound_id].files:
-                    self.assertTrue((ROOT / "data/client" / path).is_file(),
-                                    f"{name}: missing sound file {path}")
+                    self.assertTrue(_sound_file_exists(path), f"{name}: missing sound file {path}")
+
+    def test_locale_relative_voice_paths_resolve(self):
+        self.assertFalse((ROOT / "data/client/Voice/Pet/Duskling/Duskling_Summon_01.wav").is_file())
+        self.assertTrue(_sound_file_exists("Voice/Pet/Duskling/Duskling_Summon_01.wav"))
+
+    def _visualization(self, spell_id):
+        spell = next(s for s in self.spells.entry if s.id == spell_id)
+        return next(v for v in self.visuals.entry if v.id == spell.visualization_id)
+
+    def test_procs_and_ticks_are_silent(self):
+        for spell_id in SILENT_SPELLS:
+            vis = self._visualization(spell_id)
+            for event, kl in vis.kits_by_event.items():
+                for kit in kl.kits:
+                    self.assertFalse(list(kit.sound_ids),
+                                     f"{vis.name}: proc/tick spell {spell_id} plays a sound (event {event})")
+
+    def test_every_curse_idles_with_its_own_particle(self):
+        idles = {}
+        for spell_id in CURSES:
+            vis = self._visualization(spell_id)
+            particles = tuple(sorted(p for kit in vis.kits_by_event[AURA_IDLE].kits
+                                     for p in kit.particles))
+            self.assertTrue(particles, f"{vis.name}: a curse needs an AURA_IDLE particle")
+            idles[spell_id] = particles
+        self.assertEqual(len(set(idles.values())), len(CURSES), idles)
+
+    def test_drain_essence_holds_a_channel(self):
+        vis = self._visualization(1331)
+        kits = list(vis.kits_by_event[CHANNELING].kits)
+        self.assertTrue(any(k.loop and k.animation_name == "CastLoop" and k.sound_ids for k in kits))
+        self.assertNotIn(CAST, vis.kits_by_event, "a CastRelease would cut into the channel")
+
+    def test_rot_field_lies_on_the_ground(self):
+        vis = self._visualization(1336)
+        self.assertIn(GROUND_ACTIVE, vis.kits_by_event)
+        self.assertIn(GROUND_EXPIRED, vis.kits_by_event)
+        ground = vis.kits_by_event[GROUND_ACTIVE].kits
+        self.assertTrue(any(k.particles and k.HasField("light") for k in ground))
+
+    def test_new_kit_sounds_have_impact(self):
+        # Each new active has a sound on its cast or its impact.
+        for spell_id in (1330, 1333, 1334, 1335, 1336, 1345, 1347, 1352, 1360, 1363):
+            vis = self._visualization(spell_id)
+            sounds = [s for event in (CAST, IMPACT) if event in vis.kits_by_event
+                      for kit in vis.kits_by_event[event].kits for s in kit.sound_ids]
+            self.assertTrue(sounds, f"{vis.name}: no cast or impact sound")
 
     def test_particles_pass_the_hpar_validator(self):
         sys.path.insert(0, str(ROOT / "tools/particle_gen"))

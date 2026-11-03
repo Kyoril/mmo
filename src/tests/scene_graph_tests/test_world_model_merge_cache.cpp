@@ -89,7 +89,11 @@ namespace
 				ref.meshPath = TriangleMeshPath;
 				ref.position = Vector3(static_cast<float>(i) * 10.0f, 0.0f, 0.0f);
 				ref.name = "Triangle";
-				m_model->AddGroup().AddMeshRef(ref);
+
+				// Rooms: outdoor groups would go into the clusters instead of the per-group merge under test
+				WorldModelGroup& group = m_model->AddGroup();
+				group.SetFlags(WorldModelGroupFlags::Interior);
+				group.AddMeshRef(ref);
 			}
 		}
 

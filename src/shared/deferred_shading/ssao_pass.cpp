@@ -5,15 +5,19 @@
 #include "scene_graph/camera.h"
 
 // --- Shader bytecode seam ---------------------------------------------------------------
-// The only backend-bound fact in this file: which compiled blob to hand CreateShader. The
-// deferred path is D3D11-only today (there are no .metal shaders in the tree and
-// ShaderCompilerMetal is a stub), so only the D3D_SM5 blob exists. When a Metal deferred
-// path appears, this seam gains a branch and nothing below it changes.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/PS_Ssao.h"
-#	include "shaders/PS_SsaoBlur.h"
-#	include "shaders/PS_SsaoDepth.h"
+// The only backend-bound fact in this file: which compiled blob to hand CreateShader. D3D11
+// gets fxc's DXBC, Metal the blob hlsl2msl generates from the same HLSL under the same symbol.
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/PS_Ssao.h"
+#		include "shaders/PS_SsaoBlur.h"
+#		include "shaders/PS_SsaoDepth.h"
+#	else
+#		include "PS_Ssao.metal.h"
+#		include "PS_SsaoBlur.metal.h"
+#		include "PS_SsaoDepth.metal.h"
+#	endif
 #	define MMO_SSAO_PS_BYTECODE g_PS_Ssao
 #	define MMO_SSAO_PS_SIZE std::size(g_PS_Ssao)
 #	define MMO_SSAO_BLUR_PS_BYTECODE g_PS_SsaoBlur

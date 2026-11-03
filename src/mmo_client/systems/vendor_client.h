@@ -26,6 +26,18 @@ namespace mmo
 			const ItemInfo* itemData = nullptr;
 		};
 
+		/// One item the player sold to a vendor during this session and can buy back again.
+		struct VendorBuyBackEntry
+		{
+			uint32 slot;
+			uint32 itemId;
+			uint32 displayId;
+			uint32 stackCount;
+			uint32 price;
+			uint32 durability;
+			const ItemInfo* itemData = nullptr;
+		};
+
 	public:
 		VendorClient(RealmConnector& connector, DBCache<ItemInfo, game::client_realm_packet::ItemQuery>& itemCache);
 		~VendorClient();
@@ -46,14 +58,23 @@ namespace mmo
 
 		void BuyItem(uint32 index, uint8 count) const;
 
+		/// Asks the server to buy back the item at the given index of the buyback list.
+		void BuyBackItem(uint32 index) const;
+
 		void CloseVendor();
 
 		uint32 GetNumVendorItems() const;
 
 		const std::vector<VendorItemEntry>& GetVendorItems() const { return m_vendorItems; }
 
+		uint32 GetNumBuyBackItems() const;
+
+		const std::vector<VendorBuyBackEntry>& GetBuyBackItems() const { return m_buyBackItems; }
+
 	private:
 		PacketParseResult OnListInventory(game::IncomingPacket& packet);
+
+		PacketParseResult OnBuyBackList(game::IncomingPacket& packet);
 
 	private:
 		RealmConnector& m_realmConnector;
@@ -61,6 +82,7 @@ namespace mmo
 		RealmConnector::PacketHandlerHandleContainer m_packetHandlerConnections;
 
 		std::vector<VendorItemEntry> m_vendorItems;
+		std::vector<VendorBuyBackEntry> m_buyBackItems;
 		uint32 m_vendorPendingRequestCount = 0;
 		uint64 m_vendorGuid = 0;
 	};

@@ -5,7 +5,9 @@
 #include "base/non_copyable.h"
 #include "graphics/material.h"
 
+#include <functional>
 #include <map>
+#include <span>
 
 #include "base/utilities.h"
 
@@ -37,7 +39,16 @@ namespace mmo
 
 		void RemoveAllUnreferenced();
 
+		/// @brief Called for every .hmat after it was deserialized and before its GPU shaders are created.
+		using PostLoadHook = std::function<void(Material& material, std::span<const uint8> fileBytes)>;
+
+		/// @brief Installs a hook that may replace a freshly loaded material's shaders, e.g. compile missing or
+		///        stale ones in development clients. Without a hook, materials load as stored.
+		/// @param hook The hook, or nullptr to remove it.
+		void SetPostLoadHook(PostLoadHook hook) { m_postLoadHook = std::move(hook); }
+
 	private:
 		std::map<std::string, MaterialPtr, StrCaseIComp> m_materials;
+		PostLoadHook m_postLoadHook;
 	};
 }

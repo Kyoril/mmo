@@ -185,6 +185,42 @@ TEST_CASE("Two quads with the same material merge into one submesh", "[mesh_merg
 	CHECK(readBack.indices == bucket.indices);
 }
 
+TEST_CASE("Merged mesh bounds cover the geometry only, not the origin", "[mesh_merge]")
+{
+	const MeshPtr quad = QuadMesh("test/mesh_merge/FarQuad.hmsh");
+
+	// Far from the origin, like a town's outer wall group far from the town's centre
+	Matrix4 far;
+	far.MakeTransform(Vector3(300.0f, 5.0f, 200.0f), Vector3(1.0f, 1.0f, 1.0f), Quaternion::Identity);
+
+	MeshReadBackCache cache;
+	MeshMergeAccumulator accumulator(cache);
+	REQUIRE(accumulator.Add(*quad, far));
+
+	const MeshPtr merged = CreateMergedMesh("test/mesh_merge/FarMerged", accumulator.GetParts()[0]);
+	REQUIRE(merged);
+
+	AABB expected;
+	bool first = true;
+	for (const WorldModelMergeVertex& vertex : QuadVertices())
+	{
+		const Vector3 position = far * vertex.pos;
+		if (first)
+		{
+			expected = AABB(position, position);
+			first = false;
+		}
+		else
+		{
+			expected.Combine(position);
+		}
+	}
+
+	CheckVector(merged->GetBounds().min, expected.min);
+	CheckVector(merged->GetBounds().max, expected.max);
+	CHECK(merged->GetBounds().min.x > 250.0f);
+}
+
 TEST_CASE("A mirrored placement flips the triangle winding", "[mesh_merge]")
 {
 	const MeshPtr quad = QuadMesh("test/mesh_merge/Quad.hmsh");

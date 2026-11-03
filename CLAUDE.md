@@ -22,6 +22,7 @@ The following systems are fully implemented and should not be suggested as futur
 - **Foliage & particle systems**
 - **Unit stat system** — creatures use stat formulas instead of hardcoded values
 - **Asset browser** — visual thumbnails, text search, drag & drop from browser into viewport
+- **Pet system** — temporary swarms and persistent (stored, nameable, class-locked) pets, taming, pet AI, pet frame/bar, GM pet commands; authoring guide in [docs/pets.md](docs/pets.md)
 
 ## Agentic Workflow
 
@@ -84,6 +85,15 @@ Without the bump, incompatible peers are not rejected — they authenticate and 
 each other. `tools/protocol_version_check.py` runs as the first step of the gate and fails
 on changes it can see; it cannot see a payload change inside a handler, so that case still
 needs judgement. Record the bump in [docs/protocol_versions.md](docs/protocol_versions.md).
+
+## Material Compiler Version
+
+Any change to the shader code the material compiler generates (`MaterialCompilerHlsl`, the
+material graph nodes' code generation, or a platform backend such as `ShaderCompilerMetal`)
+requires bumping `material_compiler_version::Generator` in `src/shared/graphics/shader_build_info.h`,
+or that platform's backend version in `GetBackendVersion`. Without the bump, stale shaders are not
+detected in editors and development clients, and their caches keep serving the old code. Releases
+always cook fresh shaders, see [the content cooking design](docs/superpowers/specs/2026-10-31-content-cooking-design.md).
 
 ## Build Commands
 
@@ -220,6 +230,8 @@ The bulk of the engine logic lives here as static libraries consumed by all exec
 
 **`NonCopyable`** (`src/shared/base/non_copyable.h`) — Base class for all resource-managing objects.
 
+**`RealmModule`** (`src/realm_server/modules/realm_module.h`) — Realm-side gameplay features (friends, guilds, bug reports) live in a module that registers its own client packet handlers and reacts to session hooks, instead of in `Player`. New realm features go here: add a folder-local module, register it in `program.cpp`, and give it a `game::Subsystem` (`src/shared/game/subsystem.h`) so it can be switched off at runtime (`subsystem <NAME> off`, realm `POST /subsystem`). Per-character state belongs in the module, keyed by guid.
+
 **Game object naming convention**: server-side objects end in `_s` (e.g., `GameUnitS`, `GamePlayerS`); client-side end in `_c` (e.g., `GameUnitC`, `GamePlayerC`).
 
 ### Lua Scripting
@@ -247,6 +259,15 @@ UI strings are localized. Localized strings are in formatted text files located 
 UI lua files and xml files should not contain hardcoded strings, but string constants which then will be used as a key in Localization.txt.
 
 If you add or modify localized strings, add them in all locales (at least as a placeholder).
+
+### UI iteration without the client
+
+`ui_test` (`cmake --build build --config Release -t ui_test`) renders GlueUI/GameUI with the real
+frame_ui code outside the client, hot-reloads XML/Lua/TOC changes, and writes
+`artifacts/ui_test/latest.png` plus `status.json` (errors, unmocked API calls) after every load.
+The client's C++ Lua API is replaced by Lua mocks in `tools/ui_test/mocks/`; window states are
+scenarios in `tools/ui_test/scenarios/`. Use it to check UI changes visually — see
+[tools/ui_test/README.md](tools/ui_test/README.md).
 
 Text property values in XML are automatically localized. In lua, you should use the `Localize("KEY")` method. If a key is not available in the current locales Localization.txt file, the KEY is printed as is.
 

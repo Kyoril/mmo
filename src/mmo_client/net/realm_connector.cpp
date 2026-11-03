@@ -10,6 +10,7 @@
 #include "base/random.h"
 #include "base/sha1.h"
 #include "console/console_var.h"
+#include "game/pet_packets.h"
 #include "game/spell_target_map.h"
 #include "game_states/login_state.h"
 #include "log/default_log_levels.h"
@@ -590,6 +591,40 @@ namespace mmo
 		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatLearnSpell);
 			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetAdd(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetAdd);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetRemove(const uint32 petEntry)
+	{
+		sendSinglePacket([petEntry](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetRemove);
+			packet << io::write<uint32>(petEntry);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetTame()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetTame);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetMake()
+	{
+		sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPetMake);
 			packet.Finish();
 			});
 	}
@@ -1200,6 +1235,18 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::BuyBackItem(uint64 vendorGuid, uint32 buyBackSlot)
+	{
+		sendSinglePacket([vendorGuid, buyBackSlot](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::BuyBackItem);
+			packet
+				<< io::write<uint64>(vendorGuid)
+				<< io::write<uint32>(buyBackSlot)
+				;
+			packet.Finish();
+			});
+	}
+
 	void RealmConnector::AddAttributePoint(uint32 attribute)
 	{
 		sendSinglePacket([attribute](game::OutgoingPacket& packet) {
@@ -1246,6 +1293,53 @@ namespace mmo
 		sendSinglePacket([spellId](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CancelAura);
 			packet << io::write<uint32>(spellId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetCommand(const uint8 command, const uint64 targetGuid, const uint32 param)
+	{
+		game::PetCommandRequest request;
+		request.command = command;
+		request.target = targetGuid;
+		request.param = param;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCommand);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetCastSpell(const uint32 spellId, const SpellTargetMap& targetMap)
+	{
+		game::PetCastSpellRequest request;
+		request.spellId = spellId;
+		request.targetMap = targetMap;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetCastSpell);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetRename(const String& name)
+	{
+		game::PetRenameRequest request;
+		request.name = name;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetRename);
+			packet << request;
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PetNameQuery(const uint64 petGuid)
+	{
+		game::PetNameQueryRequest request;
+		request.guid = petGuid;
+		sendSinglePacket([&request](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::PetNameQuery);
+			packet << request;
 			packet.Finish();
 			});
 	}

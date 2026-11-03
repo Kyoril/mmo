@@ -3,6 +3,7 @@
 #include "console.h"
 #include "console_commands.h"
 #include "console_var.h"
+#include "login_account_memory.h"
 #include "event_loop.h"
 #include "platform.h"
 #include "screen.h"
@@ -93,6 +94,10 @@ namespace mmo
 
 	/// Connections applying gxWindow, gxMonitor and gxResolution to the game window.
 	static scoped_connection_container s_displayModeChanged;
+
+	/// Connection which keeps the remembered account name in sync with the rememberAccountName
+	/// setting, so that switching the option off erases the stored name right away.
+	static scoped_connection s_rememberAccountNameChanged;
 
 	/// True if no config file provided a resolution, i.e. the game runs for the first time.
 	static bool s_firstLaunch = false;
@@ -361,7 +366,22 @@ namespace mmo
 		
 		auto* const localeCVar = ConsoleVarMgr::RegisterConsoleVar("locale", "The locale of the game client. Changing this requires a restart!", "enUS");
 
+		// The login screen can remember the account name of the last login. The password is never
+		// stored, so there is no cvar for it.
+		auto* const rememberAccountNameCVar = ConsoleVarMgr::RegisterConsoleVar(RememberAccountNameCVar, "Whether the login screen remembers the account name of the last login.", "0");
+		auto* const accountNameCVar = ConsoleVarMgr::RegisterConsoleVar(RememberedAccountNameCVar, "Account name of the last login, shown on the login screen while rememberAccountName is enabled.", "");
+
 		console_commands::ConsoleCommand_Run("run", configFile);
+
+		// Config.cfg is plain text and may carry an account name while the option is off, either
+		// because it was hand edited or because the option was switched off by an older build.
+		(void)ApplyRememberedAccountName(*rememberAccountNameCVar, *accountNameCVar, accountNameCVar->GetStringValue());
+
+		s_rememberAccountNameChanged = rememberAccountNameCVar->Changed.connect(
+			[accountNameCVar](ConsoleVar& var, const std::string&)
+			{
+				(void)ApplyRememberedAccountName(var, *accountNameCVar, accountNameCVar->GetStringValue());
+			});
 
 		RegisterGraphicsCVars();
 

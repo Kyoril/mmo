@@ -199,6 +199,10 @@ namespace mmo
 		/// @return The target GUID, or 0 if no target.
 		uint64 GetTargetGuid() const { return m_targetGuid; }
 
+		/// @brief Gets the guid of the unit's owner (object_fields::Owner).
+		/// @return The owner GUID, or 0 if the unit has no owner.
+		uint64 GetOwnerGuid() const { return m_ownerGuid; }
+
 		/// @brief Gets the replicated stand state (unit_stand_state::Type).
 		uint32 GetStandState() const { return m_standState; }
 
@@ -289,6 +293,13 @@ namespace mmo
 		/// @return True if this unit is friendly to the other unit.
 		bool IsFriendlyTo(const BotUnit& other) const;
 
+		/// @brief Gets the guid the reaction checks treat this unit as: its owner if it has one,
+		/// otherwise its own guid.
+		uint64 GetReactionOwnerGuid() const;
+
+		/// @brief Checks whether this unit is owned by a player (a player's pet, summon or totem).
+		bool IsOwnedByPlayer() const;
+
 		/// @brief Checks if this unit can be attacked by the specified unit.
 		/// 
 		/// This considers neutral creatures (like boars) as attackable even if
@@ -363,6 +374,18 @@ namespace mmo
 		/// @brief Gets the unspent talent points (the bot's own player only).
 		uint32 GetTalentPoints() const { return m_talentPoints; }
 
+		/// @brief Sets the unspent attribute points (the bot's own player only).
+		void SetAvailableAttributePoints(uint32 points) { m_availableAttributePoints = points; }
+
+		/// @brief Gets the unspent attribute points (the bot's own player only).
+		uint32 GetAvailableAttributePoints() const { return m_availableAttributePoints; }
+
+		/// @brief Sets the total value of an attribute (attribute id < MaxAttributes).
+		void SetAttribute(uint32 attributeId, int32 value) { if (attributeId < MaxAttributes) { m_attributes[attributeId] = value; } }
+
+		/// @brief Gets the total value of an attribute, 0 for an unknown attribute id.
+		int32 GetAttribute(uint32 attributeId) const { return attributeId < MaxAttributes ? m_attributes[attributeId] : 0; }
+
 		/// @brief Gets the current experience points (players only).
 		uint32 GetXp() const { return m_xp; }
 
@@ -389,6 +412,9 @@ namespace mmo
 
 		/// @brief Sets the target GUID.
 		void SetTargetGuid(uint64 targetGuid) { m_targetGuid = targetGuid; }
+
+		/// @brief Sets the guid of the unit's owner (object_fields::Owner), 0 if it has none.
+		void SetOwnerGuid(uint64 ownerGuid) { m_ownerGuid = ownerGuid; }
 
 		/// @brief Sets the replicated stand state.
 		void SetStandState(uint32 standState) { m_standState = standState; }
@@ -473,6 +499,8 @@ namespace mmo
 		uint32 m_xp = 0;
 		uint32 m_classId = 0;
 		uint32 m_talentPoints = 0;
+		uint32 m_availableAttributePoints = 0;
+		std::array<int32, MaxAttributes> m_attributes{};
 		uint32 m_currentCastSpell = 0;
 		GameTime m_currentCastEndMs = 0;
 		uint32 m_nextLevelXp = 0;
@@ -484,6 +512,7 @@ namespace mmo
 		uint32 m_displayId = 0;
 		uint32 m_unitFlags = 0;
 		uint32 m_npcFlags = 0;
+		uint64 m_ownerGuid = 0;
 		uint64 m_targetGuid = 0;
 		uint32 m_standState = 0;
 		uint32 m_moodEmote = 0;

@@ -7,6 +7,7 @@
 #include <span>
 
 #include "editors/editor_instance.h"
+#include "imgui_node_layout_store.h"
 #include "graphics/render_texture.h"
 #include "graphics/material.h"
 #include "scene_graph/scene.h"
@@ -141,6 +142,8 @@ namespace mmo
 		float m_columnWidth { 400.0f };
 		CreateNodeDialog m_createDialog;
 		std::shared_ptr<Material> m_material;
+		/// Outlives the graph, which holds a pointer to it.
+		ImGuiNodeLayoutStore m_layoutStore;
 		std::unique_ptr<MaterialGraph> m_graph;
 		ImGuiTextFilter m_surfaceTypeFilter;
 		ImGuiTextFilter m_layerSurfaceTypeFilters[4];
@@ -154,5 +157,7 @@ namespace mmo
 		std::array<String, 4> m_pixelShaderCode;
 		int m_selectedShaderIndex { 0 };
 		bool m_shaderCodeCaptured { false };
+		/// Set when the stored shaders of the current platform were stale on open and got rebuilt in memory.
+		bool m_shadersRebuiltOnOpen { false };
 	};
 }

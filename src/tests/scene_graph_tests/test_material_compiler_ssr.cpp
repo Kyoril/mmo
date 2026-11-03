@@ -6,7 +6,7 @@
 
 #include "graphics/material.h"
 #include "graphics/shader_compiler.h"
-#include "graphics_d3d11/material_compiler_d3d11.h"
+#include "graphics/material_compiler_hlsl.h"
 #include "graphics_d3d11/shader_compiler_d3d11.h"
 
 using namespace mmo;
@@ -19,7 +19,7 @@ using namespace mmo;
 
 namespace
 {
-	String CompilePixelVariant(const MaterialCompilerD3D11& compiler, const PixelShaderType type)
+	String CompilePixelVariant(const MaterialCompilerHlsl& compiler, const PixelShaderType type)
 	{
 		ShaderCompilerD3D11 shaderCompiler;
 
@@ -33,7 +33,7 @@ namespace
 		return output.succeeded ? String() : (output.errorMessage.empty() ? String("<no message>") : output.errorMessage);
 	}
 
-	void RequireAllVariantsCompile(const MaterialCompilerD3D11& compiler)
+	void RequireAllVariantsCompile(const MaterialCompilerHlsl& compiler)
 	{
 		CHECK(CompilePixelVariant(compiler, PixelShaderType::Forward) == "");
 		CHECK(CompilePixelVariant(compiler, PixelShaderType::GBuffer) == "");
@@ -41,7 +41,7 @@ namespace
 		CHECK(CompilePixelVariant(compiler, PixelShaderType::UI) == "");
 	}
 
-	void CompileMaterial(MaterialCompilerD3D11& compiler)
+	void CompileMaterial(MaterialCompilerHlsl& compiler)
 	{
 		Material material("ScreenSpaceReflectionTest");
 		ShaderCompilerD3D11 shaderCompiler;
@@ -53,7 +53,7 @@ TEST_CASE("Screen space reflection compiles with default inputs", "[material_com
 {
 	for (const bool lit : { true, false })
 	{
-		MaterialCompilerD3D11 compiler;
+		MaterialCompilerHlsl compiler;
 		compiler.SetLit(lit);
 		compiler.SetTranslucent(true);
 
@@ -70,7 +70,7 @@ TEST_CASE("Screen space reflection compiles with every input connected", "[mater
 {
 	for (const bool lit : { true, false })
 	{
-		MaterialCompilerD3D11 compiler;
+		MaterialCompilerHlsl compiler;
 		compiler.SetLit(lit);
 		compiler.SetTranslucent(true);
 

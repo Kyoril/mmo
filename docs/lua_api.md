@@ -99,9 +99,32 @@ This document provides a comprehensive reference of all Lua functions available 
 **Description:** Returns the cost of increasing the specified attribute for the unit.
 
 ### UnitStat
-**Parameters:** `unitName` (string) - The name of the unit, `statId` (number) - The ID of the stat  
+**Parameters:** `unitName` (string) - The name of the unit, `statId` (number) - The attribute id  
 **Returns:** number, number - Base value and modifier value  
-**Description:** Returns the base value and modifier value of the specified stat for the unit.
+**Description:** Returns the base value and modifier value of the specified attribute for the unit.
+
+### GetNumAttributes
+**Parameters:** None  
+**Returns:** number - The number of attributes defined by the game data  
+**Description:** Attributes (Stamina, Strength, ...) are game data (`attributes.proto`), not code. Iterate them with `GetAttributeInfo(0 .. GetNumAttributes() - 1)`.
+
+### GetAttributeInfo
+**Parameters:** `index` (number) - 0-based display index (attributes are shown in ascending id order)  
+**Returns:** number, string, string - Attribute id, localized name and localized description (-1, "", "" if out of range)  
+**Description:** The id is what `UnitStat`, `UnitAttributeCost`, `AddAttributePoint` and the unit handle stat functions take.
+
+### GetAttributeName
+**Parameters:** `attributeId` (number) - The attribute id  
+**Returns:** string - The localized attribute name, "" if no such attribute exists  
+
+### GetAttributeLevelUpText
+**Parameters:** `attributeId` (number) - The attribute id  
+**Returns:** string - The localized level up chat line of the attribute with `%d` for the gained amount, "" if none  
+
+### GetLevelUpAttributeGain
+**Parameters:** `attributeId` (number) - The attribute id  
+**Returns:** number - How much the attribute increased with the most recent level up  
+**Description:** `PLAYER_LEVEL_UP` passes `newLevel, health, mana, talentPoints, attributePoints`; the attribute gains are read with this function.
 
 ### UnitArmor
 **Parameters:** `unitName` (string) - The name of the unit  
@@ -139,9 +162,9 @@ This document provides a comprehensive reference of all Lua functions available 
 **Description:** Returns a handle to the specified unit.
 
 ### AddAttributePoint
-**Parameters:** `attribute` (number) - The attribute ID to add a point to  
+**Parameters:** `attribute` (number) - The attribute id to add a point to  
 **Returns:** None  
-**Description:** Adds an attribute point to the specified attribute.
+**Description:** Adds an attribute point to the specified attribute. Ids that are no defined attribute are rejected.
 
 ## Movement Functions
 
@@ -895,7 +918,8 @@ Several global objects are available for use in Lua scripts:
 - **GetIcon()**: Returns the item's icon path
 - **sellPrice** (number): The item's sell price
 - **attackSpeed** (number): The item's attack speed
-- **GetStatType(index)**: Returns the type of the stat at the specified index
+- **GetStatType(index)**: Returns the localization key of the stat at the specified index, or nil for an attribute stat or an unused slot
+- **GetStatAttribute(index)**: Returns the attribute id the stat at the specified index increases, or -1 if it is no attribute stat (name it with `GetAttributeName`)
 - **GetStatValue(index)**: Returns the value of the stat at the specified index
 - **GetSpellId(index)**: Returns the ID of the spell at the specified index
 - **GetSpellTriggerType(index)**: Returns the trigger type of the spell at the specified index
@@ -984,7 +1008,8 @@ Several global objects are available for use in Lua scripts:
 - **GetEntry()**: Returns the item's entry ID
 - **GetSpell(index)**: Returns the spell at the specified index
 - **GetSpellTriggerType(index)**: Returns the trigger type of the spell at the specified index
-- **GetStatType(index)**: Returns the type of the stat at the specified index
+- **GetStatType(index)**: Returns the localization key of the stat at the specified index, or nil for an attribute stat or an unused slot
+- **GetStatAttribute(index)**: Returns the attribute id the stat at the specified index increases, or -1 if it is no attribute stat
 - **GetStatValue(index)**: Returns the value of the stat at the specified index
 
 ### Spell

@@ -77,6 +77,19 @@ namespace mmo
             uint16 stacks) const;
 
         /**
+         * @brief Creates command to sell a specific stack count from a slot to a vendor.
+         *
+         * Behaves like CreateRemoveItem, but the removed item is offered for buyback instead of
+         * being destroyed. Charging the player and paying out the sell price is up to the caller.
+         * @param slot The slot to sell the item from.
+         * @param stacks Number of stacks to sell.
+         * @return Unique pointer to the sell item command.
+         */
+        std::unique_ptr<IInventoryCommand> CreateSellItem(
+            InventorySlot slot,
+            uint16 stacks) const;
+
+        /**
          * @brief Creates command to swap items between slots.
          * @param sourceSlot The source inventory slot.
          * @param destSlot The destination inventory slot.

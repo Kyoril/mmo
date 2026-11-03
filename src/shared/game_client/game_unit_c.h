@@ -398,8 +398,23 @@ namespace mmo
 		bool IsHostile() const;
 
 	public:
-		/// @brief Returns the current health of this unit.
-		uint32 GetHealth() const { return Get<uint32>(object_fields::Health); }
+		/// @brief Returns the current health of this unit. For a unit with regeneration prediction
+		///	(the own player) this extrapolates the last synced value with the replicated rate.
+		uint32 GetHealth() const;
+
+		/// @brief Enables extrapolating health and power between server syncs with the replicated
+		///	regeneration rates (HealthRegen / PowerRegen fields). Only the own player predicts.
+		/// @param enabled Whether to predict.
+		void SetRegenerationPrediction(bool enabled);
+
+		/// @brief Whether health and power are extrapolated between server syncs.
+		[[nodiscard]] bool PredictsRegeneration() const { return m_predictRegeneration; }
+
+	protected:
+		/// Re-anchors the regeneration prediction when a synced value or rate arrived.
+		void OnFieldsApplied() override;
+
+	public:
 
 		/// @brief Gets the maximum health of this unit.
 		uint32 GetMaxHealth() const { return Get<uint32>(object_fields::MaxHealth); }
@@ -799,9 +814,27 @@ namespace mmo
 
 		const proto_client::FactionTemplateEntry *GetFactionTemplate() const { return m_factionTemplate; }
 
+		/// @brief Checks whether this unit is friendly to another unit. Both units are first resolved to
+		///	the top of their owner chain (object_fields::Owner, see owner_chain::ResolveTopOwner): units with
+		///	the same top owner are friendly, otherwise the top owners' factions decide.
 		bool IsFriendlyTo(const GameUnitC &other) const;
 
+		/// @brief Checks whether this unit is hostile to another unit, resolving owners like IsFriendlyTo.
 		bool IsHostileTo(const GameUnitC &other) const;
+
+		/// @brief Gets the unit at the top of this unit's owner chain, as far as it is known to the client.
+		/// @return The top owner, or this unit if it has no owner in sight.
+		const GameUnitC &GetTopOwner() const;
+
+		/// @brief Checks whether this unit is controlled by a player through its owner chain (a player's
+		///	pet or a summon of it). Units owned by creatures (boss adds, NPC swarms) are not, see
+		///	owner_chain::IsOwnedByPlayer.
+		bool IsOwnedByPlayer() const;
+
+		/// @brief Sets the name of a persistent pet (from PetNameQueryResult). A non-empty pet name
+		///	replaces the creature entry's name.
+		/// @param name The pet's name, empty to use the creature entry's name again.
+		void SetPetName(const String &name);
 
 	protected:
 		virtual void OnDisplayIdChanged();
@@ -931,6 +964,9 @@ namespace mmo
 
 		CreatureInfo m_creatureInfo;
 
+		/// The name of a persistent pet, which replaces the creature entry's name when set.
+		String m_petName;
+
 		SceneNode *m_nameComponentNode{nullptr};
 		std::unique_ptr<WorldTextComponent> m_nameComponent;
 
@@ -1039,6 +1075,15 @@ namespace mmo
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;
+
+		/// Health and power are extrapolated between server syncs (own player only).
+		bool m_predictRegeneration = false;
+
+		/// Local time at which health, power or a regeneration rate was last received.
+		GameTime m_regenSyncTime = 0;
+
+		/// Extrapolates a synced value by its replicated rate (per five seconds) since the last sync.
+		[[nodiscard]] int64 PredictRegeneration(int64 value, int64 maxValue, float ratePerFiveSeconds) const;
 
 		/// @brief Sound entry player used to play PlaySound animation notifies (injected by the client, may be null).
 		static SoundEntryPlayer* s_soundEntryPlayer;

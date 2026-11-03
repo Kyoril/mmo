@@ -32,7 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'push' && github.ref || 'develop' }}
+          # Scheduled runs release develop. A manual run releases the branch it was started on; only
+          # develop publishes as nightly-, any other branch as test-nightly-, which the deployer ignores.
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
           fetch-depth: 0
 
       - id: pick
@@ -41,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           commit=$(git rev-parse HEAD)
-          if [ "${{ github.event_name }}" = "push" ]; then prefix="test-nightly-"; else prefix="nightly-"; fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.ref }}" = "refs/heads/develop" ]; then prefix="nightly-"; else prefix="test-nightly-"; fi
           latest=$(gh release list --limit 100 --json tagName,createdAt \
             --jq "[.[] | select(.tagName | startswith(\"$prefix\"))] | sort_by(.createdAt) | last | .tagName // empty")
           previous=""
@@ -147,6 +149,16 @@ jobs:
       - name: Init code submodules (not the data repos)
         run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
 
+      # Only the material files of data/client are needed to cook shaders, not its ~8 GB.
+      - name: Material files of data/client
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
+          git -C data/client checkout --quiet "$sha"
+
       - name: vcpkg build
         uses: johnwason/vcpkg-action@v6
         with:
@@ -176,6 +188,7 @@ jobs:
             '-DMMO_BUILD_TOOLS=ON' `
             '-DMMO_BUILD_TESTS=OFF' `
             '-DMMO_WITH_DEV_COMMANDS=ON' `
+            '-DMMO_MATERIAL_RUNTIME_COMPILE=OFF' `
             '-DMMO_OPENSSL_STATIC=ON' `
             '-DOPENSSL_USE_STATIC_LIBS=TRUE' `
             '-DVCPKG_TARGET_TRIPLET=x64-windows-static-md' `
@@ -184,8 +197,16 @@ jobs:
 
       # This launcher build is only the fallback until a launcher-v* release exists: the deployer
       # swaps in the newest launcher release (.github/workflows/launcher-release.yml).
-      - name: Build client, launcher, crash reporter
-        run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error
+      - name: Build client, launcher, crash reporter, cook
+        run: cmake --build build --config Release --parallel 4 -t mmo_client launcher mmo_error mmo_cook
+
+      - name: Cook D3D11 material shaders
+        run: bin/Release/mmo_cook shaders --data data/client --platform D3D11 --out shaders-d3d11 --github
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shaders-d3d11
+          path: shaders-d3d11
 
       - name: Package
         shell: pwsh
@@ -200,8 +221,189 @@ jobs:
             client-bin.zip
             symbols.zip
 
+  # The macOS client for Apple Silicon (M1 and later): an arm64-only app bundle for macOS 11, the
+  # first release on M1 and the oldest that runs the Metal 2.3 shaders. Players get it from the
+  # patcher as Data's sibling mmo_client.app (deploy/patch/source.txt, condition OSX).
+  client-macos:
+    needs: [check, gate]
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+      OPENSSL_VERSION: "3.5.4"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Check the build version
+        run: |
+          expected="${{ needs.check.outputs.version }}"
+          actual=$(python3 tools/release/version.py)
+          if [ "$actual" != "$expected" ]; then echo "::error::client build would be $actual, release is $expected"; exit 1; fi
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      - name: Material files of data/client
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
+          git -C data/client checkout --quiet "$sha"
+
+      # Build tools only (hlsl2msl, configure checks); nothing from Homebrew may be linked into the
+      # client, the check after the build enforces it. mysql-client satisfies the configure step.
+      - name: Install build tools
+        run: brew install ninja glslang spirv-cross mysql-client
+
+      # Homebrew's OpenSSL targets the runner's macOS; a static build for 11.0 keeps the client
+      # runnable on every M1 release.
+      - name: Cache OpenSSL
+        id: openssl-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/openssl-arm64
+          key: openssl-${{ env.OPENSSL_VERSION }}-arm64-macos${{ env.MACOSX_DEPLOYMENT_TARGET }}
+
+      - name: Build OpenSSL
+        if: steps.openssl-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o openssl.tar.gz "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
+          tar xzf openssl.tar.gz
+          cd "openssl-${OPENSSL_VERSION}"
+          ./Configure darwin64-arm64-cc no-shared no-tests no-docs "--prefix=$HOME/openssl-arm64" "-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}"
+          make -j"$(sysctl -n hw.ncpu)"
+          make install_sw
+
+      - name: Configure CMake
+        run: |
+          mysql="$(brew --prefix mysql-client)"
+          cmake -S . -B build_mac -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DMMO_BUILD_CLIENT=ON \
+            -DMMO_BUILD_LAUNCHER=OFF \
+            -DMMO_BUILD_TESTS=OFF \
+            -DMMO_BUILD_BOTS=OFF \
+            -DMMO_WITH_DEV_COMMANDS=ON \
+            -DMMO_MATERIAL_RUNTIME_COMPILE=OFF \
+            -DMMO_OPENSSL_STATIC=ON \
+            -DOPENSSL_ROOT_DIR="$HOME/openssl-arm64" \
+            -DMYSQL_INCLUDE_DIR="$mysql/include/mysql" \
+            -DMYSQL_LIBRARY="$mysql/lib/libmysqlclient.dylib"
+
+      - name: Build client and cook
+        run: cmake --build build_mac -t mmo_client mmo_cook -j"$(sysctl -n hw.ncpu)"
+
+      # Precompiled Metal libraries (xcrun metal, part of the runner's Xcode).
+      - name: Cook Metal material shaders
+        run: bin/mmo_cook shaders --data data/client --platform METAL --out shaders-metal --github
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shaders-metal
+          path: shaders-metal
+
+      # A player's Mac has nothing but the system: no Homebrew, no Intel slice needed, no newer OS.
+      - name: Check the binary
+        run: |
+          binary=bin/mmo_client.app/Contents/MacOS/mmo_client
+          lipo -archs "$binary"
+          test "$(lipo -archs "$binary")" = "arm64" || { echo "::error::mmo_client is not arm64 only"; exit 1; }
+          minos=$(otool -l "$binary" | awk '/LC_BUILD_VERSION/{found=1} found && $1=="minos"{print $2; exit}')
+          echo "minos $minos"
+          test "$minos" = "$MACOSX_DEPLOYMENT_TARGET" || { echo "::error::mmo_client needs macOS $minos"; exit 1; }
+          foreign=$(otool -L "$binary" | tail -n +2 | awk '{print $1}' | grep -v -E '^(/System/Library/|/usr/lib/)' || true)
+          if [ -n "$foreign" ]; then echo "::error::mmo_client links libraries a player does not have: $foreign"; exit 1; fi
+
+      # Debug info goes into the dSYM (symbols zip), the shipped binary is stripped. Apple Silicon
+      # refuses unsigned code, so the bundle is signed ad hoc after stripping. The patcher downloads
+      # it without a quarantine flag, so Gatekeeper does not ask for a Developer ID.
+      - name: Package
+        run: |
+          cd bin
+          dsymutil mmo_client.app/Contents/MacOS/mmo_client -o mmo_client.app.dSYM
+          strip -S mmo_client.app/Contents/MacOS/mmo_client
+          codesign --force --sign - --timestamp=none mmo_client.app
+          codesign --verify --strict mmo_client.app
+          zip -r -X -y ../client-macos.zip mmo_client.app
+          zip -r -X ../symbols-macos.zip mmo_client.app.dSYM
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-macos
+          path: |
+            client-macos.zip
+            symbols-macos.zip
+
+  # Merges both platforms' shaders into the materials. The deployer lays the overlay over the data
+  # checkout before it compiles the patch (deploy/deployer/mmo_deployer/stage.py).
+  cook:
+    needs: [check, client, client-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-13
+      CXX: g++-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+
+      - name: Init code submodules (not the data repos)
+        run: git submodule update --init deps/asio deps/imgui deps/glfw deps/recastnavigation deps/json
+
+      - name: Material files of data/client
+        run: |
+          sha=$(git rev-parse HEAD:data/client)
+          rm -rf data/client
+          git clone --quiet --filter=blob:none --no-checkout --sparse "$(git config -f .gitmodules submodule.data/client.url)" data/client
+          git -C data/client sparse-checkout set --no-cone '*.hmat' '*.hmf' '*.hgsp'
+          git -C data/client checkout --quiet "$sha"
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-13 g++-13 ninja-build libmysqlclient-dev uuid-dev
+
+      - name: Build mmo_cook
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DMMO_BUILD_TOOLS=ON -DMMO_BUILD_TESTS=OFF
+          cmake --build build --config Release -t mmo_cook
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shaders-d3d11
+          path: shaders-d3d11
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: shaders-metal
+          path: shaders-metal
+
+      - name: Assemble the client overlay
+        run: |
+          cook=$(find bin -type f -name mmo_cook | head -n 1)
+          "$cook" assemble --data data/client --packs shaders-d3d11 shaders-metal --out overlay --github
+          (cd overlay && zip -r -X -q ../client-overlay.zip .)
+          echo "overlay: $(find overlay -name '*.hmat' | wc -l) materials"
+          ls -la client-overlay.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-overlay
+          path: client-overlay.zip
+
+  # Only develop may push to the DockerHub environment, and test-nightly- releases are never
+  # deployed, so test runs on other branches publish without images and server symbols.
   images:
     needs: [check, gate]
+    if: needs.check.outputs.prefix == 'nightly-'
     uses: ./.github/workflows/docker-build.yml
     with:
       ref: ${{ needs.check.outputs.commit }}
@@ -209,7 +411,17 @@ jobs:
     secrets: inherit
 
   publish:
-    needs: [check, gate, client, images]
+    needs: [check, gate, client, client-macos, cook, images]
+    # images is skipped on test runs, which would skip publish too without this condition.
+    if: >-
+      always()
+      && needs.check.outputs.proceed == 'true'
+      && needs.gate.result == 'success'
+      && needs.client.result == 'success'
+      && needs.client-macos.result == 'success'
+      && needs.cook.result == 'success'
+      && (needs.images.result == 'success'
+        || (needs.images.result == 'skipped' && needs.check.outputs.prefix == 'test-nightly-'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -231,19 +443,31 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: client-macos
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-overlay
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
           name: gate-summary
           path: gate
 
       # Unstripped login/realm/world ELFs from the image builds, laid out as the symbol store
       # expects (<module>.elf/<commit>/<module>), so a Linux crash report of this release can be
       # symbolicated: tools/fetch_server_symbols.ps1 -Commit <sha> unpacks it into artifacts/symbols.
-      - uses: actions/download-artifact@v4
+      - if: needs.images.result == 'success'
+        uses: actions/download-artifact@v4
         with:
           pattern: server-symbols-*
           path: server-symbols-raw
           merge-multiple: true
 
       - name: Pack server symbols
+        if: needs.images.result == 'success'
         run: |
           mkdir -p server-symbols
           for module in login_server realm_server world_server; do
@@ -276,6 +500,8 @@ jobs:
         run: |
           python3 tools/release/make_release_manifest.py --repo . --commit "$COMMIT" --previous "$PREVIOUS" \
             --asset client-bin.zip=dist/client-bin.zip --asset symbols.zip=dist/symbols.zip \
+            --asset client-macos.zip=dist/client-macos.zip --asset symbols-macos.zip=dist/symbols-macos.zip \
+            --asset client-overlay.zip=dist/client-overlay.zip \
             --gate-report gate/last_report.json --version "$VERSION" --patch-notes dist/patch_notes.json \
             --out dist/release.json
 
@@ -286,5 +512,8 @@ jobs:
           tag="${PREFIX}${VERSION}"
           # A forced re-release of the same commit has the same version.
           if gh release view "$tag" > /dev/null 2>&1; then tag="${tag}-$(date -u +%Y%m%d%H%M)"; fi
+          server_symbols=""
+          if [ -f dist/server-symbols.zip ]; then server_symbols=dist/server-symbols.zip; fi
           gh release create "$tag" --target "$COMMIT" --prerelease --title "Patch ${VERSION}" --notes-file notes.md \
-            dist/client-bin.zip dist/symbols.zip dist/server-symbols.zip dist/release.json
+            dist/client-bin.zip dist/symbols.zip dist/client-macos.zip dist/symbols-macos.zip \
+            dist/client-overlay.zip $server_symbols dist/release.json

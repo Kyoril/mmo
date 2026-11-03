@@ -129,6 +129,23 @@ namespace mmo
 		/// @returns game::inventory_change_failure::Okay if succeeded.
 		InventoryChangeFailure RemoveItem(uint16 absoluteSlot, uint16 stacks = 0, bool sold = false);
 
+		/// Gets the item that currently sits in the given buyback slot, if any.
+		/// Buyback slots only exist for the duration of a world session and are never persisted.
+		/// @param buyBackSlot Zero based buyback slot index (0 .. player_buy_back_slots::Count_ - 1).
+		/// @returns The item instance, or nullptr if the slot is empty or the index is out of range.
+		[[nodiscard]] std::shared_ptr<GameItemS> GetBuyBackItem(uint8 buyBackSlot) const;
+
+		/// Gets the amount of money the owner has to pay to buy the item in the given buyback slot back.
+		/// @param buyBackSlot Zero based buyback slot index (0 .. player_buy_back_slots::Count_ - 1).
+		/// @returns The buyback price, or 0 if the slot is empty or the index is out of range.
+		[[nodiscard]] uint32 GetBuyBackPrice(uint8 buyBackSlot) const;
+
+		/// Moves the item in the given buyback slot back into the owner's inventory. The caller is
+		/// responsible for charging the buyback price (see GetBuyBackPrice).
+		/// @param buyBackSlot Zero based buyback slot index (0 .. player_buy_back_slots::Count_ - 1).
+		/// @returns game::inventory_change_failure::Okay if succeeded.
+		InventoryChangeFailure BuyBackItem(uint8 buyBackSlot);
+
 		/// Tries to remove an item by it's guid. This is basically just a shortcut to findItemByGUID() and removeItem().
 		/// @param guid The item guid.
 		/// @param stacks The number of stacks to remove. If 0, ALL stacks will be removed. Stacks are capped automatically,
@@ -259,7 +276,7 @@ namespace mmo
 		void AddItemToSlot(std::shared_ptr<GameItemS> item, uint16 slot) override;
 		[[nodiscard]] ItemValidator &GetValidator() override;
 		[[nodiscard]] SlotManager &GetSlotManager() override;
-		void RemoveItemFromSlot(uint16 slot, uint16 stacks) override;
+		void RemoveItemFromSlot(uint16 slot, uint16 stacks, bool sold) override;
 		void SwapItemSlots(uint16 slot1, uint16 slot2) override;
 		bool SplitStack(uint16 sourceSlot, uint16 destSlot, uint16 count) override;
 		bool MergeStacks(uint16 sourceSlot, uint16 destSlot) override;

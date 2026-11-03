@@ -95,6 +95,16 @@ def worktree_up_message():
 	return "**Bug loop resumed** — the fix worktree works again"
 
 
+def claude_down_message(error):
+	return ("**Bug loop paused** — Claude cannot run on the loop machine, so triage, fixes, refixes and "
+		"features wait (no attempt, no decision is used up): {}. If the login expired, run `claude` and "
+		"`/login` as the user the scheduled task runs as.".format(error[-400:]))
+
+
+def claude_up_message():
+	return "**Bug loop resumed** — Claude runs again; waiting decisions and fixes go ahead"
+
+
 def _duration(previous, now):
 	try:
 		seconds = max(0, int((now - datetime.datetime.fromisoformat(previous.get("since"))).total_seconds()))

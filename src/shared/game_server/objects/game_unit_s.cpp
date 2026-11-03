@@ -3,15 +3,19 @@
 #include "game_unit_s.h"
 
 #include "game_server/cc_movement_controller.h"
+#include "game_server/pets/pet_manager.h"
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
+#include "game_server/world/world_instance.h"
 #include "game_server/objects/game_player_s.h"
 #include "base/assign_on_exit.h"
 #include "base/utilities.h"
 #include "base/localization.h"
 #include "binary_io/vector_sink.h"
 #include "game/chat_type.h"
+#include "game/spell_negativity.h"
 
+#include <cmath>
 #include <map>
 #include <memory>
 #include "game/id_mask.h"
@@ -44,16 +48,6 @@ namespace mmo
 		result += (statValue - baseValue) * factor;
 
 		return result;
-	}
-
-	uint32 UnitStats::GetMaxHealthFromStamina(const uint32 stamina)
-	{
-		return DeriveFromBaseWithFactor(stamina, 20, 10);
-	}
-
-	uint32 UnitStats::GetMaxManaFromIntellect(const uint32 intellect)
-	{
-		return DeriveFromBaseWithFactor(intellect, 20, 15);
 	}
 
 	PendingMovementChange::PendingMovementChange()
@@ -180,6 +174,9 @@ namespace mmo
 
 	void GameUnitS::RefreshStats()
 	{
+		// Regeneration rates are about to be recomputed: everything regenerated so far was earned
+		// at the old rates.
+		SettleRegeneration();
 	}
 
 	const Vector3 &GameUnitS::GetPosition() const
@@ -407,6 +404,12 @@ namespace mmo
 		// fully alive, which drops m_selfHold and every subscription with it.
 		m_spellCast->AbandonCast();
 
+		// Temporary pets never outlive their owner's stay in the world (despawn, logout, map change).
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
+
 		// Capture persistable auras before clearing them: the despawn fires the despawned signal
 		// (via GameObjectS::OnDespawn) which is what triggers a character save, by which point the
 		// live aura list would otherwise already be empty.
@@ -568,22 +571,8 @@ namespace mmo
 
 	UnitMods GameUnitS::GetUnitModByStat(uint8 stat)
 	{
-		switch (stat)
-		{
-		case 1:
-			return unit_mods::StatStrength;
-		case 2:
-			return unit_mods::StatAgility;
-		case 3:
-			return unit_mods::StatIntellect;
-		case 4:
-			return unit_mods::StatSpirit;
-
-		default:
-			break;
-		}
-
-		return unit_mods::StatStamina;
+		ASSERT(stat < MaxAttributes);
+		return static_cast<UnitMods>(unit_mods::AttributeStart + stat);
 	}
 
 	UnitMods GameUnitS::GetUnitModByPower(PowerType power)
@@ -914,6 +903,19 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
+			// A harmful spell cast at something attackable (neutral included) is an attack: assisting
+			// pets join in. Others (a tame, a dispel or an inspect cast at an enemy) are not, or pets
+			// would attack a tame target. A player's target is remembered even before it has pets, so
+			// pets it summons into the fight know what to attack.
+			PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get();
+			if (pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
+			{
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && UnitCanAttack(*victim))
+				{
+					pets->OnOwnerAttack(*victim);
+				}
+			}
+
 			startedCasting(spell);
 
 			// NOTE: Cast-interrupt auras (e.g. Stealth) are intentionally NOT removed here. For instant
@@ -974,6 +976,9 @@ namespace mmo
 
 	uint32 GameUnitS::Damage(uint32 damage, uint32 school, GameUnitS *instigator, DamageType damageType)
 	{
+		// Health regenerated up to this moment counts before the damage lands
+		SettleRegeneration();
+
 		// Developer/test cheat: absorb everything without touching health, threat or procs.
 		// Placed at the top of Damage() deliberately: this is the single choke point every
 		// damage source funnels through (auto-attacks, periodic auras, spell effects), so one
@@ -1024,7 +1029,14 @@ namespace mmo
 			health -= damage;
 		}
 
+		// A unit that can not die takes the hit but is refilled instead of reaching zero health.
+		if (health < 1 && !CanDie())
+		{
+			health = std::max<uint32>(1, GetMaxHealth());
+		}
+
 		Set<uint32>(object_fields::Health, health);
+		OnDamageTaken(instigator, damage);
 		takenDamage(instigator, school, damageType);
 		damageTakenAmount(instigator, damage, school);
 		if (instigator)
@@ -1059,6 +1071,8 @@ namespace mmo
 
 	int32 GameUnitS::Heal(uint32 amount, GameUnitS *instigator)
 	{
+		SettleRegeneration();
+
 		uint32 health = Get<uint32>(object_fields::Health);
 		if (health < 1)
 		{
@@ -1067,6 +1081,10 @@ namespace mmo
 
 		// Raise unit trigger
 		RaiseTrigger(trigger_event::OnHealed, instigator);
+
+		// Every spell heal (direct, periodic, percentage, leech) flows through here, so the
+		// healing taken percentage is applied once, in this single place.
+		amount = ScaleHealingTaken(amount);
 
 		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
 		if (health >= maxHealth)
@@ -1082,6 +1100,11 @@ namespace mmo
 		Set<uint32>(object_fields::Health, health + amount);
 		healedAmount(instigator, amount);
 		return static_cast<int32>(amount);
+	}
+
+	uint32 GameUnitS::ScaleHealingTaken(const uint32 amount) const
+	{
+		return static_cast<uint32>(std::floor(static_cast<float>(amount) * GetHealingTakenMultiplier()));
 	}
 
 	void GameUnitS::GenerateHealingThreat(GameUnitS& healer, uint32 effectiveHealing)
@@ -1121,12 +1144,22 @@ namespace mmo
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
 								   const proto::SpellEntry &spell, uint32 blocked)
 	{
-		if (!m_netUnitWatcher)
+		if (m_netUnitWatcher)
 		{
+			m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
+		// Pets and summons have no connection of their own: whoever owns them (through any number of
+		// owners, e.g. a pet's summon) sees the numbers.
+		if (GetOwnerGuid() != 0)
+		{
+			const GameUnitS& owner = GetTopOwner();
+			if (&owner != this && owner.m_netUnitWatcher)
+			{
+				owner.m_netUnitWatcher->OnOwnedUnitSpellDamageLog(GetGuid(), targetGuid, amount, school, flags, spell, blocked);
+			}
+		}
 	}
 
 	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
@@ -1166,23 +1199,44 @@ namespace mmo
 
 	void GameUnitS::Kill(GameUnitS *killer)
 	{
+		if (!CanDie())
+		{
+			Set<uint32>(object_fields::Health, std::max<uint32>(1, GetMaxHealth()));
+			return;
+		}
+
 		Set<uint32>(object_fields::Health, 0);
 		OnKilled(killer);
 	}
 
 	void GameUnitS::StartRegeneration() const
 	{
-		if (m_regenCountdown.IsRunning())
+		if (m_regenActive)
 		{
 			return;
 		}
 
-		m_regenCountdown.SetEnd(GetAsyncTimeMs() + (constants::OneSecond * 2));
+		// Nothing regenerated while inactive: start counting from now
+		auto& self = const_cast<GameUnitS&>(*this);
+		self.m_regenSettledAt = GetAsyncTimeMs();
+		self.m_regenRemainder.fill(0.0f);
+		m_regenActive = true;
+		self.UpdateRegenRateFields();
+		ScheduleRegenSync();
 	}
 
 	void GameUnitS::StopRegeneration() const
 	{
+		if (!m_regenActive)
+		{
+			return;
+		}
+
+		auto& self = const_cast<GameUnitS&>(*this);
+		self.SettleRegeneration();
+		m_regenActive = false;
 		m_regenCountdown.Cancel();
+		self.UpdateRegenRateFields();
 	}
 
 	void GameUnitS::ApplyAura(std::shared_ptr<AuraContainer> &&aura)
@@ -1353,6 +1407,21 @@ namespace mmo
 			{
 				++it;
 			}
+		}
+	}
+
+	void GameUnitS::ModifyPetPassiveSpell(const uint32 spellId, const bool apply)
+	{
+		if (apply)
+		{
+			m_petPassiveSpells.push_back(spellId);
+			return;
+		}
+
+		const auto it = std::find(m_petPassiveSpells.begin(), m_petPassiveSpells.end(), spellId);
+		if (it != m_petPassiveSpells.end())
+		{
+			m_petPassiveSpells.erase(it);
 		}
 	}
 
@@ -1687,7 +1756,20 @@ namespace mmo
 
 	void GameUnitS::NotifyManaUsed()
 	{
-		m_lastManaUse = GetAsyncTimeMs();
+		NotifyManaUsed(GetAsyncTimeMs());
+	}
+
+	void GameUnitS::NotifyManaUsed(const GameTime now)
+	{
+		// The casting rate starts now; everything before was regenerated at the previous rate
+		SettleRegeneration(now);
+		m_lastManaUse = now;
+
+		// Replicate the casting rate and sync again exactly when the window ends, so clients
+		// switch back to the normal rate in time
+		UpdateRegenRateFields();
+		m_regenCountdown.Cancel();
+		ScheduleRegenSync();
 	}
 
 	void GameUnitS::OnParry()
@@ -1703,7 +1785,7 @@ namespace mmo
 		const GameTime now = GetAsyncTimeMs();
 
 		// Reduce attack time to parry_haste_min_swing_ms if it's higher
-		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
+		const uint32 swingTime = GetAutoAttackTime(weapon_attack::BaseAttack);
 
 		// This is the ideal time (we want to trigger the next attack swing in parry_haste_min_swing_ms from now on)
 		const uint32 idealLastMainHand = now - swingTime + settings.parry_haste_min_swing_ms();
@@ -2583,13 +2665,9 @@ namespace mmo
 
 	float GameUnitS::GetBaseMeleeCritChance() const
 	{
-		// Base crit chance from agility and weapon skill
+		// Base crit chance plus the class's attribute contribution (e.g. 20 agility = 1% crit)
 		float critChance = 5.0f; // Base 5%
-
-		// Add agility contribution - formula approximates classic wow
-		// For most classes: 20 agi = 1% crit
-		const float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
-		critChance += agiContribution;
+		critChance += GetMeleeCritChanceFromAttributes();
 
 		return critChance;
 	}
@@ -2602,10 +2680,7 @@ namespace mmo
 
 	float GameUnitS::GetManaRegenPerFiveSeconds() const
 	{
-		// Regeneration ticks every two seconds (see StartRegeneration), so five seconds are
-		// 2.5 ticks. The aura percentage modifier is applied per tick in RegeneratePower().
-		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
-		return static_cast<float>(GetEffectivePowerRegenPerTick(power_type::Mana, static_cast<int32>(m_manaRegenPerTick))) * ticksPerFiveSeconds;
+		return GetPowerRegenPerSecond(power_type::Mana, false) * 5.0f;
 	}
 
 	float GameUnitS::GetCastingManaRegenPercent() const
@@ -2615,11 +2690,7 @@ namespace mmo
 
 	float GameUnitS::GetCastingManaRegenPerFiveSeconds() const
 	{
-		// Same tick math as GetManaRegenPerFiveSeconds, but without truncating to whole points:
-		// RegeneratePower() carries the fraction over, so over time the casting share is exact.
-		constexpr float ticksPerFiveSeconds = 5000.0f / static_cast<float>(constants::OneSecond * 2);
-		const float powerRegenScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f;
-		return GetCastingManaRegenPerTick() * powerRegenScale * ticksPerFiveSeconds;
+		return GetPowerRegenPerSecond(power_type::Mana, true) * 5.0f;
 	}
 
 	void GameUnitS::UpdateCombatStatFields()
@@ -2628,8 +2699,28 @@ namespace mmo
 		Set<float>(object_fields::SpellHealing, GetCalculatedModifierValue(unit_mods::HealingDone));
 		Set<float>(object_fields::SpellCritChance, Clamp(GetBaseSpellCritChance(), 0.0f, 100.0f));
 		Set<float>(object_fields::MeleeCritChance, Clamp(GetBaseMeleeCritChance(), 0.0f, 100.0f));
+		UpdateRegenRateFields();
+	}
+
+	void GameUnitS::UpdateRegenRateFields()
+	{
+		// Mana is replicated as its normal and its casting rate: the owning client tracks the five
+		// second rule itself. Health and rage are replicated as the rate right now (combat aware).
 		Set<float>(object_fields::ManaRegen, GetManaRegenPerFiveSeconds());
 		Set<float>(object_fields::ManaRegenCasting, GetCastingManaRegenPerFiveSeconds());
+		Set<float>(object_fields::HealthRegen, m_regenActive ? GetHealthRegenPerSecond() * 5.0f : 0.0f);
+
+		const bool casting = IsInFiveSecondRule(GetAsyncTimeMs());
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const float rate = m_regenActive ? GetPowerRegenPerSecond(static_cast<PowerType>(type), casting) : 0.0f;
+			Set<float>(object_fields::PowerRegen + type, rate * 5.0f);
+		}
+	}
+
+	bool GameUnitS::IsInFiveSecondRule(const GameTime now) const
+	{
+		return m_lastManaUse != 0 && now < m_lastManaUse + GetCombatSettings().five_second_rule_ms();
 	}
 
 	float GameUnitS::CriticalHitChance(const GameUnitS &victim, weapon_attack::Type attackType) const
@@ -2663,9 +2754,8 @@ namespace mmo
 		// Every unit can dodge melee attacks. The base chance is configurable via combat settings.
 		float dodgeChance = GetCombatSettings().base_dodge_chance();
 
-		// Add agility contribution - approximately 20 agility = 1% dodge
-		float agiContribution = GetCalculatedModifierValue(unit_mods::StatAgility) / 20.0f;
-		dodgeChance += agiContribution;
+		// Add the class's attribute contribution (e.g. 20 agility = 1% dodge)
+		dodgeChance += GetDodgeChanceFromAttributes();
 
 		// Add flat dodge chance bonus from auras (ModDodgeChance), treated as percent.
 		dodgeChance += m_dodgeChanceBonus;
@@ -3040,9 +3130,9 @@ namespace mmo
 		}
 
 		SetTarget(victim ? victim->GetGuid() : 0);
-		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
+		if (!UnitCanAttack(*victim))
 		{
-			// Unit is not an enemy, so we won't attack
+			// Unit is ourselves or friendly, so we won't attack
 			StopAttack();
 			return;
 		}
@@ -3068,6 +3158,12 @@ namespace mmo
 
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
+
+		// Assisting pets join the attack. A player's target is remembered even before it has pets.
+		if (PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get())
+		{
+			pets->OnOwnerAttack(*victim);
+		}
 	}
 
 	void GameUnitS::StopAttack()
@@ -3138,6 +3234,26 @@ namespace mmo
 
 	void GameUnitS::SetInCombat(bool inCombat, bool pvp)
 	{
+		// Health and rage regenerate differently in combat
+		if (inCombat != IsInCombat())
+		{
+			SettleRegeneration();
+		}
+
+		struct RegenRatesUpdate
+		{
+			GameUnitS& unit;
+			const bool changed;
+			~RegenRatesUpdate()
+			{
+				if (changed)
+				{
+					unit.UpdateRegenRateFields();
+					unit.ScheduleRegenSync();
+				}
+			}
+		} regenRatesUpdate{ *this, inCombat != IsInCombat() };
+
 		if (inCombat)
 		{
 			// Detect the transition into combat so interrupt auras only fire when actually entering
@@ -3166,6 +3282,25 @@ namespace mmo
 			RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 			m_pvpCombatCountdown.Cancel();
 		}
+
+		// Pet combat is the owner's combat: a player owner is in combat while one of its pets is.
+		// (A creature owner's combat flag belongs to its AI, which NotifyPetOwnerOfAttacker drives.)
+		// Only real pets: other owned units (Summon effect adds) leave their owner alone.
+		if (regenRatesUpdate.changed && GetOwnerGuid() != 0 && m_worldInstance)
+		{
+			GameUnitS* owner = m_worldInstance->FindByGuid<GameUnitS>(GetOwnerGuid());
+			if (owner && owner != this && owner->IsPlayer() && owner->FindPets() && owner->FindPets()->HasPet(*this))
+			{
+				if (inCombat)
+				{
+					owner->SetInCombat(true, pvp);
+				}
+				else
+				{
+					owner->LeaveCombatIfIdle();
+				}
+			}
+		}
 	}
 
 	float GameUnitS::GetMeleeReach() const
@@ -3193,17 +3328,48 @@ namespace mmo
 
 	void GameUnitS::AddAttackingUnit(const GameUnitS &attacker)
 	{
-		m_attackingUnits.add(&attacker);
+		const bool added = m_attackingUnits.optionalAdd(&attacker);
 		SetInCombat(true, attacker.IsPlayer());
+
+		if (added)
+		{
+			// Assisting pets defend their owner
+			if (m_pets)
+			{
+				m_pets->OnOwnerAttacked(attacker.GetGuid());
+			}
+
+			// A pet's fight is its owner's fight
+			if (GetOwnerGuid() != 0)
+			{
+				NotifyPetOwnerOfAttacker(*this, attacker.GetGuid());
+			}
+		}
 	}
 
 	void GameUnitS::RemoveAttackingUnit(const GameUnitS &attacker)
 	{
 		m_attackingUnits.remove(&attacker);
-		if (m_attackingUnits.empty())
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, attacker.IsPlayer());
 		}
+	}
+
+	bool GameUnitS::IsAnyPetInCombat() const
+	{
+		return m_pets && m_pets->IsAnyPetInCombat();
+	}
+
+	void GameUnitS::LeaveCombatIfIdle()
+	{
+		// Still attacked, in a pvp fight, or fighting through a pet
+		if (!IsInCombat() || !m_attackingUnits.empty() || m_pvpCombatCountdown.IsRunning() || IsAnyPetInCombat())
+		{
+			return;
+		}
+
+		SetInCombat(false, false);
 	}
 
 	void GameUnitS::RemoveAllAttackingUnits()
@@ -3458,9 +3624,92 @@ namespace mmo
 		return reducedDamage;
 	}
 
+	uint64 GameUnitS::GetOwnerGuid() const
+	{
+		return Get<uint64>(object_fields::Owner);
+	}
+
+	void GameUnitS::SetOwnerGuid(const uint64 ownerGuid)
+	{
+		Set<uint64>(object_fields::Owner, ownerGuid);
+	}
+
+	const GameUnitS& GameUnitS::GetTopOwner() const
+	{
+		const GameUnitS* current = this;
+		for (uint32 depth = 0; depth < MaxOwnerChainDepth; ++depth)
+		{
+			const uint64 ownerGuid = current->GetOwnerGuid();
+			if (ownerGuid == 0)
+			{
+				break;
+			}
+
+			WorldInstance* world = const_cast<GameUnitS*>(current)->GetWorldInstance();
+			if (!world)
+			{
+				break;
+			}
+
+			const GameUnitS* owner = world->FindByGuid<GameUnitS>(ownerGuid);
+			if (!owner)
+			{
+				break;
+			}
+
+			current = owner;
+		}
+
+		return *current;
+	}
+
+	bool GameUnitS::SharesTopOwnerWith(const GameUnitS& other) const
+	{
+		return &GetTopOwner() == &other.GetTopOwner();
+	}
+
+	PetManager& GameUnitS::GetPets()
+	{
+		if (!m_pets)
+		{
+			m_pets = std::make_unique<PetManager>(*this);
+		}
+
+		return *m_pets;
+	}
+
 	bool GameUnitS::UnitIsEnemy(const GameUnitS &other) const
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return false;
+		}
+
+		return FactionIsEnemy(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	{
+		const GameUnitS& topOwner = GetTopOwner();
+		const GameUnitS& otherTopOwner = other.GetTopOwner();
+		if (&topOwner == &otherTopOwner)
+		{
+			return true;
+		}
+
+		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitCanAttack(const GameUnitS &other) const
+	{
+		return other.GetGuid() != GetGuid() && !UnitIsFriendly(other);
+	}
+
+	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)
+	{
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
@@ -3500,9 +3749,9 @@ namespace mmo
 		return false;
 	}
 
-	bool GameUnitS::UnitIsFriendly(const GameUnitS &other) const
+	bool GameUnitS::FactionIsFriendly(const GameUnitS &unit, const GameUnitS &other)
 	{
-		const proto::FactionTemplateEntry *faction = GetFactionTemplate();
+		const proto::FactionTemplateEntry *faction = unit.GetFactionTemplate();
 		const proto::FactionTemplateEntry *otherFaction = other.GetFactionTemplate();
 
 		if (!faction || !otherFaction)
@@ -3575,6 +3824,12 @@ namespace mmo
 
 		Set<uint64>(object_fields::TargetUnit, 0);
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
+
+		// Temporary pets die with their owner's life.
+		if (m_pets)
+		{
+			m_pets->DespawnTemporaryPets();
+		}
 
 		killed(killer);
 
@@ -3655,93 +3910,227 @@ namespace mmo
 
 	void GameUnitS::OnRegeneration()
 	{
-		if (!IsAlive())
+		// The sync: the only settle that queues an object update by itself. Values settled silently
+		// since the last update go out with it. The rates may have changed since (five second rule
+		// window end).
+		SettleRegeneration(GetAsyncTimeMs(), true);
+		UpdateRegenRateFields();
+
+		if (HasUnsentRegeneration())
 		{
-			return;
+			if (WorldInstance* worldInstance = GetWorldInstance())
+			{
+				worldInstance->AddObjectUpdate(*this);
+			}
 		}
-
-		if (!IsInCombat())
-		{
-			RegenerateHealth();
-			RegeneratePower(power_type::Rage);
-		}
-
-		RegeneratePower(power_type::Energy);
-		RegeneratePower(power_type::Mana);
-
-		StartRegeneration();
 	}
 
-	void GameUnitS::RegenerateHealth()
+	bool GameUnitS::HasUnsentRegeneration() const
 	{
-		if (!IsAlive())
+		if (!m_fields.IsFieldMarkedAsChanged(object_fields::Health))
 		{
-			return;
+			for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+			{
+				if (m_fields.IsFieldMarkedAsChanged(object_fields::Mana + type))
+				{
+					return true;
+				}
+			}
+
+			return false;
 		}
 
-		if (!RegeneratesHealth())
-		{
-			return;
-		}
-
-		const uint32 maxHealth = GetMaxHealth();
-		uint32 health = GetHealth();
-
-		health += GetEffectiveHealthRegenPerTick();
-		if (health > maxHealth)
-			health = maxHealth;
-
-		Set<uint32>(object_fields::Health, health);
+		return true;
 	}
 
-	void GameUnitS::RegeneratePower(PowerType powerType)
+	namespace
 	{
-		if (!IsAlive())
+		/// Regeneration rates in class data are amounts per regeneration tick of two seconds.
+		constexpr float RegenTickSeconds = 2.0f;
+
+		/// Adds regenerated points to a value, carrying the fraction of a point in remainder.
+		/// @returns The new value.
+		int64 ApplyRegeneration(const int64 value, const int64 maxValue, const float gained, float& remainder)
 		{
-			return;
+			const float total = remainder + gained;
+			const float whole = std::trunc(total);
+			remainder = total - whole;
+
+			int64 result = value + static_cast<int64>(whole);
+			if (result >= maxValue)
+			{
+				result = maxValue;
+				remainder = 0.0f;
+			}
+			else if (result <= 0)
+			{
+				result = 0;
+				remainder = 0.0f;
+			}
+
+			return result;
+		}
+	}
+
+	float GameUnitS::GetHealthRegenPerSecond() const
+	{
+		if (!IsAlive() || !RegeneratesHealth())
+		{
+			return 0.0f;
 		}
 
-		if (!RegeneratesPower())
+		float rate = GetEffectiveHealthRegenPerTick() / RegenTickSeconds;
+		if (IsInCombat())
 		{
-			return;
+			rate *= GetCombatSettings().in_combat_health_regen_percent() / 100.0f;
+		}
+
+		return std::max(rate, 0.0f);
+	}
+
+	float GameUnitS::GetPowerRegenPerSecond(const PowerType powerType, const bool casting) const
+	{
+		if (!IsAlive() || !RegeneratesPower())
+		{
+			return 0.0f;
 		}
 
 		ASSERT(static_cast<uint8>(powerType) < static_cast<uint8>(power_type::Count_));
+		const float auraScale = 1.0f + m_powerRegenPctBonus[static_cast<uint8>(powerType)] / 100.0f;
 
-		int32 amount = 0;
 		switch (powerType)
 		{
-		case power_type::Rage:
-			amount -= 3;
-			break;
-		case power_type::Energy:
-			amount += 20;
-			break;
 		case power_type::Mana:
-			// Within five seconds after spending mana only the casting share of the normal
-			// regeneration flows. The fraction of a point it leaves is carried to the next tick.
-			if (GetAsyncTimeMs() - m_lastManaUse < 5000)
-			{
-				// The aura percentage modifier is applied before the carry here instead of by
-				// GetEffectivePowerRegenPerTick below, which would truncate the whole points again.
-				m_castingManaRegenRemainder += GetCastingManaRegenPerTick()
-					* (1.0f + m_powerRegenPctBonus[static_cast<uint8>(power_type::Mana)] / 100.0f);
-				const float wholePoints = std::floor(m_castingManaRegenRemainder);
-				m_castingManaRegenRemainder -= wholePoints;
-				AddPower(powerType, static_cast<int32>(wholePoints));
-				return;
-			}
+			return std::max((casting ? GetCastingManaRegenPerTick() : m_manaRegenPerTick) * auraScale / RegenTickSeconds, 0.0f);
+		case power_type::Energy:
+			return std::max(GetCombatSettings().energy_regen_per_second() * auraScale, 0.0f);
+		case power_type::Rage:
+			// Rage decays out of combat; regeneration bonuses must not speed up the decay
+			return IsInCombat() ? 0.0f : -GetCombatSettings().rage_decay_per_second();
+		default:
+			return 0.0f;
+		}
+	}
 
-			m_castingManaRegenRemainder = 0.0f;
-			amount += static_cast<int32>(m_manaRegenPerTick);
-			break;
+	void GameUnitS::SettleRegeneration()
+	{
+		SettleRegeneration(GetAsyncTimeMs());
+	}
+
+	void GameUnitS::SettleRegeneration(const GameTime now)
+	{
+		SettleRegeneration(now, false);
+	}
+
+	void GameUnitS::SettleRegeneration(const GameTime now, const bool replicate)
+	{
+		if (now <= m_regenSettledAt)
+		{
+			return;
 		}
 
-		AddPower(powerType, GetEffectivePowerRegenPerTick(powerType, amount));
+		const GameTime from = m_regenSettledAt;
+		m_regenSettledAt = now;
+
+		if (!m_regenActive || !IsAlive())
+		{
+			m_regenRemainder.fill(0.0f);
+			return;
+		}
+
+		const float seconds = static_cast<float>(now - from) / 1000.0f;
+
+		if (const float rate = GetHealthRegenPerSecond(); rate != 0.0f)
+		{
+			const int64 health = ApplyRegeneration(GetHealth(), GetMaxHealth(), rate * seconds, m_regenRemainder[0]);
+			Set<uint32>(object_fields::Health, static_cast<uint32>(health), replicate);
+		}
+
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const auto powerType = static_cast<PowerType>(type);
+
+			float gained = GetPowerRegenPerSecond(powerType) * seconds;
+			if (powerType == power_type::Mana)
+			{
+				// Within the five second rule window only the casting rate flows. The window may end
+				// anywhere inside the settled interval.
+				const GameTime windowEnd = m_lastManaUse + GetCombatSettings().five_second_rule_ms();
+				if (m_lastManaUse != 0 && windowEnd > from)
+				{
+					const float castingSeconds = static_cast<float>(std::min(windowEnd, now) - from) / 1000.0f;
+					gained = GetPowerRegenPerSecond(powerType, true) * castingSeconds
+						+ GetPowerRegenPerSecond(powerType, false) * (seconds - castingSeconds);
+				}
+			}
+
+			if (gained == 0.0f && m_regenRemainder[1 + type] == 0.0f)
+			{
+				continue;
+			}
+
+			const int64 power = ApplyRegeneration(Get<int32>(object_fields::Mana + type), Get<uint32>(object_fields::MaxMana + type),
+				gained, m_regenRemainder[1 + type]);
+			Set<int32>(object_fields::Mana + type, static_cast<int32>(power), replicate);
+		}
+
+		ScheduleRegenSync();
+	}
+
+	bool GameUnitS::IsRegenerationMoving() const
+	{
+		if (!m_regenActive)
+		{
+			return false;
+		}
+
+		if (GetHealthRegenPerSecond() > 0.0f && GetHealth() < GetMaxHealth())
+		{
+			return true;
+		}
+
+		for (uint8 type = power_type::Mana; type <= power_type::Energy; ++type)
+		{
+			const auto powerType = static_cast<PowerType>(type);
+			const int32 power = Get<int32>(object_fields::Mana + type);
+			const int32 maxPower = Get<int32>(object_fields::MaxMana + type);
+
+			// Mana may only be paused by the five second rule: its normal rate resumes later
+			const float rate = powerType == power_type::Mana
+				? std::max(GetPowerRegenPerSecond(powerType, true), GetPowerRegenPerSecond(powerType, false))
+				: GetPowerRegenPerSecond(powerType);
+			if ((rate > 0.0f && power < maxPower) || (rate < 0.0f && power > 0))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	void GameUnitS::ScheduleRegenSync() const
+	{
+		if (m_regenCountdown.IsRunning() || (!IsRegenerationMoving() && !HasUnsentRegeneration()))
+		{
+			return;
+		}
+
+		const GameTime now = GetAsyncTimeMs();
+		GameTime end = now + GetCombatSettings().regen_sync_interval_ms();
+
+		// The mana rate changes when the five second rule window ends: sync then
+		if (IsInFiveSecondRule(now))
+		{
+			end = std::min(end, m_lastManaUse + GetCombatSettings().five_second_rule_ms());
+		}
+
+		m_regenCountdown.SetEnd(end);
 	}
 
 	void GameUnitS::AddPower(PowerType powerType, int32 amount)
 	{
+		SettleRegeneration();
+
 		// Get power and max power
 		int32 power = Get<int32>(object_fields::Mana + static_cast<uint8>(powerType));
 		const int32 maxPower = Get<uint32>(object_fields::MaxMana + static_cast<uint8>(powerType));
@@ -3904,11 +4293,37 @@ namespace mmo
 		outMax = Get<float>(object_fields::MaxDamage);
 	}
 
-	uint32 GameUnitS::GetAutoAttackTime(WeaponAttack /*attackType*/) const
+	uint32 GameUnitS::GetBaseAutoAttackTime(WeaponAttack /*attackType*/) const
 	{
 		// Base units swing both hands on the same speed. Players override this to use the
 		// off-hand weapon's own delay.
-		return Get<uint32>(object_fields::BaseAttackTime);
+		return m_baseAttackTime;
+	}
+
+	uint32 GameUnitS::GetAutoAttackTime(const WeaponAttack attackType) const
+	{
+		// Shortest swing time attack speed auras can reach, so a stack of haste never makes a unit
+		// swing on every tick (a base time below it is left alone).
+		constexpr uint32 minAttackTime = 100;
+
+		const uint32 baseTime = GetBaseAutoAttackTime(attackType);
+		const uint32 scaled = static_cast<uint32>(std::lround(static_cast<double>(baseTime) / static_cast<double>(GetAttackSpeedMultiplier())));
+		return std::max(scaled, std::min(baseTime, minAttackTime));
+	}
+
+	void GameUnitS::SetBaseAttackTime(const uint32 attackTime)
+	{
+		m_baseAttackTime = attackTime;
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
+	}
+
+	void GameUnitS::ModifyAttackSpeedPctBonus(const float amount, const bool apply)
+	{
+		m_attackSpeedPctBonus += apply ? amount : -amount;
+
+		// Only the field the client displays changes: the swing already scheduled keeps its time,
+		// and TriggerNextAutoAttack picks the new interval up for the next one.
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
 	}
 
 	bool GameUnitS::ShouldDualWield() const
@@ -4335,16 +4750,22 @@ namespace mmo
 			}
 		}
 
-		// Trigger proc events
-		if (hit)
+		// Trigger proc events. Misses, dodges and parries raise them too, without a hit flag, so
+		// "after you dodge" procs can react (see AuraContainer::HandleProc).
+		const bool avoided = outcome == MeleeAttackOutcome::Miss || outcome == MeleeAttackOutcome::Dodge || outcome == MeleeAttackOutcome::Parry;
+		if (hit || avoided)
 		{
 			// Attacker procs (done)
 			uint32 procEx = 0;
-			if (hitInfo & hit_info::CriticalHit)
+			if (!hit)
+			{
+				procEx |= outcome == MeleeAttackOutcome::Miss ? proc_ex_flags::MissHit : 0;
+			}
+			else if (hitInfo & hit_info::CriticalHit)
 			{
 				procEx |= proc_ex_flags::CriticalHit;
 			}
-			else if (hit)
+			else
 			{
 				procEx |= proc_ex_flags::NormalHit;
 			}
@@ -4378,8 +4799,8 @@ namespace mmo
 
 	void GameUnitS::OnPvpCombatTimer()
 	{
-		// Leave combat when no other attacking units
-		if (m_attackingUnits.empty())
+		// Leave combat when no other attacking units (and no pet fighting)
+		if (m_attackingUnits.empty() && !IsAnyPetInCombat())
 		{
 			SetInCombat(false, true);
 		}

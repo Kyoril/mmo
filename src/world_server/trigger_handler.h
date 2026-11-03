@@ -246,6 +246,9 @@ namespace mmo
 		/// Plays a sound entry at a position for every player in range, possibly repeated.
 		void HandlePlaySound(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Executes one trigger picked at random from the ids in the action's data.
+		void HandleRandomTrigger(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Sends a positional sound entry to every player of a world instance within a radius.
 		/// @returns Number of players the sound was sent to.
 		uint32 PlaySoundAtPosition(WorldInstance& world, uint32 sound, const Vector3& position, float radius);

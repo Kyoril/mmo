@@ -113,7 +113,7 @@ Depth slices are spaced exponentially from 0.5 m, so cells near the camera are t
 - Debug view 3 (density) includes the volumes.
 - The math lives in `deferred_shading/fog_volume_math.h` (unit-tested) and is mirrored in `shaders/FogVolumeCommon.hlsli`; `GpuFogVolume` mirrors `struct FogVolume` there.
 
-**Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerD3D11`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 208 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
+**Formula copies:** the closed-form formulas exist three times and must change together: `shaders/AtmosphereCommon.hlsli`, the forward fog emitted by `MaterialCompilerHlsl`, and `deferred_shading/atmosphere_math.h`. The camera cbuffer (b1, 208 bytes) is declared three times as well; changing it requires **Tools → Rebuild All Materials**.
 
 ## Environment profiles and wind
 

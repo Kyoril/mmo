@@ -14,7 +14,7 @@ namespace mmo
 		// If no custom material is provided, try to get one from the mesh
 		if (m_mesh && m_mesh->GetSubMeshCount() > 0)
 		{
-			m_material = m_mesh->GetSubMesh(0).GetMaterial();
+			m_material = m_mesh->GetSubMesh(static_cast<uint16>(0)).GetMaterial();
 		}
 	}
 

@@ -10,10 +10,14 @@
 #include <map>
 
 // --- Shader bytecode seam ---------------------------------------------------------------
-// Mirrors the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/PS_Tonemap.h"
+// Mirrors the seam in ssao_pass.cpp; the Metal build generates the same symbols from the HLSL (hlsl2msl).
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/PS_Tonemap.h"
+#	else
+#		include "PS_Tonemap.metal.h"
+#	endif
 #	define MMO_TONEMAP_PS_BYTECODE g_PS_Tonemap
 #	define MMO_TONEMAP_PS_SIZE std::size(g_PS_Tonemap)
 #else

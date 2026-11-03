@@ -816,8 +816,8 @@ namespace mmo
 					throw mysql::Exception("Could not load character quests");
 				}
 
-				// Load known classes (per-class level, xp and attribute spending).
-				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
+				// Load known classes (per-class level, xp and the attribute layout of their spending).
+				mysql::Select classSelect(m_connection, "SELECT `class`, `level`, `xp`, `attr_layout`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4` FROM `character_classes` WHERE `character`=" + std::to_string(characterId));
 				if (classSelect.Success())
 				{
 					mysql::Row classRow(classSelect);
@@ -827,11 +827,20 @@ namespace mmo
 						classRow.GetField(0, classData.classId);
 						classRow.GetField<uint8, uint16>(1, classData.classLevel);
 						classRow.GetField(2, classData.classXp);
-						classRow.GetField(3, classData.attributePointsSpent[0]);
-						classRow.GetField(4, classData.attributePointsSpent[1]);
-						classRow.GetField(5, classData.attributePointsSpent[2]);
-						classRow.GetField(6, classData.attributePointsSpent[3]);
-						classRow.GetField(7, classData.attributePointsSpent[4]);
+						classRow.GetField(3, classData.attributeLayout);
+
+						// Layout 0: the row was last written by a server build that predates data-driven
+						// attributes (e.g. after a rollback), which only maintains the legacy columns for
+						// attribute ids 0 - 4 and leaves character_class_attributes stale. Rows written by
+						// this build always carry a non-zero layout and are read from that table below.
+						if (classData.attributeLayout == 0)
+						{
+							for (uint32 attribute = 0; attribute < 5; ++attribute)
+							{
+								classRow.GetField(4 + attribute, classData.attributePointsSpent[attribute]);
+							}
+						}
+
 						result.knownClasses.push_back(std::move(classData));
 
 						classRow = mysql::Row::Next(classSelect);
@@ -841,6 +850,42 @@ namespace mmo
 				{
 					PrintDatabaseError();
 					throw mysql::Exception("Could not load character classes");
+				}
+
+				// Load per-class attribute spending (points bought per attribute id).
+				mysql::Select attributeSelect(m_connection, "SELECT `class`, `attribute`, `points` FROM `character_class_attributes` WHERE `character`=" + std::to_string(characterId));
+				if (attributeSelect.Success())
+				{
+					mysql::Row attributeRow(attributeSelect);
+					while (attributeRow)
+					{
+						uint32 classId = 0, attribute = 0, points = 0;
+						attributeRow.GetField(0, classId);
+						attributeRow.GetField(1, attribute);
+						attributeRow.GetField(2, points);
+
+						const auto classIt = std::find_if(result.knownClasses.begin(), result.knownClasses.end(),
+							[classId](const CharacterClassData& classData) { return classData.classId == classId; });
+						if (classIt != result.knownClasses.end() && classIt->attributeLayout == 0)
+						{
+							// Spending of this class comes from the legacy columns (see above)
+						}
+						else if (classIt != result.knownClasses.end() && attribute < MaxAttributes)
+						{
+							classIt->attributePointsSpent[attribute] = points;
+						}
+						else
+						{
+							WLOG("Ignoring attribute spending of character " << characterId << " for class " << classId << ", attribute " << attribute);
+						}
+
+						attributeRow = mysql::Row::Next(attributeSelect);
+					}
+				}
+				else
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not load character class attributes");
 				}
 
 				// Defensive fallback: ensure the active class always exists (e.g. legacy characters or
@@ -1210,6 +1255,15 @@ namespace mmo
 
 		// Replace the per-class data (level, xp, attribute spending).
 		if (!m_connection.Execute(std::format(
+			"DELETE FROM `character_class_attributes` WHERE `character`={0};"
+			, characterId
+		)))
+		{
+			PrintDatabaseError();
+			throw mysql::Exception("Could not delete character class attribute data!");
+		}
+
+		if (!m_connection.Execute(std::format(
 			"DELETE FROM `character_classes` WHERE `character`={0};"
 			, characterId
 		)))
@@ -1220,9 +1274,13 @@ namespace mmo
 
 		if (!knownClasses.empty())
 		{
+			// attr_0 .. attr_4 are legacy columns, still written for attribute ids 0 - 4 so that a rolled
+			// back server build reads current values (see 20261029_1_data_driven_attributes.sql).
 			std::ostringstream strm;
-			strm << "INSERT INTO `character_classes` (`character`, `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4`) VALUES ";
+			strm << "INSERT INTO `character_classes` (`character`, `class`, `level`, `xp`, `attr_0`, `attr_1`, `attr_2`, `attr_3`, `attr_4`, `attr_layout`) VALUES ";
+			std::ostringstream attributeStrm;
 			bool isFirstItem = true;
+			bool isFirstAttribute = true;
 			for (const auto& classData : knownClasses)
 			{
 				if (!isFirstItem) strm << ",";
@@ -1231,13 +1289,29 @@ namespace mmo
 				strm << "(" << characterId
 					<< "," << classData.classId
 					<< "," << static_cast<uint32>(classData.classLevel)
-					<< "," << classData.classXp
-					<< "," << classData.attributePointsSpent[0]
-					<< "," << classData.attributePointsSpent[1]
-					<< "," << classData.attributePointsSpent[2]
-					<< "," << classData.attributePointsSpent[3]
-					<< "," << classData.attributePointsSpent[4]
-					<< ")";
+					<< "," << classData.classXp;
+				for (uint32 attribute = 0; attribute < 5; ++attribute)
+				{
+					strm << "," << classData.attributePointsSpent[attribute];
+				}
+				strm << "," << classData.attributeLayout << ")";
+
+				for (uint32 attribute = 0; attribute < MaxAttributes; ++attribute)
+				{
+					if (classData.attributePointsSpent[attribute] == 0)
+					{
+						continue;
+					}
+
+					if (!isFirstAttribute) attributeStrm << ",";
+					else isFirstAttribute = false;
+
+					attributeStrm << "(" << characterId
+						<< "," << classData.classId
+						<< "," << attribute
+						<< "," << classData.attributePointsSpent[attribute]
+						<< ")";
+				}
 			}
 			strm << ";";
 
@@ -1245,6 +1319,15 @@ namespace mmo
 			{
 				PrintDatabaseError();
 				throw mysql::Exception("Could not update character class data!");
+			}
+
+			if (!isFirstAttribute)
+			{
+				if (!m_connection.Execute("INSERT INTO `character_class_attributes` (`character`, `class`, `attribute`, `points`) VALUES " + attributeStrm.str() + ";"))
+				{
+					PrintDatabaseError();
+					throw mysql::Exception("Could not update character class attribute data!");
+				}
 			}
 		}
 
@@ -2905,6 +2988,220 @@ namespace mmo
 			WLOG("Lock contention (error " << errorCode << ") trying to " << what << " for character " << characterId
 				<< ", retrying (attempt " << (attempt + 1) << " of " << maxAttempts << ")");
 		}
+	}
+
+	std::optional<std::vector<PersistentPetData>> MySQLDatabase::LoadCharacterPets(const uint64 characterId)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		std::vector<PersistentPetData> pets;
+
+		mysql::Select select(m_connection, std::format(
+			"SELECT `id`, `class_id`, `pet_entry`, `unit_entry`, `name`, `level`, `xp`, `health`, `power`, `is_dead`, `was_summoned` "
+			"FROM `character_pets` WHERE `character_id` = {0} ORDER BY `id` ASC;"
+			, characterId
+		));
+		if (!select.Success())
+		{
+			PrintDatabaseError();
+			return std::nullopt;
+		}
+
+		for (mysql::Row row(select); row; row = mysql::Row::Next(select))
+		{
+			PersistentPetData pet;
+			uint32 isDead = 0;
+			uint32 wasSummoned = 0;
+			row.GetField(0, pet.dbId);
+			row.GetField(1, pet.classId);
+			row.GetField(2, pet.petEntry);
+			row.GetField(3, pet.unitEntry);
+			row.GetField(4, pet.name);
+			row.GetField(5, pet.level);
+			row.GetField(6, pet.xp);
+			row.GetField(7, pet.health);
+			row.GetField(8, pet.power);
+			row.GetField(9, isDead);
+			row.GetField(10, wasSummoned);
+			pet.isDead = isDead != 0;
+			pet.wasSummoned = wasSummoned != 0;
+			pets.push_back(std::move(pet));
+		}
+
+		if (pets.empty())
+		{
+			return pets;
+		}
+
+		mysql::Select spellSelect(m_connection, std::format(
+			"SELECT s.`pet_id`, s.`spell_id` FROM `character_pet_spells` s "
+			"JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+			"WHERE p.`character_id` = {0} ORDER BY s.`pet_id`, s.`spell_id`;"
+			, characterId
+		));
+		if (!spellSelect.Success())
+		{
+			PrintDatabaseError();
+			return std::nullopt;
+		}
+
+		for (mysql::Row row(spellSelect); row; row = mysql::Row::Next(spellSelect))
+		{
+			uint64 petId = 0;
+			uint32 spellId = 0;
+			row.GetField(0, petId);
+			row.GetField(1, spellId);
+
+			const auto it = std::find_if(pets.begin(), pets.end(), [petId](const PersistentPetData& pet) { return pet.dbId == petId; });
+			if (it != pets.end())
+			{
+				it->spells.push_back(spellId);
+			}
+		}
+
+		return pets;
+	}
+
+	namespace
+	{
+		/// The statements that replace the learned spells of a stored pet. Both only act if the pet
+		/// belongs to the character, so a pet id of another character changes nothing.
+		void AppendPetSpellStatements(std::vector<String>& statements, const uint64 characterId, const PersistentPetData& pet)
+		{
+			statements.push_back(std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+				"WHERE s.`pet_id` = {0} AND p.`character_id` = {1};"
+				, pet.dbId
+				, characterId
+			));
+
+			if (pet.spells.empty())
+			{
+				return;
+			}
+
+			std::ostringstream strm;
+			strm << "INSERT IGNORE INTO `character_pet_spells` (`pet_id`, `spell_id`) ";
+			bool isFirst = true;
+			for (const uint32 spellId : pet.spells)
+			{
+				if (!isFirst)
+				{
+					strm << " UNION ALL ";
+				}
+				isFirst = false;
+				strm << "SELECT `id`, " << spellId << " FROM `character_pets` WHERE `id` = " << pet.dbId << " AND `character_id` = " << characterId;
+			}
+			strm << ";";
+			statements.push_back(strm.str());
+		}
+	}
+
+	void MySQLDatabase::SaveCharacterPets(const uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds)
+	{
+		if (pets.empty() && removedPetIds.empty())
+		{
+			return;
+		}
+
+		// Rows are updated by id, never deleted and reinserted: the id is part of the pet's guid.
+		// Every statement is scoped to the character, so a pet id of another character changes nothing.
+		std::vector<String> statements;
+		for (const auto& pet : pets)
+		{
+			statements.push_back(std::format(
+				"UPDATE `character_pets` SET `class_id` = {2}, `pet_entry` = {3}, `unit_entry` = {4}, `name` = '{5}', `level` = {6}, "
+				"`xp` = {7}, `health` = {8}, `power` = {9}, `is_dead` = {10}, `was_summoned` = {11} "
+				"WHERE `id` = {0} AND `character_id` = {1};"
+				, pet.dbId
+				, characterId
+				, pet.classId
+				, pet.petEntry
+				, pet.unitEntry
+				, m_connection.EscapeString(pet.name)
+				, pet.level
+				, pet.xp
+				, pet.health
+				, pet.power
+				, pet.isDead ? 1 : 0
+				, pet.wasSummoned ? 1 : 0
+			));
+
+			AppendPetSpellStatements(statements, characterId, pet);
+		}
+
+		for (const uint64 petId : removedPetIds)
+		{
+			statements.push_back(std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` "
+				"WHERE s.`pet_id` = {0} AND p.`character_id` = {1};"
+				, petId
+				, characterId
+			));
+			statements.push_back(std::format(
+				"DELETE FROM `character_pets` WHERE `id` = {0} AND `character_id` = {1};"
+				, petId
+				, characterId
+			));
+		}
+
+		ExecuteTransactionWithLockRetry("save stored pets", characterId, statements);
+	}
+
+	uint64 MySQLDatabase::CreateCharacterPet(const uint64 characterId, const PersistentPetData& pet)
+	{
+		std::lock_guard<std::recursive_mutex> dbLock(m_databaseMutex);
+
+		// Reports failure as 0 instead of throwing: the world node waits for an answer, and a request
+		// that throws gets none.
+		mysql::Transaction transaction(m_connection);
+		if (!m_connection.Execute(std::format(
+			"INSERT INTO `character_pets` (`character_id`, `class_id`, `pet_entry`, `unit_entry`, `name`, `level`, `xp`, `health`, `power`, `is_dead`, `was_summoned`) "
+			"VALUES ({0}, {1}, {2}, {3}, '{4}', {5}, {6}, {7}, {8}, {9}, 0);"
+			, characterId
+			, pet.classId
+			, pet.petEntry
+			, pet.unitEntry
+			, m_connection.EscapeString(pet.name)
+			, pet.level
+			, pet.xp
+			, pet.health
+			, pet.power
+			, pet.isDead ? 1 : 0
+		)))
+		{
+			PrintDatabaseError();
+			return 0;
+		}
+
+		PersistentPetData created = pet;
+		created.dbId = m_connection.GetLastInsertId();
+
+		std::vector<String> spellStatements;
+		AppendPetSpellStatements(spellStatements, characterId, created);
+		for (const auto& statement : spellStatements)
+		{
+			if (!m_connection.Execute(statement))
+			{
+				PrintDatabaseError();
+				return 0;
+			}
+		}
+
+		transaction.Commit();
+		return created.dbId;
+	}
+
+	void MySQLDatabase::DeleteCharacterPets(const uint64 characterId)
+	{
+		ExecuteTransactionWithLockRetry("delete stored pets", characterId, {
+			std::format(
+				"DELETE s FROM `character_pet_spells` s JOIN `character_pets` p ON p.`id` = s.`pet_id` WHERE p.`character_id` = {0};"
+				, characterId),
+			std::format(
+				"DELETE FROM `character_pets` WHERE `character_id` = {0};"
+				, characterId),
+		});
 	}
 
 	void MySQLDatabase::PrintDatabaseError()

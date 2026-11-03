@@ -1,5 +1,6 @@
 #pragma once
 
+#include "attribute.h"
 #include "item.h"
 #include "quest.h"
 
@@ -209,25 +210,16 @@ namespace mmo
 			/// @brief 32 bit object field
 			PowerType,
 
-			StatStamina,
-			StatStrength,
-			StatAgility,
-			StatIntellect,
-			StatSpirit,
+			/// @brief MaxAttributes 32 bit fields: total value of every attribute, indexed by attribute id.
+			Stat,
 
-			PosStatStamina,
-			PosStatStrength,
-			PosStatAgility,
-			PosStatIntellect,
-			PosStatSpirit,
+			/// @brief MaxAttributes 32 bit fields: positive modifiers of every attribute, indexed by attribute id.
+			PosStat = Stat + MaxAttributes,
 
-			NegStatStamina,
-			NegStatStrength,
-			NegStatAgility,
-			NegStatIntellect,
-			NegStatSpirit,
+			/// @brief MaxAttributes 32 bit fields: negative modifiers of every attribute, indexed by attribute id.
+			NegStat = PosStat + MaxAttributes,
 
-			Armor,
+			Armor = NegStat + MaxAttributes,
 
 			PosStatArmor,
 			NegStatArmor,
@@ -290,7 +282,16 @@ namespace mmo
 			///	within five seconds after mana was spent.
 			ManaRegenCasting,
 
-			UnitFieldCount = ManaRegenCasting + 1,
+			/// @brief float health regenerated every five seconds right now (0 in combat unless
+			///	in_combat_health_regen_percent says otherwise). Clients extrapolate health with it.
+			HealthRegen,
+
+			/// @brief 3 floats (mana, rage, energy): power regenerated every five seconds right now.
+			///	Mana switches to its casting rate within the five second rule window, rage decays
+			///	(negative) out of combat. Clients extrapolate power with these.
+			PowerRegen,
+
+			UnitFieldCount = PowerRegen + 3,
 		};
 
 #define VISIBLE_ITEM_FIELDS(index, offset) \
@@ -323,9 +324,11 @@ namespace mmo
 
 			AvailableAttributePoints = Guild + 2,
 
+			/// @brief AttributePointCostFieldCount 32 bit fields: cost of the next point of every attribute,
+			///	one byte per attribute id (attribute i lives in field i / 4 at bit (i % 4) * 8).
 			AttributePointCost,
 
-			TalentPoints = AttributePointCost + 2,
+			TalentPoints = AttributePointCost + AttributePointCostFieldCount,
 
 			// Visible item fields
 			VISIBLE_ITEM_FIELDS(1, TalentPoints),

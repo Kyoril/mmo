@@ -8,8 +8,11 @@
 #include <map>
 
 #include "asset_picker_widget.h"
+#include "proto_entry_picker.h"
+#include "game/pet_defines.h"
 #include "assets/asset_registry.h"
 #include "editor_imgui_helpers.h"
+#include "attribute_ui.h"
 #include "game/aura.h"
 #include "game/id_mask.h"
 #include "game/item.h"
@@ -109,7 +112,11 @@ namespace mmo
 		{ "Critical Block", "Combat", "Allows the unit to critically block (block for an increased amount)" },
 		{ "Revive %", "Healing", "Revives a dead player target with a percentage of their max health (base points)" },
 		{ "Change Class", "Utility", "Switches the caster's active class to the class given by Misc Value A (adds it at class level 1 if not yet known)" },
-		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" }
+		{ "Teach Emote", "Utility", "Unlocks the emote given by Misc Value A for the player target (used by emote scroll items)" },
+		{ "Summon Persistent Pet", "Summon", "Summons the caster's stored pet of PetEntry Misc Value A (0 = most recently summoned)" },
+		{ "Grant Persistent Pet", "Utility", "Adds a stored persistent pet of PetEntry Misc Value A to the caster if it has none yet" },
+		{ "Dismiss Pet", "Utility", "Dismisses the caster's pets of the given pet group" },
+		{ "Revive Pet", "Healing", "Revives a dead stored pet at base points % health" }
 	};
 
 	static String s_spellEffectNames[] = {
@@ -170,7 +177,11 @@ namespace mmo
 		"Critical Block",
 		"Revive %",
 		"Change Class",
-		"Teach Emote"
+		"Teach Emote",
+		"Summon Persistent Pet",
+		"Grant Persistent Pet",
+		"Dismiss Pet",
+		"Revive Pet"
 	};
 
 	static_assert(std::size(s_spellEffectNames) == spell_effects::Count_, "Each spell effect must have a string representation!");
@@ -250,7 +261,11 @@ namespace mmo
 		"ModHealthRegenPercent",
 		"ModPowerRegenPercent",
 		"ModCritChanceTaken",
-		"ModCastingManaRegenPercent"
+		"ModCastingManaRegenPercent",
+		"ModCastingSpeedPct",
+		"ModHealingTakenPct",
+		"ModPetStatsPct",
+		"PetPassive"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
@@ -279,14 +294,6 @@ namespace mmo
 	};
 
 	static_assert(std::size(s_modifierNames) == spell_mod_op::Count_, "Each spell mod operation must have a string representation!");
-
-	static String s_statNames[] = {
-		"Stamina",
-		"Strength",
-		"Agility",
-		"Intellect",
-		"Spirit"
-	};
 
 	static String s_resistanceNames[] = {
 		"Armor",
@@ -1999,6 +2006,55 @@ namespace mmo
 			// Type-specific settings
 			DrawSectionHeader("Type-Specific Settings");
 
+			// Pet settings of the pet effects
+			if (currentEffectType == spell_effects::SummonPet)
+			{
+				static const char* const s_petLimitPolicies[] = { "Replace oldest", "Fail at cap" };
+				static const char* const s_petLevelSources[] = { "Creature level", "Character level", "Class level" };
+
+				int petGroup = static_cast<int>(effect.pet_group());
+				if (ImGui::InputInt("Pet Group", &petGroup))
+				{
+					effect.set_pet_group(petGroup < 0 ? 0 : static_cast<uint32>(petGroup));
+				}
+				DrawHelpMarker("Pets summoned by effects with the same group count against the same cap.");
+
+				int petMaxCount = static_cast<int>(effect.pet_max_count());
+				if (ImGui::InputInt("Pet Max Count", &petMaxCount))
+				{
+					effect.set_pet_max_count(petMaxCount < 0 ? 0 : static_cast<uint32>(petMaxCount));
+				}
+				DrawHelpMarker("Maximum number of pets of this group at the same time. 0 means unlimited.");
+
+				int petLimitPolicy = static_cast<int>(effect.pet_limit_policy());
+				if (DrawEnumCombo("##petLimitPolicy", "Pet Limit Policy", petLimitPolicy, s_petLimitPolicies, static_cast<int>(std::size(s_petLimitPolicies)), "What happens when the cap is reached."))
+				{
+					effect.set_pet_limit_policy(static_cast<uint32>(petLimitPolicy));
+				}
+
+				int petLevelSource = static_cast<int>(effect.pet_level_source());
+				if (DrawEnumCombo("##petLevelSource", "Pet Level Source", petLevelSource, s_petLevelSources, static_cast<int>(std::size(s_petLevelSources)), "Which level the summoned pet uses."))
+				{
+					effect.set_pet_level_source(static_cast<uint32>(petLevelSource));
+				}
+			}
+			else if (currentEffectType == spell_effects::SummonPersistentPet)
+			{
+				int petEntry = static_cast<int>(effect.miscvaluea());
+				if (DrawEntryPicker("##petEntry", "Pet Entry", petEntry, m_project.pets, "The stored pet to summon. None (0) summons the most recently summoned pet (last summoned)."))
+				{
+					effect.set_miscvaluea(petEntry);
+				}
+			}
+			else if (currentEffectType == spell_effects::GrantPersistentPet)
+			{
+				int petEntry = static_cast<int>(effect.miscvaluea());
+				if (DrawEntryPicker("##petEntry", "Pet Entry", petEntry, m_project.pets, "The pet entry added to the caster as a stored pet."))
+				{
+					effect.set_miscvaluea(petEntry);
+				}
+			}
+
 			switch (currentEffectType)
 			{
 				case spell_effects::TeleportUnits:
@@ -2396,20 +2452,11 @@ namespace mmo
 		case aura_type::ModStat:
 		case aura_type::ModStatPct:
 			{
-				int currentStat = effect.miscvaluea();
-				if (ImGui::Combo("Stat", &currentStat,
-					[](void* data, int idx, const char** out_text)
-					{
-						if (idx < 0 || idx >= IM_ARRAYSIZE(s_statNames))
-						{
-							return false;
-						}
-
-						*out_text = s_statNames[idx].c_str();
-						return true;
-					}, nullptr, IM_ARRAYSIZE(s_statNames)))
+				// The misc value is the attribute id (see attributes.proto)
+				uint32 attributeId = static_cast<uint32>(std::max(effect.miscvaluea(), 0));
+				if (DrawAttributeCombo("Attribute", m_project.attributes, attributeId))
 				{
-					effect.set_miscvaluea(currentStat);
+					effect.set_miscvaluea(static_cast<int32>(attributeId));
 				}
 			}
 			break;

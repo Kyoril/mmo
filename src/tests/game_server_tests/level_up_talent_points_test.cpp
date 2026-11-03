@@ -26,7 +26,7 @@ namespace
 	{
 		std::vector<int32> talentPoints;
 
-		void OnLevelUp(uint32, int32, int32, int32, int32, int32, int32, int32, const int32 talentPointsGained, int32) override
+		void OnLevelUp(uint32, int32, int32, const std::array<int32, MaxAttributes>&, const int32 talentPointsGained, int32) override
 		{
 			talentPoints.push_back(talentPointsGained);
 		}
@@ -89,11 +89,11 @@ namespace
 			auto* levelValues = cls->add_levelbasevalues();
 			levelValues->set_health(100);
 			levelValues->set_mana(100);
-			levelValues->set_stamina(10);
-			levelValues->set_strength(10);
-			levelValues->set_agility(10);
-			levelValues->set_intellect(10);
-			levelValues->set_spirit(10);
+			levelValues->add_attributes(10);
+			levelValues->add_attributes(10);
+			levelValues->add_attributes(10);
+			levelValues->add_attributes(10);
+			levelValues->add_attributes(10);
 			levelValues->set_attributepoints(5);
 			levelValues->set_talentpoints(1);
 

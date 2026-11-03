@@ -67,6 +67,7 @@
 #include "tex/png_writer.h"
 #include "graphics/material_instance.h"
 #include "base/clock.h"
+#include "base/profiler.h"
 #include "pcg/placement.h"
 #include "section_panel.h"
 #include "pcg/section_bake_job.h"
@@ -1362,8 +1363,8 @@ namespace mmo
 			// Determine page of entity based on position
 			const auto pos = ent->GetSceneNode().GetDerivedPosition();
 			const auto pagePos = PagePosition(
-				static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
-				static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+				static_cast<uint32>(static_cast<int32>(floor(pos.x / terrain::constants::PageSize)) + 32),
+				static_cast<uint32>(static_cast<int32>(floor(pos.z / terrain::constants::PageSize)) + 32));
 
 			// Ensure old ref file is deleted
 			if (const auto refPos = ent->GetReferencePagePosition())
@@ -1693,8 +1694,8 @@ namespace mmo
 			{
 				const Vector3 pos = entity.GetSceneNode().GetDerivedPosition();
 				const auto pagePos = PagePosition(
-					static_cast<uint32>(floor(pos.x / terrain::constants::PageSize)) + 32,
-					static_cast<uint32>(floor(pos.z / terrain::constants::PageSize)) + 32);
+					static_cast<uint32>(static_cast<int32>(floor(pos.x / terrain::constants::PageSize)) + 32),
+					static_cast<uint32>(static_cast<int32>(floor(pos.z / terrain::constants::PageSize)) + 32));
 
 				// Ensure we delete the previous reference page pos
 				if (entity.GetReferencePagePosition() && *entity.GetReferencePagePosition() != pagePos)
@@ -1723,8 +1724,8 @@ namespace mmo
 		const auto &camPos = m_camera->GetDerivedPosition();
 
 		const auto pagePos = PagePosition(
-			static_cast<uint32>(floor(camPos.x / terrain::constants::PageSize)) + 32,
-			static_cast<uint32>(floor(camPos.z / terrain::constants::PageSize)) + 32);
+			static_cast<uint32>(static_cast<int32>(floor(camPos.x / terrain::constants::PageSize)) + 32),
+			static_cast<uint32>(static_cast<int32>(floor(camPos.z / terrain::constants::PageSize)) + 32));
 
 		return pagePos;
 	}
@@ -2389,6 +2390,10 @@ namespace mmo
 		// Exposure adaptation, temporal shadows and the volumetric fog history need a few frames to
 		// settle; the last of these frames is the one that is saved.
 		constexpr float frameTime = 1.0f / 30.0f;
+
+		// The renderer only counts draws per pass while the profiler is on
+		const bool profilerWasEnabled = Profiler::GetInstance().IsEnabled();
+		Profiler::GetInstance().SetEnabled(true);
 		for (uint32 frame = 0; frame <= warmupFrames; ++frame)
 		{
 			while (m_dispatcher.poll_one() > 0)
@@ -2414,6 +2419,22 @@ namespace mmo
 			m_camera->InvalidateView();
 			m_deferredRenderer->Render(m_scene, *m_camera);
 		}
+
+		// Draw calls of the saved frame per render pass, so a capture also answers "how many batches here"
+		{
+			std::ostringstream draws;
+			double total = 0.0;
+			for (const auto& [name, value] : Profiler::GetInstance().GetCounters())
+			{
+				if (name.rfind("Draws: ", 0) == 0)
+				{
+					draws << " " << name.substr(7) << "=" << value;
+					total += value;
+				}
+			}
+			ILOG("Capture draws at " << viewpoint.ToString() << ": total=" << total << draws.str());
+		}
+		Profiler::GetInstance().SetEnabled(profilerWasEnabled);
 
 		bool written = false;
 		const auto target = std::dynamic_pointer_cast<RenderTexture>(m_deferredRenderer->GetFinalRenderTarget());

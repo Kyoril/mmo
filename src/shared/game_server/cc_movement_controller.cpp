@@ -140,19 +140,19 @@ namespace mmo
 			// and sample the navmesh around it.  This produces movement of ~12 m per
 			// tick, strongly biased away from the caster.
 			const Vector3 projectedCenter = currentPos + fleeDir * kFearProjectionDist;
-			found = mapData->FindRandomPointAroundCircle(projectedCenter, kFearSampleRadius, destination);
+			found = mapData->FindRandomPointAroundCircle(projectedCenter, kFearSampleRadius, destination, m_unit.GetMovementAbilities());
 
 			if (!found)
 			{
 				// Navmesh blocked ahead (wall, cliff, water) — try a wider sample
 				// centred on the unit itself so it still moves somewhere.
-				found = mapData->FindRandomPointAroundCircle(currentPos, kFearFallbackRadius, destination);
+				found = mapData->FindRandomPointAroundCircle(currentPos, kFearFallbackRadius, destination, m_unit.GetMovementAbilities());
 			}
 		}
 		else
 		{
 			// Disorient: small random wander around current position.
-			found = mapData->FindRandomPointAroundCircle(m_unit.GetPosition(), kDisorientRadius, destination);
+			found = mapData->FindRandomPointAroundCircle(m_unit.GetPosition(), kDisorientRadius, destination, m_unit.GetMovementAbilities());
 		}
 
 		if (!found)

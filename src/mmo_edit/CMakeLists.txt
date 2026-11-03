@@ -80,6 +80,7 @@ target_link_libraries(mmo_edit
 	hpak_v1_0 
 	tex_v1_0 
 	assets
+	material_graph
 	scene_graph
 	frame_ui
 	paging
@@ -99,6 +100,8 @@ target_link_libraries(mmo_edit nav_mesh Recast Detour DebugUtils)
 target_link_libraries(mmo_edit graphics_null)
 if (WIN32)
 	target_link_libraries(mmo_edit graphics_d3d11)
+endif()
+if (TARGET fmod_audio)
 	target_link_libraries(mmo_edit fmod_audio)
 else()
 	target_link_libraries(mmo_edit null_audio)

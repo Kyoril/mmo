@@ -27,7 +27,7 @@ Unit classes define:
 
 Each creature entry can now include:
 - `unitClassId`: Reference to a unit class template
-- `baseStats`: Base values for stamina, strength, agility, intellect, spirit
+- Base attribute values come from the unit class's `levelbasevalues.attributes` (indexed by attribute id, see `attributes.proto`)
 - `statScaling`: How much each stat increases per level
 - `baseHealth/baseMana`: Base values before stat modifiers
 - `eliteStatMultiplier`: Multiplier for elite creatures
@@ -68,19 +68,19 @@ powertype: RAGE
 
 // Health from stamina (10 HP per stamina point)
 healthStatSources: {
-  statId: STAMINA
+  statId: 0   // attribute id of Stamina (attributes.data)
   factor: 10.0
 }
 
 // Attack power from strength (2 AP per strength point)
 attackPowerStatSources: {
-  statId: STRENGTH
+  statId: 1   // Strength
   factor: 2.0
 }
 
 // Armor from agility (1 armor per agility point)
 armorStatSources: {
-  statId: AGILITY
+  statId: 2   // Agility
   factor: 1.0
 }
 ```
@@ -139,10 +139,17 @@ eliteStatMultiplier: 1.0
 
 ## Technical Details
 
+### Attributes are data
+
+Attributes (Stamina, Strength, ...) are defined in `attributes.data`; stat sources reference them by
+attribute id. Mana regeneration, melee crit and dodge come from the unit class's `manaRegenSources`,
+`meleeCritSources` and `dodgeSources` (attribute value / pointsPer). See
+`docs/superpowers/specs/2026-10-29-data-driven-attributes-design.md`.
+
 ### Object Fields
 
 The system uses existing object fields:
-- `StatStamina`, `StatStrength`, `StatAgility`, `StatIntellect`, `StatSpirit`
+- `Stat + attribute id` (one field per attribute slot, `MaxAttributes` of them)
 - `MaxHealth`, `MaxMana`, `Armor`, `AttackPower`
 - `MinDamage`, `MaxDamage`, `PowerType`
 

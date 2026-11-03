@@ -196,7 +196,8 @@ namespace mmo
 
 	void CreatureSpawner::SetRespawnTimer()
 	{
-		if (!m_respawn)
+		// An inactive spawner refills nothing: its creatures come back when it is activated again
+		if (!m_respawn || !m_active)
 		{
 			return;
 		}

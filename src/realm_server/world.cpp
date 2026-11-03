@@ -15,6 +15,8 @@
 
 #include "player.h"
 #include "player_manager.h"
+#include "modules/bug_report_module.h"
+#include "modules/pet_module.h"
 #include "vector_sink.h"
 #include "base/big_number.h"
 #include "base/constants.h"
@@ -37,7 +39,8 @@ namespace mmo
 		std::shared_ptr<Client> connection, 
 		const String & address,
 		const proto::Project& project,
-		const TimeOfDayManager& timeOfDayManager)
+		const TimeOfDayManager& timeOfDayManager,
+		PetModule& petModule)
 		: m_timerQueue(timerQueue)
 		, m_manager(worldManager)
 		, m_playerManager(playerManager)
@@ -46,6 +49,7 @@ namespace mmo
 		, m_address(address)
 		, m_project(project)
 		, m_timeOfDayManager(timeOfDayManager)
+		, m_petModule(petModule)
 	{
 		m_connection->setListener(*this);
 
@@ -374,6 +378,8 @@ namespace mmo
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::MailRestoreItem, *strongThis, &World::OnMailRestoreItem);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::SubsystemStatus, *strongThis, &World::OnSubsystemStatus);
 						strongThis->RegisterPacketHandler(auth::world_realm_packet::BugReportResult, *strongThis, &World::OnBugReportResult);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::PetData, *strongThis, &World::OnPetData);
+						strongThis->RegisterPacketHandler(auth::world_realm_packet::CreatePet, *strongThis, &World::OnCreatePet);
 
 						// If the login attempt succeeded, then we will accept RealmList request packets from now
 						// on to send the realm list to the client on manual request
@@ -847,6 +853,7 @@ namespace mmo
 			{
 				activeClass.attributePointsSpent[i] = player.GetAttributePointsByAttribute(i);
 			}
+			activeClass.attributeLayout = player.GetAttributeLayout();
 			for (const auto& [talentId, rank] : player.GetTalents())
 			{
 				activeClass.talentRanks[talentId] = static_cast<uint8>(rank);
@@ -1088,10 +1095,18 @@ namespace mmo
 			items.push_back(item);
 		}
 
-		// Send result back to World Server
-		auto sendResult = [this, characterGuid, operationId](bool success)
+		// Send result back to World Server. Holds the World weakly: the database pool drains its
+		// queue, so this can run after the world node disconnected and the World was destroyed.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, operationId](bool success)
 		{
-			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
 				outPacket
@@ -1119,18 +1134,26 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, senderGuid = draft.senderGuid](MailCreationResult result)
+		// The World is held weakly (see OnSaveInventoryItems); the player manager outlives every World.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, &playerManager = m_playerManager, senderGuid = draft.senderGuid](MailCreationResult result)
 		{
 			// Notify the recipient about the new mail if they are online
 			if (result.result == mail_result::Ok)
 			{
-				if (Player* recipient = m_playerManager.GetPlayerByCharacterGuid(result.recipientId))
+				if (Player* recipient = playerManager.GetPlayerByCharacterGuid(result.recipientId))
 				{
 					recipient->SendMailNotify();
 				}
 			}
 
-			GetConnection().sendSinglePacket([senderGuid, &result](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([senderGuid, &result](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailDraftResult);
 				outPacket
@@ -1154,8 +1177,15 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, characterGuid, mailId](std::optional<uint32> money)
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, mailId](std::optional<uint32> money)
 		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
 			uint8 result = mail_result::Ok;
 			if (!money)
 			{
@@ -1166,7 +1196,7 @@ namespace mmo
 				result = mail_result::MailNotFound;
 			}
 
-			GetConnection().sendSinglePacket([characterGuid, mailId, result, amount = money.value_or(0)](auth::OutgoingPacket& outPacket)
+			strongThis->GetConnection().sendSinglePacket([characterGuid, mailId, result, amount = money.value_or(0)](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailTakeMoneyResult);
 				outPacket
@@ -1193,11 +1223,18 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		auto sendResult = [this, characterGuid, mailId](std::optional<MailAttachment> attachment)
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, mailId](std::optional<MailAttachment> attachment)
 		{
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
 			const uint8 result = attachment ? mail_result::Ok : mail_result::MailNotFound;
 
-			GetConnection().sendSinglePacket([characterGuid, mailId, result, attachment = attachment.value_or(MailAttachment{})](auth::OutgoingPacket& outPacket)
+			strongThis->GetConnection().sendSinglePacket([characterGuid, mailId, result, attachment = attachment.value_or(MailAttachment{})](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::MailTakeItemResult);
 				outPacket
@@ -1267,10 +1304,17 @@ namespace mmo
 			slots.push_back(slot);
 		}
 
-		// Send result back to World Server
-		auto sendResult = [this, characterGuid, operationId](bool success)
+		// Send result back to World Server. Held weakly for the same reason as in OnSaveInventoryItems.
+		std::weak_ptr weakThis{ shared_from_this() };
+		auto sendResult = [weakThis, characterGuid, operationId](bool success)
 		{
-			GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
+			const auto strongThis = weakThis.lock();
+			if (!strongThis)
+			{
+				return;
+			}
+
+			strongThis->GetConnection().sendSinglePacket([characterGuid, operationId, success](auth::OutgoingPacket& outPacket)
 			{
 				outPacket.Start(auth::realm_world_packet::InventoryOperationResult);
 				outPacket
@@ -1336,6 +1380,71 @@ namespace mmo
 			packet.Start(auth::realm_world_packet::Shutdown);
 			packet.Finish();
 		});
+	}
+
+	void World::SendPlayerPetData(const uint64 characterGuid, const std::vector<PersistentPetData>& pets) const
+	{
+		m_connection->sendSinglePacket([characterGuid, &pets](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::PlayerPetData);
+			packet << io::write<uint64>(characterGuid);
+			WritePersistentPets(packet, pets);
+			packet.Finish();
+		});
+	}
+
+	void World::SendPetCreated(const uint64 characterGuid, const PersistentPetData& pet) const
+	{
+		m_connection->sendSinglePacket([characterGuid, &pet](auth::OutgoingPacket& packet)
+		{
+			packet.Start(auth::realm_world_packet::PetCreated);
+			packet << io::write<uint64>(characterGuid) << pet;
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult World::OnPetData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		std::vector<PersistentPetData> pets;
+		if (!(packet >> io::read<uint64>(characterGuid)) || !ReadPersistentPets(packet, pets))
+		{
+			ELOG("Failed to read PetData packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		m_petModule.SavePets(characterGuid, std::move(pets));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult World::OnCreatePet(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		PersistentPetData request;
+		if (!(packet >> io::read<uint64>(characterGuid) >> request))
+		{
+			ELOG("Failed to read CreatePet packet");
+			return PacketParseResult::Disconnect;
+		}
+
+		// The answer goes to the node the character is on when the pet exists, which is not this one
+		// if the character changed its node meanwhile (then the next join hands the pet over).
+		PlayerManager& playerManager = m_playerManager;
+		m_petModule.CreatePet(characterGuid, request, [&playerManager, characterGuid](const PersistentPetData& created)
+		{
+			const Player* player = playerManager.GetPlayerByCharacterGuid(characterGuid);
+			if (!player)
+			{
+				return;
+			}
+
+			if (const auto world = player->GetWorld())
+			{
+				world->SendPetCreated(characterGuid, created);
+			}
+		});
+
+		return PacketParseResult::Pass;
 	}
 
 	void World::SendSetSubsystemEnabled(const game::Subsystem subsystem, const bool enabled) const
@@ -1421,7 +1530,7 @@ namespace mmo
 
 		if (Player* player = m_playerManager.GetPlayerByCharacterGuid(characterGuid))
 		{
-			player->SendBugReportResult(static_cast<game::BugReportResult>(result));
+			SendBugReportResult(*player, static_cast<game::BugReportResult>(result));
 		}
 
 		return PacketParseResult::Pass;

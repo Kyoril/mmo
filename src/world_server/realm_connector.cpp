@@ -432,6 +432,27 @@ namespace mmo
 			});
 	}
 
+	void RealmConnector::SendPetData(const uint64 characterGuid, const std::vector<PersistentPetData>& pets)
+	{
+		sendSinglePacket([characterGuid, &pets](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::PetData);
+				outPacket << io::write<uint64>(characterGuid);
+				WritePersistentPets(outPacket, pets);
+				outPacket.Finish();
+			});
+	}
+
+	void RealmConnector::SendCreatePet(const uint64 characterGuid, const PersistentPetData& request)
+	{
+		sendSinglePacket([characterGuid, &request](auth::OutgoingPacket& outPacket)
+			{
+				outPacket.Start(auth::world_realm_packet::CreatePet);
+				outPacket << io::write<uint64>(characterGuid) << request;
+				outPacket.Finish();
+			});
+	}
+
 	void RealmConnector::SendTeleportRequest(uint64 characterGuid, uint32 mapId, const Vector3& position, const Radian& facing)
 	{
 		sendSinglePacket([characterGuid, mapId, &position, &facing](auth::OutgoingPacket& outPacket)
@@ -537,6 +558,8 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				RegisterPacketHandler(auth::realm_world_packet::SetSubsystemEnabled, *this, &RealmConnector::OnSetSubsystemEnabled);
 				RegisterPacketHandler(auth::realm_world_packet::Shutdown, *this, &RealmConnector::OnShutdown);
 				RegisterPacketHandler(auth::realm_world_packet::ResetInstance, *this, &RealmConnector::OnResetInstance);
+				RegisterPacketHandler(auth::realm_world_packet::PlayerPetData, *this, &RealmConnector::OnPlayerPetData);
+				RegisterPacketHandler(auth::realm_world_packet::PetCreated, *this, &RealmConnector::OnPetCreated);
 
 				m_loggedIn = true;
 				if (m_subsystems)
@@ -740,26 +763,12 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 
 		characterObject->SetBinding(characterData.bindMap, characterData.bindPosition, characterData.bindFacing);
 
-		bool pointsReset = false;
+		// Spending made under a different attribute set (or no longer affordable) is refunded entirely;
+		// the player is told once they are in the world.
+		bool attributePointsRefunded = false;
 		if (const CharacterClassData* activeClass = characterData.GetActiveClass())
 		{
-			for (uint32 i = 0; i < 5; ++i)
-			{
-				for (uint32 j = 0; j < activeClass->attributePointsSpent[i]; ++j)
-				{
-					if (!characterObject->AddAttributePoint(i))
-					{
-						WLOG("Points have been reset due to inconsistencies with points spent vs points available!");
-						pointsReset = true;
-						break;
-					}
-				}
-
-				if (pointsReset)
-				{
-					break;
-				}
-			}
+			attributePointsRefunded = !characterObject->ApplyAttributeSpending(*activeClass);
 		}
 
 		// Construct inventory data
@@ -788,6 +797,10 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		player->SetAccountFeatures(std::move(accountFeatures));
 		player->SetLocale(playerLocale);
 		player->SetFallDamageConfig(m_fallDamageMinHeight, m_fallDamageLethalHeight);
+		if (attributePointsRefunded)
+		{
+			player->NotifyAttributePointsRefundedOnSpawn();
+		}
 
 		// A join can arrive for a character that is still registered here. The realm kicks the old
 		// session and admits the new one, and the leave and join packets that result are not
@@ -1370,7 +1383,28 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 		m_subsystemStatusChanged = subsystems.statusChanged.connect([this](const WorldSubsystemState::StatusList& entries)
 		{
 			SendSubsystemStatus(entries);
+
+			// The PETS switch stops the live pets too, not just new pet actions.
+			for (const auto& [id, status] : entries)
+			{
+				if (id == game::subsystem::Pets)
+				{
+					OnPetsAvailabilityChanged(status == game::subsystem_status::Available);
+				}
+			}
 		});
+	}
+
+	void RealmConnector::OnPetsAvailabilityChanged(const bool available)
+	{
+		for (const ObjectGuid characterGuid : m_playerManager.GetCharacterGuids())
+		{
+			const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+			if (player)
+			{
+				player->GetCharacter().OnPetsAvailabilityChanged(available);
+			}
+		}
 	}
 
 	void RealmConnector::SendSubsystemStatus(const WorldSubsystemState::StatusList& entries)
@@ -1460,6 +1494,54 @@ void RealmConnector::SendDeleteInventoryItems(uint64 characterGuid, uint32 opera
 				NotifyWorldInstanceLeft(characterGuid, auth::world_left_reason::Disconnect);
 			}
 		}
+	}
+
+	bool RealmConnector::IsSubsystemAvailable(const game::Subsystem subsystem) const
+	{
+		return !m_subsystems || m_subsystems->IsAvailable(subsystem);
+	}
+
+	PacketParseResult RealmConnector::OnPlayerPetData(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		std::vector<PersistentPetData> pets;
+		if (!(packet >> io::read<uint64>(characterGuid)) || !ReadPersistentPets(packet, pets))
+		{
+			ELOG("Failed to read PlayerPetData packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			WLOG("Received stored pets for unknown player character " << log_hex_digit(characterGuid));
+			return PacketParseResult::Pass;
+		}
+
+		player->ApplyStoredPets(std::move(pets));
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult RealmConnector::OnPetCreated(auth::IncomingPacket& packet)
+	{
+		uint64 characterGuid = 0;
+		PersistentPetData pet;
+		if (!(packet >> io::read<uint64>(characterGuid) >> pet))
+		{
+			ELOG("Failed to read PetCreated packet from realm");
+			return PacketParseResult::Disconnect;
+		}
+
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(characterGuid);
+		if (!player)
+		{
+			// The realm keeps the pet; the character gets it with its next join.
+			WLOG("Received a created pet for unknown player character " << log_hex_digit(characterGuid));
+			return PacketParseResult::Pass;
+		}
+
+		player->GetCharacter().OnPetCreated(pet);
+		return PacketParseResult::Pass;
 	}
 
 	PacketParseResult RealmConnector::OnSetSubsystemEnabled(auth::IncomingPacket& packet)

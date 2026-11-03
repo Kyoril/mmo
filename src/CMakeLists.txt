@@ -9,9 +9,16 @@ add_subdirectory(realm_server)
 add_subdirectory(world_server)
 
 
+if (APPLE AND (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR))
+	add_subdirectory(hlsl2msl)
+endif()
+
 if (MMO_BUILD_CLIENT)
 	add_subdirectory(mmo_client)
 	add_subdirectory(graphics_test)
+	if (WIN32)
+		add_subdirectory(ui_test)
+	endif()
 endif()
 if (MMO_BUILD_EDITOR)
 	if (ASSIMPSDK_FOUND)
@@ -35,6 +42,11 @@ if (MMO_BUILD_TOOLS)
 	if (WIN32)
 		add_subdirectory(mmo_error)
 	endif()
+endif()
+
+# The client CI jobs build mmo_cook next to the client to cook their platform's shaders.
+if (MMO_BUILD_TOOLS OR MMO_BUILD_CLIENT)
+	add_subdirectory(mmo_cook)
 endif()
 
 if (MMO_BUILD_TESTS)

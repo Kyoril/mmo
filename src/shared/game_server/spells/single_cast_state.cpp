@@ -2,6 +2,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_server/ai/creature_facing.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
@@ -10,6 +11,7 @@
 #include "game_server/spells/spell_interrupt_rules.h"
 #include "game/id_mask.h"
 #include "game_server/spells/trade_skill_cast_rules.h"
+#include "game_server/pets/pet_manager.h"
 
 #include "base/utilities.h"
 #include "game_server/world/world_instance.h"
@@ -20,6 +22,33 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// True if the spell has an effect that raises its own damage or heal proc events.
+		bool DealsDamageOrHealing(const proto::SpellEntry& spell)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				switch (effect.type())
+				{
+				case spell_effects::InstantKill:
+				case spell_effects::SchoolDamage:
+				case spell_effects::EnvironmentalDamage:
+				case spell_effects::HealthLeech:
+				case spell_effects::WeaponDamageNoSchool:
+				case spell_effects::WeaponDamage:
+				case spell_effects::WeaponPercentDamage:
+				case spell_effects::Heal:
+				case spell_effects::HealPct:
+					return true;
+				default:
+					break;
+				}
+			}
+			return false;
+		}
+	}
+
 	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc, uint64 itemGuid)
 		: m_cast(cast)
 		, m_spell(spell)
@@ -49,10 +78,8 @@ namespace mmo
 		}
 		else
 		{
-			// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
-			int32 castTimeMod = static_cast<int32>(m_castTime);
-			executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
-			m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
+			// Spell mods and the ModCastingSpeedPct multiplier.
+			m_castTime = executor.ModifyCastTime(spell.id(), m_castTime);
 		}
 
 		const Vector3& location = executor.GetPosition();
@@ -77,7 +104,8 @@ namespace mmo
 			// which unit or which spell is responsible.
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
-				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid())
+				<< ": result " << static_cast<uint32>(m_endCastFailure));
 			// Report the reason validation gave, so the caller can react to it: creature AI walks
 			// towards a victim it lost line of sight to only when told so. Validation paths that
 			// end without naming a reason still report a generic error.
@@ -551,6 +579,29 @@ namespace mmo
 			return false;
 		}
 
+		if (const SpellCastResult petResult = CheckSummonPetLimit(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
+			return false;
+		}
+
+		// A spell aimed at the caster's pet needs a living, summoned persistent pet.
+		if (const SpellCastResult petResult = CheckPetTargetEffects(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
+			return false;
+		}
+
+		// A persistent pet summon, grant or revive that is bound to fail must not spend the cast.
+		if (const GamePlayerS* player = m_context.GetPlayerExecutor())
+		{
+			if (const SpellCastResult petResult = CheckPersistentPetEffects(m_spell, *player); petResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(petResult);
+				return false;
+			}
+		}
+
 		return true;
 	}
 
@@ -571,7 +622,20 @@ namespace mmo
 				return false;
 			}
 
-			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			// Creatures (NPCs and pets) turn to what they cast at, unless crowd control holds them. This
+			// runs again when the cast finishes, so a target that walked past the caster during the
+			// cast no longer throws the finished cast away. Players have to face their target themselves.
+			GameUnitS& executer = m_cast.GetExecuter();
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0
+				&& unitTarget != &executer
+				&& !executer.IsPlayer()
+				&& !executer.IsFacingTowards(*unitTarget)
+				&& CanTurnToFaceTarget(executer))
+			{
+				executer.SetFacing(executer.GetAngle(*unitTarget));
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !executer.IsFacingTowards(*unitTarget))
 			{
 				SendEndCast(spell_cast_result::FailedUnitNotInfront);
 				return false;
@@ -585,6 +649,18 @@ namespace mmo
 		}
 
 		GamePlayerS* player = m_context.GetPlayerExecutor();
+
+		// A target that cannot be tamed fails a tame spell before it is spent. Checked again when the
+		// cast finishes: someone else may have tamed the creature in the meantime.
+		if (unitTarget && player)
+		{
+			if (const SpellCastResult tameResult = CheckTameTarget(m_spell, *player, *unitTarget); tameResult != spell_cast_result::CastOkay)
+			{
+				SendEndCast(tameResult);
+				return false;
+			}
+		}
+
 		if ((unitTarget || m_target.GetTargetMap() == spell_cast_target_flags::Self) && m_itemGuid && player)
 		{
 			GameUnitS* target = unitTarget ? unitTarget : &m_cast.GetExecuter();
@@ -854,6 +930,11 @@ namespace mmo
 		const int32 totalCost = m_cast.CalculatePowerCost(m_spell);
 		if (totalCost > 0)
 		{
+			// Regeneration is continuous: count everything regenerated up to this moment, so a
+			// cast the client (which predicts regeneration) allows is not refused for waiting on
+			// the next regeneration sync.
+			m_cast.GetExecuter().SettleRegeneration();
+
 			if (m_spell.powertype() == power_type::Health)
 			{
 				uint32 currentHealth = m_cast.GetExecuter().Get<uint32>(object_fields::Health);
@@ -1000,20 +1081,39 @@ namespace mmo
 		return finalCD;
 	}
 
-	void SingleCastState::ApplyAllEffects()
+	void SingleCastState::ApplySpellCooldown()
 	{
+		if (m_spellCooldownApplied)
+		{
+			return;
+		}
+		m_spellCooldownApplied = true;
+
 		// "Disabled While Active" spells (e.g. Stealth) do not start their cooldown when cast - the
 		// cooldown only begins once the aura they place on the caster fades (handled in
 		// AuraContainer::SetApplied / GameUnitS::StartDeferredSpellCooldown). Skip the normal cooldown
-		// here for such spells; a fallback below still applies it immediately if no aura was gained.
-		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+		// here for such spells; a fallback in ApplyAllEffects still applies it immediately if no aura
+		// was gained.
+		if ((m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0)
+		{
+			return;
+		}
 
 		// Add spell cooldown if any - unless it was already started at cast start.
-		const GameTime finalCD = CalculateFinalCooldown();
-		if (finalCD && !m_cooldownStartedOnCastStart && !disabledWhileActive)
+		if (const GameTime finalCD = CalculateFinalCooldown(); finalCD && !m_cooldownStartedOnCastStart)
 		{
 			ApplyCooldown(finalCD, m_spell.categorycooldown());
 		}
+	}
+
+	void SingleCastState::ApplyAllEffects()
+	{
+		const bool disabledWhileActive = (m_spell.attributes(0) & spell_attributes::DisabledWhileActive) != 0;
+		const GameTime finalCD = CalculateFinalCooldown();
+
+		// Idempotent: a spell with a travel speed already started its cooldown when its projectile
+		// was launched, which is the moment its SpellGo announced to the client.
+		ApplySpellCooldown();
 
 		// Make sure that the executer exists after all effects have been executed
 		auto strongCaster = std::static_pointer_cast<GameUnitS>(m_cast.GetExecuter().shared_from_this());
@@ -1084,11 +1184,30 @@ namespace mmo
 
 		if (strongCaster->IsUnit())
 		{
+			// Damage and heal effects raise their own proc events. Every other spell (a stun, a
+			// self buff) raises the "no damage class" ones here, so talents can react to casting it.
+			// Positive or negative follows the target, not the spell's positive flag, which self
+			// buffs such as Evasive Step do not set.
+			const bool raiseCastProcs = !m_isProc && !(m_spell.attributes(0) & spell_attributes::Passive) && !DealsDamageOrHealing(m_spell);
+			GameUnitS& executer = m_cast.GetExecuter();
+
 			for (const uint64 targetGuid : m_affectedTargetGuids)
 			{
 				if (GameUnitS* targetUnit = m_context.FindUnitByGuid(targetGuid))
 				{
-					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
+					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &executer);
+
+					if (raiseCastProcs)
+					{
+						const bool hostile = targetUnit != &executer && !executer.UnitIsFriendly(*targetUnit);
+						executer.TriggerProcEvent(hostile ? spell_proc_flags::DoneSpellNoneDmgClassNeg : spell_proc_flags::DoneSpellNoneDmgClassPos,
+							targetUnit, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						if (targetUnit != &executer)
+						{
+							targetUnit->TriggerProcEvent(hostile ? spell_proc_flags::TakenSpellNoneDmgClassNeg : spell_proc_flags::TakenSpellNoneDmgClassPos,
+								&executer, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						}
+					}
 				}
 			}
 		}
@@ -1116,6 +1235,12 @@ namespace mmo
 			{se::Dispel,                 SpellEffects::HandleDispel},
 			{se::Summon,                 SpellEffects::HandleSummon},
 			{se::SummonPet,              SpellEffects::HandleSummonPet},
+			{se::TameCreature,           SpellEffects::HandleTameCreature},
+			{se::LearnPetSpell,          SpellEffects::HandleLearnPetSpell},
+			{se::SummonPersistentPet,    SpellEffects::HandleSummonPersistentPet},
+			{se::GrantPersistentPet,     SpellEffects::HandleGrantPersistentPet},
+			{se::DismissPet,             SpellEffects::HandleDismissPet},
+			{se::RevivePet,              SpellEffects::HandleRevivePet},
 			{se::LearnSpell,             SpellEffects::HandleLearnSpell},
 			{se::Revive,                 SpellEffects::HandleRevive},
 			{se::RevivePct,              SpellEffects::HandleRevivePct},
@@ -1123,6 +1248,7 @@ namespace mmo
 			{se::ApplyAreaAura,          SpellEffects::HandleApplyAura},
 			{se::PersistentAreaAura,     SpellEffects::HandlePersistentAreaAura},
 			{se::SchoolDamage,           SpellEffects::HandleSchoolDamage},
+			{se::HealthLeech,            SpellEffects::HandleHealthLeech},
 			{se::EnvironmentalDamage,    SpellEffects::HandleEnvironmentalDamage},
 			{se::ResetAttributePoints,   SpellEffects::HandleResetAttributePoints},
 			{se::Parry,                  SpellEffects::HandleParry},
@@ -1499,6 +1625,13 @@ namespace mmo
 					m_projectileOrigin = m_cast.GetExecuter().GetPosition();
 					m_projectileDest = targetUnit->GetPosition();
 					m_impactCountdown.SetEnd(m_projectileStart + std::min<GameTime>(travelTimeMs, 200));
+
+					// This spell's effects - and with them its cooldown - are resolved only once the
+					// projectile lands. The SpellGo packet sent above already told the client the
+					// cooldown runs from now, so start it on the server now as well: leaving it to the
+					// impact let the caster fire again while the first projectile was still in flight,
+					// with nothing but the global cooldown in the way.
+					ApplySpellCooldown();
 				}
 			}
 		}

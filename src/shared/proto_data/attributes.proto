@@ -1,0 +1,32 @@
+syntax = "proto2";
+package mmo.proto;
+
+import "localization.proto";
+
+// A primary attribute (e.g. Stamina). Attributes are pure data: the id is the attribute's slot in
+// the replicated unit fields, the unit modifier table and every per-attribute array, so it must be
+// smaller than mmo::MaxAttributes (see src/shared/game/attribute.h). Ids are stable: deleting an
+// attribute leaves its slot free, it does not shift the others.
+// NOTE: field numbers are shared between src/shared/proto_data/attributes.proto and
+// src/shared/client_data/attributes.proto (the client receives a byte copy) - keep them in sync.
+message AttributeEntry {
+	required uint32 id = 1;
+
+	// Display name, e.g. "Stamina".
+	required string name = 2;
+
+	// Optional tooltip text describing what the attribute does.
+	optional string description = 3;
+
+	// Chat line printed on level up, with %d for the gained amount, e.g. "You have gained %d stamina.".
+	// Empty means no line is printed for this attribute.
+	optional string levelUpText = 4;
+
+	repeated LocalizedString name_loc = 200;
+	repeated LocalizedString description_loc = 201;
+	repeated LocalizedString levelUpText_loc = 202;
+}
+
+message Attributes {
+	repeated AttributeEntry entry = 1;
+}

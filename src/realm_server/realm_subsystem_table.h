@@ -54,6 +54,23 @@ namespace mmo
 			return true;
 		}
 
+		/// Whether a subsystem is available to a player on a world node.
+		/// @param worldStatus The node's reported status, or nullptr if the player is on no node.
+		[[nodiscard]] bool IsAvailable(const game::Subsystem id, const SubsystemStatusArray* worldStatus) const
+		{
+			if (id >= game::subsystem::Count_)
+			{
+				return false;
+			}
+
+			if (game::GetSubsystemOwner(id) == game::subsystem_owner::Realm)
+			{
+				return m_realmOwned[id] == game::subsystem_status::Available;
+			}
+
+			return worldStatus && (*worldStatus)[id] == game::subsystem_status::Available;
+		}
+
 		/// The status of every subsystem for a player on a world node.
 		/// @param worldStatus The node's reported status, or nullptr if the player is on no node.
 		[[nodiscard]] SubsystemStatusList Compose(const SubsystemStatusArray* worldStatus) const

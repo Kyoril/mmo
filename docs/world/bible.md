@@ -99,7 +99,7 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - occasional waterfalls and streams.
 - In the game, Oakenshire is the first hub (levels 1–6). [C] It has:
   - a **Town Hall** whose ground floor holds the class trainers (q3, q4, q7, q23);
-  - an **Inn** run by Old Harbin, with a rat-infested cellar (q10);
+  - an **Inn** run by Old Harbin, with a rat-infested cellar (q10). The shadowmancer Malrik Duskwright teaches in that cellar, and Harbin is paid to keep quiet about it (q75-q77). Guests complain of muttering and cold below the floor; Harbin blames rats (q72). [E] (2026-11-02)
   - a **west gate** held by the **Oakenshire Watch** (u46, u47);
   - a **market** east of the Inn's front steps (atlas `oakenshire_market`, placeholder) with Eliza Thorne (General Goods), Garret Blackwood (Weapons), Roland Stonehelm (Mail & Plate) and Derrick Longstride (Leather Armor). On 2026-10-16 the user had them moved here from the buried old-Haven market. [E]
 - Farms and woodcutters lie in the valley south-east of town, and boars trample them (q1, q5, q6). [C]
@@ -109,20 +109,23 @@ A north-up overview is in `generated/world/review/oakenshire-sketch/map_0.png` (
   - In the data, its NPCs (Farmer Haldor, Healer Mirenna, Guard Emrik, the binder Aralin the Kindling) stand at about (300, 550), just west of the Oakenshire trainers (`forest_camp`). [C]
   - **Forest Camp is part of Oakenshire.** Its atlas pin is named "Oakenshire". [E] Quest texts may still say "camp" for the NPCs' corner of town.
 
-### 3.3 Haven (zone 3; Market, zone 4, is its sub-zone) — atlas `haven` (placeholder)
+### 3.3 Haven (zone 3; Market, zone 4, is its sub-zone) — atlas `haven` (canon)
 
 - A walled town and major human hub, reached around level 10. It has guards, vendors and class trainers. [E]
-- **Haven has no terrain yet.** The zone rows exist, but no terrain tile carries its area id. [C]
-- The data strongly suggests Haven once stood around the map origin:
-  - Five vendors stood at about (0, 21). Four of them moved to the Oakenshire market on 2026-10-16 (section 3.2). Mariana Silkspun (Clothier) is still buried there; Milly Goldwyn sells the same cloth list in Oakenshire.
-  - Injured Guards stand "north east of Haven" near (−55, −45) (q8).
-  - Haven's binder is Magister Calloran (u25), who is not spawned.
-  - All of these NPCs are buried 3–7 m below the current terrain. [C]
 - **Haven lies south-west of Oakenshire, at the end of the river valley.** [E] It is reached by the Haven Road (section 3.11), with the river passing on its east side.
-  - The atlas pin `haven` is canon at (−781, 1249), radius about 310 m: a big walled city on flat, empty ground with no zone yet.
-  - It is about 1.3 km from the Oakenshire Town Hall in a straight line.
-- The continent sketch shows Haven just **south** of Oakenshire. [E]
-- The remaining buried Haven NPCs at the map origin are leftovers. They have to move to the new Haven, or be removed. [?]
+  - The town WMO `Models/Haven/Haven_Town.hwmo` stands at (−689, 1025). Its north gate (z ≈ 950) faces the harbour bridge. [C]
+  - Layout, north to south: the north gate, the **lower court** with four market stalls (z ≈ 976), stairs up to the **upper square** with the summoning stone (−689, 1020; the runestone Oakenshire uses, replaced the plaza brazier 2026-10-24) and the main street between the inn (west) and the Haven Exchange bank (east), the fountain (−689, 1035), a curved terrace, and the Keep (z ≈ 1060+). [C]
+- **People of Haven** (populated 2026-10-24): [C]
+  - The **Haven Watch** under Watch-Captain Corwin Ashby (u98, gives q73) at the north gate; Haven Guards (u97) at the gate and the Keep stairs, and two patrols.
+  - Lower-court market: Tobias Wainwright (General Goods), Hilda Brandt (Weapons), Corin Hale (Mail & Plate), Wenna Thistle (Leather Armor). By day they call out their wares, with voice lines.
+  - Upper square: Magister Calloran, the binder, at the summoning stone (u25; ends q73, gives q74); Rosalind Tull, innkeeper (food and drink); bankers Osric Penhallow (ends q74) and Ysolde Marrow at the Haven Exchange; Mariana Silkspun (Clothier), moved here from the buried old-Haven site.
+  - Class trainers on the Keep terrace: Swordmaster Gareth Lowe, Magistra Ilyana Crest, Mother Agatha Brightwell, Duskmaster Edwin Sorrel, Ranger Tamsin Reed (u111–u115).
+- **Day and night** (`Haven - Day/Night Routine`, trigger 116, on map 0's hour event): [C]
+  - 06:00–21:00: Herald Aldous Penn, the town crier, at the fountain, and citizens about the courts.
+  - 19:00–22:00: Ned Wickham, the lamplighter, walks the main street.
+  - 21:00–06:00: Old Brannoc, the night watchman, walks the main street and calls 22:00, midnight, 02:00 and 04:00; two extra night patrols; two tipsy patrons sit outside the inn.
+  - Services stay open at all hours.
+- The remaining buried Haven NPCs at the map origin (Injured Guards of q8) are leftovers. They have to move to the new Haven, or be removed. [?]
 - The Westwatch Training Yard (q21: "not far from here") stands with them. Does it move into Haven, or stay near Oakenshire as a place of its own? [?]
 
 ### 3.4 Westwatch Training Yard
@@ -307,15 +310,15 @@ Open [?]:
 |---|---|---|---|---|---|
 | Farmer Haldor | farmer; boars threaten his fields | `forest_camp` | 15 | 1, 5, 6 / 1, 5, 6 | [E][C] |
 | Healer Mirenna | healer; sells minor potions after q2 | `forest_camp` | 16 | 2, 7 / 2 | [E][C] |
-| Guard Emrik | camp guard; sends new adventurers to their trainers, and on to the west gate once Haldor's young boars are dealt with (q66) | `forest_camp` | 17 | 3, 4, 23, 72, 66 / – | [E][C] |
+| Guard Emrik | camp guard; sends new adventurers to their trainers (but not acolytes: he knows nothing of Malrik and only sends them to look into the noises in the inn cellar, q72), and on to the west gate once Haldor's young boars are dealt with (q66) | `forest_camp` | 17 | 3, 4, 23, 72, 66 / – | [E][C] |
 | Aralin the Kindling | Oakenshire binder | `forest_camp` | 24 | – | [C] |
 | Baldric Steelheart | warrior trainer | `oakenshire_hub` (Town Hall) | 10 | 21, 31, 32 / 3, 31, 32 | [E][C] |
 | Vivienne Emberglow | mage trainer | `oakenshire_hub` | 11 | 33, 34 / 4, 33, 34 | [C] |
 | Clarissa Whiteshield | cleric trainer | `oakenshire_hub` | 12 | 8, 35, 36 / 7, 8, 35, 36 | [C] |
-| Malrik Duskwright | shadowmancer trainer | `oakenshire_hub` | 13 | 37, 38 / 37, 38, 72 | [C] |
+| Malrik Duskwright | shadowmancer trainer, in the Inn cellar | `hub_near_old_harbin` | 13 | 37, 38, 75, 77 / 37, 38, 72, 76, 77 | [C] |
 | Elira Hawke | scout trainer | `oakenshire_hub` | 38 | 39, 40 / 23, 39, 40 | [C] |
 | Milly Goldwyn | clothier | `oakenshire_hub` | 20 | – | [C] |
-| Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10 / 10 | [C] |
+| Old Harbin | innkeeper of the Oakenshire Inn | `hub_near_old_harbin` | 27 | 10, 76 / 10, 75 | [C] |
 | Lina Groveroot | herbalist; robbed on the trail south of town | `hub_near_lina_groveroot` | 26 | 9 / 9 | [C] |
 | Guard-Corporal Rowan Hale | Oakenshire Watch, west gate | `oakenshire_west_gate` | 46 | 24, 54 / 24, 66 | [C] |
 | Gatewarden Elias Rook | Oakenshire Watch, west gate | `briarwatch_west_gate` | 47 | 25 / – | [C] |
@@ -335,14 +338,16 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder | not spawned | 25 | – / – | [C] |
+| Magister Calloran | Haven binder, at the summoning stone on the upper square | `haven` | 25 | 74 / 73 | [C] |
+| Watch-Captain Corwin Ashby | commands the Haven Watch at the north gate | `haven` | 98 | 73 / – | [C] |
+| Osric Penhallow | banker of the Haven Exchange | `haven` | 104 | – / 74 | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
 
 Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
 
 - Briarwatch camp: Battlemage Serah Wren, Drillmaster Coren Ashfield, Sister Almira Deene, Duskscholar Veslin Marr, Trailmaster Joren Slate (u70–u74). [C]
 - Barrowfront camp: War-Adept Ilsa Corvain, Veteran Hargen Dray, Field-Chaplain Rosalind Merek, Duskcaller Nerith Vael, Pathfinder Quinn Aldery (u75–u79). [C]
-- The Haven vendors are listed in section 3.3. [C]
+- The Haven vendors, trainers and townsfolk are listed in section 3.3. [C]
 
 ## 6. Creatures and threats
 
@@ -369,7 +374,7 @@ Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
 | Mage | Discipline over raw power ("Power without discipline burns its bearer first", q33); fire and frost. | Vivienne Emberglow; Serah Wren; Ilsa Corvain | [E][C] |
 | Cleric | Healer and holy caster of **the Light** ("The Light is not merely a gift; it is a responsibility", q7). | Clarissa Whiteshield; Almira Deene; Rosalind Merek | [E][C] |
 | Scout | Agile fighter with daggers or one-handed swords: "Eyes open, feet quiet" (q40). | Elira Hawke; Joren Slate; Quinn Aldery | [E][C] |
-| Shadowmancer | Shadow and damage-over-time magic that feeds on the essence released at death ("the shadow takes", q37). Its students are called **Acolytes** (q38). | Malrik Duskwright; Veslin Marr; Nerith Vael | [E][C] |
+| Shadowmancer | Shadow and damage-over-time magic that feeds on the essence released at death ("the shadow takes", q37). Its students are called **Acolytes** (q38). The dark arts are not practised in public: people reach for a torch, so shadowmancers teach in hiding, and an acolyte binds their first **duskling** in secret (q75-q77). Dusklings are small demons of the dusk that gather wherever the shadow takes, and follow those who carry that pull; bound, one answers to its master alone. | Malrik Duskwright; Veslin Marr; Nerith Vael | [E][C] |
 
 The source of magic, its institutions and its costs are undefined. [E] Whether "the Light" is a faith, a force or a church is open (section 12). [?]
 

@@ -137,6 +137,13 @@ namespace mmo
 
 		/// Adds the base points as percentage points to the owner's casting mana regeneration share.
 		void HandleModCastingManaRegenPercent(bool apply) const;
+		void HandleModCastingSpeedPct(bool apply) const;
+		void HandleModHealingTakenPct(bool apply) const;
+		/// Adds the base points as percentage points to the owner's persistent pet stat in
+		/// miscvaluea (pet_stat_kind) and refreshes a summoned pet's stats.
+		void HandleModPetStatsPct(bool apply) const;
+		/// Puts the passive spell in triggerspell on the owner's persistent pet, or takes it away.
+		void HandlePetPassive(bool apply) const;
 
 	private:
 		void HandlePeriodicDamage() const;

@@ -111,7 +111,7 @@ python .agents/skills/mmo-spell-designer/scripts/import_spell_icon.py `
 - For trainer work, verify trainer ID, class linkage, cost, level gates, and optional skill requirements from live data before writing.
 - For talent work, verify the talent tab, row, column, and every rank spell ID from live data before writing.
 - When a spell uses `ApplyAura` or `ApplyAreaAura`, verify the aura type, targets, duration, amplitude, proc fields, and removal conditions together.
-- For `aura_type::ModStat` and `aura_type::ModStatPct`, treat `effect.miscvaluea` as the spell editor stat index from `spell_editor_window.cpp` and `GameUnitS::GetUnitModByStat`, not as `proto::StatConstants.StatType`. The correct mapping is `0=Stamina`, `1=Strength`, `2=Agility`, `3=Intellect`, `4=Spirit`.
+- For `aura_type::ModStat` and `aura_type::ModStatPct`, `effect.miscvaluea` is an attribute id (attributes are game data in `data/editor/data/attributes.data`). The shipped ids are `0=Stamina`, `1=Strength`, `2=Agility`, `3=Intellect`, `4=Spirit`.
 - When a spell is passive or item-driven, verify how it becomes active at runtime instead of assuming player manual casting.
 - When a spell triggers another spell, verify both the trigger spell reference and the proc conditions.
 </validation>

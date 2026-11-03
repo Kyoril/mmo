@@ -85,10 +85,14 @@ namespace mmo
 
 	uint8 GamePlayerC::GetAttributeCost(const uint32 attribute) const
 	{
-		ASSERT(attribute < 5);
+		if (attribute >= MaxAttributes)
+		{
+			return 0;
+		}
 
-		const uint64 attributeCostPacked = Get<uint64>(object_fields::AttributePointCost);
-		return (attributeCostPacked >> (attribute * 8)) & 0xFF;
+		// Four 8-bit costs per 32 bit field
+		const uint32 attributeCostPacked = Get<uint32>(object_fields::AttributePointCost + attribute / 4);
+		return (attributeCostPacked >> ((attribute % 4) * 8)) & 0xFF;
 	}
 
 	void GamePlayerC::NotifyItemData(const ItemInfo& data)

@@ -198,14 +198,16 @@ namespace mmo
 		}
 		else if (ctx.swimming)
 		{
-			const bool horizontallyMoving = (ctx.movementFlags &
+			// A unit following a server path (a swimming creature) has no movement flags of its
+			// own: it moves along the path, which always leads forward.
+			const bool horizontallyMoving = ctx.pathMoving || (ctx.movementFlags &
 				(movement_flags::Forward | movement_flags::Backward |
 					movement_flags::StrafeLeft | movement_flags::StrafeRight)) != 0;
 
 			if (horizontallyMoving)
 			{
 				clipCount = m_bindings.GetMovementBlendSpace().Evaluate(
-					MovementAngleFromFlags(ctx.movementFlags), clips);
+					ctx.pathMoving ? 0.0f : MovementAngleFromFlags(ctx.movementFlags), clips);
 				if (clipCount == 0)
 				{
 					single(m_bindings.Get(proto_client::ANIM_SLOT_MOVE_FORWARD));

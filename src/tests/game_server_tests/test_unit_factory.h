@@ -7,7 +7,9 @@
 #include "shared/proto_data/project.h"
 #include "shared/proto_data/spells.pb.h"
 #include "shared/proto_data/classes.pb.h"
+#include "shared/proto_data/attributes.pb.h"
 
+#include <iterator>
 #include <memory>
 
 namespace mmo::test
@@ -23,8 +25,30 @@ namespace mmo::test
 	/// @param timers The timer queue the unit's countdowns run on.
 	/// @param level The level to bring the unit to.
 	/// @return The constructed player.
+	/// Adds the shipped attributes (0 Stamina, 1 Strength, 2 Agility, 3 Intellect, 4 Spirit) to a
+	///	project that has none yet.
+	/// @param project The project to add the attributes to.
+	inline void AddDefaultAttributes(proto::Project& project)
+	{
+		if (project.attributes.count() > 0)
+		{
+			return;
+		}
+
+		const char* names[] = { "Stamina", "Strength", "Agility", "Intellect", "Spirit" };
+		for (uint32 id = 0; id < std::size(names); ++id)
+		{
+			if (auto* attribute = project.attributes.add(id))
+			{
+				attribute->set_name(names[id]);
+			}
+		}
+	}
+
 	inline std::shared_ptr<GamePlayerS> MakeUnit(proto::Project& project, TimerQueue& timers, const uint32 level = 1)
 	{
+		AddDefaultAttributes(project);
+
 		auto* cls = project.classes.getById(1);
 		if (!cls)
 		{
@@ -39,16 +63,24 @@ namespace mmo::test
 				cls->set_healthregenpertick(10.0f);
 				cls->set_basemanaregenpertick(20.0f);
 
+				// 20 agility = 1% melee crit and dodge, like the shipped classes
+				auto* critSource = cls->add_meleecritsources();
+				critSource->set_attribute(2);
+				critSource->set_pointsper(20.0f);
+				auto* dodgeSource = cls->add_dodgesources();
+				dodgeSource->set_attribute(2);
+				dodgeSource->set_pointsper(20.0f);
+
 				for (uint32 i = 0; i < level + 1; ++i)
 				{
 					auto* lbv = cls->add_levelbasevalues();
 					lbv->set_health(100);
 					lbv->set_mana(100);
-					lbv->set_stamina(10);
-					lbv->set_strength(10);
-					lbv->set_agility(10);
-					lbv->set_intellect(10);
-					lbv->set_spirit(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
 				}
 			}
 		}

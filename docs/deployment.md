@@ -6,7 +6,7 @@ Design: [docs/superpowers/specs/2026-10-06-nightly-deploy-design.md](superpowers
 
 1. 23:00 (Europe/Berlin, `NIGHTLY_AT`): the deployer starts the nightly workflow on `develop` through `workflow_dispatch`. The gate may take up to 180 min, the client build up to 120 min, then staging follows, so the release is staged before 04:45. The workflow's own GitHub schedule (22:00 UTC) stays as a fallback only: GitHub starts scheduled runs hours late on busy nights (up to 4 h 49 min observed), which once left nothing staged at 04:45. When both run, the second finds develop's head already released and skips (if develop moved in between, it releases the newer head, like any nightly). The workflow (`.github/workflows/nightly-release.yml`) gates `develop` on Linux (full gate incl. E2E), builds the images and client patch, writes player patch notes, and publishes a `nightly-<version>` release (with `release.json`). Versions, patch notes and the launcher's own release cycle are described in [versioning.md](versioning.md).
 2. The `mmo-deployer` container on the root server polls GitHub and stages the newest green release (patch files, data, `update_compiler`). The stager refuses a release whose `release.json` gate is not green. It ships the newest `launcher-v*` release's `Launcher.exe` instead of the nightly's build (`LAUNCHER_RELEASE_PREFIX`, default `launcher-v`).
-3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`.
+3. 04:45 (Europe/Berlin): maintenance. Preflight (login, realms, Portainer token), 15-minute realm shutdown countdown, DB backup, patch `current` flip, Portainer redeploy with `MMO_TAG=<sha>`. The stack update request may take up to 45 min (it stops the old containers, pulls every image and runs `data-service` first). If it times out anyway, the deployer does not give up: Portainer finishes the update on its own, so the deployer waits up to another 30 min for the stack to report the new `MMO_TAG` and then verifies as usual.
 4. Verify: within 300 s there must be two consecutive rounds in which login and every realm answer `/uptime` and Portainer reports every `WAIT_SERVICES` container (default `realm_server_01,world_node_01`, so the world node too) as `running`. Otherwise the deployer rolls back to the previous release.
 5. Notify: every step posts to `NOTIFY_WEBHOOK` (the URL itself is never included in a message).
 
@@ -56,8 +56,9 @@ Every top-level entry of `source.txt` is downloaded into the player's install fo
 also be listed in `[UninstallDelete]` of `deploy/installer/setup.iss`
 (`tools/tests/test_installer_uninstall_list.py` enforces this).
 
-The website's client download links to the setup of the newest launcher release:
-`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe`. That URL
+The website's client downloads link to the installers of the newest launcher release:
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline-Setup.exe` (Windows) and
+`https://github.com/Kyoril/mmo/releases/latest/download/AlestiaOnline.dmg` (macOS). That URL
 resolves to the newest non-prerelease, so every release other than `launcher-v*` must stay a
 prerelease (the nightly workflow publishes with `--prerelease`).
 
@@ -102,6 +103,8 @@ Notifications:
 | `post-deploy cleanup step failed: ...` | Pruning releases/backups or the patch note failed after a successful deploy; harmless. |
 | `post-stage cleanup failed: ...` | Pruning old releases after staging failed; the staged release is fine, check the patch disk. |
 | `Release <sha> failed its health check; rolling back` | Verify failed, rolling back. |
+| `Release <sha> could not be deployed (<error>); rolling back` | Portainer refused or failed the stack update; the release never ran. |
+| `Release <sha> never finished its redeploy (...); rolling back` | The stack update timed out and the stack still had the old tag 30 min later. Look at Portainer and the containers' stop times before blaming the release; `unbad <sha>` retries it. |
 | `Release <sha> was rolled back` | Rollback healthy; release marked bad. |
 | `Release <sha> is live` | Success, with the change list. The launcher gets a `Patch <version>` entry with the player patch notes. |
 | `MANUAL INTERVENTION REQUIRED` | Deployer paused; see the playbook. |
@@ -118,7 +121,7 @@ Disk budget: plan for roughly `KEEP_RELEASES + 1` compressed client data sets un
 - **Gate red**: nothing shipped, the live release keeps running. Open the `gate-report` artifact of the failed `Nightly Release` run and fix on develop; the next night ships.
 - **Staging failed**: the data commit was not pushed to `mmo-data`, or the `deployer-state` volume or patch disk is full. The deployer retries every poll and notifies once; fix the cause, or run `stage-now`.
 - **Aborted** (notification `... aborted, nothing changed`): a realm, the login server or Portainer was unreachable at 04:45 (or a shutdown could not be scheduled). Nothing changed. Fix the service, then `deploy-now`, or wait for the next night. If the DB backup fails after the shutdown, the deployer restarts the stack on the live release and notifies "Database backup failed (...); restarting the stack ..."; the staged release is retried the next night. Only if that restart also fails (or there is no live release yet) it escalates to MANUAL INTERVENTION.
-- **Rolled back**: the release failed its health check and the previous release is live again. The release is marked bad and not staged again. Fix it on develop; the next night ships the fix. To retry the same commit use `unbad <sha>`.
+- **Rolled back**: the release failed its health check (or could not be deployed at all, see the message) and the previous release is live again. The release is marked bad and not staged again. Fix it on develop; the next night ships the fix. To retry the same commit use `unbad <sha>`.
 - **Paused after MANUAL INTERVENTION** (release failed and rollback failed, or backup failure with no working restart): the deployer is paused and the failed release is marked bad and cleared from staging; `live` still names the last good release. Restore it by hand (`deploy-now` and `rollback` cannot do this: `deploy-now <live sha>` answers "nothing new is staged", and `rollback` targets the older `previous_live`):
   1. `docker exec mmo-deployer deployer status`, read `live`.
   2. On the host: `sudo ln -sfn releases/<live> /srv/mmo-patch/current.new && sudo mv -T /srv/mmo-patch/current.new /srv/mmo-patch/current`
@@ -152,6 +155,9 @@ Change `DEPLOYER_TAG` to a newer green SHA and redeploy its stack. It never upda
 ## 7. CI notes
 
 - The Linux gate runs on the runner's preinstalled MySQL (root/root). The CI run proving the pipeline has not happened yet; if Linux E2E fails, move the gate job to `windows-latest` and start MySQL 8.0 (root/root) with `shogo82148/actions-setup-mysql`.
-- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall) before publishing.
+- `launcher-release.yml` installs Inno Setup via Chocolatey if the runner lacks it, then builds and smoke-tests the setup (install, upgrade, foreign-file, all-users, uninstall). In parallel a `macos-15` job builds the macOS launcher and `AlestiaOnline.dmg` and smoke-tests it (deploy/installer/README.md). The release is published only once both passed. The DMG's launcher is signed ad-hoc until the `MACOS_*` signing secrets exist.
 - `docker.yml` builds develop images only after "Linux Servers" passes.
 - `win-release.yml` (master) is unchanged.
+- The `client-macos` job builds the Apple Silicon client on `macos-15`: arm64 only, macOS 11 minimum (the first M1 release; the Metal 2.3 shaders need it too), OpenSSL built statically for that target and cached. It fails when the binary links anything outside `/System` and `/usr/lib` (a player has no Homebrew), then strips it, signs the bundle ad hoc and publishes `client-macos.zip` plus `symbols-macos.zip` (dSYM). The stager unpacks `client-macos.zip` next to the Windows binaries, and `source.txt` ships `mmo_client.app` to launchers with the `OSX` condition; the updater marks `Contents/MacOS/*` executable. Files the launcher downloads carry no quarantine flag, so the ad hoc signature is enough; only a downloaded launcher needs a Developer ID to open without a Gatekeeper prompt.
+- When a release carries `client-overlay.zip` (the cooked material shaders for every platform, see [the cooking design](superpowers/specs/2026-10-31-content-cooking-design.md)), the stager lays it over the data checkout before compiling the patch: files replace their repository counterparts, `overlay.json` lists paths to delete and the cook warnings. The staging notification shows the warning count and the first five. Releases without it stage from the repository data as before.
+- The client jobs also cook their platform's material shaders (`mmo_cook shaders`, D3D11 on Windows, precompiled Metal libraries on macOS) from a sparse checkout of `data/client` (`*.hmat`, `*.hmf`). The `cook` job assembles both into `client-overlay.zip` on Linux and lists the cook warnings as annotations; `publish` attaches it. Both client builds use `MMO_MATERIAL_RUNTIME_COMPILE=OFF`, so players never compile shaders. A manual run on a branch other than `develop` publishes as `test-nightly-*`, which the deployer never stages.

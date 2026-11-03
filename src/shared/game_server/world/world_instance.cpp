@@ -82,6 +82,10 @@ namespace mmo
 	NavMapData::NavMapData(std::shared_ptr<MapStaticData> staticData)
 		: m_staticData(std::move(staticData))
 		, m_collisionMap(std::make_unique<ServerCollisionMap>(m_staticData->GetStaticCollision()))
+		, m_landQueryFilter(m_queryFilter, [this](const float x, const float z, float& outSurfaceY)
+			{
+				return GetWaterSurface(Vector3(x, 0.0f, z), outSurfaceY);
+			})
 	{
 	}
 
@@ -227,13 +231,40 @@ namespace mmo
 			std::max(a.x, b.x) + margin, std::max(a.z, b.z) + margin);
 	}
 
-	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path) const
+	const dtQueryFilter& NavMapData::GetQueryFilter(const MovementAbilityFlags movementAbilities) const
+	{
+		if ((movementAbilities & movement_ability::CanSwim) != 0)
+		{
+			return m_queryFilter;
+		}
+
+		return m_landQueryFilter;
+	}
+
+	float NavMapData::GetSearchExtentY(const Vector3& start, const Vector3& destination) const
+	{
+		for (const Vector3& point : { start, destination })
+		{
+			float surfaceY = 0.0f;
+			if (GetWaterSurface(point, surfaceY) && surfaceY - point.y >= swim::StartDepth)
+			{
+				return swim::NavSearchDepth;
+			}
+		}
+
+		return nav::Map::DefaultSearchExtentY;
+	}
+
+	bool NavMapData::CalculatePath(const Vector3& start, const Vector3& destination, std::vector<Vector3>& out_path, const MovementAbilityFlags movementAbilities) const
 	{
 		// A path may bend out of the box its endpoints span; the margin covers the usual detour.
 		constexpr float pathMargin = 64.0f;
 		EnsureNavLoaded(start, destination, pathMargin);
 
-		const bool found = m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &m_queryFilter);
+		const dtQueryFilter& filter = GetQueryFilter(movementAbilities);
+		const float searchExtentY = GetSearchExtentY(start, destination);
+
+		const bool found = m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &filter, searchExtentY);
 		if (!found || !m_staticData->IsNavStreaming() || out_path.empty())
 		{
 			return found;
@@ -252,14 +283,14 @@ namespace mmo
 
 		EnsureNavLoaded(start, destination, static_cast<float>(terrain::constants::PageSize));
 		out_path.clear();
-		return m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &m_queryFilter);
+		return m_staticData->GetNavMap().FindPath(start, destination, out_path, true, &filter, searchExtentY);
 	}
 
-	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint) const
+	bool NavMapData::FindRandomPointAroundCircle(const Vector3& centerPosition, float radius, Vector3& randomPoint, const MovementAbilityFlags movementAbilities) const
 	{
 		EnsureNavLoaded(centerPosition, centerPosition, radius + 5.0f);
 
-		return m_staticData->GetNavMap().FindRandomPointAroundCircle(centerPosition, radius, randomPoint, &m_queryFilter);
+		return m_staticData->GetNavMap().FindRandomPointAroundCircle(centerPosition, radius, randomPoint, &GetQueryFilter(movementAbilities));
 	}
 
 	bool NavMapData::GetWaterSurface(const Vector3& pos, float& outSurfaceY) const
@@ -1033,7 +1064,7 @@ namespace mmo
 		}
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius)
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, float randomWalkRadius, const uint64 guid)
 	{
 		// Create the unit
 		auto spawned = std::make_shared<GameCreatureS>(
@@ -1044,7 +1075,7 @@ namespace mmo
 		spawned->ApplyMovementInfo(
 			{ movement_flags::None, GetAsyncTimeMs(), position, Radian(o), Radian(0), 0, Vector3::Zero });
 		spawned->Initialize();
-		spawned->Set<uint64>(object_fields::Guid, CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
+		spawned->Set<uint64>(object_fields::Guid, guid != 0 ? guid : CreateEntryGUID(m_objectIdGenerator.GenerateId(), entry.id(), GuidType::Unit));
 		
 		// TODO: This might be bad because we aren't technically really spawned in this world yet! We do this only so that passives can be cast!
 		spawned->SetWorldInstance(this);
@@ -1068,9 +1099,9 @@ namespace mmo
 		return std::static_pointer_cast<GameWorldObjectS>(spawned);
 	}
 
-	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius)
+	std::shared_ptr<GameCreatureS> WorldInstance::CreateTemporaryCreature(const proto::UnitEntry& entry, const Vector3& position, const float o, const float randomWalkRadius, const uint64 guid)
 	{
-		auto creature = CreateCreature(entry, position, o, randomWalkRadius);
+		auto creature = CreateCreature(entry, position, o, randomWalkRadius, guid);
 		m_temporaryCreatures[creature->GetGuid()] = creature;
 
 		creature->destroy = [this](const GameObjectS& gameObjectS)

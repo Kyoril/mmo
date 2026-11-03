@@ -378,7 +378,10 @@ namespace mmo
 		/// If blocked, slides along the contact surface. Call after computing the desired
 		/// movement delta for a remote player to prevent them penetrating walls.
 		/// @param delta The desired movement vector for this frame.
-		void RemotePlayerMoveCollide(const Vector3& delta);
+		/// @param outBlockingNormals Optional array of at least two entries that receives the contact
+		///        normals of the surfaces that stopped or deflected the move.
+		/// @return The number of normals written to outBlockingNormals (0 when the move was not blocked).
+		int32 RemotePlayerMoveCollide(const Vector3& delta, Vector3* outBlockingNormals = nullptr);
 
 		/// @brief Constrains input acceleration to valid movement parameters
 		/// @param inputAcceleration Raw input acceleration vector
@@ -485,6 +488,19 @@ namespace mmo
 		///        searched range so the highest-hit selection can recover the unit onto it.
 		/// @return True if ground was found and position was corrected, false otherwise
 		bool CorrectGroundHeight(float maxCorrectionDistance = 5.0f, std::optional<float> referenceHeight = std::nullopt);
+
+		/// @brief Floats a creature at the water surface while it is in water deep enough to swim
+		/// in, and keeps its swimming movement flag in sync.
+		/// @details The navigation mesh the server paths creatures on is baked on the ground, so
+		///          the server lifts the paths of creatures which can swim into the water surface
+		///          band. Without this the per-frame ground correction would pull them straight
+		///          back down and they would walk along the bottom of the water, fully submerged.
+		/// @param position The unit's current node position, which the ground search started at.
+		/// @param groundY Height of the ground found below the unit, if any.
+		/// @param hasGround Whether any ground was found below the unit at all.
+		/// @return True when the unit is swimming and its height was set to the surface band, so
+		///         no ground correction applies.
+		bool UpdateRemoteSwimState(const Vector3& position, float groundY, bool hasGround);
 
 		/// @brief Corrects the height of a remotely simulated player so it comes to rest where the
 		/// player's own client puts it.

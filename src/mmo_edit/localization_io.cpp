@@ -200,6 +200,14 @@ namespace mmo
 			ExportField(entries, "zone", e.id(), 0, "name", e.name(), e.name_loc());
 		}
 
+		// Loading screen tips
+		const auto& loadingTips = project.loadingTips.getTemplates();
+		for (int i = 0; i < loadingTips.entry_size(); ++i)
+		{
+			const auto& e = loadingTips.entry(i);
+			ExportField(entries, "loading_tip", e.id(), 0, "text", e.text(), e.text_loc());
+		}
+
 		// Emotes (chat line templates)
 		const auto& emotes = project.emotes.getTemplates();
 		for (int i = 0; i < emotes.entry_size(); ++i)
@@ -222,6 +230,16 @@ namespace mmo
 				const auto& category = e.categories(c);
 				ExportField(entries, "skill_category", e.id(), category.id(), "name", category.name(), category.name_loc());
 			}
+		}
+
+		// Attributes (Stamina, Strength, ...). The id is the attribute slot, so 0 is a valid id here.
+		const auto& attributes = project.attributes.getTemplates();
+		for (int i = 0; i < attributes.entry_size(); ++i)
+		{
+			const auto& e = attributes.entry(i);
+			ExportField(entries, "attribute", e.id(), 0, "name", e.name(), e.name_loc());
+			ExportField(entries, "attribute", e.id(), 0, "description", e.description(), e.description_loc());
+			ExportField(entries, "attribute", e.id(), 0, "levelUpText", e.leveluptext(), e.leveluptext_loc());
 		}
 
 		// Triggers (per-action Say / Yell / Emote text). 'sub' is the 1-based action index.
@@ -405,6 +423,13 @@ namespace mmo
 					if (field == "name") { loc = e->mutable_name_loc(); }
 				}
 			}
+			else if (type == "loading_tip")
+			{
+				if (auto* e = project.loadingTips.getById(id))
+				{
+					if (field == "text") { loc = e->mutable_text_loc(); }
+				}
+			}
 			else if (type == "emote")
 			{
 				if (auto* e = project.emotes.getById(id))
@@ -433,6 +458,15 @@ namespace mmo
 							break;
 						}
 					}
+				}
+			}
+			else if (type == "attribute")
+			{
+				if (auto* e = project.attributes.getById(id))
+				{
+					if (field == "name") { loc = e->mutable_name_loc(); }
+					else if (field == "description") { loc = e->mutable_description_loc(); }
+					else if (field == "levelUpText") { loc = e->mutable_leveluptext_loc(); }
 				}
 			}
 			else if (type == "trigger")

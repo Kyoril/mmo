@@ -194,7 +194,7 @@ namespace mmo
 	{
 		// Sort by vertex; stable, so assignments of one vertex keep their insertion order as they
 		// did in the multimap this used to be. Files are already sorted, so this is usually a check.
-		const auto byVertex = [](const auto& a, const auto& b) { return a.first < b.first; };
+		const auto byVertex = [](const auto& a, const auto& b) { return (a.first) < (b.first); };
 		if (!std::is_sorted(assignments.begin(), assignments.end(), byVertex))
 		{
 			std::stable_sort(assignments.begin(), assignments.end(), byVertex);

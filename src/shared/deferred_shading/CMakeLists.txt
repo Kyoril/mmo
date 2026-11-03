@@ -32,6 +32,9 @@ endif()
 
 if (APPLE)
     target_link_libraries(deferred_shading "-framework CoreFoundation")
+
+	file(GLOB metal_shaders "${CMAKE_CURRENT_LIST_DIR}/shaders/VS_*.hlsl" "${CMAKE_CURRENT_LIST_DIR}/shaders/PS_*.hlsl" "${CMAKE_CURRENT_LIST_DIR}/shaders/CS_*.hlsl")
+	mmo_add_metal_shaders(deferred_shading ${metal_shaders})
 endif()
 
 # Put the library into the shared solution folder

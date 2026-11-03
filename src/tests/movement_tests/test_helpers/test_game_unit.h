@@ -31,7 +31,16 @@ namespace mmo
 		/// @brief Report this unit as locally controlled so UnitMovement::Tick applies input.
 		bool IsControlledByLocalPlayer() const override
 		{
-			return true;
+			return m_locallyControlled;
 		}
+
+		/// @brief Makes this unit a remotely simulated one (an NPC or another player's character).
+		void SetLocallyControlledForTest(const bool locallyControlled)
+		{
+			m_locallyControlled = locallyControlled;
+		}
+
+	private:
+		bool m_locallyControlled = true;
 	};
 }

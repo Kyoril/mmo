@@ -10,6 +10,7 @@
 #include "game/time_of_day.h"
 #include "game/shutdown_countdown.h"
 #include "game/bug_report_compression.h"
+#include "game/pet_defines.h"
 #include "log/default_log_levels.h"
 #include "mmo_client/luabind_lambda.h"
 
@@ -71,8 +72,20 @@ namespace mmo
 			/// Whispers received, oldest first.
 			std::vector<std::string> whispers;
 
+			/// Guild chat lines received, oldest first.
+			std::vector<std::string> guildChats;
+
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
+
+			/// Casts with a cast time other units started (SpellStart) per caster, and the cast time
+			/// in milliseconds the server announced for the latest of them.
+			std::map<uint64, uint32> castStarts;
+			std::map<uint64, GameTime> lastCastTimes;
+
+			/// Periodic aura ticks (PeriodicAuraLog) per victim and spell: how many arrived, and the
+			/// amount the latest one dealt, healed or energized.
+			std::map<std::pair<uint64, uint32>, std::pair<uint32, uint32>> periodicTicks;
 
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
@@ -316,6 +329,63 @@ namespace mmo
 			return g_runtime->session->GetRealm().GetSubsystemStatusPacketCount();
 		}
 
+		int32 luaLastFriendCommandResult()
+		{
+			return g_runtime->session->GetRealm().GetLastFriendCommandResult();
+		}
+
+		void luaClearLastFriendCommandResult()
+		{
+			g_runtime->session->GetRealm().ClearLastFriendCommandResult();
+		}
+
+		uint32 luaFriendListUpdateCount()
+		{
+			return g_runtime->session->GetRealm().GetFriendListUpdateCount();
+		}
+
+		void luaFriendInvite(const std::string& name)
+		{
+			g_runtime->session->GetRealm().FriendInvite(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("FriendInvite", { { "name", name } });
+			}
+		}
+
+		void luaRequestFriendList()
+		{
+			g_runtime->session->GetRealm().RequestFriendList();
+		}
+
+		int32 luaLastGuildCommandResult()
+		{
+			return g_runtime->session->GetRealm().GetLastGuildCommandResult();
+		}
+
+		void luaClearLastGuildCommandResult()
+		{
+			g_runtime->session->GetRealm().ClearLastGuildCommandResult();
+		}
+
+		void luaGuildLeave()
+		{
+			g_runtime->session->GetRealm().GuildLeave();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GuildLeave", {});
+			}
+		}
+
+		void luaGuildInvite(const std::string& name)
+		{
+			g_runtime->session->GetRealm().GuildInvite(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GuildInvite", { { "name", name } });
+			}
+		}
+
 		std::string luaLastBugReportResult()
 		{
 			return g_runtime->session->GetRealm().GetLastBugReportResult();
@@ -394,6 +464,15 @@ namespace mmo
 			}
 			std::fclose(file);
 			return content;
+		}
+
+		void luaGmCreateGuild(const std::string& name)
+		{
+			g_runtime->session->GetRealm().CheatCreateGuild(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.CreateGuild", { { "name", name } });
+			}
 		}
 
 		void luaGmSetSubsystem(const std::string& name, const bool enabled)
@@ -552,6 +631,27 @@ namespace mmo
 			return unit ? static_cast<int32>(unit->GetMaxHealth()) : -1;
 		}
 
+		int32 luaGetAttribute(const std::string& guid, const uint32 attributeId)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? unit->GetAttribute(attributeId) : -1;
+		}
+
+		int32 luaGetAvailableAttributePoints()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? static_cast<int32>(selfUnit->GetAvailableAttributePoints()) : -1;
+		}
+
+		void luaAddAttributePoint(const uint32 attributeId)
+		{
+			g_runtime->session->GetRealm().AddAttributePoint(attributeId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AddAttributePoint", { { "attribute", attributeId } });
+			}
+		}
+
 		int32 luaGetLevel(const std::string& guid)
 		{
 			const BotUnit* unit = findUnit(guid);
@@ -604,6 +704,41 @@ namespace mmo
 		bool luaIsSpellOnCooldown(const uint32 spellId)
 		{
 			return g_runtime->session->GetContext().IsSpellOnCooldown(spellId);
+		}
+
+		/// Milliseconds left on our own spell's cooldown, as the server's cooldown packets left it
+		/// (0 when the spell is not on cooldown).
+		int32 luaGetSpellCooldownRemaining(const uint32 spellId)
+		{
+			return static_cast<int32>(g_runtime->session->GetContext().GetSpellCooldownRemaining(spellId));
+		}
+
+		/// How many casts with a cast time another unit guid has started (SpellStart packets).
+		int32 luaCastStartCount(const std::string& guid)
+		{
+			const auto it = g_runtime->castStarts.find(guidFromString(guid));
+			return it == g_runtime->castStarts.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// Cast time in milliseconds of the latest cast another unit guid started, -1 if none.
+		int32 luaLastCastTime(const std::string& guid)
+		{
+			const auto it = g_runtime->lastCastTimes.find(guidFromString(guid));
+			return it == g_runtime->lastCastTimes.end() ? -1 : static_cast<int32>(it->second);
+		}
+
+		/// How many ticks of spellId's periodic aura on guid the server reported (PeriodicAuraLog).
+		int32 luaPeriodicTickCount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? 0 : static_cast<int32>(it->second.first);
+		}
+
+		/// Amount the latest tick of spellId's periodic aura on guid dealt or healed, -1 if none.
+		int32 luaLastPeriodicAmount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? -1 : static_cast<int32>(it->second.second);
 		}
 
 		/// How many channels the server has announced for guid (ChannelStart packets).
@@ -855,6 +990,121 @@ namespace mmo
 			return count;
 		}
 
+		/// Guid of a unit's owner (object_fields::Owner): "0x0" for a unit without one, "" for an
+		/// unknown unit. A pet, summon or totem has its summoner as owner.
+		std::string luaGetOwner(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? guidToString(unit->GetOwnerGuid()) : std::string();
+		}
+
+		/// Guid of the unit's current target (object_fields::TargetUnit): "0x0" for none, "" for an
+		/// unknown unit. A creature targets what it attacks.
+		std::string luaGetTarget(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? guidToString(unit->GetTargetGuid()) : std::string();
+		}
+
+		/// Calls fn for every living creature the client knows that is owned by ownerGuid and, unless
+		/// entry is 0, has that entry.
+		template <typename F>
+		void forEachOwnedCreature(const std::string& ownerGuid, const uint32 entry, F&& fn)
+		{
+			const uint64 owner = guidFromString(ownerGuid);
+			g_runtime->session->GetContext().GetObjectManager().ForEachCreature([owner, entry, &fn](const BotUnit& unit)
+				{
+					if (owner != 0 && unit.GetOwnerGuid() == owner && unit.IsAlive() && (entry == 0 || unit.GetEntry() == entry))
+					{
+						fn(unit);
+					}
+				});
+		}
+
+		/// Counts the living creatures the client knows that the unit owns (its pets and summons).
+		uint32 luaCountUnitsOwnedBy(const std::string& ownerGuid, const uint32 entry)
+		{
+			uint32 count = 0;
+			forEachOwnedCreature(ownerGuid, entry, [&count](const BotUnit&) { ++count; });
+			return count;
+		}
+
+		/// The index-th (0-based) living creature owned by the unit, in the client's object order, or "".
+		std::string luaGetOwnedUnit(const std::string& ownerGuid, const uint32 entry, const uint32 index)
+		{
+			std::string result;
+			uint32 current = 0;
+			forEachOwnedCreature(ownerGuid, entry, [&result, &current, index](const BotUnit& unit)
+				{
+					if (current++ == index)
+					{
+						result = guidToString(unit.GetGuid());
+					}
+				});
+			return result;
+		}
+
+		/// Guid of the summoned persistent pet as the last PetSpells described it, or "" for none.
+		std::string luaGetPet()
+		{
+			const uint64 petGuid = g_runtime->session->GetRealm().GetPetSpells().petGuid;
+			return petGuid != 0 ? guidToString(petGuid) : std::string();
+		}
+
+		std::string luaGetPetName()
+		{
+			return g_runtime->session->GetRealm().GetPetSpells().name;
+		}
+
+		uint32 luaGetPetEntry()
+		{
+			return g_runtime->session->GetRealm().GetPetSpells().petEntry;
+		}
+
+		bool luaPetKnowsSpell(const uint32 spellId)
+		{
+			const auto& spells = g_runtime->session->GetRealm().GetPetSpells().spells;
+			return std::find(spells.begin(), spells.end(), spellId) != spells.end();
+		}
+
+		uint32 luaPetSpellsCount()
+		{
+			return g_runtime->session->GetRealm().GetPetSpellsPacketCount();
+		}
+
+		int32 luaLastPetResult()
+		{
+			return g_runtime->session->GetRealm().GetLastPetResult();
+		}
+
+		void luaClearLastPetResult()
+		{
+			g_runtime->session->GetRealm().ClearLastPetResult();
+		}
+
+		void luaPetCommand(const uint32 command, const std::string& targetGuid, const uint32 param)
+		{
+			if (command > pet_command::Dismiss)
+			{
+				abortScenario(bot_exit_code::ScenarioFailed, "PetCommand: unknown command " + std::to_string(command));
+			}
+
+			g_runtime->session->GetRealm().PetCommand(static_cast<uint8>(command), guidFromString(targetGuid), param);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("PetCommand", { { "command", command }, { "target", targetGuid }, { "param", param } });
+			}
+		}
+
+		void luaPetRename(const std::string& name)
+		{
+			g_runtime->session->GetRealm().PetRename(name);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("PetRename", { { "name", name } });
+			}
+		}
+
 		std::string luaFindUnitByName(const std::string& name)
 		{
 			std::string result;
@@ -1056,9 +1306,13 @@ namespace mmo
 			{
 				type = ChatType::Emote;
 			}
+			else if (channel == "guild")
+			{
+				type = ChatType::Guild;
+			}
 			else if (channel != "say")
 			{
-				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, general or whisper)");
+				abortScenario(bot_exit_code::ScenarioFailed, "SendChat: unknown channel '" + channel + "' (expected say, party, yell, emote, guild, general or whisper)");
 			}
 
 			g_runtime->session->GetContext().SendChatMessage(message, type);
@@ -1170,6 +1424,42 @@ namespace mmo
 			if (g_runtime->transcript)
 			{
 				g_runtime->transcript->Action("GM.LearnSpell", { { "spell_id", spellId } });
+			}
+		}
+
+		void luaGmPetAdd(const uint32 petEntry)
+		{
+			g_runtime->session->GetRealm().CheatPetAdd(petEntry);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetAdd", { { "pet_entry", petEntry } });
+			}
+		}
+
+		void luaGmPetRemove(const uint32 petEntry)
+		{
+			g_runtime->session->GetRealm().CheatPetRemove(petEntry);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetRemove", { { "pet_entry", petEntry } });
+			}
+		}
+
+		void luaGmPetTame()
+		{
+			g_runtime->session->GetRealm().CheatPetTame();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetTame", {});
+			}
+		}
+
+		void luaGmPetMake()
+		{
+			g_runtime->session->GetRealm().CheatPetMake();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PetMake", {});
 			}
 		}
 
@@ -1654,6 +1944,30 @@ namespace mmo
 			}
 		}
 
+		/// Accepts a quest at the quest giver, the way a player does: the server checks that the giver
+		/// offers it and that the character stands next to it, and raises the giver's OnQuestAccept.
+		void luaAcceptQuestFrom(const std::string& questGiver, const uint32 questId)
+		{
+			g_runtime->session->GetRealm().AcceptQuest(guidFromString(questGiver), questId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AcceptQuestFrom", { { "quest_giver", questGiver }, { "quest_id", questId } });
+			}
+		}
+
+		/// Turns a completed quest in at its quest ender, the way a player does, so the ender's
+		/// OnQuestReward triggers run (GM.TurnInQuest skips the quest ender).
+		void luaTurnInQuestAt(const std::string& questGiver, const uint32 questId, const uint32 rewardChoice)
+		{
+			const uint64 guid = guidFromString(questGiver);
+			g_runtime->session->GetRealm().QuestGiverCompleteQuest(guid, questId);
+			g_runtime->session->GetRealm().QuestGiverChooseQuestReward(guid, questId, rewardChoice);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("TurnInQuestAt", { { "quest_giver", questGiver }, { "quest_id", questId }, { "reward_choice", rewardChoice } });
+			}
+		}
+
 		void luaGmClearInventory()
 		{
 			g_runtime->session->GetRealm().CheatClearInventory();
@@ -1688,6 +2002,15 @@ namespace mmo
 				luabind::def_lambda("ClearLastBugReportResult", &luaClearLastBugReportResult),
 				luabind::def_lambda("SubmitBugReport", &luaSubmitBugReport),
 				luabind::def_lambda("NewestBugReportFile", &luaNewestBugReportFile),
+				luabind::def_lambda("LastFriendCommandResult", &luaLastFriendCommandResult),
+				luabind::def_lambda("ClearLastFriendCommandResult", &luaClearLastFriendCommandResult),
+				luabind::def_lambda("FriendListUpdateCount", &luaFriendListUpdateCount),
+				luabind::def_lambda("FriendInvite", &luaFriendInvite),
+				luabind::def_lambda("RequestFriendList", &luaRequestFriendList),
+				luabind::def_lambda("LastGuildCommandResult", &luaLastGuildCommandResult),
+				luabind::def_lambda("ClearLastGuildCommandResult", &luaClearLastGuildCommandResult),
+				luabind::def_lambda("GuildInvite", &luaGuildInvite),
+				luabind::def_lambda("GuildLeave", &luaGuildLeave),
 				luabind::def_lambda("LoginElsewhereImpl", &luaLoginElsewhere),
 				luabind::def_lambda("ReconnectImpl", &luaReconnect),
 
@@ -1696,6 +2019,9 @@ namespace mmo
 				luabind::def_lambda("UnitExists", &luaUnitExists),
 				luabind::def_lambda("GetHealth", &luaGetHealth),
 				luabind::def_lambda("GetMaxHealth", &luaGetMaxHealth),
+				luabind::def_lambda("GetAttribute", &luaGetAttribute),
+				luabind::def_lambda("GetAvailableAttributePoints", &luaGetAvailableAttributePoints),
+				luabind::def_lambda("AddAttributePoint", &luaAddAttributePoint),
 				luabind::def_lambda("GetLevel", &luaGetLevel),
 				luabind::def_lambda("GetPower", &luaGetPower),
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
@@ -1707,6 +2033,11 @@ namespace mmo
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
 				luabind::def_lambda("SpellGoCount", &luaSpellGoCount),
 				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
+				luabind::def_lambda("GetSpellCooldownRemaining", &luaGetSpellCooldownRemaining),
+				luabind::def_lambda("CastStartCount", &luaCastStartCount),
+				luabind::def_lambda("LastCastTime", &luaLastCastTime),
+				luabind::def_lambda("PeriodicTickCount", &luaPeriodicTickCount),
+				luabind::def_lambda("LastPeriodicAmount", &luaLastPeriodicAmount),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
@@ -1736,11 +2067,26 @@ namespace mmo
 				luabind::def_lambda("FindNearestObjectByEntryImpl", &luaFindNearestObjectByEntry),
 				luabind::def_lambda("GetObjectState", &luaGetObjectState),
 				luabind::def_lambda("GetUnitFlags", &luaGetUnitFlags),
+				luabind::def_lambda("GetOwner", &luaGetOwner),
+				luabind::def_lambda("GetTarget", &luaGetTarget),
+				luabind::def_lambda("CountUnitsOwnedByImpl", &luaCountUnitsOwnedBy),
+				luabind::def_lambda("GetOwnedUnitImpl", &luaGetOwnedUnit),
+				luabind::def_lambda("GetPetImpl", &luaGetPet),
+				luabind::def_lambda("GetPetName", &luaGetPetName),
+				luabind::def_lambda("GetPetEntry", &luaGetPetEntry),
+				luabind::def_lambda("PetKnowsSpell", &luaPetKnowsSpell),
+				luabind::def_lambda("PetSpellsCount", &luaPetSpellsCount),
+				luabind::def_lambda("LastPetResult", &luaLastPetResult),
+				luabind::def_lambda("ClearLastPetResult", &luaClearLastPetResult),
+				luabind::def_lambda("PetCommandImpl", &luaPetCommand),
+				luabind::def_lambda("PetRename", &luaPetRename),
 				luabind::def_lambda("LootUnit", &luaLootUnit),
 				luabind::def_lambda("ReleaseLoot", &luaReleaseLoot),
 
 				// Actions
 				luabind::def_lambda("TargetUnit", &luaTargetUnit),
+				luabind::def_lambda("AcceptQuestFrom", &luaAcceptQuestFrom),
+				luabind::def_lambda("TurnInQuestAtImpl", &luaTurnInQuestAt),
 				luabind::def_lambda("FaceUnit", &luaFaceUnit),
 				luabind::def_lambda("CastSpellImpl", &luaCastSpell),
 				luabind::def_lambda("CastSpellOnObject", &luaCastSpellOnObject),
@@ -1752,6 +2098,8 @@ namespace mmo
 				luabind::def_lambda("SendChatImpl", &luaSendChat),
 				luabind::def_lambda("GetWhisperCount", []() { return static_cast<uint32>(g_runtime->whispers.size()); }),
 				luabind::def_lambda("GetLastWhisper", []() { return g_runtime->whispers.empty() ? std::string() : g_runtime->whispers.back(); }),
+				luabind::def_lambda("GetGuildChatCount", []() { return static_cast<uint32>(g_runtime->guildChats.size()); }),
+				luabind::def_lambda("GetLastGuildChat", []() { return g_runtime->guildChats.empty() ? std::string() : g_runtime->guildChats.back(); }),
 				luabind::def_lambda("InviteToParty", &luaInviteToParty),
 				luabind::def_lambda("AcceptPartyInvitation", &luaAcceptPartyInvitation),
 				luabind::def_lambda("LeaveParty", &luaLeaveParty),
@@ -1767,6 +2115,10 @@ namespace mmo
 				luabind::def_lambda("GM_AddItem", &luaGmAddItem),
 				luabind::def_lambda("GM_LearnSpell", &luaGmLearnSpell),
 				luabind::def_lambda("GM_LearnEmote", &luaGmLearnEmote),
+				luabind::def_lambda("GM_PetAdd", &luaGmPetAdd),
+				luabind::def_lambda("GM_PetRemove", &luaGmPetRemove),
+				luabind::def_lambda("GM_PetTame", &luaGmPetTame),
+				luabind::def_lambda("GM_PetMake", &luaGmPetMake),
 				luabind::def_lambda("GM_LevelUp", &luaGmLevelUp),
 				luabind::def_lambda("GM_ClassLevelUp", &luaGmClassLevelUp),
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
@@ -1793,7 +2145,8 @@ namespace mmo
 				luabind::def_lambda("GM_AcceptQuest", &luaGmAcceptQuest),
 				luabind::def_lambda("GM_TurnInQuest", &luaGmTurnInQuest),
 				luabind::def_lambda("GM_ClearInventory", &luaGmClearInventory),
-				luabind::def_lambda("GM_SetSubsystem", &luaGmSetSubsystem)
+				luabind::def_lambda("GM_SetSubsystem", &luaGmSetSubsystem),
+				luabind::def_lambda("GM_CreateGuild", &luaGmCreateGuild)
 			);
 
 			luabind::module(state)[std::move(apiScope)];
@@ -1817,9 +2170,40 @@ namespace mmo
 				return guid
 			end
 
+			function TurnInQuestAt(questGiver, questId, rewardChoice)
+				TurnInQuestAtImpl(questGiver, questId, rewardChoice or 0)
+			end
+
 			function CountUnitsByEntry(entry, includeDead)
 				return CountUnitsByEntryImpl(entry, not includeDead)
 			end
+
+			function CountUnitsOwnedBy(owner, entry)
+				return CountUnitsOwnedByImpl(owner, entry or 0)
+			end
+
+			function GetOwnedUnits(owner, entry)
+				local units = {}
+				local count = CountUnitsOwnedByImpl(owner, entry or 0)
+				for i = 0, count - 1 do
+					local guid = GetOwnedUnitImpl(owner, entry or 0, i)
+					if guid ~= "" then units[#units + 1] = guid end
+				end
+				return units
+			end
+
+			function GetPet()
+				local guid = GetPetImpl()
+				if guid == "" then return nil end
+				return guid
+			end
+
+			-- pet_command: 0 Attack, 1 Follow, 2 Stay, 3 SetStrategy, 4 Dismiss
+			function PetAttack(target) PetCommandImpl(0, target, 0) end
+			function PetFollow() PetCommandImpl(1, "", 0) end
+			function PetStay() PetCommandImpl(2, "", 0) end
+			function PetSetStrategy(strategy) PetCommandImpl(3, "", strategy) end
+			function PetDismiss() PetCommandImpl(4, "", 0) end
 
 			function FindUnitByName(name)
 				local guid = FindUnitByNameImpl(name)
@@ -1843,6 +2227,10 @@ namespace mmo
 				AddItem = GM_AddItem,
 				LearnSpell = GM_LearnSpell,
 				LearnEmote = GM_LearnEmote,
+				PetAdd = GM_PetAdd,
+				PetRemove = GM_PetRemove,
+				PetTame = GM_PetTame,
+				PetMake = GM_PetMake,
 				LevelUp = GM_LevelUp,
 				ClassLevelUp = GM_ClassLevelUp,
 				GiveMoney = GM_GiveMoney,
@@ -1871,6 +2259,7 @@ namespace mmo
 				TurnInQuest = function(questId, rewardChoice) GM_TurnInQuest(questId, rewardChoice or 0) end,
 				ClearInventory = GM_ClearInventory,
 				SetSubsystem = GM_SetSubsystem,
+				CreateGuild = GM_CreateGuild,
 			}
 		)LUA";
 
@@ -1953,12 +2342,34 @@ namespace mmo
 				++runtime.spellGos[{ caster, spellId }];
 				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
 			}) };
+		const scoped_connection periodicTickRecorder { realm.PeriodicAuraTicked.connect(
+			[&transcript, &runtime](const uint64 victim, const uint64 caster, const uint32 spellId, const uint32 auraType, const uint32 amount)
+			{
+				auto& ticks = runtime.periodicTicks[{ victim, spellId }];
+				++ticks.first;
+				ticks.second = amount;
+				transcript.Event("periodic_tick",
+					{ { "victim", guidToString(victim) }, { "caster", guidToString(caster) }, { "spell_id", spellId },
+					  { "aura_type", auraType }, { "amount", amount } });
+			}) };
+		const scoped_connection unitCastStartedRecorder { realm.UnitCastStarted.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const GameTime castTime)
+			{
+				++runtime.castStarts[caster];
+				runtime.lastCastTimes[caster] = castTime;
+				transcript.Event("cast_start",
+					{ { "caster", guidToString(caster) }, { "spell_id", spellId }, { "cast_time_ms", static_cast<uint32>(castTime) } });
+			}) };
 		const scoped_connection chatRecorder { realm.ChatMessageReceived.connect(
 			[&transcript, &runtime](const BotChatMessage& message)
 			{
 				if (message.type == ChatType::Whisper)
 				{
 					runtime.whispers.push_back(message.message);
+				}
+				else if (message.type == ChatType::Guild)
+				{
+					runtime.guildChats.push_back(message.message);
 				}
 
 				transcript.Event("chat_received",

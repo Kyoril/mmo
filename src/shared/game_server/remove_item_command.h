@@ -42,8 +42,9 @@ namespace mmo
          * @brief Removes item from a specific slot and updates all systems.
          * @param slot Absolute slot coordinates.
          * @param stacks Number of stacks to remove (0 = all).
+         * @param sold If true, the removed item is offered for buyback instead of being destroyed.
          */
-        virtual void RemoveItemFromSlot(uint16 slot, uint16 stacks) = 0;
+        virtual void RemoveItemFromSlot(uint16 slot, uint16 stacks, bool sold) = 0;
     };
 
     /**
@@ -80,11 +81,13 @@ namespace mmo
          * @param context Command execution context.
          * @param slot The slot to remove item from.
          * @param stacks Number of stacks to remove.
+         * @param sold If true, the removed item is offered for buyback instead of being destroyed.
          */
         RemoveItemCommand(
             IRemoveItemCommandContext &context,
             InventorySlot slot,
-            uint16 stacks) noexcept;
+            uint16 stacks,
+            bool sold = false) noexcept;
 
     public:
         // IInventoryCommand implementation
@@ -108,6 +111,7 @@ namespace mmo
         IRemoveItemCommandContext &m_context;
         InventorySlot m_slot;
         uint16 m_stacks;
+        bool m_sold;
         std::shared_ptr<GameItemS> m_removedItem;
     };
 }

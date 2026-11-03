@@ -1,7 +1,7 @@
 #!/bin/sh
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 # Compiles a miniature client tree with the real deploy/patch/source.txt layout and checks
-# that the Linux update_compiler produces a list.txt naming the Windows binaries.
+# that the Linux update_compiler produces a list.txt naming the Windows binaries and the macOS bundle.
 set -eu
 work=$(mktemp -d)
 mkdir -p "$work/deploy/patch"
@@ -12,8 +12,12 @@ done
 for bin in Launcher.exe fmod.dll mmo_client.exe mmo_error.exe; do
 	echo "$bin" > "$work/deploy/patch/$bin"
 done
+mkdir -p "$work/deploy/patch/mmo_client.app/Contents/MacOS"
+echo "mac" > "$work/deploy/patch/mmo_client.app/Contents/MacOS/mmo_client"
+echo "plist" > "$work/deploy/patch/mmo_client.app/Contents/Info.plist"
 cat > "$work/deploy/patch/source.txt" <<'EOF'
 // Every top-level entry here is downloaded into the install folder; list it in [UninstallDelete] of deploy/installer/setup.iss too.
+// mmo_client.app (condition OSX) comes from the nightly's client-macos.zip and is never installed on Windows.
 version = 0
 root = (type = "fs", from = ".", to = "", entries =
 {
@@ -49,12 +53,15 @@ root = (type = "fs", from = ".", to = "", entries =
 	(type = "if", condition = "WINDOWS", value =
 		(type = "fs", from = "mmo_error.exe")
 	)
+	(type = "if", condition = "OSX", value =
+		(type = "fs", from = "mmo_client.app")
+	)
 })
 EOF
 # The nightly backup shells out to mysqldump; a missing client must fail the image build, not a night.
 command -v mysqldump >/dev/null || { echo "mysqldump missing"; exit 1; }
 /app/update_compiler -s "$work/deploy/patch" -o "$work/out" -c zlib -j 2
-for bin in Launcher.exe mmo_client.exe mmo_error.exe fmod.dll; do
+for bin in Launcher.exe mmo_client.exe mmo_error.exe fmod.dll mmo_client.app Info.plist \"mmo_client\"; do
 	grep -q "$bin" "$work/out/list.txt" || { echo "list.txt lacks $bin"; exit 1; }
 done
 echo "update_compiler smoke test passed"

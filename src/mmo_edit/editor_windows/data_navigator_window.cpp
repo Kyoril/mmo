@@ -23,9 +23,11 @@
 #include "creature_editor_window.h"
 #include "class_editor_window.h"
 #include "unit_class_editor_window.h"
+#include "attribute_editor_window.h"
 #include "race_editor_window.h"
 #include "proficiency_editor_window.h"
 #include "skill_editor_window.h"
+#include "pet_editor_window.h"
 #include "chat_channel_editor_window.h"
 #include "emote_editor_window.h"
 #include "faction_editor_window.h"
@@ -383,6 +385,13 @@ namespace mmo
             [this]() { OpenEditorWindow(std::type_index(typeid(UnitClassEditorWindow))); },
             static_cast<int>(m_project.unitClasses.count())
         });
+
+        characterCategory.editors.push_back({
+            std::type_index(typeid(AttributeEditorWindow)),
+            "Attributes",
+            [this]() { OpenEditorWindow(std::type_index(typeid(AttributeEditorWindow))); },
+            static_cast<int>(m_project.attributes.count())
+        });
         
         characterCategory.editors.push_back({
             std::type_index(typeid(RaceEditorWindow)),
@@ -403,6 +412,13 @@ namespace mmo
             "Skills",
             [this]() { OpenEditorWindow(std::type_index(typeid(SkillEditorWindow))); },
             static_cast<int>(m_project.skills.count())
+        });
+
+        characterCategory.editors.push_back({
+            std::type_index(typeid(PetEditorWindow)),
+            "Pets",
+            [this]() { OpenEditorWindow(std::type_index(typeid(PetEditorWindow))); },
+            static_cast<int>(m_project.pets.count())
         });
 
         characterCategory.editors.push_back({

@@ -59,6 +59,9 @@ namespace mmo
 
 		const proto::SpellEntry* GetSpell() const override { return &m_spell; }
 
+		/// @returns The cast time in milliseconds after spell mods and casting speed auras.
+		GameTime GetCastTime() const { return m_castTime; }
+
 		/// @returns The result of Activate(): CastOkay unless the cast failed validation.
 		SpellCastResult GetActivationResult() const { return m_activationResult; }
 
@@ -103,6 +106,11 @@ namespace mmo
 		GameTime CalculateFinalCooldown() const;
 
 		void ApplyCooldown(GameTime cooldownTimeMs, GameTime categoryCooldownTimeMs);
+
+		/// Puts the spell on its cooldown, as announced to the client in the SpellGo packet.
+		/// Called from ApplyAllEffects, and already when a projectile is launched, because that
+		/// spell's effects only resolve on impact. Idempotent, so the impact does not restart it.
+		void ApplySpellCooldown();
 
 		void ApplyAllEffects();
 		/// Applies a single effect. Does not evaluate the effect's gating condition; ApplyAllEffects
@@ -155,6 +163,9 @@ namespace mmo
 		bool m_tookReagents { false };
 		bool m_delayedCast;
 		bool m_cooldownStartedOnCastStart { false };
+		/// Whether ApplySpellCooldown already ran for this cast, so a projectile landing later
+		/// does not restart the cooldown the client was told about when the cast went off.
+		bool m_spellCooldownApplied { false };
 		GameTime m_cooldownStartedAtCastStartMs { 0 };
 		bool m_globalCooldownTriggered { false };
 		GameTime m_appliedGlobalCooldownMs { 0 };

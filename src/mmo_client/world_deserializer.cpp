@@ -112,6 +112,9 @@ namespace mmo
 		/// Keeps the merged geometry alive until the instance holds it itself.
 		std::vector<std::shared_ptr<const void>> mergedGeometry;
 
+		/// Whether the outdoor clusters of the placement are built (after every model's own merge).
+		bool clustersMerged = false;
+
 		std::vector<String> pendingKits;
 
 		std::vector<String> pendingMeshes;
@@ -638,6 +641,20 @@ namespace mmo
 			{
 				prep.mergedGeometry.push_back(std::move(merged));
 				++prep.nextMerge;
+			}
+		}
+		else if (prep.merging && !prep.clustersMerged)
+		{
+			// The outdoor clusters of the whole placement (it and its children), a group per step as well
+			const auto rootIt = prep.modelsByPath.find(prep.entity.meshName);
+			if (rootIt == prep.modelsByPath.end() || !rootIt->second)
+			{
+				prep.clustersMerged = true;
+			}
+			else if (auto clusters = WorldModelInstance::PrewarmClusterGeometry(rootIt->second, 1))
+			{
+				prep.mergedGeometry.push_back(std::move(clusters));
+				prep.clustersMerged = true;
 			}
 		}
 		else

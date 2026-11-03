@@ -4,8 +4,8 @@ Two constants describe what a binary can say on the wire:
 
 | Constant | Defined in | Current |
 |---|---|---|
-| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 11 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 29 |
+| `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 36 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -47,7 +47,7 @@ It covers files that define a wire structure **together with its serializer**, o
 the indices and framing those structures travel in. For the game protocol that deliberately
 includes the field layer — `object_type_id.h` (`object_fields`), `field_map.h`,
 `movement_info.h` — plus the standalone payload structures `character_view.{h,cpp}`,
-`mail.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
+`mail.h`, `trade_skill_data.h`, `pet_packets.h` and `game.h`. The field layer matters most: `FieldMap` indices go out in every
 `UpdateObject` and `object_fields::UnitFields` is numbered implicitly, so adding a unit stat
 in the middle renumbers every field after it. That is ordinary gameplay work that looks
 nothing like a protocol edit, and it is the likeliest wire break in this codebase.
@@ -104,6 +104,8 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 13 | 2026-11-01 | Persistent pets: realm->world `PlayerPetData` (uint64 character guid + uint8-counted `PersistentPetData` list, sent right after `PlayerCharacterJoin`) and `PetCreated` (character guid + the created pet), world->realm `PetData` (the same list, sent with every character save and on every stored pet change) and `CreatePet` (character guid + the pet to create, id 0). `PersistentPetData` is written by `src/shared/game_server/pets/persistent_pet.cpp` |
+| 12 | 2026-10-29 | Data-driven attributes: `CharacterClassData` (inside CharacterData and the world->realm character updates) carries `MaxAttributes` (10) spent-point counts instead of 5, followed by a uint32 `attributeLayout` |
 | 11 | 2026-10-20 | Realm selection redesign: every `RealmList` entry carries a trailing uint8 `realm_population` band and a uint32 player count, which is exact only for GM accounts and `HiddenRealmPlayerCount` (0xFFFFFFFF) for everyone else |
 | 10 | 2026-10-19 | GM observation: CharacterData carries uint8 gmFlags after isGameMaster; realm→world TeleportRequest carries the target InstanceId |
 | 9 | 2026-10-13 | Instance reset: realm→world `ResetInstance` request |
@@ -120,6 +122,13 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 36 | 2026-11-02 | Pet damage numbers: `damage_flags` gains `Pet` (0x10). A unit without its own connection (a pet) forwards its `SpellDamageLog` to its owner with that bit set, so the owner's client shows it in the pet colour and credits it to the pet |
+| 35 | 2026-11-01 | Pets: client `PetCommand` (uint8 pet_command, uint64 target, uint32 param), `PetCastSpell` (uint32 spellId + SpellTargetMap), `PetRename` (uint8-length name), `PetNameQuery` (uint64 guid), all proxied to the world node, and GM `CheatPetAdd`/`CheatPetRemove` (uint32 petEntry), `CheatPetTame`/`CheatPetMake` (no payload; selected creature), proxied with GM level 2; server `PetSpells` (uint64 petGuid, 0 = none, uint32 petEntry, uint8-length name, uint8 levelMode, uint8 strategy, uint8 canRename, uint8 count + uint32 spell ids), `PetLearnedSpell` (uint32), `PetXp` (uint32 xp, uint32 nextLevelXp), `PetNameQueryResult` (uint64 guid, uint8 found, uint8-length name) and `PetResult` (uint8 pet_result). Payloads live in `src/shared/game/pet_packets.h`, now on the fingerprint watch list. `spell_cast_result` gains `FailedTooManyPets` (23) and the pre-cast pet failures `FailedNoPet`, `FailedPetDead`, `FailedPetWrongClass`, `FailedAlreadyHavePet`, `FailedNoFreePetSlot`, `FailedNotTamable`, `FailedTargetTooHighLevel` (24-30). Subsystem id 3 `PETS` (world-owned) joins `SubsystemStatus` |
+| 34 | 2026-11-01 | Guilds become a switchable subsystem: subsystem id 2 `GUILD` (realm-owned) joins `SubsystemStatus`, and `GuildCommandResult` gains result 7 `Disabled`, sent for any guild request and for guild chat while the subsystem is off |
+| 33 | 2026-10-30 | Real-time regeneration: unit fields `HealthRegen` and `PowerRegen` (3 floats: mana, rage, energy; current rates per five seconds) are appended after `ManaRegenCasting`, renumbering every player field after them. The owning client extrapolates health and power with them |
+| 32 | 2026-10-30 | Friends become a switchable subsystem: subsystem id 1 `FRIENDS` (realm-owned) joins `SubsystemStatus`, and `FriendCommandResult` gains result 8 `Disabled`, sent for any friend request while the subsystem is off |
+| 31 | 2026-10-29 | Data-driven attributes: the unit fields `Stat`, `PosStat` and `NegStat` hold `MaxAttributes` (10) values each instead of five named ones, and the player field `AttributePointCost` spans `AttributePointCostFieldCount` (3) uint32 fields instead of a uint64, renumbering every field after them. `LevelUp` carries health, mana, talent and attribute points, then a uint8 count of (uint8 attribute id, int32 gain) pairs instead of five fixed attribute gains |
+| 30 | 2026-10-23 | Vendor buyback: client `BuyBackItem` (vendor guid + buyback slot index, proxied to the world node) and server `BuyBackList` (vendor guid, then per entry the buyback slot index, item, display, stack count, price and durability), sent with `ListInventory` and whenever the buyback list changes |
 | 29 | 2026-10-20 | Second action bar: `MaxActionButtons` grows from 12 to 24, so the server `ActionButtons` payload carries 24 button records instead of 12 and the client `SetActionBarButton` slot range widens to 0..23 |
 | 28 | 2026-10-21 | Character order: `SetCharacterOrder` client opcode, `CharEnum` gains trailing uint64 realm time of day |
 | 27 | 2026-10-19 | GM observation: client `CheatInvisible` (uint8 enable), handled by the realm (persisted) and forwarded to the world node; client `CheatGhost` (uint8-length target name, empty = stop), handled by the realm |

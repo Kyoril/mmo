@@ -41,6 +41,13 @@ namespace mmo
         return std::make_unique<RemoveItemCommand>(m_removeContext, slot, stacks);
     }
 
+    std::unique_ptr<IInventoryCommand> InventoryCommandFactory::CreateSellItem(
+        InventorySlot slot,
+        uint16 stacks) const
+    {
+        return std::make_unique<RemoveItemCommand>(m_removeContext, slot, stacks, true);
+    }
+
     std::unique_ptr<IInventoryCommand> InventoryCommandFactory::CreateSwapItems(
         InventorySlot sourceSlot,
         InventorySlot destSlot) const

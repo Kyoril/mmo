@@ -65,6 +65,9 @@ Session (for scenarios that deliberately provoke a disconnect):
 | `ExpectDisconnect()` | Losing the realm connection stops being a failure. Arm it **before** the disconnect can happen |
 | `IsDisconnected() -> bool` | True once the realm connection has been lost |
 | `LastKickReason() -> string` | `"none"` \| `"logged_in_elsewhere"` \| `"banned"` |
+| `AcceptQuestFrom(g, questId)` | Accepts a quest at the quest giver `g` like a player: it must offer the quest and stand within reach |
+| `TurnInQuestAt(g, questId [, rewardChoice])` | Turns a completed quest in at the quest ender `g` like a player, so its `OnQuestReward` triggers run |
+| `AddAttributePoint(attributeId)` | Spends one attribute point on that attribute (the server rejects unaffordable points and undefined attributes) |
 | `LoginElsewhere([timeoutMs]) -> bool` | Opens a second login-server session on the same account and waits for it to authenticate; default 15s |
 | `Reconnect([timeoutMs]) -> bool` | Logs back in and returns to the world over the **same** connectors; default 30s |
 
@@ -75,6 +78,7 @@ Queries (`g` is a guid string; numeric queries return `-1` for unknown units):
 `GetTradeSkill(skillId)` / `GetTradeSkillMax(skillId)` (own profession skill value / cap, `-1`
 when the skill is not known),
 `GetXp()`, `GetNextLevelXp()` (own character only),
+`GetAttribute(g, attributeId)` (total value of an attribute, ids from `attributes.data`), `GetAvailableAttributePoints()` (own character only),
 `LastCastResult()` (`"none" | "pending" | "started" | "ok" | "failed:<reason>"`; crafting
 failures report the numeric reason, e.g. `failed:21` = skill too low, `failed:22` = inventory full),
 `LastSwingError()` (`"none" | "out_of_range" | "wrong_facing" | "target_dead" | ...`),
@@ -100,16 +104,37 @@ come from their speaker),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
-cooldown is not tracked),
+cooldown is not tracked), `GetSpellCooldownRemaining(spellId)` (milliseconds left on that cooldown,
+0 when there is none),
+`CastStartCount(g)` / `LastCastTime(g)` (casts with a cast time another unit started — SpellStart
+packets — and the cast time in ms the server announced for the latest one, `-1` if none: shows
+cast-time modifiers on creatures),
+`PeriodicTickCount(g, spellId)` / `LastPeriodicAmount(g, spellId)` (ticks of `spellId`'s periodic
+aura on `g` the server logged — PeriodicAuraLog — and the amount the latest one dealt or healed,
+`-1` if none: exact tick values, which a health bar blurs with regeneration),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
+
+Pets (see [docs/pets.md](../docs/pets.md)):
+`GetOwner(g)` (the unit's Owner field: `"0x0"` for none, `""` for an unknown unit),
+`GetTarget(g)` (the unit's TargetUnit field, same conventions; a creature targets what it attacks),
+`CountUnitsOwnedBy(owner [, entry])` / `GetOwnedUnits(owner [, entry]) -> { g, ... }` (living
+creatures the client knows that `owner` owns, optionally of one entry: pets, summons),
+`GetPet() -> g|nil`, `GetPetName()`, `GetPetEntry()`, `PetKnowsSpell(spellId)` (the summoned
+persistent pet as the last `PetSpells` described it; temporary pets have no such state),
+`PetSpellsCount()` (`PetSpells` packets received this session), `LastPetResult()` /
+`ClearLastPetResult()` (the last `PetResult`, a `pet_result` value, -1 for none),
+`PetAttack(g)`, `PetFollow()`, `PetStay()`, `PetSetStrategy(strategy)` (0 Assist, 1 Passive),
+`PetDismiss()` (commands to all own pets), `PetRename(name)`
 
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
 the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
-`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
+`SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"guild"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
+`GetGuildChatCount()` and `GetLastGuildChat()` for guild chat received, `GuildInvite(name)`,
+`GuildLeave()`, `LastGuildCommandResult()` / `ClearLastGuildCommandResult()` (game::guild_command_result, -1 for none),
 `InviteToParty(name)`, `AcceptPartyInvitation()` (only once `HasPendingPartyInvitation()` is
 true: the realm disconnects a client that accepts with no invitation pending), `LeaveParty()`,
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
@@ -127,6 +152,10 @@ server validates the player's position, so walk inside the area first)
 GM commands (server must run with dev commands; the test account has GM level 3):
 `GM.AddItem(itemId, count)`, `GM.LearnSpell(spellId)`, `GM.LearnEmote(emoteId)`, `GM.LevelUp(levels)`,
 `GM.ClassLevelUp(levels)` (levels the active class, not the character),
+`GM.PetAdd(petEntry)` / `GM.PetRemove(petEntry)` (grant / delete a stored pet of the selected
+player, else the test character), `GM.PetTame()` (tames the selected creature, ignoring the
+level check) and `GM.PetMake()` (the selected creature becomes a temporary pet without a
+duration), the latter two act on the current selection (`SetTarget`),
 `GM.GiveMoney(copper)`, `GM.CreateMonster(entry) -> g` (waits for the spawn),
 `GM.DestroyMonster(g)`, `GM.CreateObject(entry [, state]) -> g` (spawns a temporary
 world object at the player's position facing the player's direction; waits for the
@@ -149,8 +178,10 @@ cancel the realm's scheduled shutdown, needs gm_level 3; wait for the realm's
 ShutdownCountdown announcement and return its seconds, `GM.CancelShutdown` returns whether it
 announced the cancellation — a shutdown that runs out stops the shared test stack, so always
 cancel it within the scenario, and never pass 0 seconds),
+`GM.CreateGuild(name)` (founds a guild led by the character; it persists, so leave it again
+with `GuildLeave()`, which disbands a guild the character leads),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
-quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
+quest ender needed, so the ender's `OnQuestReward` triggers do not run), `GM.ClearInventory()` (destroys all backpack items, keeps
 equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the
 normal damage path, so `OnHealthDroppedBelow` triggers, threat and death handling
 all run — use it to walk a boss across its phase thresholds instead of depending
@@ -203,6 +234,11 @@ character, like godmode)
   gives the scenario a dedicated character so it does not share progression state with
   other scenarios of the same class (see `quest_path_1_to_10.lua`, which must start
   at level 1).
+- Where a scenario leaves the character is shared state too: the next scenario of the
+  same class starts there, and most scenarios port only relative to where they stand
+  (`GM.Worldport(0, GetPosX(me) + 3, ...)`). A scenario that travels to another
+  settlement or into a dungeon must therefore take its own character, or every later
+  scenario of that class runs from there (see `haven_day_night.lua`, `hollow_choir_*`).
 - The runner retries a scenario **once** on infrastructure failures (exit 2/3/4 —
   connect, timeout, disconnect) because a reconnect within ~1s of the previous
   session can race server-side session cleanup. Assertion failures (exit 1) are

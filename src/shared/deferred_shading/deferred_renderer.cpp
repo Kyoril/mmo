@@ -27,6 +27,9 @@
 #   include "shaders/PS_DeferredLighting.h"
 #   include "graphics_d3d11/graphics_device_d3d11.h"
 #   include "graphics_d3d11/render_texture_d3d11.h"
+#elif defined(__APPLE__)
+#   include "VS_DeferredLighting.metal.h"
+#   include "PS_DeferredLighting.metal.h"
 #endif
 
 namespace mmo
@@ -116,7 +119,7 @@ namespace mmo
         csmConfig.stableCascades = true;
         csmConfig.cascadeBlendFactor = 0.25f;
         
-#ifdef WIN32
+#if defined(WIN32) || defined(__APPLE__)
 		m_deferredLightVs = m_device.CreateShader(ShaderType::VertexShader, g_VS_DeferredLighting, std::size(g_VS_DeferredLighting));
         m_deferredLightPs = m_device.CreateShader(ShaderType::PixelShader, g_PS_DeferredLighting, std::size(g_PS_DeferredLighting));
 #endif

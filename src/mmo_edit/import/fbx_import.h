@@ -126,5 +126,8 @@ namespace mmo
 		Vector3 m_importOffset = Vector3::Zero;
 		Vector3 m_importScale = Vector3::UnitScale;;
 		Quaternion m_importRotation = Quaternion::Identity;
+
+		/// Uniform scale applied to the skeleton and the skinned vertices of the current import.
+		float m_skeletonScale = 1.0f;
 	};
 }

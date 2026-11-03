@@ -33,11 +33,11 @@ namespace
 					auto* lbv = cls->add_levelbasevalues();
 					lbv->set_health(100);
 					lbv->set_mana(100);
-					lbv->set_stamina(10);
-					lbv->set_strength(10);
-					lbv->set_agility(10);
-					lbv->set_intellect(10);
-					lbv->set_spirit(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
+					lbv->add_attributes(10);
 				}
 			}
 		}
@@ -142,4 +142,55 @@ TEST_CASE("Proc aura without procfamily still procs from family-less spells", "[
 		nullptr, 0, 0, false, /*familyFlags=*/0);
 	CHECK(procced);
 	CHECK_FALSE(owner->HasAuraSpellFromCaster(702, casterId));
+}
+
+TEST_CASE("Proc aura without procexflags ignores avoided swings", "[aura_proc]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto owner = MakeProcUnit(project, timers);
+
+	const uint64 casterId = 42;
+	proto::SpellEntry spell = MakeProcSpell(703, /*procFamily=*/0);
+	spell.set_procflags(spell_proc_flags::TakenMeleeAutoAttack);
+
+	auto container = std::make_shared<AuraContainer>(*owner, casterId, spell, /*duration=*/8000, /*itemGuid=*/0);
+	{ auto handle = container; owner->ApplyAura(std::move(handle)); }
+	REQUIRE(owner->HasAuraSpellFromCaster(703, casterId));
+
+	// A "when hit" proc must not fire on a dodge, parry or miss: those carry no hit flag.
+	for (const uint32 avoided : { proc_ex_flags::Dodge, proc_ex_flags::Parry, proc_ex_flags::MissHit })
+	{
+		CHECK_FALSE(container->HandleProc(spell_proc_flags::TakenMeleeAutoAttack, avoided, nullptr, 0, 0, false, 0));
+	}
+	CHECK(owner->HasAuraSpellFromCaster(703, casterId));
+
+	CHECK(container->HandleProc(spell_proc_flags::TakenMeleeAutoAttack, proc_ex_flags::NormalHit, nullptr, 0, 0, false, 0));
+}
+
+TEST_CASE("Proc aura with procexflags Dodge fires only on dodges", "[aura_proc]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+
+	auto owner = MakeProcUnit(project, timers);
+
+	const uint64 casterId = 42;
+	proto::SpellEntry spell = MakeProcSpell(704, /*procFamily=*/0);
+	spell.set_procflags(spell_proc_flags::TakenMeleeAutoAttack);
+	spell.set_procexflags(proc_ex_flags::Dodge);
+
+	auto container = std::make_shared<AuraContainer>(*owner, casterId, spell, /*duration=*/8000, /*itemGuid=*/0);
+	{ auto handle = container; owner->ApplyAura(std::move(handle)); }
+	REQUIRE(owner->HasAuraSpellFromCaster(704, casterId));
+
+	CHECK_FALSE(container->HandleProc(spell_proc_flags::TakenMeleeAutoAttack, proc_ex_flags::NormalHit, nullptr, 0, 0, false, 0));
+	CHECK_FALSE(container->HandleProc(spell_proc_flags::TakenMeleeAutoAttack, proc_ex_flags::Parry, nullptr, 0, 0, false, 0));
+	CHECK(owner->HasAuraSpellFromCaster(704, casterId));
+
+	CHECK(container->HandleProc(spell_proc_flags::TakenMeleeAutoAttack, proc_ex_flags::Dodge, nullptr, 0, 0, false, 0));
+	CHECK_FALSE(owner->HasAuraSpellFromCaster(704, casterId));
 }

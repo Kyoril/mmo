@@ -27,6 +27,7 @@
 #include "graphics/graphics_device.h"
 #include "game/aura.h"
 #include "game/emote_defs.h"
+#include "game/owner_chain.h"
 #include "game/spell.h"
 #include "trade_skill_list.h"
 #include "game/character_customization/avatar_definition_mgr.h"
@@ -764,33 +765,25 @@ namespace mmo
 		// Apply facing
 		GetSceneNode()->SetDerivedOrientation(Quaternion(state.facing, Vector3::UnitY));
 
-		// Apply lateral movement through SafeMoveNode so the capsule respects
-		// world geometry (walls, obstacles). This prevents remote players from
-		// visually penetrating walls they are colliding against locally.
-		// Only do the sweep when there is actual movement — zero-delta sweeps
-		// are a no-op but waste cycles.
+		// Move the scene node through a capsule sweep so the remote player respects world
+		// geometry (walls, obstacles, the top of whatever it jumped onto). The renderer's move
+		// for this frame starts at the position the previous sweep resolved to.
+		GetSceneNode()->SetDerivedPosition(state.position);
 		if (!state.desiredDelta.IsZero())
 		{
-			// state.position is the pre-collision start point computed by the
-			// renderer (m_scenePos − desiredDelta).  Setting the scene node here
-			// ensures the capsule sweep begins from the smooth-correction position
-			// rather than wherever the scene node happened to be last frame.
-			GetSceneNode()->SetDerivedPosition(state.position);
+			Vector3 blockingNormals[2];
+			const int32 numBlockingNormals = m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta, blockingNormals);
 
-			// Apply lateral movement through a capsule sweep so the remote
-			// player character respects world geometry (walls, obstacles).
-			m_unitMovement->RemotePlayerMoveCollide(state.desiredDelta);
+			// Feed the collision-resolved position back into the renderer's scene-tracking
+			// state so the smooth correction loop stays in sync with the physical capsule.
+			m_remoteMovementRenderer.SetRenderedPos(GetSceneNode()->GetDerivedPosition());
 
-			// Feed the collision-resolved position back into the renderer's
-			// scene-tracking state (m_scenePos) so the smooth correction loop
-			// stays in sync with the physical capsule position.
-			const Vector3 resolvedPos = GetSceneNode()->GetDerivedPosition();
-			m_remoteMovementRenderer.SetRenderedPos(resolvedPos);
-		}
-		else
-		{
-			// No movement — place the scene node at the renderer's correction pos.
-			GetSceneNode()->SetDerivedPosition(state.position);
+			// The real player is stopped by the same surfaces: keep the dead-reckoning target
+			// on this side of them, or it runs on into the obstacle until the next heartbeat.
+			for (int32 i = 0; i < numBlockingNormals; ++i)
+			{
+				m_remoteMovementRenderer.ClipTargetToSurface(blockingNormals[i]);
+			}
 		}
 
 		// Update movement info flags so animation system works correctly
@@ -2129,7 +2122,77 @@ namespace mmo
 			return 0;
 		}
 
-		return Get<int32>(object_fields::Mana + powerType);
+		const int32 power = Get<int32>(object_fields::Mana + powerType);
+		if (!m_predictRegeneration || !IsAlive())
+		{
+			return power;
+		}
+
+		return static_cast<int32>(PredictRegeneration(power, Get<int32>(object_fields::MaxMana + powerType),
+			Get<float>(object_fields::PowerRegen + powerType)));
+	}
+
+	uint32 GameUnitC::GetHealth() const
+	{
+		const uint32 health = Get<uint32>(object_fields::Health);
+		if (!m_predictRegeneration || health == 0)
+		{
+			return health;
+		}
+
+		return static_cast<uint32>(PredictRegeneration(health, Get<uint32>(object_fields::MaxHealth), Get<float>(object_fields::HealthRegen)));
+	}
+
+	void GameUnitC::SetRegenerationPrediction(const bool enabled)
+	{
+		m_predictRegeneration = enabled;
+		m_regenSyncTime = GetAsyncTimeMs();
+	}
+
+	void GameUnitC::OnFieldsApplied()
+	{
+		GameObjectC::OnFieldsApplied();
+
+		if (!m_predictRegeneration)
+		{
+			return;
+		}
+
+		// Anything that changes the synced value or the rate re-anchors the extrapolation. The
+		// server sends both one network latency late, so the prediction stays behind the server's
+		// exact value rather than ahead of it: a cast the prediction allows is never refused.
+		// This has to happen before the fieldsChanged handlers run: they raise the UI events that
+		// read GetHealth / GetPower, and the new value extrapolated from the previous sync's time
+		// would show a whole sync interval of regeneration too much for a frame.
+		for (uint32 field = object_fields::MaxHealth; field <= object_fields::MaxEnergy; ++field)
+		{
+			if (WasChanged(field))
+			{
+				m_regenSyncTime = GetAsyncTimeMs();
+				return;
+			}
+		}
+
+		for (uint32 field = object_fields::HealthRegen; field <= object_fields::PowerRegen + power_type::Energy; ++field)
+		{
+			if (WasChanged(field))
+			{
+				m_regenSyncTime = GetAsyncTimeMs();
+				return;
+			}
+		}
+	}
+
+	int64 GameUnitC::PredictRegeneration(const int64 value, const int64 maxValue, const float ratePerFiveSeconds) const
+	{
+		if (ratePerFiveSeconds == 0.0f)
+		{
+			return value;
+		}
+
+		const float seconds = static_cast<float>(GetAsyncTimeMs() - m_regenSyncTime) / 1000.0f;
+		const int64 predicted = value + static_cast<int64>(std::trunc(ratePerFiveSeconds / 5.0f * seconds));
+		return std::clamp<int64>(predicted, 0, std::max<int64>(maxValue, value));
 	}
 
 	int32 GameUnitC::GetMaxPower(const int32 powerType) const
@@ -2144,32 +2207,32 @@ namespace mmo
 
 	int32 GameUnitC::GetStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::StatStamina + statId);
+		return Get<int32>(object_fields::Stat + statId);
 	}
 
 	int32 GameUnitC::GetPosStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::PosStatStamina + statId);
+		return Get<int32>(object_fields::PosStat + statId);
 	}
 
 	int32 GameUnitC::GetNegStat(int32 statId) const
 	{
-		if (statId < 0 || statId >= 5)
+		if (statId < 0 || statId >= static_cast<int32>(MaxAttributes))
 		{
 			return 0;
 		}
 
-		return Get<int32>(object_fields::NegStatStamina + statId);
+		return Get<int32>(object_fields::NegStat + statId);
 	}
 
 	float GameUnitC::GetArmorReductionFactor() const
@@ -2423,8 +2486,24 @@ namespace mmo
 		RefreshUnitName();
 	}
 
+	void GameUnitC::SetPetName(const String &name)
+	{
+		if (m_petName == name)
+		{
+			return;
+		}
+
+		m_petName = name;
+		RefreshUnitName();
+	}
+
 	const String &GameUnitC::GetName() const
 	{
+		if (!m_petName.empty())
+		{
+			return m_petName;
+		}
+
 		if (m_creatureInfo.name.empty())
 		{
 			return GameObjectC::GetName();
@@ -2698,58 +2777,102 @@ namespace mmo
 		return m_proficiencies.contains(proficiencyId);
 	}
 
+	namespace
+	{
+		/// The owner of a unit as far as the client knows it (nullptr if it has none or it is not in sight).
+		const GameUnitC* FindUnitOwner(const GameUnitC& unit)
+		{
+			const uint64 ownerGuid = unit.Get<uint64>(object_fields::Owner);
+			if (ownerGuid == 0 || ownerGuid == unit.GetGuid())
+			{
+				return nullptr;
+			}
+
+			// The raw pointer stays valid for the reaction check: ObjectMgr keeps the object alive.
+			return ObjectMgr::Get<GameUnitC>(ownerGuid).get();
+		}
+
+		/// The faction part of GameUnitC::IsFriendlyTo, between two top owners.
+		bool FactionIsFriendly(const GameUnitC& unit, const GameUnitC& other)
+		{
+			const proto_client::FactionTemplateEntry* factionTemplate = unit.GetFactionTemplate();
+			const proto_client::FactionTemplateEntry* otherFactionTemplate = other.GetFactionTemplate();
+			if (factionTemplate == nullptr || otherFactionTemplate == nullptr)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == nullptr || other.GetFaction() == nullptr)
+			{
+				return false;
+			}
+
+			// Same faction template should always be friendly
+			if (factionTemplate == otherFactionTemplate)
+			{
+				return true;
+			}
+
+			if (unit.GetFaction() == other.GetFaction())
+			{
+				return true;
+			}
+
+			const uint32 otherFactionId = other.GetFaction()->id();
+			return std::find(factionTemplate->friends().begin(), factionTemplate->friends().end(), otherFactionId) != factionTemplate->friends().end();
+		}
+
+		/// The faction part of GameUnitC::IsHostileTo, between two top owners.
+		bool FactionIsHostile(const GameUnitC& unit, const GameUnitC& other)
+		{
+			const proto_client::FactionTemplateEntry* factionTemplate = unit.GetFactionTemplate();
+			const proto_client::FactionTemplateEntry* otherFactionTemplate = other.GetFactionTemplate();
+			if (factionTemplate == nullptr || otherFactionTemplate == nullptr)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == nullptr || other.GetFaction() == nullptr)
+			{
+				return false;
+			}
+
+			// Same faction template should always never be hostile
+			if (factionTemplate == otherFactionTemplate)
+			{
+				return false;
+			}
+
+			if (unit.GetFaction() == other.GetFaction())
+			{
+				return false;
+			}
+
+			const uint32 otherFactionId = other.GetFaction()->id();
+			return std::find(factionTemplate->enemies().begin(), factionTemplate->enemies().end(), otherFactionId) != factionTemplate->enemies().end();
+		}
+	}
+
+	const GameUnitC &GameUnitC::GetTopOwner() const
+	{
+		return owner_chain::ResolveTopOwner(*this, &FindUnitOwner);
+	}
+
+	bool GameUnitC::IsOwnedByPlayer() const
+	{
+		return owner_chain::IsOwnedByPlayer(*this, &FindUnitOwner,
+			[](const GameUnitC& unit) { return unit.GetGuid(); },
+			[](const GameUnitC& unit) { return unit.Get<uint64>(object_fields::Owner); });
+	}
+
 	bool GameUnitC::IsFriendlyTo(const GameUnitC &other) const
 	{
-		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
-		{
-			return false;
-		}
-
-		if (m_faction == nullptr || other.m_faction == nullptr)
-		{
-			return false;
-		}
-
-		// Same faction template should always be friendly
-		if (m_factionTemplate == other.m_factionTemplate)
-		{
-			return true;
-		}
-
-		if (m_faction == other.m_faction)
-		{
-			return true;
-		}
-
-		return std::find_if(m_factionTemplate->friends().begin(), m_factionTemplate->friends().end(), [&other](uint32 factionId)
-							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->friends().end();
+		return owner_chain::IsFriendly(*this, other, &FindUnitOwner, &FactionIsFriendly);
 	}
 
 	bool GameUnitC::IsHostileTo(const GameUnitC &other) const
 	{
-		if (m_factionTemplate == nullptr || other.m_factionTemplate == nullptr)
-		{
-			return false;
-		}
-
-		if (m_faction == nullptr || other.m_faction == nullptr)
-		{
-			return false;
-		}
-
-		// Same faction template should always never be hostile
-		if (m_factionTemplate == other.m_factionTemplate)
-		{
-			return false;
-		}
-
-		if (m_faction == other.m_faction)
-		{
-			return false;
-		}
-
-		return std::find_if(m_factionTemplate->enemies().begin(), m_factionTemplate->enemies().end(), [&other](uint32 factionId)
-							{ return factionId == other.GetFaction()->id(); }) != m_factionTemplate->enemies().end();
+		return owner_chain::IsHostile(*this, other, &FindUnitOwner, &FactionIsHostile);
 	}
 
 	bool GameUnitC::HasStealthAura() const

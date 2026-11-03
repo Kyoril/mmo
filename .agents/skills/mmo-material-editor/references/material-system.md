@@ -6,7 +6,7 @@
 - Runtime instance serialization: `src/shared/scene_graph/material_instance_serializer.cpp`
 - Editable graph: `src/mmo_edit/editors/material_editor/material_graph.cpp`
 - Nodes, pins, properties: `src/mmo_edit/editors/material_editor/material_node.h`
-- D3D11 generation: `src/shared/graphics_d3d11/material_compiler_d3d11.cpp`
+- HLSL generation (`MaterialCompilerHlsl`): `src/shared/graphics/material_compiler_hlsl.cpp`
 - Metal generation: `src/shared/graphics_metal/material_compiler_metal.mm`
 - Deferred lighting: `src/shared/deferred_shading/shaders/PS_DeferredLighting.hlsl`
 

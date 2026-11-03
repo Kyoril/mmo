@@ -73,6 +73,8 @@ namespace mmo
 
 		[[nodiscard]] const char* GetStatType(int32 index) const;
 
+		[[nodiscard]] int32 GetStatAttribute(int32 index) const;
+
 		[[nodiscard]] int32 GetStatValue(int32 index) const;
 
 		[[nodiscard]] int32 GetRequiredLevel() const;

@@ -151,8 +151,6 @@ namespace mmo
 		String m_selectedBoneName;
 		Bone* m_selectedBone{ nullptr };
 
-		std::unique_ptr<AnimEvaluator> m_animEvaluator;
-
 		std::unique_ptr<MeshCollisionEditor> m_collisionEditor;
 
 		/// @brief Result of the last collision tool run, shown in the collision panel.

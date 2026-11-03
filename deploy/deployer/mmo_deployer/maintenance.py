@@ -16,6 +16,8 @@ log = logging.getLogger("deployer")
 
 VERIFY_TIMEOUT_S = 300
 EXIT_GRACE_S = 1800
+# How long a stack update may go on after its HTTP request timed out (see _redeploy).
+REDEPLOY_SETTLE_S = 1800
 POLL_S = 15
 # A crash-looping server can answer once between restarts.
 HEALTHY_ROUNDS = 2
@@ -38,8 +40,20 @@ class Abort(Exception):
 	Outcome.ABORTED means: release not deployed, live release running."""
 
 
+class RedeployUnfinished(Exception):
+	"""The stack update timed out and the stack never reported the new tag afterwards."""
+
+
+_DEPLOY_ERRORS = _REMOTE_ERRORS + (RedeployUnfinished,)
+
+
 def _short(sha):
 	return sha[:8] if sha else "none"
+
+
+def _is_timeout(error):
+	# A read timeout surfaces as TimeoutError; urllib wraps a connect timeout in a URLError.
+	return isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError)
 
 
 class Maintenance:
@@ -83,9 +97,9 @@ class Maintenance:
 				self.notifier.send("MANUAL INTERVENTION REQUIRED: no live release to restart after the backup failure.")
 				return Outcome.FAILED
 			try:
-				self.portainer.redeploy(state.live)
+				self._redeploy(state.live)
 				restarted = self._verify()
-			except _REMOTE_ERRORS as restart_error:
+			except _DEPLOY_ERRORS as restart_error:
 				log.error("restart on %s failed: %s", state.live, restart_error)
 				restarted = False
 			if restarted:
@@ -95,15 +109,20 @@ class Maintenance:
 
 		try:
 			self.patchdir.flip_current(sha)
-			self.portainer.redeploy(sha)
+			self._redeploy(sha)
 			healthy = self._verify()
+			failure = "failed its health check"
+		except RedeployUnfinished:
+			healthy = False
+			failure = "never finished its redeploy (the stack update timed out and the stack kept the old tag)"
 		except _REMOTE_ERRORS as error:
 			log.error("deploying %s failed: %s", sha, error)
 			healthy = False
+			failure = "could not be deployed ({})".format(error)
 		if healthy:
 			return Outcome.DEPLOYED
 
-		self.notifier.send("Release {} failed its health check; rolling back to {}.".format(_short(sha), _short(state.live)))
+		self.notifier.send("Release {} {}; rolling back to {}.".format(_short(sha), failure, _short(state.live)))
 		return Outcome.ROLLED_BACK if self.rollback_to(state.live) else Outcome.FAILED
 
 	def _dry_run(self, sha):
@@ -128,11 +147,34 @@ class Maintenance:
 			return False
 		try:
 			self.patchdir.flip_current(sha)
-			self.portainer.redeploy(sha)
-		except _REMOTE_ERRORS as error:
+			self._redeploy(sha)
+		except _DEPLOY_ERRORS as error:
 			log.error("rollback to %s failed: %s", sha, error)
 			return False
 		return self._verify()
+
+	def _redeploy(self, sha):
+		"""Points the stack at `sha`. A timed-out stack update is not a failed one: Portainer
+		carries on after the request is given up on, and records the new MMO_TAG once compose is
+		up, so the update counts as done when the stack reports `sha` within REDEPLOY_SETTLE_S.
+		The health check that follows decides whether the release is any good."""
+		try:
+			self.portainer.redeploy(sha)
+			return
+		except _REMOTE_ERRORS as error:
+			if not _is_timeout(error):
+				raise
+			log.warning("the stack update to %s timed out (%s); waiting for it to finish", sha, error)
+		deadline = self.clock.now() + datetime.timedelta(seconds=REDEPLOY_SETTLE_S)
+		while self.clock.now() < deadline:
+			try:
+				if self.portainer.current_tag() == sha:
+					log.info("the stack update to %s finished after its request timed out", sha)
+					return
+			except _REMOTE_ERRORS as error:
+				log.warning("could not read the stack's tag: %s", error)
+			self.clock.sleep(POLL_S)
+		raise RedeployUnfinished()
 
 	def _preflight(self, sha):
 		if not self.patchdir.has_release(sha):

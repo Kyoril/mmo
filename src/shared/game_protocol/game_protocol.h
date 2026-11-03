@@ -47,7 +47,11 @@ namespace mmo
 
 				AlreadyInOtherGuild,
 
-				InvitePending
+				InvitePending,
+
+				/// Guilds are switched off (GUILD subsystem unavailable). Sent for any guild request
+				/// and for guild chat; the command byte then only names the closest command.
+				Disabled
 			};
 		}
 
@@ -62,7 +66,9 @@ namespace mmo
 				PlayerNotFound,
 				CannotAddSelf,
 				InvitePending,
-				NotFriends
+				NotFriends,
+				/// The friend list is switched off (FRIENDS subsystem unavailable).
+				Disabled
 			};
 		}
 
@@ -97,7 +103,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000001D;
+		constexpr uint32 ProtocolVersion = 0x00000024;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -482,6 +488,48 @@ namespace mmo
 				/// character of the account exactly once. Handled by the realm.
 				/// Payload: uint8 count, then count uint64 character guids in the desired order.
 				SetCharacterOrder,
+
+				/// Sent by the client to buy an item it sold to the open vendor back. Proxied to the
+				/// world node. Payload: uint64 vendor guid, uint32 buyback slot index (zero based).
+				BuyBackItem,
+
+				/// Gives a command to all pets of the sender (temporary pets and the summoned persistent
+				/// pet). Proxied to the world node. Payload (game::PetCommandRequest): uint8 command
+				/// (pet_command), uint64 target (Attack, otherwise 0), uint32 param (the pet_strategy
+				/// for SetStrategy, otherwise 0).
+				PetCommand,
+
+				/// Makes the sender's summoned persistent pet cast one of its spells. Proxied to the
+				/// world node. Payload (game::PetCastSpellRequest): uint32 spellId, SpellTargetMap (as
+				/// CastSpell). Failures are answered with SpellFailure for the pet's guid, or PetResult.
+				PetCastSpell,
+
+				/// Renames the sender's summoned persistent pet, if its pet entry allows it. Proxied to
+				/// the world node. Payload (game::PetRenameRequest): uint8-length name. Answered with
+				/// PetSpells on success and PetResult (InvalidName, NamingNotAllowed, NoPet) otherwise.
+				PetRename,
+
+				/// Asks for the name of a persistent pet; any client may ask for any pet. Proxied to the
+				/// world node. Payload (game::PetNameQueryRequest): uint64 guid. Answered with
+				/// PetNameQueryResult.
+				PetNameQuery,
+
+				/// GAME MASTER. Grants the selected player (the sender if none) a stored pet of a pet
+				/// entry. Proxied to the world node. Payload: uint32 petEntry.
+				CheatPetAdd, // GAME MASTER
+
+				/// GAME MASTER. Removes the stored pet of a pet entry from the selected player (the
+				/// sender if none), dismissing it if summoned. Proxied to the world node. Payload:
+				/// uint32 petEntry.
+				CheatPetRemove, // GAME MASTER
+
+				/// GAME MASTER. Tames the sender's selected creature, ignoring the level and tamable
+				/// checks. Proxied to the world node. No payload.
+				CheatPetTame, // GAME MASTER
+
+				/// GAME MASTER. Makes the sender's selected creature the sender's temporary pet without
+				/// a duration. Proxied to the world node. No payload.
+				CheatPetMake, // GAME MASTER
 
 				/// Counter constant
 				Count_,
@@ -894,6 +942,37 @@ namespace mmo
 
 				/// Tells the loot master why a MasterLootItem request was refused. Payload: uint8 loot_error.
 				MasterLootResult,
+
+				/// The items the character sold to a vendor during this world session and can buy
+				/// back while the vendor window is open. Sent together with ListInventory and again
+				/// whenever the list changes. Buyback offers are never persisted, so the list is
+				/// empty again after a logout or a world node change. Payload: uint64 vendor guid,
+				/// uint8 count, then per entry uint32 buyback slot index, uint32 itemId, uint32
+				/// displayId, uint32 stackCount, uint32 price, uint32 durability.
+				BuyBackList,
+
+				/// The receiver's summoned persistent pet: sent when it is summoned, dismissed, killed or
+				/// changes (spells, level, strategy, name). Payload (game::PetSpellsData): uint64 petGuid
+				/// (0 = no persistent pet, the client clears its pet state), uint32 petEntry,
+				/// uint8-length name, uint8 levelMode (pet_level_mode), uint8 strategy (pet_strategy),
+				/// uint8 canRename, uint8 count, count x uint32 spellId. Temporary pets have no packet.
+				PetSpells,
+
+				/// The receiver's summoned persistent pet learned a spell (followed by PetSpells).
+				/// Payload (game::PetLearnedSpellData): uint32 spellId.
+				PetLearnedSpell,
+
+				/// Experience of the receiver's summoned persistent pet (pet_level_mode::OwnLevel pets
+				/// only). Payload (game::PetXpData): uint32 xp, uint32 nextLevelXp.
+				PetXp,
+
+				/// Answer to PetNameQuery, also sent unasked to the clients in sight of a pet that was
+				/// renamed. Payload (game::PetNameQueryResultData): uint64 guid, uint8 found,
+				/// uint8-length name (empty if not found).
+				PetNameQueryResult,
+
+				/// A pet action of the receiver failed. Payload (game::PetResultData): uint8 pet_result.
+				PetResult,
 
 				/// Counter constant
 				Count_,

@@ -41,7 +41,7 @@ namespace mmo
 	struct alignas(16) PsCameraConstantBuffer
 	{
 		// MUST stay field-for-field in sync with CameraBuffer in AtmosphereCommon.hlsli and the
-		// CameraParameters cbuffer emitted by MaterialCompilerD3D11.
+		// CameraParameters cbuffer emitted by MaterialCompilerHlsl.
 		Vector3 cameraPosition;
 		float fogDensity;			// 0 when fog is disabled
 		float fogHeightFalloff;

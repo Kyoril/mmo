@@ -84,7 +84,7 @@ namespace mmo
 		{
 			if (a.first != b.first)
 			{
-				return a.first < b.first;
+				return (a.first) < (b.first);
 			}
 
 			// Tie-break (most commonly both at surface distance 0, i.e. the camera is inside both

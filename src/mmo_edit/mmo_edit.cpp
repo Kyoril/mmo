@@ -13,12 +13,15 @@
 #include "log/default_log_levels.h"
 
 #ifdef _WIN32
-#include "fmod_audio/fmod_audio.h"
 #include "base/win_utility.h"
 #include <crtdbg.h>
 #include <fstream>
 #include <sstream>
 #include <mutex>
+#endif
+
+#ifdef MMO_WITH_FMOD
+#include "fmod_audio/fmod_audio.h"
 #else
 #include "null_audio/null_audio.h"
 #endif
@@ -59,7 +62,9 @@
 #include "editor_windows/race_editor_window.h"
 #include "editor_windows/proficiency_editor_window.h"
 #include "editor_windows/skill_editor_window.h"
+#include "editor_windows/pet_editor_window.h"
 #include "editor_windows/chat_channel_editor_window.h"
+#include "editor_windows/attribute_editor_window.h"
 #include "editor_windows/emote_editor_window.h"
 #include "editor_windows/item_subclass_editor_window.h"
 #include "editor_windows/item_class_editor_window.h"
@@ -69,6 +74,7 @@
 #include "editor_windows/zone_editor_window.h"
 #include "editor_windows/sound_editor_window.h"
 #include "editor_windows/surface_type_editor_window.h"
+#include "editor_windows/loading_tip_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
 #include "editor_windows/object_display_editor_window.h"
@@ -85,6 +91,7 @@
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
+#include "import/fbx_animation_import.h"
 
 #include "locale_asset_utils.h"
 
@@ -353,7 +360,7 @@ int main(int argc, char* arg[])
 	AddDefaultPreviewProviders(previewProviderManager, mainWindow);
 
 	// Create FMOD audio system for sound preview in editor
-#ifdef _WIN32
+#ifdef MMO_WITH_FMOD
 	auto editorAudio = std::make_unique<mmo::FMODAudio>();
 #else
 	auto editorAudio = std::make_unique<mmo::NullAudio>();
@@ -376,9 +383,11 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionEditorWindow>("Faction Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::FactionTemplateEditorWindow>("Faction Template Editor", project, mainWindow));	mainWindow.AddEditorWindow(std::make_unique<mmo::ClassEditorWindow>("Class Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::UnitClassEditorWindow>("Unit Class Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::AttributeEditorWindow>("Attribute Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::RaceEditorWindow>("Race Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ProficiencyEditorWindow>("Proficiency Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SkillEditorWindow>("Skill Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::PetEditorWindow>("Pet Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ChatChannelEditorWindow>("Chat Channel Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EmoteEditorWindow>("Emote Editor", project, mainWindow, previewProviderManager));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ModelEditorWindow>("Model Data Editor", project, mainWindow));
@@ -395,6 +404,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SurfaceTypeEditorWindow>("Surface Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::WaterProfileEditorWindow>("Water Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EnvironmentProfileEditorWindow>("Environment Profile Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::LoadingTipEditorWindow>("Loading Tip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
@@ -755,7 +765,7 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--import-texture")
 			{
-				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map]
+				// mmo_edit --import-texture <asset folder> <image>... [--normal | --grayscale] [--compress] [--height-map] [--mipmaps]
 				static std::ofstream importLog("texture_import.log", std::ios::out | std::ios::trunc);
 				static std::mutex importLogMutex;
 				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
@@ -775,6 +785,7 @@ int main(int argc, char* arg[])
 				mmo::TextureUsage usage = mmo::TextureUsage::Color;
 				bool compress = false;
 				bool heightMap = false;
+				bool mipMaps = false;
 				for (int j = i + 2; j < argCount; ++j)
 				{
 					const std::string arg = args[j];
@@ -782,11 +793,12 @@ int main(int argc, char* arg[])
 					else if (arg == "--grayscale") usage = mmo::TextureUsage::Grayscale;
 					else if (arg == "--compress") compress = true;
 					else if (arg == "--height-map") heightMap = true;
+					else if (arg == "--mipmaps") mipMaps = true;
 					else files.emplace_back(arg);
 				}
 
 				mmo::TextureImport importer;
-				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap) ? 0 : 1);
+				PostQuitMessage(importer.ImportUnattended(files, args[i + 1], usage, compress, heightMap, mipMaps) ? 0 : 1);
 				break;
 			}
 
@@ -889,6 +901,82 @@ int main(int argc, char* arg[])
 				}
 
 				PostQuitMessage(allImported ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--import-fbx-animations")
+			{
+				// mmo_edit --import-fbx-animations <skeleton.skel> <model> [--scale <s>] [--clip <take>=<name>]...
+				// Imports the model's animation takes into the skeleton asset. Without --clip every take keeps its
+				// name; with it, only the listed takes are imported, renamed. A take matches by its full name or by
+				// one of its '|' separated parts ("Minion|Idle01|BaseLayer" matches "Idle01").
+				static std::ofstream importLog("fbx_animation_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-fbx-animations needs <skeleton.skel> <model>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				float scale = 1.0f;
+				std::vector<std::pair<std::string, std::string>> clips;
+				bool badArgs = false;
+				for (int j = i + 3; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--scale" && j + 1 < argCount)
+					{
+						scale = std::stof(args[++j]);
+					}
+					else if (arg == "--clip" && j + 1 < argCount && std::string(args[j + 1]).find('=') != std::string::npos)
+					{
+						const std::string clip = args[++j];
+						const size_t separator = clip.find('=');
+						clips.emplace_back(clip.substr(0, separator), clip.substr(separator + 1));
+					}
+					else
+					{
+						ELOG("--import-fbx-animations: unknown or incomplete option " << arg);
+						badArgs = true;
+					}
+				}
+
+				const auto resolveName = [&clips](const std::string& takeName) -> std::string
+				{
+					std::vector<std::string> parts{ takeName };
+					std::stringstream stream(takeName);
+					for (std::string part; std::getline(stream, part, '|');)
+					{
+						parts.push_back(part);
+					}
+
+					if (clips.empty())
+					{
+						ILOG("Found take '" << takeName << "'");
+						return takeName;
+					}
+
+					for (const auto& [source, target] : clips)
+					{
+						if (std::ranges::find(parts, source) != parts.end())
+						{
+							return target;
+						}
+					}
+
+					ILOG("Skipping take '" << takeName << "'");
+					return {};
+				};
+
+				const bool imported = !badArgs && mmo::ImportFbxAnimationsIntoAsset(args[i + 1], args[i + 2], resolveName, scale);
+				PostQuitMessage(imported ? 0 : 1);
 				break;
 			}
 

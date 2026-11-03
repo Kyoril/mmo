@@ -10,14 +10,22 @@
 #include <algorithm>
 
 // --- Shader bytecode seam ---------------------------------------------------------------
-// Mirrors the seam in ssao_pass.cpp; the deferred path is D3D11-only today.
-#ifdef _WIN32
-#	include <Windows.h>
-#	include "shaders/CS_FogDepthTiles.h"
-#	include "shaders/CS_FogInject.h"
-#	include "shaders/CS_FogTemporal.h"
-#	include "shaders/CS_FogIntegrate.h"
-#	include "shaders/PS_FogComposite.h"
+// Mirrors the seam in ssao_pass.cpp; the Metal build generates the same symbols from the HLSL (hlsl2msl).
+#if defined(_WIN32) || defined(__APPLE__)
+#	ifdef _WIN32
+#		include <Windows.h>
+#		include "shaders/CS_FogDepthTiles.h"
+#		include "shaders/CS_FogInject.h"
+#		include "shaders/CS_FogTemporal.h"
+#		include "shaders/CS_FogIntegrate.h"
+#		include "shaders/PS_FogComposite.h"
+#	else
+#		include "CS_FogDepthTiles.metal.h"
+#		include "CS_FogInject.metal.h"
+#		include "CS_FogTemporal.metal.h"
+#		include "CS_FogIntegrate.metal.h"
+#		include "PS_FogComposite.metal.h"
+#	endif
 #	define MMO_FOG_DEPTH_TILES_CS_BYTECODE g_CS_FogDepthTiles
 #	define MMO_FOG_DEPTH_TILES_CS_SIZE std::size(g_CS_FogDepthTiles)
 #	define MMO_FOG_INJECT_CS_BYTECODE g_CS_FogInject
