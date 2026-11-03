@@ -24,9 +24,8 @@ namespace mmo
 {
 	namespace
 	{
-		/// Whether a spell has an effect that damages its targets directly. Those effects fire the
-		///	damage class proc events themselves (e.g. DoneSpellMagicDmgClassNeg).
-		bool DealsDirectDamage(const proto::SpellEntry& spell)
+		/// True if the spell has an effect that raises its own damage or heal proc events.
+		bool DealsDamageOrHealing(const proto::SpellEntry& spell)
 		{
 			for (const auto& effect : spell.effects())
 			{
@@ -37,15 +36,15 @@ namespace mmo
 				case spell_effects::EnvironmentalDamage:
 				case spell_effects::HealthLeech:
 				case spell_effects::WeaponDamageNoSchool:
-				case spell_effects::WeaponPercentDamage:
 				case spell_effects::WeaponDamage:
+				case spell_effects::WeaponPercentDamage:
+				case spell_effects::Heal:
+				case spell_effects::HealPct:
 					return true;
-
 				default:
 					break;
 				}
 			}
-
 			return false;
 		}
 	}
@@ -1141,11 +1140,6 @@ namespace mmo
 			m_delayedCast = true;
 		}
 		
-		// A negative spell that deals no damage (a curse, a snare) fires no damage proc event, so
-		// landing its aura on an enemy is what fires DoneSpellNoneDmgClassNeg for the caster.
-		// Only the caster's side: Taken procs keyed on it (Frost Nova's break) keep their behaviour.
-		const bool firesNoneDmgClassNeg = !DealsDirectDamage(m_spell);
-
 		// Apply aura containers to their respective owners. Lookup by GUID so stale raw
 		// pointers from units that died during effect processing are handled gracefully.
 		for (auto& [targetGuid, auraContainer] : m_targetAuraContainers)
@@ -1154,13 +1148,6 @@ namespace mmo
 			if (targetUnit)
 			{
 				targetUnit->ApplyAura(std::move(auraContainer));
-
-				GameUnitS& executer = m_cast.GetExecuter();
-				if (firesNoneDmgClassNeg && targetUnit != &executer && targetUnit->IsAlive() && !executer.UnitIsFriendly(*targetUnit))
-				{
-					executer.TriggerProcEvent(spell_proc_flags::DoneSpellNoneDmgClassNeg, targetUnit, 0, proc_ex_flags::NormalHit,
-						static_cast<uint8>(m_spell.spellschool()), m_isProc, m_spell.familyflags());
-				}
 			}
 		}
 
@@ -1197,11 +1184,30 @@ namespace mmo
 
 		if (strongCaster->IsUnit())
 		{
+			// Damage and heal effects raise their own proc events. Every other spell (a stun, a
+			// self buff) raises the "no damage class" ones here, so talents can react to casting it.
+			// Positive or negative follows the target, not the spell's positive flag, which self
+			// buffs such as Evasive Step do not set.
+			const bool raiseCastProcs = !m_isProc && !(m_spell.attributes(0) & spell_attributes::Passive) && !DealsDamageOrHealing(m_spell);
+			GameUnitS& executer = m_cast.GetExecuter();
+
 			for (const uint64 targetGuid : m_affectedTargetGuids)
 			{
 				if (GameUnitS* targetUnit = m_context.FindUnitByGuid(targetGuid))
 				{
-					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
+					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &executer);
+
+					if (raiseCastProcs)
+					{
+						const bool hostile = targetUnit != &executer && !executer.UnitIsFriendly(*targetUnit);
+						executer.TriggerProcEvent(hostile ? spell_proc_flags::DoneSpellNoneDmgClassNeg : spell_proc_flags::DoneSpellNoneDmgClassPos,
+							targetUnit, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						if (targetUnit != &executer)
+						{
+							targetUnit->TriggerProcEvent(hostile ? spell_proc_flags::TakenSpellNoneDmgClassNeg : spell_proc_flags::TakenSpellNoneDmgClassPos,
+								&executer, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						}
+					}
 				}
 			}
 		}

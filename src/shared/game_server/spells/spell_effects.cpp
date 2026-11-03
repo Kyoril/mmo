@@ -1852,11 +1852,17 @@ namespace mmo
 					executer.AddPower(power_type::Rage, addRage);
 				}
 
-				// Trigger melee auto-attack proc events
-				if (hit)
+				// Trigger melee auto-attack proc events. Misses, dodges and parries raise them too,
+				// without a hit flag, so "after you dodge" procs can react (see AuraContainer::HandleProc).
+				const bool avoided = outcome == melee_attack_outcome::Miss || outcome == melee_attack_outcome::Dodge || outcome == melee_attack_outcome::Parry;
+				if (hit || avoided)
 				{
 					uint32 procEx = 0;
-					if (hitInfo & hit_info::CriticalHit)
+					if (!hit)
+					{
+						procEx |= outcome == melee_attack_outcome::Miss ? proc_ex_flags::MissHit : 0;
+					}
+					else if (hitInfo & hit_info::CriticalHit)
 					{
 						procEx |= proc_ex_flags::CriticalHit;
 					}

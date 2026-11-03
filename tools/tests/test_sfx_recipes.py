@@ -157,7 +157,7 @@ class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = scout
-    count = 21
+    count = 26
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude the
@@ -176,7 +176,8 @@ class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
             self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
             for entry in mix["layers"]:
                 self.assertIn(entry.sound, scout.SOUNDS, f"{mix_name}: unknown layer")
-                self.assertTrue(1 <= entry.take <= 3, f"{mix_name}: take {entry.take}")
+                # 3 takes per layer in the first pass, 4 for the Trickster layers.
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
                 self.assertGreaterEqual(entry.offset, 0.0)
                 self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
 
