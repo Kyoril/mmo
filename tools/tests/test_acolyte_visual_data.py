@@ -42,8 +42,7 @@ ACOLYTE_PARTICLE_MATERIALS = SCOUT_PARTICLE_MATERIALS | {
 
 ACOLYTE_SPELLS = {
     23: "Shadowbolt", 74: "Shadowbolt", 24: "Corrupting Touch", 73: "Fear",
-    38: "Veil of Shadows", 1309: "Umbral Bloom", 1328: "Embrace of Dread",
-    1306: "Gloaming Trance", 1314: "Leeching Rot",
+    38: "Veil of Shadows", 1328: "Embrace of Dread", 1314: "Leeching Rot",
     119: "Void Resurgence", 120: "Void Resurgence", 121: "Void Resurgence",
     # Kit overhaul (2026-11-02): trainer spells and their ticks.
     1330: "Curse of Frailty", 1331: "Drain Essence", 1332: "Drain Essence",
@@ -54,7 +53,8 @@ ACOLYTE_SPELLS = {
     1357: "Creeping Rot", 1360: "Tangled Tongue", 1362: "Grasping Dread",
     1363: "Wail of the Lost", 1365: "Lingering Dread",
 }
-# Umbral Bloom (1309) and Gloaming Trance (1306) left the trees with Umbra; their visualizations stay.
+# Umbral Bloom (1309) and Gloaming Trance (1306) left the trees with Umbra: they are neutered (no
+# visualization, see author_talent_trees.py), while their visualization entries stay in the catalog.
 TALENT_SPELLS = (1314, 1328, 1345, 1347, 1349, 1352, 1357, 1360, 1362, 1363, 1365)
 # Procs and per-tick spells fire often and must stay silent.
 SILENT_SPELLS = (1314, 1332, 1337, 1349, 1357, 1362, 1365)
