@@ -170,6 +170,10 @@ namespace mmo
 		/// @brief The influence of the new build.
 		pcg::WorldRect influence{};
 
+		/// @brief The editor and the rect whose pages Begin loaded (loaded again before anything is written).
+		IWorldEditor* editor = nullptr;
+		pcg::WorldRect loadRect{};
+
 		/// @brief True between a successful BeginContentRebuild and Finish or Abort.
 		bool active = false;
 	};

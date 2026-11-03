@@ -163,6 +163,11 @@ namespace mmo
 		/// @brief Whether live rebuild is on.
 		[[nodiscard]] bool IsLiveRebuild() const { return m_liveRebuild; }
 
+		/// @brief The section assets of this world's graph instance rebuilds. They stay loaded from one rebuild to the next
+		///        (assets whose files changed are read again, see SectionAssetCache::DropChanged). Each world has its own:
+		///        a background rebuild reads its cache on a worker thread while nothing else in this mode changes it.
+		[[nodiscard]] const std::shared_ptr<SectionAssetCache>& GetRebuildSectionAssets() const { return m_rebuildSections; }
+
 		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
 		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
 		///        are refused if their influence overlaps another built oasis or section path; when their old or
@@ -759,8 +764,10 @@ namespace mmo
 		std::vector<uint64> m_rebuildQueue;
 		/// See SetLiveRebuild.
 		bool m_liveRebuild = false;
-		/// Bumped by InvalidateGraph (part of the live rebuild inputs).
-		uint64 m_graphRevision = 0;
+		/// Bumped per graph (path with forward slashes) by InvalidateGraph (part of the live rebuild inputs).
+		std::map<String, uint64> m_graphRevisions;
+		/// See GetRebuildSectionAssets.
+		std::shared_ptr<SectionAssetCache> m_rebuildSections = std::make_shared<SectionAssetCache>();
 
 		/// Text of the extra tags field while it is being edited (applied when the edit ends).
 		String m_tagsBuffer;

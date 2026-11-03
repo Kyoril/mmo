@@ -1246,6 +1246,12 @@ namespace mmo
 
 	bool WorldEditorInstance::Save()
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		// River flow first: a pending flow apply changes terrain pages, which are saved below.
 		if (m_waterEditMode)
 		{
@@ -2789,6 +2795,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	bool WorldEditorInstance::GenerateTerrainLod(const bool onlyStale)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate terrain LOD: no terrain available");
@@ -2816,6 +2828,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	bool WorldEditorInstance::GenerateMinimaps(const bool onlyStale, const MinimapBaker::Region& region)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate minimaps: no terrain available");
@@ -2850,6 +2868,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	void WorldEditorInstance::StartMinimapBake(const bool onlyStale)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (m_minimapBake || !m_terrain || !m_hasTerrain)
 		{
 			return;

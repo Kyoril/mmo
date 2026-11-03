@@ -127,15 +127,6 @@ namespace mmo
 			return "?";
 		}
 
-		/// The section assets of rebuilds. They stay loaded from one rebuild to the next (parsing and the staleness check
-		/// of a large section take a good part of a second each); an asset whose files changed since is read again.
-		std::shared_ptr<SectionAssetCache> RebuildSectionAssets()
-		{
-			static const std::shared_ptr<SectionAssetCache> cache = std::make_shared<SectionAssetCache>();
-			cache->DropChanged();
-			return cache;
-		}
-
 		/// Evaluates out.graph (already read) with a freshly built context, the way EvaluateGraphInstance does.
 		bool EvaluateLoadedGraph(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
 			GraphInstanceEvaluation& out, String& error, const bool baseTerrain = false)
@@ -913,7 +904,9 @@ namespace mmo
 		{
 			CollectSeamNeighbours(record, otherInstances, impl.neighbourAreas, &impl.neighbourNames);
 		}
-		impl.sections = RebuildSectionAssets();
+		// The world's rebuild cache: kept loaded between rebuilds, assets changed on disk read again.
+		impl.sections = controls.GetRebuildSectionAssets();
+		impl.sections->DropChanged();
 
 		// Takes the old contribution out of the terrain data; the world keeps showing it until Commit or Abort.
 		if (!BeginContentRebuild(editor, areaRect, record.content, impl.session, error))
@@ -950,14 +943,16 @@ namespace mmo
 		impl.context.pointLimit = record.pointLimit;
 
 		impl.readAccess = std::make_unique<EditorTerrainAccess>(*terrain);
-		impl.layers = std::make_unique<EditorTextureLayers>(*terrain);
-		impl.layers->Prewarm(areaRect);
+		// Warmed on the main thread; Run only uses copies, which never read the terrain.
+		EditorTextureLayers warm(*terrain);
+		warm.Prewarm(areaRect);
+		impl.layers = warm.CopyWarmCache();
 		impl.lookup = impl.layers->MakeLookup();
 		const size_t workers = pcg::HardwareWorkers();
 		impl.workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
 		for (size_t i = 1; i < workers; ++i)
 		{
-			impl.workerLayers.push_back(impl.layers->CopyWarmCache());
+			impl.workerLayers.push_back(warm.CopyWarmCache());
 			impl.workerLookups.push_back(impl.workerLayers.back()->MakeLookup());
 		}
 		return job;
@@ -1036,15 +1031,16 @@ namespace mmo
 
 		// Every terrain sample, on one target per hardware thread.
 		std::vector<pcg::ChannelTerrainTargetFunction> targets;
+		// Once canceled the targets return nothing, so the computation ends quickly (its result is not used).
 		targets.push_back([&impl](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
 		{
-			return impl.prepared.Evaluate(x, z, baseHeight, impl.lookup, &impl.notes, channels);
+			return impl.canceled ? pcg::TerrainTarget{} : impl.prepared.Evaluate(x, z, baseHeight, impl.lookup, &impl.notes, channels);
 		});
 		for (size_t i = 0; i < impl.workerLookups.size(); ++i)
 		{
 			targets.push_back([&impl, i](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
 			{
-				return impl.prepared.Evaluate(x, z, baseHeight, impl.workerLookups[i], &impl.workerNotes[i], channels);
+				return impl.canceled ? pcg::TerrainTarget{} : impl.prepared.Evaluate(x, z, baseHeight, impl.workerLookups[i], &impl.workerNotes[i], channels);
 			});
 		}
 		pcg::ComputeTerrainSamples(*impl.readAccess, impl.areaRect, targets, impl.samples);

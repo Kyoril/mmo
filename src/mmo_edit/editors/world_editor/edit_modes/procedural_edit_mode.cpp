@@ -902,6 +902,18 @@ namespace mmo
 		OnControlsChanged();
 
 		DLOG("Loaded " << m_controls.size() << " procedural record(s) from " << folder);
+
+		// Live rebuild counts the loaded state as built.
+		if (m_liveRebuild)
+		{
+			for (Control& control : m_controls)
+			{
+				if (control.kind == ControlKind::GraphInstance)
+				{
+					control.builtInputs = GetGraphInstanceInputs(control);
+				}
+			}
+		}
 	}
 
 	bool ProceduralEditMode::Save(const std::filesystem::path& pcgFolder)
@@ -1825,7 +1837,6 @@ namespace mmo
 
 	void ProceduralEditMode::InvalidateGraph(const String& graphPath)
 	{
-		++m_graphRevision;
 		const auto normalize = [](String path)
 		{
 			std::replace(path.begin(), path.end(), '\\', '/');
@@ -1833,6 +1844,7 @@ namespace mmo
 		};
 
 		const String normalized = normalize(graphPath);
+		++m_graphRevisions[normalized];
 		std::erase_if(m_graphs, [&normalize, &normalized](const auto& entry)
 		{
 			return normalize(entry.first) == normalized;
@@ -1919,7 +1931,10 @@ namespace mmo
 		hasher.F32(record.borderFade);
 		hasher.Spline(record.area);
 		hasher.Attributes(record.parameterOverrides);
-		hasher.U64(m_graphRevision);
+		String graphKey = record.graphPath;
+		std::replace(graphKey.begin(), graphKey.end(), '\\', '/');
+		const auto graphRevision = m_graphRevisions.find(graphKey);
+		hasher.U64(graphRevision != m_graphRevisions.end() ? graphRevision->second : 0);
 		hasher.U64(m_controlLibrary.Revision());
 
 		const pcg::graph::Bounds2D area = pcg::graph::SplineBounds(record.area);
@@ -1955,6 +1970,8 @@ namespace mmo
 		while (HasBackgroundRebuilds())
 		{
 			UpdateBackgroundRebuild();
+			// Unattended: there is no edit to wait for.
+			StartQueuedRebuild();
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
 

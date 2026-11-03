@@ -605,6 +605,16 @@ namespace mmo
 		}
 	}
 
+	namespace
+	{
+		/// Loads the session's pages again (see BeginContentRebuild).
+		bool ReloadSessionPages(const ContentRebuildSession& session)
+		{
+			OasisBuildReport loadReport;
+			return session.editor && LoadPagesOrFail(*session.editor, session.loadRect, loadReport);
+		}
+	}
+
 	ContentRebuildSession::ContentRebuildSession() = default;
 
 	ContentRebuildSession::~ContentRebuildSession() = default;
@@ -654,6 +664,8 @@ namespace mmo
 
 		// The old contribution leaves the terrain data (normals included); the renderer keeps showing it until the session
 		// ends. Unapply clears owned.terrain: the record must not claim a contribution that is not on the terrain.
+		session.editor = &editor;
+		session.loadRect = loadRect;
 		session.recorded = owned.terrain;
 		session.captured = pcg::CaptureSamples(*session.access, owned.terrain);
 		pcg::Unapply(*session.access, owned.terrain);
@@ -671,6 +683,8 @@ namespace mmo
 		}
 
 		// The samples the old contribution recorded get the values they had before the undo, hand sculpting included.
+		// Streaming may have unloaded tiles since the start; tile materials need them.
+		ReloadSessionPages(session);
 		pcg::RestoreSamples(*session.access, session.captured);
 		owned.terrain = std::move(session.recorded);
 		session.access->FlushGpuUpdates();
@@ -688,6 +702,15 @@ namespace mmo
 		if (!session.active || !terrain)
 		{
 			report.error = "No rebuild in progress";
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
+
+		// Streaming may have unloaded tiles since the start; tile material writes need them.
+		if (!ReloadSessionPages(session))
+		{
+			AbortContentRebuild(session, owned);
+			report.error = "The terrain pages of the build could not be loaded again; the world was not changed.";
 			report.milliseconds = MillisecondsSince(start);
 			return report;
 		}
