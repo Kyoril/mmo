@@ -4,6 +4,8 @@
 
 #include "parallel_for.h"
 
+#include "base/macros.h"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -306,7 +308,135 @@ namespace mmo::pcg
 		{
 			return;
 		}
-		const ChannelTerrainTargetFunction& target = targets.front();
+
+		// Nothing writes the terrain in between, so the bases still hold and the write cannot be refused.
+		TerrainSamples samples;
+		ComputeTerrainSamples(terrain, rect, targets, samples);
+		VERIFY(WriteTerrainSamples(terrain, samples, material, out));
+	}
+
+	void ComputeTerrainSamples(const ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
+		TerrainSamples& out)
+	{
+		out = TerrainSamples();
+		if (targets.empty())
+		{
+			return;
+		}
+		out.computed = true;
+
+		const GridLayout& l = terrain.GetLayout();
+		const double vs = l.vertexSpacing;
+		const double quadSize = vs * l.verticesPerTile / l.quadsPerTile;
+		const double tileSize = vs * l.verticesPerTile;
+
+		const auto setRange = [](TerrainSamples::Range& range, const IndexRange& rx, const IndexRange& rz)
+		{
+			range.x0 = rx.lo;
+			range.z0 = rz.lo;
+			range.width = std::max(0, rx.hi - rx.lo + 1);
+			range.rows = range.width > 0 ? std::max(0, rz.hi - rz.lo + 1) : 0;
+		};
+
+		// Outer vertices, then inner vertices. Each sample reads only its own base, so the rows are evaluated
+		// concurrently with several targets.
+		for (int pass = 0; pass < 2; ++pass)
+		{
+			const double offset = pass == 0 ? 0.0 : 0.5;
+			TerrainSamples::Range& range = pass == 0 ? out.outer : out.inner;
+			std::vector<TerrainSamples::Height>& samples = pass == 0 ? out.outerSamples : out.innerSamples;
+			setRange(range, RangeFor(rect.minX, rect.maxX, l.originX, vs, offset), RangeFor(rect.minZ, rect.maxZ, l.originZ, vs, offset));
+			samples.resize(range.Count());
+			ForEachRow(targets, range.rows, [&](const ChannelTerrainTargetFunction& target, const int32 row)
+			{
+				const int32 z = range.z0 + row;
+				const double wz = l.originZ + (z + offset) * vs;
+				for (int32 i = 0; i < range.width; ++i)
+				{
+					const int32 x = range.x0 + i;
+					const float base = pass == 0 ? terrain.GetOuterHeight(x, z) : terrain.GetInnerHeight(x, z);
+					const double wx = l.originX + (x + offset) * vs;
+					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), base, terrain_channel::Heights);
+					samples[range.Index(i, row)] = { base, t.height, t.heightWeight };
+				}
+			});
+		}
+
+		// Splat pixels (the targets do not read the base splat; WriteTerrainSamples blends over it).
+		setRange(out.splat, RangeFor(rect.minX, rect.maxX, l.originX, l.pixelSpacing, 0.0), RangeFor(rect.minZ, rect.maxZ, l.originZ, l.pixelSpacing, 0.0));
+		out.splatSamples.resize(out.splat.Count());
+		ForEachRow(targets, out.splat.rows, [&](const ChannelTerrainTargetFunction& target, const int32 row)
+		{
+			const int32 z = out.splat.z0 + row;
+			const double wz = l.originZ + z * l.pixelSpacing;
+			for (int32 i = 0; i < out.splat.width; ++i)
+			{
+				const double wx = l.originX + (out.splat.x0 + i) * l.pixelSpacing;
+				const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Splat);
+				out.splatSamples[out.splat.Index(i, row)] = { t.splatWeight, t.splat };
+			}
+		});
+
+		// Water quads (type and surface height at the quad centre) and tile materials: few samples, the first target.
+		const ChannelTerrainTargetFunction& first = targets.front();
+		setRange(out.water, RangeFor(rect.minX, rect.maxX, l.originX, quadSize, 0.5), RangeFor(rect.minZ, rect.maxZ, l.originZ, quadSize, 0.5));
+		out.waterSamples.resize(out.water.Count());
+		for (int32 row = 0; row < out.water.rows; ++row)
+		{
+			const double wz = l.originZ + (out.water.z0 + row + 0.5) * quadSize;
+			for (int32 i = 0; i < out.water.width; ++i)
+			{
+				const double wx = l.originX + (out.water.x0 + i + 0.5) * quadSize;
+				const TerrainTarget t = first(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Water);
+				out.waterSamples[out.water.Index(i, row)] = { t.waterType, t.waterHeight };
+			}
+		}
+
+		setRange(out.materials, RangeFor(rect.minX, rect.maxX, l.originX, tileSize, 0.5), RangeFor(rect.minZ, rect.maxZ, l.originZ, tileSize, 0.5));
+		out.materialSamples.resize(out.materials.Count());
+		for (int32 row = 0; row < out.materials.rows; ++row)
+		{
+			const double wz = l.originZ + (out.materials.z0 + row + 0.5) * tileSize;
+			for (int32 i = 0; i < out.materials.width; ++i)
+			{
+				const double wx = l.originX + (out.materials.x0 + i + 0.5) * tileSize;
+				const TerrainTarget t = first(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Material);
+				out.materialSamples[out.materials.Index(i, row)] = t.setMaterial ? 1 : 0;
+			}
+		}
+	}
+
+	bool WriteTerrainSamples(ITerrainAccess& terrain, const TerrainSamples& samples, const String& material, TerrainContribution& out)
+	{
+		out.Clear();
+		if (!samples.computed)
+		{
+			return true;
+		}
+
+		// The heights are blended over the bases read when they were computed: those must still be the terrain's.
+		for (int pass = 0; pass < 2; ++pass)
+		{
+			const TerrainSamples::Range& range = pass == 0 ? samples.outer : samples.inner;
+			const std::vector<TerrainSamples::Height>& heights = pass == 0 ? samples.outerSamples : samples.innerSamples;
+			for (int32 row = 0; row < range.rows; ++row)
+			{
+				for (int32 i = 0; i < range.width; ++i)
+				{
+					const TerrainSamples::Height& t = heights[range.Index(i, row)];
+					if (t.weight <= 0.0f)
+					{
+						continue;
+					}
+					const int32 x = range.x0 + i;
+					const int32 z = range.z0 + row;
+					if ((pass == 0 ? terrain.GetOuterHeight(x, z) : terrain.GetInnerHeight(x, z)) != t.base)
+					{
+						return false;
+					}
+				}
+			}
+		}
 
 		const GridLayout& l = terrain.GetLayout();
 		const double vs = l.vertexSpacing;
@@ -327,46 +457,21 @@ namespace mmo::pcg
 		for (int pass = 0; pass < 2; ++pass)
 		{
 			const double offset = pass == 0 ? 0.0 : 0.5;
-			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, vs, offset);
-			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, vs, offset);
+			const TerrainSamples::Range& range = pass == 0 ? samples.outer : samples.inner;
+			const std::vector<TerrainSamples::Height>& heights = pass == 0 ? samples.outerSamples : samples.innerSamples;
 			auto& list = pass == 0 ? out.outer : out.inner;
-			const int32 width = rx.hi - rx.lo + 1;
-			const int32 rows = rz.hi - rz.lo + 1;
-			if (width <= 0 || rows <= 0)
+			for (int32 row = 0; row < range.rows; ++row)
 			{
-				continue;
-			}
-
-			// The targets are evaluated first (concurrently with several targets; each sample reads only its own base,
-			// which nothing writes before this pass's write loop), then written in order.
-			struct HeightSample
-			{
-				float base, height, weight;
-			};
-			std::vector<HeightSample> samples(static_cast<size_t>(width) * static_cast<size_t>(rows));
-			ForEachRow(targets, rows, [&](const ChannelTerrainTargetFunction& rowTarget, const int32 row)
-			{
-				const int32 z = rz.lo + row;
+				const int32 z = range.z0 + row;
 				const double wz = l.originZ + (z + offset) * vs;
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				for (int32 i = 0; i < range.width; ++i)
 				{
-					const float base = pass == 0 ? terrain.GetOuterHeight(x, z) : terrain.GetInnerHeight(x, z);
-					const double wx = l.originX + (x + offset) * vs;
-					const TerrainTarget t = rowTarget(static_cast<float>(wx), static_cast<float>(wz), base, terrain_channel::Heights);
-					samples[static_cast<size_t>(row) * width + (x - rx.lo)] = { base, t.height, t.heightWeight };
-				}
-			});
-
-			for (int32 z = rz.lo; z <= rz.hi; ++z)
-			{
-				const double wz = l.originZ + (z + offset) * vs;
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
-				{
-					const HeightSample& t = samples[static_cast<size_t>(z - rz.lo) * width + (x - rx.lo)];
+					const TerrainSamples::Height& t = heights[range.Index(i, row)];
 					if (t.weight <= 0.0f)
 					{
 						continue;
 					}
+					const int32 x = range.x0 + i;
 					const double wx = l.originX + (x + offset) * vs;
 					const float base = t.base;
 					const float written = Lerp(base, t.height, std::min(1.0f, t.weight));
@@ -388,91 +493,67 @@ namespace mmo::pcg
 			}
 		}
 
-		// Splat pixels.
+		// Splat pixels, blended over the current splat.
+		for (int32 row = 0; row < samples.splat.rows; ++row)
 		{
-			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, l.pixelSpacing, 0.0);
-			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, l.pixelSpacing, 0.0);
-			const int32 width = std::max(0, rx.hi - rx.lo + 1);
-			const int32 rows = std::max(0, rz.hi - rz.lo + 1);
-
-			// Evaluated first (concurrently with several targets), then blended and written in order.
-			struct SplatSample
+			const int32 z = samples.splat.z0 + row;
+			for (int32 i = 0; i < samples.splat.width; ++i)
 			{
-				float weight;
-				std::array<uint8, 4> splat;
-			};
-			std::vector<SplatSample> samples(static_cast<size_t>(width) * static_cast<size_t>(rows));
-			ForEachRow(targets, width > 0 ? rows : 0, [&](const ChannelTerrainTargetFunction& rowTarget, const int32 row)
-			{
-				const int32 z = rz.lo + row;
+				const TerrainSamples::Splat& t = samples.splatSamples[samples.splat.Index(i, row)];
+				if (t.weight <= 0.0f)
+				{
+					continue;
+				}
+				const int32 x = samples.splat.x0 + i;
+				const double wx = l.originX + x * l.pixelSpacing;
 				const double wz = l.originZ + z * l.pixelSpacing;
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				const uint32 base = terrain.GetSplat(x, z);
+				const std::array<uint8, 4> baseW = Unpack(base);
+				const float w = std::min(1.0f, t.weight);
+				std::array<double, 4> blended{};
+				for (size_t k = 0; k < 4; ++k)
 				{
-					const double wx = l.originX + x * l.pixelSpacing;
-					const TerrainTarget t = rowTarget(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Splat);
-					samples[static_cast<size_t>(row) * width + (x - rx.lo)] = { t.splatWeight, t.splat };
+					blended[k] = Lerp(static_cast<float>(baseW[k]), static_cast<float>(t.splat[k]), w);
 				}
-			});
-
-			for (int32 z = rz.lo; z <= rz.hi; ++z)
-			{
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				const uint32 written = Pack(Normalize(blended, baseW));
+				if (written == base)
 				{
-					const double wx = l.originX + x * l.pixelSpacing;
-					const double wz = l.originZ + z * l.pixelSpacing;
-					const SplatSample& t = samples[static_cast<size_t>(z - rz.lo) * width + (x - rx.lo)];
-					if (t.weight <= 0.0f)
-					{
-						continue;
-					}
-					const uint32 base = terrain.GetSplat(x, z);
-					const std::array<uint8, 4> baseW = Unpack(base);
-					const float w = std::min(1.0f, t.weight);
-					std::array<double, 4> blended{};
-					for (size_t i = 0; i < 4; ++i)
-					{
-						blended[i] = Lerp(static_cast<float>(baseW[i]), static_cast<float>(t.splat[i]), w);
-					}
-					const uint32 written = Pack(Normalize(blended, baseW));
-					if (written == base)
-					{
-						continue;
-					}
-					terrain.SetSplat(x, z, written);
-					out.splat.push_back({ x, z, base, written });
-					touchWorld(wx, wz);
+					continue;
 				}
+				terrain.SetSplat(x, z, written);
+				out.splat.push_back({ x, z, base, written });
+				touchWorld(wx, wz);
 			}
 		}
 
 		// Water quads and the vertex heights of watered quads.
 		{
 			std::map<std::pair<int32, int32>, float> vertexHeights; // keyed (z, x)
-			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, quadSize, 0.5);
-			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, quadSize, 0.5);
-			for (int32 z = rz.lo; z <= rz.hi; ++z)
+			for (int32 row = 0; row < samples.water.rows; ++row)
 			{
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				const int32 z = samples.water.z0 + row;
+				for (int32 i = 0; i < samples.water.width; ++i)
 				{
-					const double wx = l.originX + (x + 0.5) * quadSize;
-					const double wz = l.originZ + (z + 0.5) * quadSize;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Water);
-					if (t.waterType == 0)
+					const TerrainSamples::Water& t = samples.waterSamples[samples.water.Index(i, row)];
+					if (t.type == 0)
 					{
 						continue;
 					}
+					const int32 x = samples.water.x0 + i;
+					const double wx = l.originX + (x + 0.5) * quadSize;
+					const double wz = l.originZ + (z + 0.5) * quadSize;
 					const uint8 base = terrain.GetWaterQuad(x, z);
-					if (base != t.waterType)
+					if (base != t.type)
 					{
-						terrain.SetWaterQuad(x, z, t.waterType);
-						out.waterQuads.push_back({ x, z, base, t.waterType });
+						terrain.SetWaterQuad(x, z, t.type);
+						out.waterQuads.push_back({ x, z, base, t.type });
 						touchWorld(wx, wz);
 					}
 					for (int32 dz = 0; dz <= 1; ++dz)
 					{
 						for (int32 dx = 0; dx <= 1; ++dx)
 						{
-							vertexHeights[{ z + dz, x + dx }] = t.waterHeight;
+							vertexHeights[{ z + dz, x + dx }] = t.height;
 						}
 					}
 				}
@@ -491,29 +572,26 @@ namespace mmo::pcg
 		}
 
 		// Tile materials.
+		for (int32 row = 0; row < samples.materials.rows; ++row)
 		{
-			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, tileSize, 0.5);
-			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, tileSize, 0.5);
-			for (int32 z = rz.lo; z <= rz.hi; ++z)
+			const int32 z = samples.materials.z0 + row;
+			for (int32 i = 0; i < samples.materials.width; ++i)
 			{
-				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				if (!samples.materialSamples[samples.materials.Index(i, row)])
 				{
-					const double wx = l.originX + (x + 0.5) * tileSize;
-					const double wz = l.originZ + (z + 0.5) * tileSize;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Material);
-					if (!t.setMaterial)
-					{
-						continue;
-					}
-					const String base = terrain.GetTileMaterial(x, z);
-					if (base == material)
-					{
-						continue;
-					}
-					terrain.SetTileMaterial(x, z, material);
-					out.materials.push_back({ x, z, base, material });
-					touchWorld(wx, wz);
+					continue;
 				}
+				const int32 x = samples.materials.x0 + i;
+				const double wx = l.originX + (x + 0.5) * tileSize;
+				const double wz = l.originZ + (z + 0.5) * tileSize;
+				const String base = terrain.GetTileMaterial(x, z);
+				if (base == material)
+				{
+					continue;
+				}
+				terrain.SetTileMaterial(x, z, material);
+				out.materials.push_back({ x, z, base, material });
+				touchWorld(wx, wz);
 			}
 		}
 
@@ -522,5 +600,6 @@ namespace mmo::pcg
 			out.touchedOuter = touched;
 			terrain.FinishEdits(touched);
 		}
+		return true;
 	}
 }

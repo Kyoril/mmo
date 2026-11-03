@@ -78,13 +78,22 @@ namespace mmo
 
 		/// @brief Recomputes outer and inner normals, rebuilds tile geometry, coverage textures and
 		///        water meshes for the rect plus a one-vertex border (clamped to the terrain), and
-		///        rebuilds the water mesh of every page whose water changed since the last call.
+		///        rebuilds the water mesh of every page whose water changed since the last call. While GPU
+		///        updates are deferred only the normals are recomputed; the rest waits for FlushGpuUpdates.
 		void FinishEdits(const pcg::IntRect& outerVertexRect) override;
 
 	public:
 		/// @brief Sets the water material given to a page that receives water but has none yet.
 		/// @param materialName The material asset name. Empty disables the assignment.
 		void SetDefaultWaterMaterial(const String& materialName) { m_defaultWaterMaterial = materialName; }
+
+		/// @brief Defers what FinishEdits does for the renderer (tile geometry, coverage textures, water meshes) until
+		///        FlushGpuUpdates: the terrain data (heights, normals, splat, water) changes at once while the world keeps
+		///        showing what it showed before.
+		void SetDeferGpuUpdates(bool defer) { m_deferGpu = defer; }
+
+		/// @brief Does the deferred renderer updates of every FinishEdits since the last flush (nothing if none).
+		void FlushGpuUpdates();
 
 		/// @brief Pages (x, z) any setter wrote to since the adapter was created.
 		[[nodiscard]] const std::set<std::pair<uint32, uint32>>& GetTouchedPages() const { return m_touchedPages; }
@@ -106,6 +115,12 @@ namespace mmo
 		/// @brief Records a page as touched.
 		void Touch(int32 pageX, int32 pageZ);
 
+		/// @brief The renderer part of FinishEdits for a clamped outer vertex rect.
+		void UpdateGpu(const pcg::IntRect& r);
+
+		/// @brief Rebuilds the water meshes of the pages whose water changed, and forgets them.
+		void RebuildDirtyWaterMeshes();
+
 	private:
 		terrain::Terrain& m_terrain;
 		pcg::GridLayout m_layout;
@@ -113,7 +128,12 @@ namespace mmo
 		int32 m_pagesZ = 0;
 		String m_defaultWaterMaterial;
 		std::set<std::pair<uint32, uint32>> m_touchedPages;
-		/// Pages whose water mask, type or heights changed since the last FinishEdits.
+		/// Pages whose water mask, type or heights changed since the last FinishEdits (or flush, while deferring).
 		std::set<std::pair<uint32, uint32>> m_waterDirtyPages;
+		/// Whether FinishEdits leaves the renderer updates to FlushGpuUpdates.
+		bool m_deferGpu = false;
+		/// Union of the clamped rects of the deferred renderer updates (valid while m_gpuPending).
+		pcg::IntRect m_gpuRect{};
+		bool m_gpuPending = false;
 	};
 }

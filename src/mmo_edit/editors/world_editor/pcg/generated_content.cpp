@@ -10,9 +10,11 @@
 #include "pcg/placement_reconcile.h"
 #include "scene_graph/instanced_foliage.h"
 #include "terrain/constants.h"
+#include "terrain/page.h"
 #include "terrain/terrain.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -261,6 +263,106 @@ namespace mmo
 					});
 			}
 		}
+
+		/// The rects MaterializeOceanPagesForWrites turns into terrain where they are open ocean: the influence when there
+		/// are no write rects, else every non-empty write rect grown by the seam margin and clipped to the influence.
+		std::vector<pcg::WorldRect> GetMaterializeRects(const pcg::WorldRect& influence, const std::vector<pcg::WorldRect>& writeRects)
+		{
+			std::vector<pcg::WorldRect> rects;
+			if (writeRects.empty())
+			{
+				rects.push_back(influence);
+			}
+			for (const pcg::WorldRect& rect : writeRects)
+			{
+				if (rect.minX > rect.maxX || rect.minZ > rect.maxZ)
+				{
+					// Empty rect: nothing to write there.
+					continue;
+				}
+				rects.push_back({ std::max(rect.minX - WriteRectSeamMargin, influence.minX), std::max(rect.minZ - WriteRectSeamMargin, influence.minZ),
+					std::min(rect.maxX + WriteRectSeamMargin, influence.maxX), std::min(rect.maxZ + WriteRectSeamMargin, influence.maxZ) });
+			}
+			return rects;
+		}
+
+		/// Puts the placements into the world, reconciled against what the generator owns (remove / update / create),
+		/// and stores the new owned placements. Counts go to the report.
+		void ReconcilePlacements(IWorldEditor& editor, std::vector<pcg::Placement> placements, pcg::OwnedContent& owned,
+			const uint64 ownerId, const String& ownerLabel, OasisBuildReport& report)
+		{
+			SortMaterialOverrides(placements);
+
+			InstancedFoliage& foliage = editor.GetInstancedFoliage();
+			const pcg::ReconcileResult reconciled = pcg::Reconcile(owned.placements, placements,
+				[&editor, &foliage](const uint64 uniqueId, const pcg::PlacementKind kind)
+				{
+					return kind != pcg::PlacementKind::Foliage ? editor.HasMapEntity(uniqueId) : FoliageExists(foliage, uniqueId);
+				});
+
+			std::map<uint64, pcg::PlacementKind> ownedKinds;
+			for (const auto& placement : owned.placements)
+			{
+				ownedKinds[placement.uniqueId] = placement.kind;
+			}
+
+			for (const uint64 uniqueId : reconciled.remove)
+			{
+				const auto it = ownedKinds.find(uniqueId);
+				if (it != ownedKinds.end() && RemoveOwned(editor, uniqueId, it->second))
+				{
+					++report.removed;
+				}
+			}
+
+			std::vector<pcg::OwnedPlacement> nextOwned = reconciled.keep;
+			report.kept = static_cast<uint32>(reconciled.keep.size());
+
+			for (const auto& update : reconciled.update)
+			{
+				if (UpdatePlacement(editor, update))
+				{
+					nextOwned.push_back(update);
+					++report.updated;
+					continue;
+				}
+
+				// Vanished since the existence check: create it again.
+				if (const uint64 uniqueId = CreatePlacement(editor, ownerLabel, ownerId, update.written))
+				{
+					pcg::OwnedPlacement recreated = update;
+					recreated.uniqueId = uniqueId;
+					nextOwned.push_back(recreated);
+					++report.created;
+				}
+			}
+
+			for (const auto& placement : reconciled.create)
+			{
+				const uint64 uniqueId = CreatePlacement(editor, ownerLabel, ownerId, placement);
+				if (uniqueId == 0)
+				{
+					// Not owned: the next build tries again.
+					continue;
+				}
+
+				pcg::OwnedPlacement created;
+				created.key = placement.key;
+				created.uniqueId = uniqueId;
+				created.kind = placement.kind;
+				created.written = placement;
+				nextOwned.push_back(created);
+				++report.created;
+			}
+
+			std::sort(nextOwned.begin(), nextOwned.end(), [](const pcg::OwnedPlacement& a, const pcg::OwnedPlacement& b)
+			{
+				return a.key < b.key;
+			});
+			owned.placements = std::move(nextOwned);
+
+			foliage.RebuildDirtyCells();
+		}
 	}
 
 	pcg::WorldRect GetTerrainRect(const terrain::Terrain& terrain)
@@ -312,29 +414,9 @@ namespace mmo
 		// The terrain brushes turn ocean placeholder pages into real terrain before writing; do the
 		// same so no write of the contribution is silently dropped. Only where the build may write:
 		// a page that stays open ocean is neither changed nor saved.
-		if (!writesTerrain)
+		if (writesTerrain)
 		{
-			// Nothing is written.
-		}
-		else if (content.writeRects.empty())
-		{
-			terrain->MaterializeOceanPages(content.influence.minX, content.influence.minZ, content.influence.maxX, content.influence.maxZ);
-		}
-		else
-		{
-			for (const pcg::WorldRect& rect : content.writeRects)
-			{
-				if (rect.minX > rect.maxX || rect.minZ > rect.maxZ)
-				{
-					// Empty rect: nothing to write there.
-					continue;
-				}
-				terrain->MaterializeOceanPages(
-					std::max(rect.minX - WriteRectSeamMargin, content.influence.minX),
-					std::max(rect.minZ - WriteRectSeamMargin, content.influence.minZ),
-					std::min(rect.maxX + WriteRectSeamMargin, content.influence.maxX),
-					std::min(rect.maxZ + WriteRectSeamMargin, content.influence.maxZ));
-			}
+			MaterializeOceanPagesForWrites(*terrain, content.influence, content.writeRects);
 		}
 
 		EditorTerrainAccess access(*terrain);
@@ -415,77 +497,7 @@ namespace mmo
 		{
 			content.placements(groundHeight, groundSlope, placements);
 		}
-		SortMaterialOverrides(placements);
-
-		InstancedFoliage& foliage = editor.GetInstancedFoliage();
-		const pcg::ReconcileResult reconciled = pcg::Reconcile(owned.placements, placements,
-			[&editor, &foliage](const uint64 uniqueId, const pcg::PlacementKind kind)
-			{
-				return kind != pcg::PlacementKind::Foliage ? editor.HasMapEntity(uniqueId) : FoliageExists(foliage, uniqueId);
-			});
-
-		std::map<uint64, pcg::PlacementKind> ownedKinds;
-		for (const auto& placement : owned.placements)
-		{
-			ownedKinds[placement.uniqueId] = placement.kind;
-		}
-
-		for (const uint64 uniqueId : reconciled.remove)
-		{
-			const auto it = ownedKinds.find(uniqueId);
-			if (it != ownedKinds.end() && RemoveOwned(editor, uniqueId, it->second))
-			{
-				++report.removed;
-			}
-		}
-
-		std::vector<pcg::OwnedPlacement> nextOwned = reconciled.keep;
-		report.kept = static_cast<uint32>(reconciled.keep.size());
-
-		for (const auto& update : reconciled.update)
-		{
-			if (UpdatePlacement(editor, update))
-			{
-				nextOwned.push_back(update);
-				++report.updated;
-				continue;
-			}
-
-			// Vanished since the existence check: create it again.
-			if (const uint64 uniqueId = CreatePlacement(editor, ownerLabel, ownerId, update.written))
-			{
-				pcg::OwnedPlacement recreated = update;
-				recreated.uniqueId = uniqueId;
-				nextOwned.push_back(recreated);
-				++report.created;
-			}
-		}
-
-		for (const auto& placement : reconciled.create)
-		{
-			const uint64 uniqueId = CreatePlacement(editor, ownerLabel, ownerId, placement);
-			if (uniqueId == 0)
-			{
-				// Not owned: the next build tries again.
-				continue;
-			}
-
-			pcg::OwnedPlacement created;
-			created.key = placement.key;
-			created.uniqueId = uniqueId;
-			created.kind = placement.kind;
-			created.written = placement;
-			nextOwned.push_back(created);
-			++report.created;
-		}
-
-		std::sort(nextOwned.begin(), nextOwned.end(), [](const pcg::OwnedPlacement& a, const pcg::OwnedPlacement& b)
-		{
-			return a.key < b.key;
-		});
-		owned.placements = std::move(nextOwned);
-
-		foliage.RebuildDirtyCells();
+		ReconcilePlacements(editor, std::move(placements), owned, ownerId, ownerLabel, report);
 
 		ReportTouchedPages(access, report);
 		report.ok = true;
@@ -550,6 +562,170 @@ namespace mmo
 
 		editor.GetInstancedFoliage().RebuildDirtyCells();
 
+		report.ok = true;
+		report.milliseconds = MillisecondsSince(start);
+		return report;
+	}
+
+	bool NeedsOceanMaterialization(const terrain::Terrain& terrain, const pcg::WorldRect& influence, const std::vector<pcg::WorldRect>& writeRects)
+	{
+		// The pages Terrain::MaterializeOceanPages visits for each rect.
+		const double halfWidth = static_cast<double>(terrain.GetWidth()) * terrain::constants::PageSize * 0.5;
+		const double halfHeight = static_cast<double>(terrain.GetHeight()) * terrain::constants::PageSize * 0.5;
+		const auto pageIndex = [](const float value, const double half)
+		{
+			return static_cast<int32>(std::floor((static_cast<double>(value) + half) / terrain::constants::PageSize));
+		};
+		for (const pcg::WorldRect& rect : GetMaterializeRects(influence, writeRects))
+		{
+			const int32 minX = std::max(pageIndex(rect.minX, halfWidth), 0);
+			const int32 minZ = std::max(pageIndex(rect.minZ, halfHeight), 0);
+			const int32 maxX = std::min(pageIndex(rect.maxX, halfWidth), static_cast<int32>(terrain.GetWidth()) - 1);
+			const int32 maxZ = std::min(pageIndex(rect.maxZ, halfHeight), static_cast<int32>(terrain.GetHeight()) - 1);
+			for (int32 pageZ = minZ; pageZ <= maxZ; ++pageZ)
+			{
+				for (int32 pageX = minX; pageX <= maxX; ++pageX)
+				{
+					const terrain::Page* page = terrain.GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+					if (page && page->IsOceanPlaceholder())
+					{
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	void MaterializeOceanPagesForWrites(const terrain::Terrain& terrain, const pcg::WorldRect& influence, const std::vector<pcg::WorldRect>& writeRects)
+	{
+		for (const pcg::WorldRect& rect : GetMaterializeRects(influence, writeRects))
+		{
+			terrain.MaterializeOceanPages(rect.minX, rect.minZ, rect.maxX, rect.maxZ);
+		}
+	}
+
+	ContentRebuildSession::ContentRebuildSession() = default;
+
+	ContentRebuildSession::~ContentRebuildSession() = default;
+
+	bool BeginContentRebuild(IWorldEditor& editor, const pcg::WorldRect& influence, pcg::OwnedContent& owned, ContentRebuildSession& session,
+		String& error)
+	{
+		session.access.reset();
+		session.recorded.Clear();
+		session.captured.Clear();
+		session.active = false;
+
+		terrain::Terrain* terrain = editor.GetTerrain();
+		if (!terrain || !editor.HasTerrain())
+		{
+			error = "The world has no terrain";
+			return false;
+		}
+		if (!Contains(GetTerrainRect(*terrain), influence))
+		{
+			error = "The influence does not fit inside the terrain";
+			return false;
+		}
+
+		// Everything the old build touched and the new one will touch.
+		pcg::WorldRect loadRect = influence;
+		pcg::WorldRect oldRect;
+		if (GetOldContentRect(owned, oldRect))
+		{
+			bool any = true;
+			Include(loadRect, any, oldRect);
+		}
+		OasisBuildReport loadReport;
+		if (!LoadPagesOrFail(editor, loadRect, loadReport))
+		{
+			error = loadReport.error;
+			return false;
+		}
+
+		session.access = std::make_unique<EditorTerrainAccess>(*terrain);
+		session.access->SetDeferGpuUpdates(true);
+		if (!CheckRecordMatchesTerrain(*session.access, owned.terrain, error))
+		{
+			session.access.reset();
+			return false;
+		}
+
+		// The old contribution leaves the terrain data (normals included); the renderer keeps showing it until the session
+		// ends. Unapply clears owned.terrain: the record must not claim a contribution that is not on the terrain.
+		session.recorded = owned.terrain;
+		session.captured = pcg::CaptureSamples(*session.access, owned.terrain);
+		pcg::Unapply(*session.access, owned.terrain);
+		owned.terrain.Clear();
+		session.influence = influence;
+		session.active = true;
+		return true;
+	}
+
+	void AbortContentRebuild(ContentRebuildSession& session, pcg::OwnedContent& owned)
+	{
+		if (!session.active)
+		{
+			return;
+		}
+
+		// The samples the old contribution recorded get the values they had before the undo, hand sculpting included.
+		pcg::RestoreSamples(*session.access, session.captured);
+		owned.terrain = std::move(session.recorded);
+		session.access->FlushGpuUpdates();
+		session.active = false;
+	}
+
+	OasisBuildReport FinishContentRebuild(IWorldEditor& editor, ContentRebuildSession& session, const pcg::TerrainSamples& samples,
+		const String& tileMaterial, const String& waterMaterial,
+		const std::function<void(const GroundFunction& ground, const GroundFunction& slope, std::vector<pcg::Placement>& out)>& placements,
+		pcg::OwnedContent& owned, const uint64 ownerId, const String& ownerLabel)
+	{
+		const Clock::time_point start = Clock::now();
+		OasisBuildReport report;
+		terrain::Terrain* terrain = editor.GetTerrain();
+		if (!session.active || !terrain)
+		{
+			report.error = "No rebuild in progress";
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
+
+		EditorTerrainAccess& access = *session.access;
+		access.SetDefaultWaterMaterial(waterMaterial);
+		pcg::TerrainContribution written;
+		if (!pcg::WriteTerrainSamples(access, samples, tileMaterial, written))
+		{
+			AbortContentRebuild(session, owned);
+			report.error = "The terrain changed while the build was computed; the world was not changed. Rebuild again.";
+			report.milliseconds = MillisecondsSince(start);
+			return report;
+		}
+		owned.terrain = std::move(written);
+		owned.influence = session.influence;
+		report.terrainSamples = CountSamples(owned.terrain);
+		access.FlushGpuUpdates();
+		session.active = false;
+
+		// Placements on the final ground, reconciled against what the generator owns.
+		const GroundFunction groundHeight = [terrain](const float x, const float z)
+		{
+			return terrain->GetSmoothHeightAt(x, z);
+		};
+		const GroundFunction groundSlope = [terrain](const float x, const float z)
+		{
+			const Vector3 normal = terrain->GetSmoothNormalAt(x, z);
+			return std::acos(std::clamp(normal.y, -1.0f, 1.0f)) * RadToDeg;
+		};
+		std::vector<pcg::Placement> next;
+		if (placements)
+		{
+			placements(groundHeight, groundSlope, next);
+		}
+		ReconcilePlacements(editor, std::move(next), owned, ownerId, ownerLabel, report);
+
+		ReportTouchedPages(access, report);
 		report.ok = true;
 		report.milliseconds = MillisecondsSince(start);
 		return report;

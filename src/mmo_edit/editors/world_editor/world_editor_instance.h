@@ -769,8 +769,10 @@ namespace mmo
 		///        unattended runs.
 		/// @param idOrZero Id of the control to rebuild, or 0 for all of them.
 		/// @param error Receives the reason when the call returns false.
+		/// @param background Rebuild a graph instance the way the editor does in the background (worker thread, written
+		///        on an update), and wait for it (see ProceduralEditMode::RebuildInBackgroundAndWait).
 		/// @return True if everything requested was rebuilt.
-		bool RebuildProcedural(uint64 idOrZero, String& error);
+		bool RebuildProcedural(uint64 idOrZero, String& error, bool background = false);
 
 		/// @brief Adds an oasis like the "New Oasis" button does, centred on (x, z), and builds it,
 		///        for unattended runs. The world is not saved.

@@ -568,6 +568,12 @@ namespace mmo
 
 		s_openInstances.erase(std::remove(s_openInstances.begin(), s_openInstances.end(), this), s_openInstances.end());
 
+		// A background PCG rebuild reads the terrain: stop it while everything is intact.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->CancelBackgroundRebuilds();
+		}
+
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
@@ -692,6 +698,11 @@ namespace mmo
 			// The button may still be held while the cursor is outside the viewport. Tell the
 			// mode so it does not treat the re-entry point as the far end of a continuous drag.
 			m_editMode->OnStrokeInterrupted();
+		}
+
+		if (m_editMode)
+		{
+			m_editMode->OnUpdate(deltaTimeSeconds);
 		}
 
 		const auto pos = GetPagePositionFromCamera();
@@ -1117,7 +1128,7 @@ namespace mmo
 		return "Editor/Pcg/Worlds/" + m_assetPath.stem().string();
 	}
 
-	bool WorldEditorInstance::RebuildProcedural(const uint64 idOrZero, String& error)
+	bool WorldEditorInstance::RebuildProcedural(const uint64 idOrZero, String& error, const bool background)
 	{
 		if (!m_proceduralEditMode)
 		{
@@ -1125,6 +1136,10 @@ namespace mmo
 			return false;
 		}
 
+		if (background && idOrZero != 0 && m_proceduralEditMode->FindGraphInstance(idOrZero))
+		{
+			return m_proceduralEditMode->RebuildInBackgroundAndWait(idOrZero, error);
+		}
 		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
 	}
 

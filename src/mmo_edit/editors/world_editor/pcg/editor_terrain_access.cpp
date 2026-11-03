@@ -452,35 +452,76 @@ namespace mmo
 				}
 			}
 
-			// Tile vertex buffers, render batches, page bounds and (for those pages) water meshes.
-			m_terrain.UpdateTiles(r.minX, r.minZ, r.maxX, r.maxZ);
-
-			// Splat coverage textures over the same area in pixel space.
-			const double pixelsPerVertex = static_cast<double>(PixelStepsPerPage) / static_cast<double>(VertexStepsPerPage);
-			const int32 pMinX = std::max(0, static_cast<int32>(std::floor(r.minX * pixelsPerVertex)));
-			const int32 pMinZ = std::max(0, static_cast<int32>(std::floor(r.minZ * pixelsPerVertex)));
-			const int32 pMaxX = std::min(m_pagesX * PixelStepsPerPage, static_cast<int32>(std::ceil(r.maxX * pixelsPerVertex)));
-			const int32 pMaxZ = std::min(m_pagesZ * PixelStepsPerPage, static_cast<int32>(std::ceil(r.maxZ * pixelsPerVertex)));
-			// Same per-page split as Terrain::UpdateTileCoverage (private), via the public page call.
-			for (int32 pageZ = pMinZ / PixelStepsPerPage; pageZ <= std::min(m_pagesZ - 1, pMaxZ / PixelStepsPerPage); ++pageZ)
+			if (m_deferGpu)
 			{
-				for (int32 pageX = pMinX / PixelStepsPerPage; pageX <= std::min(m_pagesX - 1, pMaxX / PixelStepsPerPage); ++pageX)
+				if (!m_gpuPending)
 				{
-					terrain::Page* page = GetPreparedPage(pageX, pageZ);
-					if (!page || !page->IsLoaded())
-					{
-						continue;
-					}
-
-					page->UpdateTileCoverage(
-						std::max(pMinX - pageX * PixelStepsPerPage, 0),
-						std::max(pMinZ - pageZ * PixelStepsPerPage, 0),
-						pMaxX - pageX * PixelStepsPerPage,
-						pMaxZ - pageZ * PixelStepsPerPage);
+					m_gpuRect = r;
+					m_gpuPending = true;
 				}
+				else
+				{
+					m_gpuRect.minX = std::min(m_gpuRect.minX, r.minX);
+					m_gpuRect.minZ = std::min(m_gpuRect.minZ, r.minZ);
+					m_gpuRect.maxX = std::max(m_gpuRect.maxX, r.maxX);
+					m_gpuRect.maxZ = std::max(m_gpuRect.maxZ, r.maxZ);
+				}
+			}
+			else
+			{
+				UpdateGpu(r);
 			}
 		}
 
+		if (!m_deferGpu)
+		{
+			RebuildDirtyWaterMeshes();
+		}
+	}
+
+	void EditorTerrainAccess::FlushGpuUpdates()
+	{
+		if (m_gpuPending)
+		{
+			m_gpuPending = false;
+			UpdateGpu(m_gpuRect);
+		}
+		RebuildDirtyWaterMeshes();
+	}
+
+	void EditorTerrainAccess::UpdateGpu(const pcg::IntRect& r)
+	{
+		// Tile vertex buffers, render batches, page bounds and (for those pages) water meshes.
+		m_terrain.UpdateTiles(r.minX, r.minZ, r.maxX, r.maxZ);
+
+		// Splat coverage textures over the same area in pixel space.
+		const double pixelsPerVertex = static_cast<double>(PixelStepsPerPage) / static_cast<double>(VertexStepsPerPage);
+		const int32 pMinX = std::max(0, static_cast<int32>(std::floor(r.minX * pixelsPerVertex)));
+		const int32 pMinZ = std::max(0, static_cast<int32>(std::floor(r.minZ * pixelsPerVertex)));
+		const int32 pMaxX = std::min(m_pagesX * PixelStepsPerPage, static_cast<int32>(std::ceil(r.maxX * pixelsPerVertex)));
+		const int32 pMaxZ = std::min(m_pagesZ * PixelStepsPerPage, static_cast<int32>(std::ceil(r.maxZ * pixelsPerVertex)));
+		// Same per-page split as Terrain::UpdateTileCoverage (private), via the public page call.
+		for (int32 pageZ = pMinZ / PixelStepsPerPage; pageZ <= std::min(m_pagesZ - 1, pMaxZ / PixelStepsPerPage); ++pageZ)
+		{
+			for (int32 pageX = pMinX / PixelStepsPerPage; pageX <= std::min(m_pagesX - 1, pMaxX / PixelStepsPerPage); ++pageX)
+			{
+				terrain::Page* page = GetPreparedPage(pageX, pageZ);
+				if (!page || !page->IsLoaded())
+				{
+					continue;
+				}
+
+				page->UpdateTileCoverage(
+					std::max(pMinX - pageX * PixelStepsPerPage, 0),
+					std::max(pMinZ - pageZ * PixelStepsPerPage, 0),
+					pMaxX - pageX * PixelStepsPerPage,
+					pMaxZ - pageZ * PixelStepsPerPage);
+			}
+		}
+	}
+
+	void EditorTerrainAccess::RebuildDirtyWaterMeshes()
+	{
 		// Water-only changes (water heights are not part of the touched rect) still need their
 		// meshes rebuilt. RebuildWaterMesh does nothing for a page without a water render object.
 		for (const auto& pagePos : m_waterDirtyPages)

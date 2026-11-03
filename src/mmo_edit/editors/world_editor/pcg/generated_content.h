@@ -8,10 +8,12 @@
 #include "pcg/terrain_contribution.h"
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace mmo
 {
+	class EditorTerrainAccess;
 	class IWorldEditor;
 
 	namespace terrain
@@ -132,4 +134,66 @@ namespace mmo
 	/// @param owned What the generator owns; cleared on success.
 	/// @return The report (removed = number of owned objects deleted).
 	OasisBuildReport RemoveGeneratedContent(IWorldEditor& editor, pcg::OwnedContent& owned);
+
+	/// @brief Whether writing over the given rects would first turn open-ocean placeholder pages into terrain (see
+	///        MaterializeOceanPagesForWrites): such a write changes the base terrain under it.
+	/// @param terrain The terrain.
+	/// @param influence The build's influence.
+	/// @param writeRects The rects the build may write (GeneratedContent::writeRects rules).
+	bool NeedsOceanMaterialization(const terrain::Terrain& terrain, const pcg::WorldRect& influence, const std::vector<pcg::WorldRect>& writeRects);
+
+	/// @brief Turns the open-ocean placeholder pages under the write rects (grown by a seam margin, clipped to the
+	///        influence; the whole influence when there are none, nothing for empty rects) into real terrain, as the
+	///        terrain brushes do before they write.
+	void MaterializeOceanPagesForWrites(const terrain::Terrain& terrain, const pcg::WorldRect& influence, const std::vector<pcg::WorldRect>& writeRects);
+
+	/// @brief A generator rebuild taken apart, so that the new contribution can be computed in between on another
+	///        thread (graph instance rebuilds): BeginContentRebuild takes the previous terrain contribution out of the
+	///        terrain data, the caller computes the new contribution on that base terrain, then FinishContentRebuild writes
+	///        it and reconciles the placements, or AbortContentRebuild puts the old contribution back. Until then the
+	///        renderer keeps showing the previous build (the GPU updates are deferred), and nothing else may write the
+	///        terrain. Main thread only.
+	struct ContentRebuildSession
+	{
+		ContentRebuildSession();
+		~ContentRebuildSession();
+
+		/// @brief Terrain access of the session, with deferred GPU updates.
+		std::unique_ptr<EditorTerrainAccess> access;
+
+		/// @brief The previous contribution (put back by AbortContentRebuild).
+		pcg::TerrainContribution recorded;
+
+		/// @brief The terrain values under it before the undo (RestoreSamples).
+		pcg::TerrainContribution captured;
+
+		/// @brief The influence of the new build.
+		pcg::WorldRect influence{};
+
+		/// @brief True between a successful BeginContentRebuild and Finish or Abort.
+		bool active = false;
+	};
+
+	/// @brief Starts a rebuild: loads the pages of the influence and of everything the generator owns, refuses (the world
+	///        stays untouched) if one is not ready, the influence leaves the terrain or the recorded contribution does not
+	///        match the terrain any more, then undoes the previous contribution in the terrain data and clears
+	///        owned.terrain.
+	/// @return False with the reason in error if refused.
+	bool BeginContentRebuild(IWorldEditor& editor, const pcg::WorldRect& influence, pcg::OwnedContent& owned, ContentRebuildSession& session,
+		String& error);
+
+	/// @brief Ends a session without a new build: the old contribution is put back exactly (hand sculpting since included)
+	///        and owned.terrain holds it again. Does nothing for a session that is not active.
+	void AbortContentRebuild(ContentRebuildSession& session, pcg::OwnedContent& owned);
+
+	/// @brief Ends a session with the new build: writes the samples (pcg::WriteTerrainSamples; a page that gets water and
+	///        has no water material gets waterMaterial), updates the renderer, builds the placements on the final ground and
+	///        reconciles them like ApplyGeneratedContent. Afterwards owned holds the session's influence, the new
+	///        contribution and placements. If the samples were computed on another base than the terrain holds, the session
+	///        is aborted instead and the report says so.
+	/// @param placements Produces the placements on the final ground; may be empty (no placements).
+	OasisBuildReport FinishContentRebuild(IWorldEditor& editor, ContentRebuildSession& session, const pcg::TerrainSamples& samples,
+		const String& tileMaterial, const String& waterMaterial,
+		const std::function<void(const GroundFunction& ground, const GroundFunction& slope, std::vector<pcg::Placement>& out)>& placements,
+		pcg::OwnedContent& owned, uint64 ownerId, const String& ownerLabel);
 }

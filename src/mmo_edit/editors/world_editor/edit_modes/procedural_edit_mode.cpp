@@ -11,6 +11,7 @@
 #include "math/matrix4.h"
 #include "math/ray.h"
 #include "math/vector4.h"
+#include "pcg/graph/hashing.h"
 #include "pcg/oasis_recipe.h"
 #include "pcg/pcg_random.h"
 #include "pcg/section_path.h"
@@ -24,6 +25,7 @@
 #include <imgui/misc/cpp/imgui_stdlib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iterator>
@@ -364,6 +366,11 @@ namespace mmo
 	{
 	}
 
+	ProceduralEditMode::~ProceduralEditMode()
+	{
+		CancelBackgroundRebuilds();
+	}
+
 	const char* ProceduralEditMode::GetName() const
 	{
 		static const char* s_name = "Procedural";
@@ -495,6 +502,8 @@ namespace mmo
 
 	void ProceduralEditMode::OnDeactivate()
 	{
+		// Other modes write the terrain: the running rebuild must end first.
+		WaitForBackgroundRebuild();
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
 		// A point or transform selection is meaningless outside this mode (no handles, no overlay).
@@ -772,6 +781,7 @@ namespace mmo
 
 	void ProceduralEditMode::Load(const std::filesystem::path& pcgFolder)
 	{
+		CancelBackgroundRebuilds();
 		ClearPointSelection();
 		ClearTransformSelection();
 		// Reloading replaces the records; an unfinished tags edit is dropped with them.
@@ -1815,6 +1825,7 @@ namespace mmo
 
 	void ProceduralEditMode::InvalidateGraph(const String& graphPath)
 	{
+		++m_graphRevision;
 		const auto normalize = [](String path)
 		{
 			std::replace(path.begin(), path.end(), '\\', '/');
@@ -1832,12 +1843,20 @@ namespace mmo
 	{
 		// The rebuild reads the saved graph file; the panel follows what it read.
 		m_graphs.erase(control.instance.graphPath);
+		control.builtInputs = GetGraphInstanceInputs(control);
+		const GeneratorBuildReport report = RebuildGraphInstance(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this,
+			MakeTerrainOverlapCheck(control.Id()));
+		return ReportGraphInstanceBuild(control, report, error);
+	}
 
+	std::function<bool(const pcg::WorldRect& areaRect, String& error)> ProceduralEditMode::MakeTerrainOverlapCheck(const uint64 controlId)
+	{
 		// An instance whose graph writes terrain may write anywhere inside its area: no oasis or section path may
 		// have built there (the rebuild asks once it knows the graph has terrain ops).
-		const auto checkTerrainOverlap = [this, &control](const pcg::WorldRect& areaRect, String& overlapError)
+		return [this, controlId](const pcg::WorldRect& areaRect, String& overlapError)
 		{
-			if (CheckOverlap(control, { areaRect }, overlapError))
+			const int32 index = FindControl(controlId);
+			if (index < 0 || CheckOverlap(m_controls[index], { areaRect }, overlapError))
 			{
 				return true;
 			}
@@ -1850,9 +1869,10 @@ namespace mmo
 			}
 			return false;
 		};
+	}
 
-		const GeneratorBuildReport report = RebuildGraphInstance(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this,
-			checkTerrainOverlap);
+	bool ProceduralEditMode::ReportGraphInstanceBuild(Control& control, const GeneratorBuildReport& report, String& error)
+	{
 		if (!report.ok)
 		{
 			error = report.error;
@@ -1884,6 +1904,256 @@ namespace mmo
 			WLOG("'" << control.Name() << "': " << warning);
 		}
 		return true;
+	}
+
+	uint64 ProceduralEditMode::GetGraphInstanceInputs(const Control& control)
+	{
+		// Everything a rebuild reads that the editor changes: the record (without what the last build wrote), the graph
+		// as the details panel last read it, the control types and every placed control that may reach the area. A
+		// placed control moved out of the area changes the set as well.
+		const pcg::GraphInstanceRecord& record = control.instance;
+		pcg::graph::Hasher hasher;
+		hasher.Str(record.graphPath);
+		hasher.U64(record.seed);
+		hasher.U64(record.pointLimit);
+		hasher.F32(record.borderFade);
+		hasher.Spline(record.area);
+		hasher.Attributes(record.parameterOverrides);
+		hasher.U64(m_graphRevision);
+		hasher.U64(m_controlLibrary.Revision());
+
+		const pcg::graph::Bounds2D area = pcg::graph::SplineBounds(record.area);
+		for (const Control& other : m_controls)
+		{
+			if (other.kind != ControlKind::Placed)
+			{
+				continue;
+			}
+			const pcg::graph::Bounds2D bounds = GetPlacedControlBounds(other.placed, m_controlLibrary.Find(other.placed.typePath));
+			if (bounds.valid && pcg::graph::SaneBounds(bounds) && !bounds.Intersects(area))
+			{
+				continue;
+			}
+			hasher.Str(pcg::graph::WriteControlInstance(other.placed));
+		}
+		return hasher.Result();
+	}
+
+	bool ProceduralEditMode::IsEditIdle() const
+	{
+		// A rebuild starts when an edit ends: no button held, no point, handle or gizmo dragged, no field being typed in.
+		if (m_splineEditor.IsDragging() || m_worldEditor.IsTransforming())
+		{
+			return false;
+		}
+		return !ImGui::GetCurrentContext() || (!ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive());
+	}
+
+	bool ProceduralEditMode::RebuildInBackgroundAndWait(const uint64 controlId, String& error)
+	{
+		RequestBackgroundRebuild(controlId);
+		while (HasBackgroundRebuilds())
+		{
+			UpdateBackgroundRebuild();
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+		const int32 index = FindControl(controlId);
+		if (index < 0 || !m_controls[index].lastReportOk)
+		{
+			error = index < 0 ? "No procedural control with id " + FormatId(controlId) : m_controls[index].lastReport;
+			return false;
+		}
+		return true;
+	}
+
+	void ProceduralEditMode::RequestBackgroundRebuild(const uint64 controlId)
+	{
+		if (std::find(m_rebuildQueue.begin(), m_rebuildQueue.end(), controlId) == m_rebuildQueue.end())
+		{
+			m_rebuildQueue.push_back(controlId);
+		}
+
+		// A newer request supersedes the running rebuild of the same instance.
+		if (m_rebuildJob && m_rebuildJob->GetInstanceId() == controlId)
+		{
+			m_rebuildJob->Cancel();
+		}
+	}
+
+	void ProceduralEditMode::LaunchRebuildThread()
+	{
+		m_rebuildRunning = true;
+		GraphRebuildJob* job = m_rebuildJob.get();
+		m_rebuildThread = std::thread([this, job]()
+		{
+			job->Run();
+			m_rebuildRunning = false;
+		});
+	}
+
+	void ProceduralEditMode::StartQueuedRebuild()
+	{
+		while (!m_rebuildJob && !m_rebuildQueue.empty())
+		{
+			const uint64 id = m_rebuildQueue.front();
+			m_rebuildQueue.erase(m_rebuildQueue.begin());
+			const int32 index = FindControl(id);
+			if (index < 0 || m_controls[index].kind != ControlKind::GraphInstance)
+			{
+				continue;
+			}
+
+			Control& control = m_controls[index];
+			// The rebuild reads the saved graph file; the panel follows what it read.
+			m_graphs.erase(control.instance.graphPath);
+			const uint64 inputs = GetGraphInstanceInputs(control);
+			String error;
+			m_rebuildJob = GraphRebuildJob::Start(m_worldEditor, control.instance, GetOtherGraphInstances(id), *this, error);
+			if (!m_rebuildJob)
+			{
+				GeneratorBuildReport report;
+				report.error = "Rebuild of '" + control.Name() + "' refused, the world was not changed: " + error;
+				ELOG("PCG: " << report.error);
+				ReportGraphInstanceBuild(control, report, error);
+				// Not again until the inputs change.
+				control.builtInputs = inputs;
+				continue;
+			}
+			m_rebuildJobInputs = inputs;
+			SetStatus("Rebuilding '" + control.Name() + "' in the background...", StatusLevel::Ok);
+			LaunchRebuildThread();
+		}
+	}
+
+	void ProceduralEditMode::FinishBackgroundRebuild()
+	{
+		if (m_rebuildThread.joinable())
+		{
+			m_rebuildThread.join();
+		}
+		if (!m_rebuildJob)
+		{
+			return;
+		}
+
+		const int32 index = FindControl(m_rebuildJob->GetInstanceId());
+		if (index < 0)
+		{
+			// Deleting an instance waits for its rebuild, so this does not happen; the old contribution has no record left.
+			ELOG("PCG: the instance of a background rebuild is gone");
+			m_rebuildJob.reset();
+			return;
+		}
+
+		Control& control = m_controls[index];
+		if (m_rebuildJob->IsCanceled())
+		{
+			// Superseded (a newer request is queued) or dropped: the old build goes back.
+			m_rebuildJob->Abort(control.instance);
+			m_rebuildJob.reset();
+			return;
+		}
+
+		const GeneratorBuildReport report = m_rebuildJob->Commit(m_worldEditor, control.instance, GetOtherGraphInstances(control.Id()), *this,
+			MakeTerrainOverlapCheck(control.Id()));
+		String error;
+		ReportGraphInstanceBuild(control, report, error);
+		// A refused build is not retried until the inputs change either.
+		control.builtInputs = m_rebuildJobInputs;
+		m_rebuildJob.reset();
+	}
+
+	void ProceduralEditMode::UpdateBackgroundRebuild()
+	{
+		if (m_rebuildJob && !m_rebuildRunning)
+		{
+			if (m_rebuildThread.joinable())
+			{
+				m_rebuildThread.join();
+			}
+			if (m_rebuildJob->NeedsSectionAssets() && !m_rebuildJob->IsCanceled())
+			{
+				// Section assets are read on the main thread; the job then runs again.
+				m_rebuildJob->LoadSectionAssets();
+				LaunchRebuildThread();
+				return;
+			}
+			FinishBackgroundRebuild();
+		}
+
+		if (m_liveRebuild && IsEditIdle())
+		{
+			for (Control& control : m_controls)
+			{
+				if (control.kind != ControlKind::GraphInstance || control.instance.graphPath.empty())
+				{
+					continue;
+				}
+				const uint64 inputs = GetGraphInstanceInputs(control);
+				const bool running = m_rebuildJob && m_rebuildJob->GetInstanceId() == control.Id() && !m_rebuildJob->IsCanceled();
+				if (inputs != (running ? m_rebuildJobInputs : control.builtInputs))
+				{
+					RequestBackgroundRebuild(control.Id());
+				}
+			}
+		}
+
+		if (IsEditIdle())
+		{
+			StartQueuedRebuild();
+		}
+	}
+
+	void ProceduralEditMode::WaitForBackgroundRebuild()
+	{
+		if (!m_rebuildJob)
+		{
+			return;
+		}
+
+		if (m_rebuildThread.joinable())
+		{
+			m_rebuildThread.join();
+		}
+		m_rebuildRunning = false;
+		while (m_rebuildJob->NeedsSectionAssets() && !m_rebuildJob->IsCanceled())
+		{
+			m_rebuildJob->LoadSectionAssets();
+			m_rebuildJob->Run();
+		}
+		FinishBackgroundRebuild();
+	}
+
+	void ProceduralEditMode::CancelBackgroundRebuilds()
+	{
+		m_rebuildQueue.clear();
+		if (m_rebuildJob)
+		{
+			m_rebuildJob->Cancel();
+		}
+		WaitForBackgroundRebuild();
+	}
+
+	void ProceduralEditMode::OnUpdate(float)
+	{
+		UpdateBackgroundRebuild();
+	}
+
+	void ProceduralEditMode::SetLiveRebuild(const bool enabled)
+	{
+		if (enabled && !m_liveRebuild)
+		{
+			// What is in the world now counts as built: only edits from here on rebuild.
+			for (Control& control : m_controls)
+			{
+				if (control.kind == ControlKind::GraphInstance)
+				{
+					control.builtInputs = GetGraphInstanceInputs(control);
+				}
+			}
+		}
+		m_liveRebuild = enabled;
 	}
 
 	std::vector<pcg::WorldRect> ProceduralEditMode::GetBuiltRects(const Control& control)
@@ -1972,6 +2242,10 @@ namespace mmo
 
 	bool ProceduralEditMode::Rebuild(const uint64 controlId, String& error)
 	{
+		// One terrain writer at a time.
+		WaitForBackgroundRebuild();
+		m_rebuildQueue.erase(std::remove(m_rebuildQueue.begin(), m_rebuildQueue.end(), controlId), m_rebuildQueue.end());
+
 		const int32 index = FindControl(controlId);
 		if (index < 0)
 		{
@@ -2162,6 +2436,8 @@ namespace mmo
 	bool ProceduralEditMode::RebuildAll(String& error)
 	{
 		error.clear();
+		WaitForBackgroundRebuild();
+		m_rebuildQueue.clear();
 
 		// Placed controls build nothing themselves (graph instances read them). Graph instances sample the terrain
 		// the oases and section paths write, so they go last (list order within each group).
@@ -2212,6 +2488,10 @@ namespace mmo
 
 	bool ProceduralEditMode::DeleteControl(const uint64 id, String& error)
 	{
+		// One terrain writer at a time; a deleted instance is not rebuilt any more.
+		WaitForBackgroundRebuild();
+		m_rebuildQueue.erase(std::remove(m_rebuildQueue.begin(), m_rebuildQueue.end(), id), m_rebuildQueue.end());
+
 		const int32 index = FindControl(id);
 		if (index < 0)
 		{
@@ -2328,6 +2608,18 @@ namespace mmo
 			RebuildAll(error);
 		}
 		ImGui::EndDisabled();
+		ImGui::SameLine();
+		bool live = m_liveRebuild;
+		if (ImGui::Checkbox("Live Rebuild", &live))
+		{
+			SetLiveRebuild(live);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("Rebuilds a graph instance in the background as soon as an edit of it ends: a spline point or\n"
+				"gizmo released, a field left. Edits of its area, graph, seed, parameters and of the placed\n"
+				"controls reaching into it count. The world shows the old build until the new one is ready.");
+		}
 
 		ImGui::BeginDisabled(m_newPathAsset.empty());
 		if (ImGui::Button("New Section Path"))
@@ -2351,6 +2643,17 @@ namespace mmo
 		DrawSectionAssetCombo("##newPathAsset", m_newPathAsset);
 
 		DrawNewControlMenu();
+
+		if (m_rebuildJob)
+		{
+			const int32 building = FindControl(m_rebuildJob->GetInstanceId());
+			ImGui::TextColored(StatusOkColor, "Rebuilding '%s' in the background (%.1f s)%s", building >= 0 ? m_controls[building].Name().c_str() : "?",
+				m_rebuildJob->GetElapsedSeconds(), m_rebuildJob->IsCanceled() ? ", canceled" : "");
+		}
+		if (!m_rebuildQueue.empty())
+		{
+			ImGui::TextDisabled("%zu rebuild(s) queued", m_rebuildQueue.size());
+		}
 
 		if (!m_status.empty())
 		{
@@ -2430,8 +2733,16 @@ namespace mmo
 		{
 			if (ImGui::Button("Rebuild"))
 			{
-				String error;
-				Rebuild(m_controls[m_selected].Id(), error);
+				// Graph instances rebuild in the background; oases and section paths are quick.
+				if (m_controls[m_selected].kind == ControlKind::GraphInstance)
+				{
+					RequestBackgroundRebuild(m_controls[m_selected].Id());
+				}
+				else
+				{
+					String error;
+					Rebuild(m_controls[m_selected].Id(), error);
+				}
 			}
 			ImGui::SameLine();
 		}

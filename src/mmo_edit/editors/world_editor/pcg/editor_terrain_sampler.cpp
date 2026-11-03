@@ -5,10 +5,12 @@
 #include "section_bake_job.h"
 
 #include "pcg/section_asset.h"
+#include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
@@ -86,6 +88,29 @@ namespace mmo
 		return m_revision ? m_revision() : 0;
 	}
 
+	void EditorTerrainSampler::PrewarmTiles(const pcg::WorldRect& rect)
+	{
+		const int32 tilesX = static_cast<int32>(m_terrain.GetWidth() * terrain::constants::TilesPerPage);
+		const int32 tilesZ = static_cast<int32>(m_terrain.GetHeight() * terrain::constants::TilesPerPage);
+		const double halfX = static_cast<double>(m_terrain.GetWidth()) * terrain::constants::PageSize * 0.5;
+		const double halfZ = static_cast<double>(m_terrain.GetHeight()) * terrain::constants::PageSize * 0.5;
+		const auto tile = [](const float value, const double half, const int32 count)
+		{
+			return std::clamp(static_cast<int32>(std::floor((static_cast<double>(value) + half) / terrain::constants::TileSize)), 0, count - 1);
+		};
+
+		const bool cacheOnly = m_cacheOnly;
+		m_cacheOnly = false;
+		for (int32 z = std::max(0, tile(rect.minZ, halfZ, tilesZ) - 1); z <= std::min(tilesZ - 1, tile(rect.maxZ, halfZ, tilesZ) + 1); ++z)
+		{
+			for (int32 x = std::max(0, tile(rect.minX, halfX, tilesX) - 1); x <= std::min(tilesX - 1, tile(rect.maxX, halfX, tilesX) + 1); ++x)
+			{
+				GetTileTextureKeys(x, z);
+			}
+		}
+		m_cacheOnly = cacheOnly;
+	}
+
 	const std::array<String, 4>& EditorTerrainSampler::GetTileTextureKeys(const int32 tileX, const int32 tileZ) const
 	{
 		// Tile materials are terrain data, so a material change bumps the revision and drops the cache.
@@ -113,7 +138,7 @@ namespace mmo
 		}
 
 		// A page that is not loaded yet is not cached: it may stream in without a revision change.
-		if (page == nullptr || !page->IsPrepared())
+		if (m_cacheOnly || page == nullptr || !page->IsPrepared())
 		{
 			static const std::array<String, 4> none;
 			return none;

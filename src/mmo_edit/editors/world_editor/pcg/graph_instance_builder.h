@@ -127,6 +127,11 @@ namespace mmo
 		/// @brief A provider for pcg::graph::PreparedTerrain::Prepare reading through this cache, which must outlive it.
 		[[nodiscard]] pcg::graph::SectionAssetProvider MakeProvider();
 
+		/// @brief The asset if it was read already (null with the reason in error if it failed to read); never reads a
+		///        file, so it may be called from another thread while nothing changes the cache.
+		/// @param cached Receives false if the asset was not read yet (the result is null then).
+		const pcg::SectionAsset* Find(const String& path, String& error, bool& cached) const;
+
 		/// @brief Drops every entry whose asset file or section world file has another write time (or appeared or
 		///        disappeared) since it was read. Stats two files per entry, so call it sparingly.
 		/// @return True if an entry was dropped.
@@ -254,23 +259,89 @@ namespace mmo
 	bool EvaluateGraphInstance(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
 		GraphInstanceEvaluation& out, String& error, bool baseTerrain = false);
 
-	/// @brief Rebuilds a graph instance: terrain ops and placements through ApplyGeneratedContent.
-	/// @details First a dry run on the live terrain decides every refusal, leaving the world and record untouched:
-	///          an area wholly outside the terrain, missing graph, parse error, validation issues (message lists them),
-	///          evaluation error, overlap with another instance's area, missing spawn assets, a placed control that failed to resolve (missing,
-	///          renamed or invalid type, geometry not fitting the shape) whose bounds reach the area or cannot be
-	///          computed (the evaluation would silently run without it and the reconcile would delete its content; the
-	///          message names those controls), and terrain ops that cannot be prepared (missing, unreadable or stale
-	///          section asset, a section param it rejects; the message names the node and asset).
-	///          Then ApplyGeneratedContent undoes the previous contribution and, in content.prepare, the graph is
-	///          evaluated again on that base terrain, its terrain ops are prepared on it (pcg::graph::PreparedTerrain,
-	///          clipped to the area with the record's borderFade) and written; an op-free graph writes nothing. A record
-	///          without a terrain contribution has the base as its live terrain: prepare then takes over the dry run
-	///          instead, unless the terrain revision changed in between (an ocean page was materialised). Should
-	///          that second run fail after all, the old contribution is put back (the world ends as before). Spawned
-	///          placements keep their height above the base ground on the final ground; the section placements of
-	///          the ops are added under salted keys. After a successful write the river paths of the applied terrain
-	///          (PreparedTerrain::GetFlowPaths) join the world's river flow: Terrain::ApplyWaterFlow over the hand rivers
+	/// @brief A graph instance rebuild in three steps, so that the expensive middle step can run on a worker thread while
+	///        the editor stays responsive (ProceduralEditMode's background rebuilds). RebuildGraphInstance runs the same
+	///        steps on the calling thread, so both write the same.
+	/// @details Start (main thread) refuses what it can decide before evaluating, loads the pages, copies what the
+	///          evaluation reads (the record, the graph, the placed controls, the tile materials) and takes the instance's
+	///          previous terrain contribution out of the terrain data (BeginContentRebuild: the world keeps showing the old
+	///          build). Run (one thread at a time) evaluates the graph on that base terrain, prepares its terrain ops and
+	///          computes every terrain sample; it only reads the terrain, so nothing may write the terrain until Commit or
+	///          Abort, and the editor must not change the terrain pages it reads (they stay prepared: streaming only unloads
+	///          tiles). Commit (main thread) decides the remaining refusals, writes the result and reconciles the placements
+	///          (FinishContentRebuild); Abort puts the old contribution back. Every job must end in Commit or Abort.
+	class GraphRebuildJob final : public NonCopyable
+	{
+	public:
+		~GraphRebuildJob();
+
+		/// @brief Starts a rebuild (main thread). Refusals here (bad area, area outside the terrain or overlapping another
+		///        instance, unreadable graph, pages that cannot be loaded, a record that no longer matches the terrain)
+		///        leave the world and record untouched. On success record.content.terrain is empty until Commit or Abort.
+		/// @return The job, or null with the reason in error.
+		static std::unique_ptr<GraphRebuildJob> Start(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
+			const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls, String& error);
+
+		/// @brief Evaluates, prepares the terrain ops and computes the terrain samples (any one thread; see the class).
+		///        Returns early once canceled. If a section asset was not loaded yet, NeedsSectionAssets is true afterwards:
+		///        call LoadSectionAssets on the main thread and Run again, until it is false (each run stops at the first
+		///        missing asset; each round loads at least one).
+		void Run();
+
+		/// @brief Whether the last Run stopped for section assets that are not loaded yet.
+		[[nodiscard]] bool NeedsSectionAssets() const;
+
+		/// @brief Loads the section assets the last Run asked for (main thread).
+		void LoadSectionAssets();
+
+		/// @brief Asks Run to stop at its next step; Commit then refuses. Any thread.
+		void Cancel();
+
+		/// @brief Whether Cancel was called.
+		[[nodiscard]] bool IsCanceled() const;
+
+		/// @brief Ends the job with its result (main thread): the refusals of RebuildGraphInstance that need the evaluation
+		///        (canceled, terrain changed since Start, validation issues, node errors, missing spawn assets, unresolved
+		///        controls reaching the area, terrain ops that cannot be prepared, an overlap found now) abort it and
+		///        leave the world as before; otherwise the terrain is written, the placements reconciled and the river flow
+		///        and seams updated (see RebuildGraphInstance). Write rects over open ocean are materialised first and the
+		///        job runs again on this thread.
+		/// @param record The instance the job was started for (the same object).
+		GeneratorBuildReport Commit(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const std::vector<const pcg::GraphInstanceRecord*>& otherInstances,
+			ProceduralEditMode& controls, const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap);
+
+		/// @brief Ends the job without a result (main thread): the old contribution is put back.
+		/// @param record The instance the job was started for (the same object).
+		void Abort(pcg::GraphInstanceRecord& record);
+
+		/// @brief Id of the instance being rebuilt.
+		[[nodiscard]] uint64 GetInstanceId() const;
+
+		/// @brief Seconds since Start.
+		[[nodiscard]] double GetElapsedSeconds() const;
+
+	private:
+		GraphRebuildJob();
+
+		struct Impl;
+		std::unique_ptr<Impl> m_impl;
+	};
+
+	/// @brief Rebuilds a graph instance: the steps of a GraphRebuildJob, run on the calling thread.
+	/// @details Refused, with the world and record ending as before (the old contribution is put back exactly, hand
+	///          sculpting included): an area wholly outside the terrain, missing graph, parse error, validation issues
+	///          (message lists them), evaluation error, overlap with another instance's area, missing spawn assets, a placed
+	///          control that failed to resolve (missing, renamed or invalid type, geometry not fitting the shape) whose
+	///          bounds reach the area or cannot be computed (the evaluation would silently run without it and the reconcile
+	///          would delete its content; the message names those controls), and terrain ops that cannot be prepared
+	///          (missing, unreadable or stale section asset, a section param it rejects; the message names the node and
+	///          asset). The previous contribution is taken out of the terrain data first (BeginContentRebuild), the graph is
+	///          evaluated on that base terrain, its terrain ops are prepared on it (pcg::graph::PreparedTerrain, clipped to
+	///          the area with the record's borderFade) and every terrain sample is computed; then they are written (an
+	///          op-free graph writes nothing). Write rects over open ocean are materialised and the computation repeated on
+	///          the materialised base. Spawned placements keep their height above the base ground on the final ground; the
+	///          section placements of the ops are added under salted keys. After a successful write the river paths of the
+	///          applied terrain (PreparedTerrain::GetFlowPaths) join the world's river flow: Terrain::ApplyWaterFlow over the hand rivers
 	///          the editor holds (IWorldEditor::GetHandFlowPaths, else the .hflow) followed by every instance's paths (ProceduralEditMode::CollectGeneratedFlowPaths,
 	///          this one's new), with this instance's old paths as the previous set; they are then stored in
 	///          record.flowPaths. Bit-identical paths skip that step. A refused or failed rebuild touches no flow.
@@ -278,8 +349,8 @@ namespace mmo
 	/// @param record The instance to rebuild; its owned content and flow paths are updated.
 	/// @param otherInstances The world's other graph instances (their areas must not overlap this one's).
 	/// @param controls The procedural mode holding the world's placed controls.
-	/// @param checkTerrainOverlap If set, called with the area's bounds when the graph has terrain ops (part of the
-	///        dry run); returning false refuses the rebuild with its error (the procedural mode checks the bounds
+	/// @param checkTerrainOverlap If set, called with the area's bounds when the graph has terrain ops (before anything
+	///        is written); returning false refuses the rebuild with its error (the procedural mode checks the bounds
 	///        against what oases and section paths built).
 	/// @return The report. Warnings: control resolution, parameter merge, node and collection warnings of the run on
 	///         the base terrain, terrain op preparation and section placement warnings, and paint skipped on tiles

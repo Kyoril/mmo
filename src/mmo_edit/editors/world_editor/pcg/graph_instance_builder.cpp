@@ -17,17 +17,20 @@
 #include "pcg/graph/node_util.h"
 #include "pcg/graph/node_registry.h"
 #include "pcg/graph/terrain_compose.h"
+#include "pcg/parallel_for.h"
 #include "pcg/pcg_random.h"
 #include "terrain/constants.h"
 #include "terrain/terrain.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -123,44 +126,6 @@ namespace mmo
 			}
 			return "?";
 		}
-
-		/// What content.prepare builds on the base terrain, read by the terrain and placement steps.
-		struct GraphBuildState
-		{
-			/// The terrain ops prepared on the base.
-			pcg::graph::PreparedTerrain terrain;
-
-			/// The spawned placements (inside the area), as evaluated on the base.
-			std::vector<pcg::Placement> spawns;
-
-			/// Per spawn: its height above the base ground the graph saw.
-			std::vector<float> spawnOffsets;
-
-			/// Spawned points dropped for lying outside the area.
-			size_t clipped = 0;
-
-			/// Section placements added by the last placement step.
-			size_t sectionPlacements = 0;
-
-			/// True if content.prepare took over the dry run instead of evaluating again.
-			bool reusedDryRun = false;
-
-			/// Paint layers the terrain step had to skip.
-			pcg::graph::TerrainEvaluateNotes notes;
-
-			/// Texture key to tile layer matching of the terrain step (lookup calls layers).
-			std::unique_ptr<EditorTextureLayers> layers;
-			pcg::graph::TextureLayerLookup lookup;
-
-			/// The other worker threads of the terrain step: a copy of the warmed layer cache, its lookup and the notes
-			/// of each (merged into `notes` after the write).
-			std::vector<std::unique_ptr<EditorTextureLayers>> workerLayers;
-			std::vector<pcg::graph::TextureLayerLookup> workerLookups;
-			std::vector<pcg::graph::TerrainEvaluateNotes> workerNotes;
-
-			/// Warnings of the evaluation on the base, the terrain preparation and the placement step.
-			std::vector<String> warnings;
-		};
 
 		/// The section assets of rebuilds. They stay loaded from one rebuild to the next (parsing and the staleness check
 		/// of a large section take a good part of a second each); an asset whose files changed since is read again.
@@ -390,6 +355,20 @@ namespace mmo
 				entry.asset.reset();
 			}
 			it = m_entries.emplace(path, std::move(entry)).first;
+		}
+
+		error = it->second.error;
+		return it->second.asset.get();
+	}
+
+	const pcg::SectionAsset* SectionAssetCache::Find(const String& path, String& error, bool& cached) const
+	{
+		const auto it = m_entries.find(path);
+		cached = it != m_entries.end();
+		if (!cached)
+		{
+			error.clear();
+			return nullptr;
 		}
 
 		error = it->second.error;
@@ -755,234 +734,434 @@ namespace mmo
 		}
 	}
 
-	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
-		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
-		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap)
+	struct GraphRebuildJob::Impl
 	{
-		const Clock::time_point start = Clock::now();
-		GeneratorBuildReport report;
-		const auto refuse = [&report, &start, &record](const String& reason)
-		{
-			report.error = "Rebuild of '" + record.name + "' refused, the world was not changed: " + reason;
-			report.milliseconds = MillisecondsSince(start);
-			ELOG("PCG: " << report.error);
-			return report;
-		};
+		Clock::time_point start = Clock::now();
+		terrain::Terrain* terrain = nullptr;
 
-		String error;
+		/// The record as it was when the job started (its content is the session's business).
+		pcg::GraphInstanceRecord record;
+		pcg::graph::Graph graph;
+
+		/// Copies of the placed controls the evaluation reads, and the resolved controls pointing at them.
+		std::deque<pcg::graph::ControlType> controlTypes;
+		std::deque<pcg::graph::ControlInstance> controlInstances;
+		std::vector<pcg::graph::ResolvedControl> controls;
+		std::vector<String> contextWarnings;
+		std::vector<UnresolvedPlacedControl> unresolved;
+
+		/// The terrain the evaluation reads (warmed tile cache, cache only, the revision fixed at the start).
+		std::unique_ptr<EditorTerrainSampler> sampler;
+		pcg::graph::EvalContext context;
+
+		std::vector<PathSpline> neighbourAreas;
+		std::vector<String> neighbourNames;
+		std::shared_ptr<SectionAssetCache> sections;
+
+		pcg::WorldRect areaRect{};
+		ContentRebuildSession session;
+		uint64 terrainRevision = 0;
+
+		/// Read-only terrain access of Run (the session's access writes, and is main thread only).
+		std::unique_ptr<EditorTerrainAccess> readAccess;
+
+		/// Texture key to tile layer matching of the terrain samples: the warmed main cache, then one copy per further
+		/// worker thread with its own notes.
+		std::unique_ptr<EditorTextureLayers> layers;
+		pcg::graph::TextureLayerLookup lookup;
+		pcg::graph::TerrainEvaluateNotes notes;
+		std::vector<std::unique_ptr<EditorTextureLayers>> workerLayers;
+		std::vector<pcg::graph::TextureLayerLookup> workerLookups;
+		std::vector<pcg::graph::TerrainEvaluateNotes> workerNotes;
+
+		// Results of Run.
+		bool ran = false;
+		String runError;
+		std::set<String> missingSections;
+		GraphInstanceEvaluation evaluation;
+		pcg::graph::PreparedTerrain prepared;
+		pcg::TerrainSamples samples;
+		std::vector<float> spawnOffsets;
+
+		std::atomic<bool> canceled{ false };
+	};
+
+	GraphRebuildJob::GraphRebuildJob()
+		: m_impl(std::make_unique<Impl>())
+	{
+	}
+
+	GraphRebuildJob::~GraphRebuildJob()
+	{
+		if (m_impl && m_impl->session.active)
+		{
+			ELOG("PCG: a rebuild of '" << m_impl->record.name << "' was dropped without Commit or Abort; its old terrain contribution is not on the terrain");
+		}
+	}
+
+	uint64 GraphRebuildJob::GetInstanceId() const
+	{
+		return m_impl->record.id;
+	}
+
+	double GraphRebuildJob::GetElapsedSeconds() const
+	{
+		return MillisecondsSince(m_impl->start) / 1000.0;
+	}
+
+	void GraphRebuildJob::Cancel()
+	{
+		m_impl->canceled = true;
+	}
+
+	bool GraphRebuildJob::IsCanceled() const
+	{
+		return m_impl->canceled;
+	}
+
+	bool GraphRebuildJob::NeedsSectionAssets() const
+	{
+		return !m_impl->missingSections.empty();
+	}
+
+	void GraphRebuildJob::LoadSectionAssets()
+	{
+		for (const String& path : m_impl->missingSections)
+		{
+			String ignored;
+			m_impl->sections->Get(path, ignored);
+		}
+		m_impl->missingSections.clear();
+	}
+
+	std::unique_ptr<GraphRebuildJob> GraphRebuildJob::Start(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
+		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls, String& error)
+	{
 		if (!CheckArea(record.area, error))
 		{
-			return refuse(error);
+			return nullptr;
+		}
+
+		terrain::Terrain* terrain = editor.GetTerrain();
+		if (!terrain || !editor.HasTerrain())
+		{
+			error = "the world has no terrain";
+			return nullptr;
 		}
 
 		// An area wholly outside the terrain would clamp to an inverted influence.
-		if (const terrain::Terrain* terrain = editor.GetTerrain())
+		const pcg::WorldRect areaRect = ClampToTerrain(GetAreaRect(record.area), *terrain);
+		if (areaRect.minX > areaRect.maxX || areaRect.minZ > areaRect.maxZ)
 		{
-			const pcg::WorldRect clamped = ClampToTerrain(GetAreaRect(record.area), *terrain);
-			if (clamped.minX > clamped.maxX || clamped.minZ > clamped.maxZ)
-			{
-				return refuse("the area lies outside the terrain");
-			}
+			error = "the area lies outside the terrain";
+			return nullptr;
 		}
 
 		for (const pcg::GraphInstanceRecord* other : otherInstances)
 		{
 			if (other && other->id != record.id && pcg::AreasOverlap(record.area, other->area))
 			{
-				return refuse("its area overlaps the area of graph instance '" + other->name + "' (" + FormatId(other->id) + ")");
+				error = "its area overlaps the area of graph instance '" + other->name + "' (" + FormatId(other->id) + ")";
+				return nullptr;
 			}
 		}
 
-		// Every refusal is decided here, before ApplyGeneratedContent changes anything: a dry run on the live
-		// terrain (which still carries the previous contribution). Neither the checks nor the section assets, the
-		// op geometry or the influence depend on the heights; content.prepare repeats the run on the base terrain
-		// and fails only on what this run cannot see (ApplyGeneratedContent then restores the old contribution).
-		GraphInstanceEvaluation dryRun;
-		if (!EvaluateGraphInstance(editor, record, controls, dryRun, error))
+		std::unique_ptr<GraphRebuildJob> job(new GraphRebuildJob());
+		Impl& impl = *job->m_impl;
+		impl.terrain = terrain;
+		impl.record = record;
+		impl.record.content = pcg::OwnedContent();
+		impl.areaRect = areaRect;
+		if (!LoadGraphAsset(record.graphPath, impl.graph, error))
 		{
-			return refuse(error);
+			return nullptr;
 		}
 
-		// The warnings come from the run on the base terrain (content.prepare), which takes these over only when it
-		// reuses the dry run.
-		std::vector<String> dryWarnings;
-		if (!CheckEvaluation(dryRun, record.area, dryWarnings, error))
+		// Resolves the controls and loads the pages the evaluation reads.
+		GraphInstanceContext live;
+		if (!BuildGraphInstanceContext(editor, record, controls, live, error))
 		{
-			return refuse(error);
+			return nullptr;
 		}
 
-		// EvaluateGraphInstance built the context, so the terrain exists.
-		terrain::Terrain* terrain = editor.GetTerrain();
-		const GroundFunction liveGround = [terrain](const float x, const float z)
+		// The resolved controls point into the procedural mode, which keeps changing while the job runs: copy them.
+		std::map<const pcg::graph::ControlType*, const pcg::graph::ControlType*> typeCopies;
+		for (const pcg::graph::ResolvedControl& resolved : live.controls)
+		{
+			pcg::graph::ResolvedControl copy = resolved;
+			if (resolved.type)
+			{
+				auto it = typeCopies.find(resolved.type);
+				if (it == typeCopies.end())
+				{
+					impl.controlTypes.push_back(*resolved.type);
+					it = typeCopies.emplace(resolved.type, &impl.controlTypes.back()).first;
+				}
+				copy.type = it->second;
+			}
+			if (resolved.instance)
+			{
+				impl.controlInstances.push_back(*resolved.instance);
+				copy.instance = &impl.controlInstances.back();
+			}
+			impl.controls.push_back(std::move(copy));
+		}
+		impl.contextWarnings = live.warnings;
+		impl.unresolved = live.unresolved;
+
+		if (GraphHasTerrainOps(impl.graph))
+		{
+			CollectSeamNeighbours(record, otherInstances, impl.neighbourAreas, &impl.neighbourNames);
+		}
+		impl.sections = RebuildSectionAssets();
+
+		// Takes the old contribution out of the terrain data; the world keeps showing it until Commit or Abort.
+		if (!BeginContentRebuild(editor, areaRect, record.content, impl.session, error))
+		{
+			return nullptr;
+		}
+		impl.terrainRevision = editor.GetTerrainRevision();
+
+		// Everything Run reads besides the terrain heights is read here, on the base terrain.
+		const uint64 revision = impl.terrainRevision;
+		impl.sampler = std::make_unique<EditorTerrainSampler>(*terrain, [revision]() { return revision; });
+		pcg::graph::Bounds2D bounds = pcg::graph::SplineBounds(record.area);
+		for (const pcg::graph::ResolvedControl& control : impl.controls)
+		{
+			const pcg::graph::Bounds2D controlBounds = GetControlBounds(control);
+			if (controlBounds.valid && pcg::graph::SaneBounds(controlBounds) && controlBounds.Intersects(pcg::graph::SplineBounds(record.area)))
+			{
+				bounds.Add(controlBounds.minX, controlBounds.minZ);
+				bounds.Add(controlBounds.maxX, controlBounds.maxZ);
+			}
+		}
+		const float margin = static_cast<float>(terrain::constants::PageSize / 8.0);
+		impl.sampler->PrewarmTiles({ bounds.minX - margin, bounds.minZ - margin, bounds.maxX + margin, bounds.maxZ + margin });
+		impl.sampler->SetCacheOnly(true);
+
+		impl.context = pcg::graph::EvalContext();
+		impl.context.instanceSeed = record.seed;
+		impl.context.region = record.area;
+		impl.context.parameters = record.parameterOverrides;
+		impl.context.controls = &impl.controls;
+		// 0: Evaluate hashes the controls itself.
+		impl.context.controlsRevision = 0;
+		impl.context.terrain = impl.sampler.get();
+		impl.context.pointLimit = record.pointLimit;
+
+		impl.readAccess = std::make_unique<EditorTerrainAccess>(*terrain);
+		impl.layers = std::make_unique<EditorTextureLayers>(*terrain);
+		impl.layers->Prewarm(areaRect);
+		impl.lookup = impl.layers->MakeLookup();
+		const size_t workers = pcg::HardwareWorkers();
+		impl.workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
+		for (size_t i = 1; i < workers; ++i)
+		{
+			impl.workerLayers.push_back(impl.layers->CopyWarmCache());
+			impl.workerLookups.push_back(impl.workerLayers.back()->MakeLookup());
+		}
+		return job;
+	}
+
+	void GraphRebuildJob::Run()
+	{
+		Impl& impl = *m_impl;
+		impl.ran = false;
+		impl.runError.clear();
+		impl.missingSections.clear();
+		impl.notes = pcg::graph::TerrainEvaluateNotes{};
+		for (pcg::graph::TerrainEvaluateNotes& notes : impl.workerNotes)
+		{
+			notes = pcg::graph::TerrainEvaluateNotes{};
+		}
+		if (impl.canceled)
+		{
+			return;
+		}
+
+		// The graph on the base terrain (EvaluateLoadedGraph with the copied context).
+		GraphInstanceEvaluation& evaluation = impl.evaluation;
+		evaluation = GraphInstanceEvaluation();
+		evaluation.graph = impl.graph;
+		evaluation.warnings = impl.contextWarnings;
+		evaluation.unresolved = impl.unresolved;
+		pcg::graph::MergeParameters(evaluation.graph.parameters, impl.record.parameterOverrides, &evaluation.warnings);
+		evaluation.result = pcg::graph::Evaluate(evaluation.graph, pcg::graph::NodeRegistry::Default(), impl.context, nullptr);
+		if (!evaluation.result.issues.empty())
+		{
+			// Commit refuses with the issues.
+			impl.ran = true;
+			return;
+		}
+		evaluation.collected = pcg::graph::CollectPlacements(evaluation.graph, evaluation.result, impl.record.area);
+		evaluation.warnings.insert(evaluation.warnings.end(), evaluation.collected.warnings.begin(), evaluation.collected.warnings.end());
+		if (impl.canceled)
+		{
+			return;
+		}
+
+		// Terrain ops on the base ground. Section assets come from the cache only; missing ones are loaded on the main
+		// thread (LoadSectionAssets) and the job runs again.
+		terrain::Terrain* terrain = impl.terrain;
+		const GroundFunction ground = [terrain](const float x, const float z)
 		{
 			return terrain->GetSmoothHeightAt(x, z);
 		};
-
-		// Touching terrain-writing instances share seams with this one: no border fade along them.
-		std::vector<PathSpline> neighbourAreas;
-		std::vector<String> neighbourNames;
-		if (GraphHasTerrainOps(dryRun.graph))
+		const pcg::graph::SectionAssetProvider provider = [&impl](const String& path, String& assetError) -> const pcg::SectionAsset*
 		{
-			CollectSeamNeighbours(record, otherInstances, neighbourAreas, &neighbourNames);
-		}
-
-		const std::shared_ptr<SectionAssetCache> sections = RebuildSectionAssets();
-		pcg::graph::PreparedTerrain dryTerrain;
-		if (!PrepareTerrainOps(dryRun, record, liveGround, *sections, neighbourAreas, dryTerrain, error))
-		{
-			return refuse(error);
-		}
-
-		// Clamped to the terrain: the bounds include tangent handles, which may reach past its edge (nothing is
-		// written there anyway) while ApplyGeneratedContent needs an influence inside the terrain.
-		const pcg::WorldRect areaRect = ClampToTerrain(GetAreaRect(record.area), *terrain);
-		if (!dryTerrain.IsEmpty() && checkTerrainOverlap && !checkTerrainOverlap(areaRect, error))
-		{
-			return refuse(error);
-		}
-
-		const auto state = std::make_shared<GraphBuildState>();
-		state->layers = std::make_unique<EditorTextureLayers>(*terrain);
-		state->lookup = state->layers->MakeLookup();
-
-		GeneratedContent content;
-		// Writes are clipped to the area. The terrain step is always set, so the previous contribution is undone on
-		// every rebuild and a graph without terrain ops writes nothing.
-		content.influence = areaRect;
-		// Ocean pages only become terrain where an op reaches (an empty rect: nowhere).
-		content.writeRects = { dryTerrain.IsEmpty() ? pcg::WorldRect{ 1.0f, 1.0f, 0.0f, 0.0f } : dryTerrain.GetInfluence() };
-		content.waterMaterial = dryTerrain.GetWaterMaterial();
-
-		const pcg::graph::Graph& graph = dryRun.graph;
-		const bool dryEmpty = dryTerrain.IsEmpty();
-		const pcg::WorldRect dryInfluence = dryTerrain.GetInfluence();
-		const String dryWaterMaterial = dryTerrain.GetWaterMaterial();
-
-		// Without a recorded contribution the live terrain already is the base: unless the terrain changed since the dry
-		// run (an ocean page materialised for the writes), prepare takes over the dry run instead of evaluating again.
-		const bool liveIsBase = record.content.terrain.IsEmpty();
-		const uint64 dryTerrainRevision = editor.GetTerrainRevision();
-		content.prepare = [&editor, &record, &controls, &graph, &dryRun, &dryWarnings, &dryTerrain, &neighbourAreas, liveIsBase, dryTerrainRevision,
-			sections, state, dryEmpty, dryInfluence, dryWaterMaterial](const GroundFunction& ground, String& prepareError)
-		{
-			// The previous contribution is undone: the graph sees the base terrain.
-			GraphInstanceEvaluation base;
-			std::vector<String> warnings;
-			if (liveIsBase && editor.GetTerrainRevision() == dryTerrainRevision)
+			bool cached = false;
+			const pcg::SectionAsset* asset = impl.sections->Find(path, assetError, cached);
+			if (!cached)
 			{
-				// Same terrain, same ground (GetSmoothHeightAt): the dry run's evaluation and prepared ops are what this
-				// run would produce. The dry run is not used after this step.
-				base = std::move(dryRun);
-				warnings = std::move(dryWarnings);
-				state->terrain = std::move(dryTerrain);
-				state->reusedDryRun = true;
+				impl.missingSections.insert(path);
+				assetError = "not loaded yet";
 			}
-			else
+			return asset;
+		};
+		String prepareError;
+		if (!impl.prepared.Prepare(pcg::graph::CollectTerrainOps(evaluation.graph, evaluation.result), ground, provider, impl.record.area,
+			impl.record.borderFade, prepareError, impl.neighbourAreas))
+		{
+			if (impl.missingSections.empty())
 			{
-				base.graph = graph;
-				if (!EvaluateLoadedGraph(editor, record, controls, base, prepareError) ||
-					!CheckEvaluation(base, record.area, warnings, prepareError) ||
-					!PrepareTerrainOps(base, record, ground, *sections, neighbourAreas, state->terrain, prepareError))
+				impl.runError = "the terrain ops could not be prepared: " + prepareError;
+				impl.ran = true;
+			}
+			return;
+		}
+		if (impl.canceled)
+		{
+			return;
+		}
+
+		// Every terrain sample, on one target per hardware thread.
+		std::vector<pcg::ChannelTerrainTargetFunction> targets;
+		targets.push_back([&impl](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
+		{
+			return impl.prepared.Evaluate(x, z, baseHeight, impl.lookup, &impl.notes, channels);
+		});
+		for (size_t i = 0; i < impl.workerLookups.size(); ++i)
+		{
+			targets.push_back([&impl, i](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
+			{
+				return impl.prepared.Evaluate(x, z, baseHeight, impl.workerLookups[i], &impl.workerNotes[i], channels);
+			});
+		}
+		pcg::ComputeTerrainSamples(*impl.readAccess, impl.areaRect, targets, impl.samples);
+
+		// Spawns keep their height above the base ground.
+		impl.spawnOffsets.clear();
+		for (const pcg::Placement& placement : evaluation.collected.placements)
+		{
+			impl.spawnOffsets.push_back(placement.position.y - ground(placement.position.x, placement.position.z));
+		}
+		impl.ran = !impl.canceled;
+	}
+
+	void GraphRebuildJob::Abort(pcg::GraphInstanceRecord& record)
+	{
+		AbortContentRebuild(m_impl->session, record.content);
+	}
+
+	GeneratorBuildReport GraphRebuildJob::Commit(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
+		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
+		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap)
+	{
+		Impl& impl = *m_impl;
+		GeneratorBuildReport report;
+		const auto refuse = [this, &impl, &report, &record](const String& reason)
+		{
+			Abort(record);
+			report.error = "Rebuild of '" + impl.record.name + "' refused, the world was not changed: " + reason;
+			report.milliseconds = MillisecondsSince(impl.start);
+			ELOG("PCG: " << report.error);
+			return report;
+		};
+
+		if (impl.canceled)
+		{
+			return refuse("it was canceled");
+		}
+
+		std::vector<String> warnings;
+		for (int attempt = 0;; ++attempt)
+		{
+			if (editor.GetTerrainRevision() != impl.terrainRevision)
+			{
+				return refuse("the terrain changed while it was computed; rebuild again");
+			}
+			if (!impl.ran)
+			{
+				return refuse(impl.runError.empty() ? "it was not computed" : impl.runError);
+			}
+
+			String error;
+			warnings.clear();
+			if (!CheckEvaluation(impl.evaluation, impl.record.area, warnings, error))
+			{
+				return refuse(error);
+			}
+			if (!impl.runError.empty())
+			{
+				return refuse(impl.runError);
+			}
+
+			// Other instances may have moved since the start.
+			for (const pcg::GraphInstanceRecord* other : otherInstances)
+			{
+				if (other && other->id != record.id && pcg::AreasOverlap(impl.record.area, other->area))
 				{
-					return false;
+					return refuse("its area overlaps the area of graph instance '" + other->name + "' (" + FormatId(other->id) + ")");
 				}
 			}
-
-			// writeRects and waterMaterial were fixed from the dry run before the undo (ApplyGeneratedContent reads them
-			// first). Op geometry and materials do not depend on the heights, so they must not differ; if they do
-			// anyway, ocean pages outside the dry influence would silently drop writes or the water would get the
-			// wrong material, so the build fails (and the old contribution is put back).
-			const pcg::WorldRect influence = state->terrain.GetInfluence();
-			const bool contained = state->terrain.IsEmpty() || (!dryEmpty && influence.minX >= dryInfluence.minX &&
-				influence.minZ >= dryInfluence.minZ && influence.maxX <= dryInfluence.maxX && influence.maxZ <= dryInfluence.maxZ);
-			if (!contained)
+			if (!impl.prepared.IsEmpty() && checkTerrainOverlap && !checkTerrainOverlap(impl.areaRect, error))
 			{
-				prepareError = "the terrain ops reach further on the base terrain than on the live terrain; rebuild again";
-				return false;
-			}
-			if (state->terrain.GetWaterMaterial() != dryWaterMaterial)
-			{
-				prepareError = "the water material of the terrain ops differs between the live and the base terrain ('"
-					+ dryWaterMaterial + "' vs '" + state->terrain.GetWaterMaterial() + "'); rebuild again";
-				return false;
+				return refuse(error);
 			}
 
-			state->spawns = std::move(base.collected.placements);
-			state->clipped = base.collected.clipped;
-			state->spawnOffsets.clear();
-			for (const pcg::Placement& placement : state->spawns)
+			// Ocean pages only become terrain where an op reaches; doing so changes the base, so the job runs again on it.
+			const std::vector<pcg::WorldRect> writeRects = { impl.prepared.IsEmpty() ? pcg::WorldRect{ 1.0f, 1.0f, 0.0f, 0.0f } : impl.prepared.GetInfluence() };
+			if (attempt > 0 || !NeedsOceanMaterialization(*impl.terrain, impl.areaRect, writeRects))
 			{
-				state->spawnOffsets.push_back(placement.position.y - ground(placement.position.x, placement.position.z));
+				break;
 			}
-
-			state->warnings = std::move(warnings);
-			const std::vector<String>& terrainWarnings = state->terrain.GetWarnings();
-			state->warnings.insert(state->warnings.end(), terrainWarnings.begin(), terrainWarnings.end());
-			return true;
-		};
-
-		// Each Apply pass asks only for its channel, so the splat and water passes skip the height ops.
-		content.terrain = [state](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
-		{
-			return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes, channels);
-		};
-
-		// One target per hardware thread: the main one, then copies of the layer cache warmed over the influence (the
-		// copies never read the terrain, so they may run on other threads).
-		content.terrainWorkers = [state, areaRect]()
-		{
-			const uint32 workers = std::max(1u, std::thread::hardware_concurrency());
-			state->layers->Prewarm(areaRect);
-			state->workerLayers.clear();
-			state->workerLookups.clear();
-			state->workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
-			for (uint32 i = 1; i < workers; ++i)
+			MaterializeOceanPagesForWrites(*impl.terrain, impl.areaRect, writeRects);
+			impl.terrainRevision = editor.GetTerrainRevision();
+			Run();
+			while (NeedsSectionAssets())
 			{
-				state->workerLayers.push_back(state->layers->CopyWarmCache());
-				state->workerLookups.push_back(state->workerLayers.back()->MakeLookup());
+				LoadSectionAssets();
+				Run();
 			}
+		}
 
-			std::vector<pcg::ChannelTerrainTargetFunction> targets;
-			targets.push_back([state](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
-			{
-				return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes, channels);
-			});
-			for (size_t i = 0; i + 1 < workers; ++i)
-			{
-				targets.push_back([state, i](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
-				{
-					return state->terrain.Evaluate(x, z, baseHeight, state->workerLookups[i], &state->workerNotes[i], channels);
-				});
-			}
-			return targets;
-		};
-
-		content.placements = [state](const GroundFunction& ground, const GroundFunction&, std::vector<pcg::Placement>& out)
+		const std::vector<pcg::Placement>& spawns = impl.evaluation.collected.placements;
+		size_t sectionPlacementCount = 0;
+		const auto placements = [&impl, &spawns, &warnings, &sectionPlacementCount](const GroundFunction& ground, const GroundFunction&, std::vector<pcg::Placement>& out)
 		{
 			// Spawns keep their height above the ground, now the final one.
 			out.clear();
 			std::set<uint64> keys;
-			for (size_t i = 0; i < state->spawns.size(); ++i)
+			for (size_t i = 0; i < spawns.size(); ++i)
 			{
-				pcg::Placement placement = state->spawns[i];
-				placement.position.y = ground(placement.position.x, placement.position.z) + state->spawnOffsets[i];
+				pcg::Placement placement = spawns[i];
+				placement.position.y = ground(placement.position.x, placement.position.z) + impl.spawnOffsets[i];
 				keys.insert(placement.key);
 				out.push_back(std::move(placement));
 			}
 
 			std::vector<pcg::Placement> sectionPlacements;
-			state->terrain.BuildPlacements(ground, sectionPlacements, &state->warnings);
-			state->sectionPlacements = 0;
+			impl.prepared.BuildPlacements(ground, sectionPlacements, &warnings);
 			for (pcg::Placement& placement : sectionPlacements)
 			{
 				placement.key = pcg::Hash(placement.key, 0, 0, SectionPlacementKeySalt);
 				if (!keys.insert(placement.key).second)
 				{
-					state->warnings.push_back("a section placement (" + placement.asset + ") was dropped: its key collides with another placement");
+					warnings.push_back("a section placement (" + placement.asset + ") was dropped: its key collides with another placement");
 					continue;
 				}
 				out.push_back(std::move(placement));
-				++state->sectionPlacements;
+				++sectionPlacementCount;
 			}
 
 			std::sort(out.begin(), out.end(), [](const pcg::Placement& a, const pcg::Placement& b)
@@ -991,54 +1170,81 @@ namespace mmo
 			});
 		};
 
-		report = ApplyGeneratedContent(editor, content, record.content, record.id, GraphInstanceLabel);
-		for (const pcg::graph::TerrainEvaluateNotes& notes : state->workerNotes)
+		const std::vector<String>& terrainWarnings = impl.prepared.GetWarnings();
+		warnings.insert(warnings.end(), terrainWarnings.begin(), terrainWarnings.end());
+
+		report = FinishContentRebuild(editor, impl.session, impl.samples, String(), impl.prepared.GetWaterMaterial(), placements,
+			record.content, record.id, GraphInstanceLabel);
+		for (const pcg::graph::TerrainEvaluateNotes& notes : impl.workerNotes)
 		{
-			state->notes.missingLayerOps.insert(notes.missingLayerOps.begin(), notes.missingLayerOps.end());
-			state->notes.missingSectionLayers.insert(notes.missingSectionLayers.begin(), notes.missingSectionLayers.end());
+			impl.notes.missingLayerOps.insert(notes.missingLayerOps.begin(), notes.missingLayerOps.end());
+			impl.notes.missingSectionLayers.insert(notes.missingSectionLayers.begin(), notes.missingSectionLayers.end());
 		}
-		report.warnings.insert(report.warnings.end(), state->warnings.begin(), state->warnings.end());
-		state->terrain.DescribeNotes(state->notes, report.warnings);
-		report.milliseconds = MillisecondsSince(start);
+		report.warnings.insert(report.warnings.end(), warnings.begin(), warnings.end());
+		impl.prepared.DescribeNotes(impl.notes, report.warnings);
 		if (!report.ok)
 		{
-			report.error = "Rebuild of '" + record.name + "' failed: " + report.error;
+			report.error = "Rebuild of '" + impl.record.name + "' failed: " + report.error;
+			report.milliseconds = MillisecondsSince(impl.start);
 			ELOG("PCG: " << report.error);
+			return report;
 		}
-		else
+
+		// The terrain write succeeded: the river paths of the terrain that was actually applied join the world's flow.
+		std::vector<terrain_io::water_flow::FlowPath> flowPaths;
+		impl.prepared.GetFlowPaths(flowPaths);
+		ApplyInstanceFlow(editor, record, controls, std::move(flowPaths), report.warnings);
+
+		// The seam set decides which edges do not fade; a neighbour that was created or deleted since the last build
+		// leaves its side of the seam as it was until it is rebuilt too.
+		const uint64 seamHash = impl.prepared.GetSeamHash();
+		if (seamHash != record.seamHash)
 		{
-			// The terrain write succeeded: the river paths of the terrain that was actually applied join the world's flow.
-			std::vector<terrain_io::water_flow::FlowPath> flowPaths;
-			state->terrain.GetFlowPaths(flowPaths);
-			ApplyInstanceFlow(editor, record, controls, std::move(flowPaths), report.warnings);
-
-			// The seam set decides which edges do not fade; a neighbour that was created or deleted since the last build
-			// leaves its side of the seam as it was until it is rebuilt too.
-			const uint64 seamHash = state->terrain.GetSeamHash();
-			if (seamHash != record.seamHash)
+			String touching;
+			for (const size_t index : impl.prepared.GetSeamNeighbours())
 			{
-				String touching;
-				for (const size_t index : state->terrain.GetSeamNeighbours())
+				if (index < impl.neighbourNames.size())
 				{
-					if (index < neighbourNames.size())
-					{
-						touching += (touching.empty() ? "'" : ", '") + neighbourNames[index] + "'";
-					}
+					touching += (touching.empty() ? "'" : ", '") + impl.neighbourNames[index] + "'";
 				}
-				report.warnings.push_back(touching.empty()
-					? "seams changed since the last build of '" + record.name + "'; rebuild the touching instances too"
-					: "seams changed since the last build of " + touching + "; rebuild " + (state->terrain.GetSeamNeighbours().size() > 1 ? "them" : "it") + " too");
-				WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << report.warnings.back());
-				record.seamHash = seamHash;
 			}
-			report.milliseconds = MillisecondsSince(start);
-
-			ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << state->spawns.size()
-				<< " spawn placement(s) inside the area, " << state->clipped << " clipped, " << state->sectionPlacements
-				<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written"
-				<< (state->reusedDryRun ? " (no previous contribution: the dry run was reused)" : ""));
+			report.warnings.push_back(touching.empty()
+				? "seams changed since the last build of '" + record.name + "'; rebuild the touching instances too"
+				: "seams changed since the last build of " + touching + "; rebuild " + (impl.prepared.GetSeamNeighbours().size() > 1 ? "them" : "it") + " too");
+			WLOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << report.warnings.back());
+			record.seamHash = seamHash;
 		}
+		report.milliseconds = MillisecondsSince(impl.start);
+
+		ILOG("PCG: graph instance '" << record.name << "' (" << FormatId(record.id) << "): " << spawns.size()
+			<< " spawn placement(s) inside the area, " << impl.evaluation.collected.clipped << " clipped, " << sectionPlacementCount
+			<< " section placement(s), " << report.terrainSamples << " terrain sample(s) written");
 		return report;
+	}
+
+	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
+		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
+		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap)
+	{
+		// The steps of a background rebuild, on this thread.
+		String error;
+		const std::unique_ptr<GraphRebuildJob> job = GraphRebuildJob::Start(editor, record, otherInstances, controls, error);
+		if (!job)
+		{
+			GeneratorBuildReport report;
+			report.error = "Rebuild of '" + record.name + "' refused, the world was not changed: " + error;
+			ELOG("PCG: " << report.error);
+			return report;
+		}
+
+		// Each run stops at the first section asset that is not loaded yet; every round loads at least one.
+		job->Run();
+		while (job->NeedsSectionAssets())
+		{
+			job->LoadSectionAssets();
+			job->Run();
+		}
+		return job->Commit(editor, record, otherInstances, controls, checkTerrainOverlap);
 	}
 
 	GeneratorBuildReport DeleteGraphInstanceContent(IWorldEditor& editor, pcg::GraphInstanceRecord& record, const ProceduralEditMode& controls)

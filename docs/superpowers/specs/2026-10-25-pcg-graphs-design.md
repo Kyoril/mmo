@@ -409,3 +409,21 @@ Task 7 (Falwyn stream and waterfall):
   `BuildNearestGrid` builds its rows in parallel (`pcg::ParallelFor`, plain threads: the editor and tools do not
   initialise the TaskSystem); rebuilds keep section assets loaded (`DropChanged` rereads changed files). 5.0 s in
   the CLI (Debug), of which ~2 s are the one-time page and asset loads an open editor does not repeat.
+- **Background rebuilds and live rebuild (2026-11-03, user request: non-blocking rebuilds, rebuild on release).** A
+  graph instance rebuild is a `GraphRebuildJob` in three steps. Start (main thread): refusals that need no evaluation,
+  page loading, copies of the record, graph, placed controls and tile materials, then `BeginContentRebuild` takes the
+  old contribution out of the terrain data (normals included) with the GPU updates deferred, so the world keeps showing
+  the old build. Run (worker thread): evaluate on that base terrain, prepare the ops, `pcg::ComputeTerrainSamples` (only
+  reads the terrain; section assets from the cache only, a miss is loaded on the main thread and Run repeats). Commit
+  (main thread): the remaining refusals (put the old build back exactly), ocean materialisation (then Run again on the
+  new base), `WriteTerrainSamples` (refuses if a base height changed), one GPU update, placements, flow, seams. The
+  synchronous rebuild (CLI, Rebuild All) runs the same steps inline, so both write the same bytes (checked on
+  FalwynValley: sync, `--pcg-rebuild --background` and the committed data are identical). No dry run on the live
+  terrain any more: everything is computed once, on the base. Safety rules: one job at a time; every other terrain
+  write of the Procedural mode (Rebuild, Rebuild All, Delete, leaving the mode, Load) waits for it first; streaming only
+  unloads tiles, never the arrays the job reads; the job never logs and never touches materials or the asset registry.
+  Live rebuild (checkbox, off by default): a graph instance whose inputs hash changed (record without its content, graph
+  revision, control library revision, the placed controls whose bounds may reach the area) is queued when no edit is in
+  progress (no mouse button, drag, gizmo or active widget); a request for the instance being rebuilt cancels that job
+  (old build back) and starts again. Turning it on counts the current state as built. Main thread cost per background
+  rebuild (Debug): Start ~0.25 s (+ first page/asset loads), Commit ~0.7 s; the rest (~2-3 s) runs in the background.

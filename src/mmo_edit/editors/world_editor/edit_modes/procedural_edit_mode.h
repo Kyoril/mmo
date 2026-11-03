@@ -24,8 +24,12 @@
 
 #include <imgui.h>
 
+#include <atomic>
 #include <filesystem>
+#include <functional>
 #include <map>
+#include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -56,6 +60,9 @@ namespace mmo
 		/// @param camera The camera used to project the spline handles.
 		ProceduralEditMode(IWorldEditor& editor, Camera& camera);
 
+		/// @brief Cancels a background rebuild (its old build goes back) and waits for its thread.
+		~ProceduralEditMode() override;
+
 	public:
 		/// @copydoc WorldEditMode::GetName
 		const char* GetName() const override;
@@ -64,7 +71,12 @@ namespace mmo
 		void DrawDetails() override;
 
 		/// @copydoc WorldEditMode::OnDeactivate
+		/// @details Finishes a background rebuild first (waits for it and writes it).
 		void OnDeactivate() override;
+
+		/// @brief Runs the background rebuilds: writes a finished one, starts the next queued one when no edit is in
+		///        progress, and in live mode queues the graph instances whose inputs changed (see SetLiveRebuild).
+		void OnUpdate(float deltaSeconds) override;
 
 		/// @copydoc WorldEditMode::OnMouseDown
 		void OnMouseDown(float x, float y) override;
@@ -121,12 +133,43 @@ namespace mmo
 		/// @return True if all controls were rebuilt (also when there are none).
 		bool RebuildAll(String& error);
 
+		/// @brief Rebuilds a graph instance in the background (GraphRebuildJob): the expensive part runs on a worker thread,
+		///        the world keeps showing the old build until the new one is written (OnUpdate), the editor stays usable.
+		///        One rebuild runs at a time; requests wait in a queue, and a request for the instance being rebuilt
+		///        cancels that rebuild (the old build goes back) and rebuilds it again. Any other terrain change of this mode
+		///        (Rebuild, RebuildAll, DeleteControl, leaving the mode) first waits for the running rebuild.
+		/// @param controlId Id of the graph instance.
+		void RequestBackgroundRebuild(uint64 controlId);
+
+		/// @brief Whether a background rebuild is running or queued.
+		[[nodiscard]] bool HasBackgroundRebuilds() const { return m_rebuildJob != nullptr || !m_rebuildQueue.empty(); }
+
+		/// @brief Waits for the running background rebuild and writes it (main thread).
+		void WaitForBackgroundRebuild();
+
+		/// @brief Requests a background rebuild of a graph instance and drives OnUpdate until no background rebuild is left,
+		///        for unattended runs (mmo_edit --pcg-rebuild --background): the same threads and steps as in the editor.
+		/// @return Whether the instance's build succeeded (error receives the report's error otherwise).
+		bool RebuildInBackgroundAndWait(uint64 controlId, String& error);
+
+		/// @brief Drops the queued background rebuilds and cancels the running one (its old build goes back).
+		void CancelBackgroundRebuilds();
+
+		/// @brief Live rebuild: when an edit ends (button released, no field active), every graph instance whose inputs
+		///        changed since its last build (its record, the graph as last read, the control types, the placed controls
+		///        that may reach its area) is rebuilt in the background. Turning it on counts what is built now as current.
+		void SetLiveRebuild(bool enabled);
+
+		/// @brief Whether live rebuild is on.
+		[[nodiscard]] bool IsLiveRebuild() const { return m_liveRebuild; }
+
 		/// @brief Rebuilds one control. An oasis is refused if the recipe is not loaded; a section
 		///        path if its section asset is missing or unreadable (a stale asset only warns). Both
 		///        are refused if their influence overlaps another built oasis or section path; when their old or
 		///        new influence overlaps a graph instance's area, the status warns to rebuild that instance. A graph
 		///        instance is refused as RebuildGraphInstance describes (its saved graph is used). A placed
-		///        control has nothing to build (graph instances read it); the call succeeds without changes.
+		///        control has nothing to build (graph instances read it); the call succeeds without changes. Waits for a
+		///        background rebuild first; a graph instance is rebuilt on this thread (RebuildGraphInstance).
 		/// @param controlId Id of the control.
 		/// @param error Receives the reason when the call returns false.
 		/// @return True on success.
@@ -336,6 +379,8 @@ namespace mmo
 			uint32 heightAttempts = 0;
 			/// Overlay frame of the next attempt.
 			uint64 nextHeightAttemptFrame = 0;
+			/// Graph instances: GetGraphInstanceInputs of the last build attempt (or of when live rebuild was turned on).
+			uint64 builtInputs = 0;
 
 			/// @brief Id of the control.
 			uint64 Id() const
@@ -517,6 +562,31 @@ namespace mmo
 		/// @brief Rebuilds one graph instance (see Rebuild).
 		bool RebuildGraphInstanceControl(Control& control, String& error);
 
+		/// @brief The oasis and section path overlap check of a graph instance rebuild (looks the instance up by id).
+		std::function<bool(const pcg::WorldRect& areaRect, String& error)> MakeTerrainOverlapCheck(uint64 controlId);
+
+		/// @brief Status line, last report and log of a graph instance build; marks the control changed on success.
+		/// @return report.ok (error receives report.error otherwise).
+		bool ReportGraphInstanceBuild(Control& control, const GeneratorBuildReport& report, String& error);
+
+		/// @brief Hash of everything a rebuild of the graph instance reads that the editor changes (see SetLiveRebuild).
+		uint64 GetGraphInstanceInputs(const Control& control);
+
+		/// @brief Whether no edit is in progress (no mouse button held, no drag, no gizmo, no active widget).
+		bool IsEditIdle() const;
+
+		/// @brief Runs m_rebuildJob on m_rebuildThread.
+		void LaunchRebuildThread();
+
+		/// @brief Starts the first queued rebuild that can start (refusals are reported and skipped).
+		void StartQueuedRebuild();
+
+		/// @brief Joins the rebuild thread and ends the job: commits it, or aborts it when it was canceled.
+		void FinishBackgroundRebuild();
+
+		/// @brief OnUpdate's work.
+		void UpdateBackgroundRebuild();
+
 		/// @brief The records of every graph instance except the one with the id.
 		std::vector<const pcg::GraphInstanceRecord*> GetOtherGraphInstances(uint64 id) const;
 
@@ -678,6 +748,19 @@ namespace mmo
 
 		/// Whether RebuildAll is running (suppresses the re-ground hints of GetRegroundWarnings).
 		bool m_rebuildingAll = false;
+
+		/// The background rebuild (see RequestBackgroundRebuild), the thread running it while m_rebuildRunning, and the
+		/// GetGraphInstanceInputs it was started with.
+		std::unique_ptr<GraphRebuildJob> m_rebuildJob;
+		std::thread m_rebuildThread;
+		std::atomic<bool> m_rebuildRunning{ false };
+		uint64 m_rebuildJobInputs = 0;
+		/// Graph instances waiting for a background rebuild, in request order.
+		std::vector<uint64> m_rebuildQueue;
+		/// See SetLiveRebuild.
+		bool m_liveRebuild = false;
+		/// Bumped by InvalidateGraph (part of the live rebuild inputs).
+		uint64 m_graphRevision = 0;
 
 		/// Text of the extra tags field while it is being edited (applied when the edit ends).
 		String m_tagsBuffer;

@@ -1105,17 +1105,19 @@ int main(int argc, char* arg[])
 
 			if (std::string(args[i]) == "--pcg-rebuild")
 			{
-				// mmo_edit --pcg-rebuild <world.hwld> [--oasis|--id <id hex>]
+				// mmo_edit --pcg-rebuild <world.hwld> [--oasis|--id <id hex>] [--background]
 				// Opens the world, rebuilds one or all procedural controls (oases, section paths and graph
 				// instances; a graph instance uses its saved graph), saves the world and exits (0 = success).
+				// --background rebuilds the graph instance --id names on a worker thread, like the editor.
 				mmo::RedirectUnattendedLog("pcg_rebuild");
 
-				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis|--id <id hex>]"))
+				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis|--id <id hex>] [--background]"))
 				{
 					break;
 				}
 
 				uint64 oasisId = 0;
+				bool background = false;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
@@ -1126,6 +1128,11 @@ int main(int argc, char* arg[])
 							ELOG("--pcg-rebuild: --oasis/--id expects a non-zero hexadecimal id, got '" << args[j] << "'");
 							argumentsValid = false;
 						}
+					}
+					else if (std::string(args[j]) == "--background")
+					{
+						// A graph instance is rebuilt the way the editor does it in the background.
+						background = true;
 					}
 					else
 					{
@@ -1150,7 +1157,7 @@ int main(int argc, char* arg[])
 					else
 					{
 						std::string error;
-						if (!world->RebuildProcedural(oasisId, error))
+						if (!world->RebuildProcedural(oasisId, error, background))
 						{
 							ELOG("--pcg-rebuild: " << error);
 						}

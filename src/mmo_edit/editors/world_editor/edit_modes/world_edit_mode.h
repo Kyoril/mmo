@@ -275,6 +275,9 @@ namespace mmo
 
 		virtual void OnMouseHold(float deltaSeconds) {}
 
+		/// @brief Called once per frame while the mode is active.
+		virtual void OnUpdate(float deltaSeconds) {}
+
 		/// @brief Called on any frame where OnMouseHold is not called, so a mode that treats a
 		///        held drag as a continuous stroke can tell a pause apart from a fast movement.
 		///        Without it, leaving the viewport mid-drag and re-entering elsewhere looks

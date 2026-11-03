@@ -201,6 +201,67 @@ TEST_CASE("Apply with several worker targets writes what one target writes", "[t
 	CHECK(untouched.m_data == original);
 }
 
+TEST_CASE("Computed samples written later write what Apply writes", "[terrain_contribution]")
+{
+	FakeTerrain applied;
+	TerrainContribution direct;
+	Apply(applied, FullRect, Bowl, "Grass", direct);
+
+	// Computing changes nothing; the write then gives Apply's terrain and record.
+	FakeTerrain split;
+	const FakeTerrain::Data original = split.m_data;
+	const ChannelTerrainTargetFunction bowl = [](const float x, const float z, const float baseHeight, terrain_channel::Type)
+	{
+		return Bowl(x, z, baseHeight);
+	};
+	TerrainSamples samples;
+	ComputeTerrainSamples(split, FullRect, { bowl, bowl }, samples);
+	CHECK(samples.computed);
+	CHECK(split.m_data == original);
+
+	TerrainContribution written;
+	REQUIRE(WriteTerrainSamples(split, samples, "Grass", written));
+	CHECK(split.m_data == applied.m_data);
+	CHECK(written.outer.size() == direct.outer.size());
+	CHECK(written.inner.size() == direct.inner.size());
+	CHECK(written.splat.size() == direct.splat.size());
+	CHECK(written.waterQuads.size() == direct.waterQuads.size());
+	CHECK(written.waterHeights.size() == direct.waterHeights.size());
+	CHECK(written.materials.size() == direct.materials.size());
+	CHECK(written.touchedOuter.minX == direct.touchedOuter.minX);
+	CHECK(written.touchedOuter.maxZ == direct.touchedOuter.maxZ);
+
+	// Unapply restores the terrain the samples were computed on.
+	Unapply(split, written);
+	CHECK(split.m_data == original);
+
+	// A default (not computed) set writes nothing.
+	TerrainContribution none;
+	CHECK(WriteTerrainSamples(split, TerrainSamples{}, "Grass", none));
+	CHECK(none.IsEmpty());
+	CHECK(split.m_data == original);
+}
+
+TEST_CASE("Computed samples are refused when a base height changed since", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	TerrainSamples samples;
+	ComputeTerrainSamples(terrain, FullRect, { [](const float x, const float z, const float baseHeight, terrain_channel::Type)
+	{
+		return Bowl(x, z, baseHeight);
+	} }, samples);
+
+	// A vertex the bowl writes (the centre) changes after the samples were computed.
+	const int32 cx = static_cast<int32>(8.0 / terrain.GetLayout().vertexSpacing);
+	terrain.SetOuterHeight(cx, cx, terrain.GetOuterHeight(cx, cx) + 1.0f);
+	const FakeTerrain::Data changed = terrain.m_data;
+
+	TerrainContribution out;
+	CHECK_FALSE(WriteTerrainSamples(terrain, samples, "Grass", out));
+	CHECK(out.IsEmpty());
+	CHECK(terrain.m_data == changed);
+}
+
 TEST_CASE("Rebuild twice is identical", "[terrain_contribution]")
 {
 	FakeTerrain terrain;

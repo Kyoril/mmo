@@ -4,6 +4,7 @@
 
 #include "base/typedefs.h"
 #include "pcg/graph/evaluator.h"
+#include "pcg/terrain_contribution.h"
 
 #include <array>
 #include <functional>
@@ -19,7 +20,9 @@ namespace mmo
 
 	/// @brief Answers the PCG graph evaluator's terrain queries from the editor's terrain::Terrain.
 	/// @details Reads only; main thread only (the terrain is not thread safe). Pages that are not
-	///          loaded have no terrain: callers load the region first (IWorldEditor::EnsurePagesLoaded).
+	///          loaded have no terrain: callers load the region first (IWorldEditor::EnsurePagesLoaded). A rebuild
+	///          job uses one on its worker thread while nothing writes the terrain: PrewarmTiles reads the tile
+	///          materials first and SetCacheOnly keeps the worker from reading them.
 	class EditorTerrainSampler final : public pcg::graph::ITerrainSampler
 	{
 	public:
@@ -53,6 +56,13 @@ namespace mmo
 		/// @brief The value of the revision callback (0 without a callback).
 		uint64 Revision() const override;
 
+		/// @brief Caches the texture keys of every tile overlapping the rect (grown by one tile) whose page is loaded.
+		void PrewarmTiles(const pcg::WorldRect& rect);
+
+		/// @brief While set, a tile missing from the cache has no texture keys instead of being read (no material is
+		///        touched).
+		void SetCacheOnly(bool cacheOnly) { m_cacheOnly = cacheOnly; }
+
 	private:
 		/// @brief Normalised texture keys (pcg::NormalizeTextureKey) of the four paint layers of a tile,
 		///        cached per tile until the revision changes. All empty if the tile has no loaded page.
@@ -65,5 +75,7 @@ namespace mmo
 		/// Tile texture keys by global tile index, valid for m_cacheRevision.
 		mutable std::map<std::pair<int32, int32>, std::array<String, 4>> m_tileTextureKeys;
 		mutable uint64 m_cacheRevision = 0;
+		/// See SetCacheOnly.
+		bool m_cacheOnly = false;
 	};
 }

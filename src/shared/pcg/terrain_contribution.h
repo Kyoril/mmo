@@ -119,12 +119,64 @@ namespace mmo::pcg
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const ChannelTerrainTargetFunction& target,
 		const String& material, TerrainContribution& out);
 
-	/// Apply with one target per worker thread: the height and splat passes evaluate their samples on
-	/// targets.size() threads (no target is called from two threads at once, but different targets run
-	/// concurrently) and then write in the same order as Apply with a single target, so the result is the
-	/// same. Every target must return the same as targets[0]; the water and material passes use targets[0]
-	/// only. The terrain's height Get methods are called concurrently and must only read. Nothing is
-	/// written when `targets` is empty.
+	/// Apply with one target per worker thread: ComputeTerrainSamples, then WriteTerrainSamples. Writes the same as
+	/// Apply with targets[0] alone. Nothing is written when `targets` is empty.
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
 		const String& material, TerrainContribution& out);
+
+	/// What a target asks for at every sample of a rect, evaluated but not yet written (see ComputeTerrainSamples).
+	struct TerrainSamples
+	{
+		/// An index range of one sample grid: x0 .. x0 + width - 1 by z0 .. z0 + rows - 1, row-major.
+		struct Range
+		{
+			int32 x0 = 0, z0 = 0, width = 0, rows = 0;
+
+			size_t Count() const { return static_cast<size_t>(width) * static_cast<size_t>(rows); }
+			size_t Index(const int32 i, const int32 row) const { return static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(i); }
+		};
+
+		/// A vertex: the base height it was evaluated on and the target's height and weight.
+		struct Height
+		{
+			float base = 0.0f, height = 0.0f, weight = 0.0f;
+		};
+
+		/// A splat pixel: the target's weights and blend weight.
+		struct Splat
+		{
+			float weight = 0.0f;
+			std::array<uint8, 4> splat{};
+		};
+
+		/// A water quad: the target's type (0 = none) and surface height.
+		struct Water
+		{
+			uint8 type = 0;
+			float height = 0.0f;
+		};
+
+		/// False until computed (a default object writes nothing).
+		bool computed = false;
+		Range outer, inner, splat, water, materials;
+		std::vector<Height> outerSamples, innerSamples;
+		std::vector<Splat> splatSamples;
+		std::vector<Water> waterSamples;
+		/// 1 = the tile's material is set.
+		std::vector<uint8> materialSamples;
+	};
+
+	/// Evaluates the targets at every sample Apply writes over `rect`, reading only the base heights (the Get height
+	/// methods are called concurrently, so they must only read): the height and splat samples on targets.size()
+	/// threads (no target is called from two threads at once, but different targets run concurrently), water quads and
+	/// tile materials with targets[0]. Every target must return the same as targets[0]. Nothing is computed when
+	/// `targets` is empty. The terrain is not changed, so this may run on another thread while nothing writes it.
+	void ComputeTerrainSamples(const ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
+		TerrainSamples& out);
+
+	/// Writes computed samples the way Apply writes its targets and records base/written (`out` is cleared first).
+	/// Refuses, writing nothing, if a height sample with weight > 0 was evaluated on another base than the terrain now
+	/// holds (the result would differ from Apply's).
+	/// @return False if refused.
+	bool WriteTerrainSamples(ITerrainAccess& terrain, const TerrainSamples& samples, const String& material, TerrainContribution& out);
 }
