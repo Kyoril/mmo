@@ -71,6 +71,9 @@ namespace mmo
 
 		virtual void Initialize() override;
 
+		/// A creature whose combat script forbids dying (a training dummy in combat) can not die.
+		[[nodiscard]] bool CanDie() const override;
+
 		ObjectTypeId GetTypeId() const override {
 			return ObjectTypeId::Unit;
 		}

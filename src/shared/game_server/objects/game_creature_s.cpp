@@ -91,6 +91,11 @@ namespace mmo
 		}
 	}
 
+	bool GameCreatureS::CanDie() const
+	{
+		return !m_ai || m_ai->CanControlledDie();
+	}
+
 	void GameCreatureS::Initialize()
 	{
 		GameUnitS::Initialize();

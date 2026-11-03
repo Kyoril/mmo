@@ -74,6 +74,10 @@ namespace mmo
 		/// Gets a reference of the controlled units home.
 		[[nodiscard]] const Home& GetHome() const;
 
+		/// Whether the controlled creature may die: false while a combat script forbids it
+		/// (e.g. a training dummy in combat).
+		[[nodiscard]] bool CanControlledDie() const;
+
 		/// Sets a new home position
 		/// @param home The new home position of the controlled unit.
 		void SetHome(Home home);
