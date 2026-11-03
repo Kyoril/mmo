@@ -257,5 +257,7 @@ TEST_CASE("pet opcodes are appended at the end of the opcode lists", "[pets][pro
 	CHECK(realm_client_packet::PetResult == realm_client_packet::PetNameQueryResult + 1);
 	CHECK(realm_client_packet::Count_ == realm_client_packet::PetResult + 1);
 
-	CHECK(ProtocolVersion == 0x23);
+	// Pins the current wire version: the opcode layout above only holds for this version,
+	// so update this value whenever ProtocolVersion moves and re-check the order.
+	CHECK(ProtocolVersion == 0x24);
 }
