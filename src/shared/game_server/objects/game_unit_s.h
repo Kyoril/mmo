@@ -1178,6 +1178,12 @@ namespace mmo
 		///	additive across auras, never below 0.
 		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus * 0.01f); }
 
+		/// Scales a heal by the healing taken multiplier, rounded exactly as Heal() applies it. Combat
+		///	text and heal procs report this amount, so they match what lands (before over-heal).
+		///	@param amount The heal before the healing taken percentage.
+		///	@returns The heal after the healing taken percentage.
+		[[nodiscard]] uint32 ScaleHealingTaken(uint32 amount) const;
+
 		/// Gets the multiplier this unit's ModPetStatsPct auras give one stat of its persistent pet:
 		///	1.0 by default, additive across auras, never below 0.
 		///	@param kind The pet stat (pet_stat_kind). Unknown kinds return 1.0.

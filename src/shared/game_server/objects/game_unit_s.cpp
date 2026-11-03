@@ -15,6 +15,7 @@
 #include "game/chat_type.h"
 #include "game/spell_negativity.h"
 
+#include <cmath>
 #include <map>
 #include <memory>
 #include "game/id_mask.h"
@@ -1075,7 +1076,7 @@ namespace mmo
 
 		// Every spell heal (direct, periodic, percentage, leech) flows through here, so the
 		// healing taken percentage is applied once, in this single place.
-		amount = static_cast<uint32>(std::floor(static_cast<float>(amount) * GetHealingTakenMultiplier()));
+		amount = ScaleHealingTaken(amount);
 
 		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
 		if (health >= maxHealth)
@@ -1091,6 +1092,11 @@ namespace mmo
 		Set<uint32>(object_fields::Health, health + amount);
 		healedAmount(instigator, amount);
 		return static_cast<int32>(amount);
+	}
+
+	uint32 GameUnitS::ScaleHealingTaken(const uint32 amount) const
+	{
+		return static_cast<uint32>(std::floor(static_cast<float>(amount) * GetHealingTakenMultiplier()));
 	}
 
 	void GameUnitS::GenerateHealingThreat(GameUnitS& healer, uint32 effectiveHealing)

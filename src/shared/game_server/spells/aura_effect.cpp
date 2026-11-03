@@ -760,6 +760,10 @@ namespace mmo
 
 		heal = std::max(heal, 0);
 
+		// Heal() applies the owner's healing taken percentage; the log and procs report the same
+		// scaled amount so they show what lands.
+		const uint32 scaledHeal = m_container.GetOwner().ScaleHealingTaken(static_cast<uint32>(heal));
+
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
@@ -771,7 +775,7 @@ namespace mmo
 			<< io::write_packed_guid(m_container.GetCasterId())
 			<< io::write<uint32>(m_container.GetSpell().id())
 			<< io::write<uint32>(GetType())
-			<< io::write<uint32>(heal);
+			<< io::write<uint32>(scaledHeal);
 		packet.Finish();
 
 		m_container.GetOwner().ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
@@ -792,9 +796,9 @@ namespace mmo
 		// Trigger proc events for periodic healing
 		if (m_container.GetCaster())
 		{
-			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicHeal, &m_container.GetOwner(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
+			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicHeal, &m_container.GetOwner(), scaledHeal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
 		}
-		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicHeal, m_container.GetCaster(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
+		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicHeal, m_container.GetCaster(), scaledHeal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
 	}
 
 	void AuraEffect::HandlePeriodicEnergize()

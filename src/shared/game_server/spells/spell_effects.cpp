@@ -518,6 +518,9 @@ namespace mmo
 					}
 				}
 
+				// Heal() applies the target's healing taken percentage; combat text and procs report
+				// the same scaled amount so they show what lands.
+				const uint32 scaledHealing = unitTarget.ScaleHealingTaken(healingAmount);
 				const int32 effectiveHealing = unitTarget.Heal(healingAmount, &executer);
 
 				// Healing a unit that is under attack generates threat on its attackers and pulls
@@ -531,19 +534,19 @@ namespace mmo
 				}
 
 				// Trigger proc events for healing
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, procFlags, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &executer, healingAmount, procFlags, spell.spellschool(), false, spell.familyflags());
+				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, scaledHealing, procFlags, spell.spellschool(), false, spell.familyflags());
+				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &executer, scaledHealing, procFlags, spell.spellschool(), false, spell.familyflags());
 
 				const uint32 spellId = spell.id();
 				ctx.castContext.SendPacketFromCaster(
-					[&unitTarget, &executer, spellId, healingAmount, isCrit](game::OutgoingPacket& out_packet)
+					[&unitTarget, &executer, spellId, scaledHealing, isCrit](game::OutgoingPacket& out_packet)
 					{
 						out_packet.Start(game::realm_client_packet::SpellHealLog);
 						out_packet
 							<< io::write_packed_guid(unitTarget.GetGuid())
 							<< io::write_packed_guid(executer.GetGuid())
 							<< io::write<uint32>(spellId)
-							<< io::write<uint32>(healingAmount)
+							<< io::write<uint32>(scaledHealing)
 							<< io::write<uint8>(isCrit);
 						out_packet.Finish();
 					});

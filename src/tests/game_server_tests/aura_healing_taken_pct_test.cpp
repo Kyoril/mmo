@@ -175,3 +175,18 @@ TEST_CASE_METHOD(HealFixture, "ModHealingTakenPct scales each periodic heal tick
 	io.run_for(std::chrono::milliseconds(200));
 	CHECK(unit->GetHealth() == 580u);
 }
+
+// Combat text and heal procs report the healed amount after the healing taken percentage, rounded
+// exactly as Heal() applies it: under -20% a heal of 100 reads 80, not 100.
+TEST_CASE_METHOD(HealFixture, "The scaled heal amount matches what Heal applies", "[healing_taken_pct]")
+{
+	AuraEffect aura(container, auraEffect, timers, -20);
+	aura.HandleEffect(true);
+
+	CHECK(unit->ScaleHealingTaken(100) == 80u);
+	CHECK(unit->ScaleHealingTaken(333) == 266u);	// 266.4 rounds down, like Heal()
+	CHECK(unit->Heal(333, healer.get()) == static_cast<int32>(unit->ScaleHealingTaken(333)));
+
+	aura.HandleEffect(false);
+	CHECK(unit->ScaleHealingTaken(333) == 333u);
+}
