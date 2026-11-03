@@ -699,6 +699,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
 		RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
 		RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
+		RegisterPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &BotRealmConnector::OnPeriodicAuraLog);
 	}
 
 	PacketParseResult BotRealmConnector::OnAuthChallenge(game::IncomingPacket& packet)
@@ -3072,6 +3073,26 @@ namespace mmo
 		}
 
 		DamageReceived(targetGuid, amount, flags);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPeriodicAuraLog(game::IncomingPacket& packet)
+	{
+		// Damage, heal and energize ticks share this prefix; the damage variant appends school,
+		// absorbed and resisted amounts, which nothing reads yet.
+		uint64 victimGuid = 0;
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		uint32 auraType = 0;
+		uint32 amount = 0;
+		if (!(packet >> io::read_packed_guid(victimGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId)
+			>> io::read<uint32>(auraType) >> io::read<uint32>(amount)))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		PeriodicAuraTicked(victimGuid, casterGuid, spellId, auraType, amount);
 
 		return PacketParseResult::Pass;
 	}

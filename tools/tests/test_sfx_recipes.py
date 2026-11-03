@@ -191,7 +191,7 @@ class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class AcolyteRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = acolyte
-    count = 16
+    count = 38
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude music,

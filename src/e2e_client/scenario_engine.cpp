@@ -78,6 +78,15 @@ namespace mmo
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
+			/// Casts with a cast time other units started (SpellStart) per caster, and the cast time
+			/// in milliseconds the server announced for the latest of them.
+			std::map<uint64, uint32> castStarts;
+			std::map<uint64, GameTime> lastCastTimes;
+
+			/// Periodic aura ticks (PeriodicAuraLog) per victim and spell: how many arrived, and the
+			/// amount the latest one dealt, healed or energized.
+			std::map<std::pair<uint64, uint32>, std::pair<uint32, uint32>> periodicTicks;
+
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
 			/// still being observed.
@@ -695,6 +704,41 @@ namespace mmo
 		bool luaIsSpellOnCooldown(const uint32 spellId)
 		{
 			return g_runtime->session->GetContext().IsSpellOnCooldown(spellId);
+		}
+
+		/// Milliseconds left on our own spell's cooldown, as the server's cooldown packets left it
+		/// (0 when the spell is not on cooldown).
+		int32 luaGetSpellCooldownRemaining(const uint32 spellId)
+		{
+			return static_cast<int32>(g_runtime->session->GetContext().GetSpellCooldownRemaining(spellId));
+		}
+
+		/// How many casts with a cast time another unit guid has started (SpellStart packets).
+		int32 luaCastStartCount(const std::string& guid)
+		{
+			const auto it = g_runtime->castStarts.find(guidFromString(guid));
+			return it == g_runtime->castStarts.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// Cast time in milliseconds of the latest cast another unit guid started, -1 if none.
+		int32 luaLastCastTime(const std::string& guid)
+		{
+			const auto it = g_runtime->lastCastTimes.find(guidFromString(guid));
+			return it == g_runtime->lastCastTimes.end() ? -1 : static_cast<int32>(it->second);
+		}
+
+		/// How many ticks of spellId's periodic aura on guid the server reported (PeriodicAuraLog).
+		int32 luaPeriodicTickCount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? 0 : static_cast<int32>(it->second.first);
+		}
+
+		/// Amount the latest tick of spellId's periodic aura on guid dealt or healed, -1 if none.
+		int32 luaLastPeriodicAmount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? -1 : static_cast<int32>(it->second.second);
 		}
 
 		/// How many channels the server has announced for guid (ChannelStart packets).
@@ -1989,6 +2033,11 @@ namespace mmo
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
 				luabind::def_lambda("SpellGoCount", &luaSpellGoCount),
 				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
+				luabind::def_lambda("GetSpellCooldownRemaining", &luaGetSpellCooldownRemaining),
+				luabind::def_lambda("CastStartCount", &luaCastStartCount),
+				luabind::def_lambda("LastCastTime", &luaLastCastTime),
+				luabind::def_lambda("PeriodicTickCount", &luaPeriodicTickCount),
+				luabind::def_lambda("LastPeriodicAmount", &luaLastPeriodicAmount),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
@@ -2292,6 +2341,24 @@ namespace mmo
 			{
 				++runtime.spellGos[{ caster, spellId }];
 				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
+		const scoped_connection periodicTickRecorder { realm.PeriodicAuraTicked.connect(
+			[&transcript, &runtime](const uint64 victim, const uint64 caster, const uint32 spellId, const uint32 auraType, const uint32 amount)
+			{
+				auto& ticks = runtime.periodicTicks[{ victim, spellId }];
+				++ticks.first;
+				ticks.second = amount;
+				transcript.Event("periodic_tick",
+					{ { "victim", guidToString(victim) }, { "caster", guidToString(caster) }, { "spell_id", spellId },
+					  { "aura_type", auraType }, { "amount", amount } });
+			}) };
+		const scoped_connection unitCastStartedRecorder { realm.UnitCastStarted.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const GameTime castTime)
+			{
+				++runtime.castStarts[caster];
+				runtime.lastCastTimes[caster] = castTime;
+				transcript.Event("cast_start",
+					{ { "caster", guidToString(caster) }, { "spell_id", spellId }, { "cast_time_ms", static_cast<uint32>(castTime) } });
 			}) };
 		const scoped_connection chatRecorder { realm.ChatMessageReceived.connect(
 			[&transcript, &runtime](const BotChatMessage& message)

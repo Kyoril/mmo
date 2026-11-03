@@ -104,7 +104,14 @@ come from their speaker),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
-cooldown is not tracked),
+cooldown is not tracked), `GetSpellCooldownRemaining(spellId)` (milliseconds left on that cooldown,
+0 when there is none),
+`CastStartCount(g)` / `LastCastTime(g)` (casts with a cast time another unit started — SpellStart
+packets — and the cast time in ms the server announced for the latest one, `-1` if none: shows
+cast-time modifiers on creatures),
+`PeriodicTickCount(g, spellId)` / `LastPeriodicAmount(g, spellId)` (ticks of `spellId`'s periodic
+aura on `g` the server logged — PeriodicAuraLog — and the amount the latest one dealt or healed,
+`-1` if none: exact tick values, which a health bar blurs with regeneration),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 
