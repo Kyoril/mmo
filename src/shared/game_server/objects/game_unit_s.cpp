@@ -1027,6 +1027,12 @@ namespace mmo
 			health -= damage;
 		}
 
+		// A unit that can not die takes the hit but is refilled instead of reaching zero health.
+		if (health < 1 && !CanDie())
+		{
+			health = std::max<uint32>(1, GetMaxHealth());
+		}
+
 		Set<uint32>(object_fields::Health, health);
 		OnDamageTaken(instigator, damage);
 		takenDamage(instigator, school, damageType);
@@ -1191,6 +1197,12 @@ namespace mmo
 
 	void GameUnitS::Kill(GameUnitS *killer)
 	{
+		if (!CanDie())
+		{
+			Set<uint32>(object_fields::Health, std::max<uint32>(1, GetMaxHealth()));
+			return;
+		}
+
 		Set<uint32>(object_fields::Health, 0);
 		OnKilled(killer);
 	}

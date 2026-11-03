@@ -939,9 +939,14 @@ namespace mmo
 		/// @param type The type of environmental damage.
 		void EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type);
 
-		/// Kills the unit.
+		/// Kills the unit. A unit that can not die (see CanDie) is refilled to full health instead.
 		/// @param killer The unit that killed this unit.
 		void Kill(GameUnitS *killer);
+
+		/// Whether this unit may die right now. A unit that can not die (a training dummy in combat)
+		/// is refilled to full health by lethal damage instead of being killed, so nothing reacts to
+		/// a death: casts aimed at it, death and kill procs, kill credit.
+		[[nodiscard]] virtual bool CanDie() const { return true; }
 
 		/// Gets the current health of the unit.
 		/// @returns The current health as a uint32.

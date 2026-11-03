@@ -47,23 +47,10 @@ namespace mmo
 		m_hasPatrolWaypointSaved = false;
 		m_savedPatrolWaypointIndex = 0;
 
+		// A combat script that forbids dying (training dummies) is honoured before the death,
+		// through GameCreatureS::CanDie, so a creature that gets here really died.
 		m_onKilled = m_controlled.killed.connect([this](GameUnitS* killer)
 			{
-				// Check if a combat script prevents death (e.g., training dummies)
-				if (auto* combatState = dynamic_cast<CreatureAICombatState*>(m_state.get()))
-				{
-					if (auto* script = combatState->GetScript())
-					{
-						if (!script->CanDie())
-						{
-							// Restore health and stay in combat
-							m_controlled.Set<uint32>(object_fields::Health, 
-								std::max<uint32>(1, m_controlled.GetMaxHealth()));
-							return;
-						}
-					}
-				}
-
 				auto state = std::make_shared<CreatureAIDeathState>(*this);
 				SetState(std::move(state));
 			});
@@ -135,6 +122,19 @@ namespace mmo
 	const CreatureAI::Home& CreatureAI::GetHome() const
 	{
 		return m_home;
+	}
+
+	bool CreatureAI::CanControlledDie() const
+	{
+		if (const auto* combatState = dynamic_cast<const CreatureAICombatState*>(m_state.get()))
+		{
+			if (const CreatureCombatScript* script = combatState->GetScript())
+			{
+				return script->CanDie();
+			}
+		}
+
+		return true;
 	}
 
 	void CreatureAI::EnterCombat(GameUnitS& victim)
