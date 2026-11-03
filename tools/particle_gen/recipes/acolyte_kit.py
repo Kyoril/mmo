@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import acolyte_common as ac
 from acolyte_common import (
-    BEAM, BLIGHT, BLIGHT_DEEP, BLIGHT_HOT, DREAD, DREAD_DEEP, DREAD_HOT, GLOW, MIASMA, SKULL,
+    BEAM, BLIGHT, BLIGHT_DEEP, BLIGHT_HOT, DREAD, DREAD_DEEP, DREAD_HOT, GLOW, MIASMA, RING, SKULL,
     SMOKE, STAR, UMBRA, VOID, VOID_DEEP, VOID_HOT, WISP, Burst, ParticleSystem,
     color_curve, e, fade, float_curve, hpar, lift, looping, rgba, write)
 
@@ -129,7 +129,19 @@ def frailty_aura():
                   rate=4.0, lifetime=1.2)
     smoke = _smoke_loop("Frailty Weight", 5.0, 1.2, UMBRA, ASH, 0.34, vel=(-0.2, 0.05),
                         **_body_cone(1.7, 0.32))
-    return ParticleSystem(emitters=[smoke, sag])
+    # Lit ash flakes drifting down from the shoulders: the dark motes alone vanish against a
+    # dark target, these keep the curse readable at range.
+    # Origin is the feet: lift to the shoulders, then gravity lets them sag down the body.
+    ash = looping(e(name="Frailty Ash", material_name=STAR,
+                    shape=hpar.SHAPE_SPHERE, shape_extents=(0.34, 0.0, 0.0),
+                    min_start_size=0.10, max_start_size=0.16,
+                    min_angular_velocity=-2.0, max_angular_velocity=2.0,
+                    gravity=(0.0, -0.9, 0.0),
+                    size_over_life=float_curve((0.0, 0.5), (0.3, 1.0), (1.0, 0.5)),
+                    color_over_lifetime=fade(ASH, 0.85, peak=0.2, end=VOID)),
+                  rate=12.0, lifetime=1.8)
+    lift(ash, 1.45, drag=5.0, hidden=0.2, spread=0.06)
+    return ParticleSystem(emitters=[smoke, sag, ash])
 
 
 # =========================================================================================
@@ -330,23 +342,29 @@ def rot_field_ground():
     pool = looping(e(name="Rot Pool", simulation_space=hpar.SIM_LOCAL,
                      render_mode=hpar.RENDER_HORIZONTAL, material_name=SMOKE,
                      shape=hpar.SHAPE_CONE, shape_extents=(0.0, 0.02, R * 0.92),
-                     min_velocity=(0.0, 0.01, 0.0), max_velocity=(0.0, 0.01, 0.0),
+                     min_velocity=(0.0, 0.08, 0.0), max_velocity=(0.0, 0.08, 0.0),
                      min_start_size=3.4, max_start_size=4.8,
                      min_angular_velocity=-0.2, max_angular_velocity=0.2,
                      size_over_life=float_curve((0.0, 0.6), (0.4, 1.0), (1.0, 1.1)),
                      color_over_lifetime=color_curve(
                          (0.00, rgba(MIASMA, 0.0)),
-                         (0.25, rgba(MIASMA, 0.34)),
-                         (0.70, rgba(BLIGHT_DEEP, 0.28)),
+                         (0.25, rgba(BLIGHT_DEEP, 0.48)),
+                         (0.70, rgba(BLIGHT_DEEP, 0.40)),
                          (1.00, rgba(MIASMA, 0.0)))), rate=40.0, lifetime=2.5)
+    # The field's edge: one ring sprite whose bright band sits on the 8 yd radius (the band is
+    # at ~62 % of the quad half-size). Rises slowly so grass does not swallow it.
+    ring_size = 2.0 * R / 0.62
     edge = looping(e(name="Rot Rim", simulation_space=hpar.SIM_LOCAL,
-                     render_mode=hpar.RENDER_HORIZONTAL, material_name=GLOW,
-                     shape=hpar.SHAPE_CONE, shape_extents=(0.0, 0.02, R * 0.95),
-                     min_velocity=(0.0, 0.01, 0.0), max_velocity=(0.0, 0.01, 0.0),
-                     min_start_size=1.4, max_start_size=2.0,
-                     size_over_life=float_curve((0.0, 0.7), (0.5, 1.0), (1.0, 1.0)),
-                     color_over_lifetime=fade(BLIGHT, 0.10, peak=0.3, end=BLIGHT_DEEP)),
-                   rate=14.0, lifetime=2.0)
+                     render_mode=hpar.RENDER_HORIZONTAL, material_name=RING,
+                     min_velocity=(0.0, 0.12, 0.0), max_velocity=(0.0, 0.12, 0.0),
+                     min_start_size=ring_size, max_start_size=ring_size,
+                     min_angular_velocity=-0.25, max_angular_velocity=0.25,
+                     size_over_life=float_curve((0.0, 0.97), (1.0, 1.01)),
+                     color_over_lifetime=color_curve(
+                         (0.00, rgba(BLIGHT, 0.0)),
+                         (0.30, rgba(BLIGHT, 0.42)),
+                         (0.70, rgba(BLIGHT_DEEP, 0.40)),
+                         (1.00, rgba(BLIGHT_DEEP, 0.0)))), rate=1.6, lifetime=2.4)
     bubbles = looping(e(name="Rot Bubbles", simulation_space=hpar.SIM_LOCAL,
                         shape=hpar.SHAPE_CONE, shape_extents=(0.0, 0.05, R * 0.9),
                         min_velocity=(0.0, 0.1, 0.0), max_velocity=(0.0, 0.45, 0.0),
