@@ -27,9 +27,10 @@ Design rules that are easy to undo by accident:
   itself. The talent tree's tooltip leaves the spell rank out (it shows the talent's points).
 * Descriptions use literal numbers for modifiers: the tooltip formatter prints $s raw, so a
   negative cast time modifier would read "-400".
-* Old rank spells that a talent no longer uses are neutered (effects removed). Characters who
-  learned them keep the spell, so it must not keep working; the server resets talents whose
-  saved rank no longer exists.
+* Old rank spells that a talent no longer uses are neutered: effects removed, and hidden passive
+  without cost, cooldown or visualization. The server resets talents whose saved rank no longer
+  exists and does not restore Talent spells from the saved spell list (SetKnownSpells), so a
+  character loses them at load; the neutered data is the second line of defence.
 """
 
 import argparse
@@ -73,6 +74,10 @@ MECHANIC_STUN, MECHANIC_ROOT = 10, 11       # MECHANIC_ROOT is Freeze (frost roo
 MECHANIC_FEAR, MECHANIC_ROOTED, MECHANIC_SNARE = 5, 6, 9
 # The acolyte's damage spells: Corrupting Touch, Shadowbolt, Drain Essence, Wasting Plague, Rot Field.
 ACOLYTE_DAMAGE_MASK = 0x2 | 0x10 | 0x80 | 0x200 | 0x800
+
+# Single attribute bits (spell_attributes / spell_attributes_b in src/shared/game/spell.h).
+ATTR_PASSIVE = 0x40
+ATTR_B_HIDDEN_AURA = 0x2
 
 # Attribute words, copied from working spells of the same kind.
 PASSIVE_ATTRS = [0x80000050, 134]      # talent passives (Burning Soul)
@@ -1559,6 +1564,15 @@ def build(spells, talents, tabs):
             spell.ClearField("description_loc")
             spell.ClearField("auratext_loc")
             neutered.append(spell_id)
+        # An active retired spell (Umbral Bloom) must not leave a button that spends mana and
+        # does nothing: a hidden passive without cost, cooldown or visualization can not be cast.
+        # The server also drops Talent spells no current talent uses at load (SetKnownSpells).
+        while len(spell.attributes) < 2:
+            spell.attributes.append(0)
+        spell.attributes[0] |= ATTR_PASSIVE
+        spell.attributes[1] |= ATTR_B_HIDDEN_AURA
+        for field in ("cost", "cooldown", "visualization_id"):
+            spell.ClearField(field)
 
     # A single-rank talent spell that higher ranks continue (trainer ranks such as Fireball rank 2,
     # whose baseid points at it) is rank 1 of that chain. Retired rank spells do not count: their
