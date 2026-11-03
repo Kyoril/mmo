@@ -343,8 +343,8 @@ TEST_CASE("A river draws its surface line and its bed edges", "[graph_terrain_de
 {
 	// A river along z = 10 on flat ground at 2 (spline on the ground): surface 1.6, bed edges at z = 5 and 15.
 	PathSpline line;
-	SplinePoint a; a.x = 10.0f; a.z = 10.0f; a.y = 2.0f;
-	SplinePoint b; b.x = 50.0f; b.z = 10.0f; b.y = 2.0f;
+	SplinePoint a; a.x = 110.0f; a.z = 10.0f; a.y = 2.0f;
+	SplinePoint b; b.x = 150.0f; b.z = 10.0f; b.y = 2.0f;
 	line.points = { a, b };
 	PreparedTerrain t;
 	String error;

@@ -999,26 +999,70 @@ TEST_CASE("A river carves its bed below a running water surface", "[terrain_comp
 	CHECK(centre.waterHeight == Approx(7.6f).margin(1e-4));
 	CHECK(Written(t.Evaluate(100.0f, 4.9f, 8.0f, {}), 8.0f) == Approx(6.1f).margin(1e-4));
 
-	// Halfway up the bank: smoothstep(9, 5, 7) = 0.5.
+	// Halfway up the bank: smoothstep(5, 9, 7) = 0.5.
 	CHECK(Written(t.Evaluate(100.0f, 7.0f, 8.0f, {}), 8.0f) == Approx(8.0f - 0.5f * 1.9f).margin(1e-4));
 
-	// At width + bank the running height holds; beyond, nothing is written.
+	// At width + bank the running height holds; beyond, ground above the water is not written.
 	const TerrainTarget rim = t.Evaluate(100.0f, 9.0f, 8.0f, {});
 	CHECK(rim.heightWeight == 1.0f);
 	CHECK(Written(rim, 8.0f) == Approx(8.0f));
 	CHECK(t.Evaluate(100.0f, 9.5f, 8.0f, {}).heightWeight == 0.0f);
 
-	// The bank never raises the ground above the running height.
-	CHECK(Written(t.Evaluate(100.0f, 8.0f, 2.0f, {}), 2.0f) == Approx(2.0f));
-
-	// Water inside width + waterMargin = 8, none beyond.
-	CHECK(t.Evaluate(100.0f, 7.9f, 8.0f, {}).waterType == 1);
-	CHECK(t.Evaluate(100.0f, -7.9f, 8.0f, {}).waterHeight == Approx(7.6f).margin(1e-4));
-	CHECK(t.Evaluate(100.0f, 8.1f, 8.0f, {}).waterType == 0);
+	// Water inside width + bank + waterMargin = 12, none beyond.
+	CHECK(t.Evaluate(100.0f, 11.9f, 8.0f, {}).waterType == 1);
+	CHECK(t.Evaluate(100.0f, -11.9f, 8.0f, {}).waterHeight == Approx(7.6f).margin(1e-4));
+	CHECK(t.Evaluate(100.0f, 12.1f, 8.0f, {}).waterType == 0);
 	CHECK(t.Evaluate(100.0f, 30.0f, 8.0f, {}).waterType == 0);
 }
 
-TEST_CASE("A river has flat end caps: no water and no bed past its ends", "[terrain_compose]")
+TEST_CASE("A river bank rises above the water surface over low ground", "[terrain_compose]")
+{
+	// Ground at 2 beside a surface of 7.6 (bed 6.1): the bank climbs to the surface + 0.25 at width + bank, holds it
+	// to the end of the water (width + bank + waterMargin = 12) and fades back to the ground over another bank (16).
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
+	const float top = 7.6f + 0.25f;
+
+	// smoothstep(5, 9, 8) = 0.84375.
+	CHECK(Written(t.Evaluate(100.0f, 8.0f, 2.0f, {}), 2.0f) == Approx(6.1f + 0.84375f * (top - 6.1f)).margin(1e-4));
+	for (const float d : { 9.0f, 10.5f, 12.0f })
+	{
+		CHECK(Written(t.Evaluate(100.0f, d, 2.0f, {}), 2.0f) == Approx(top).margin(1e-4));
+		CHECK(Written(t.Evaluate(100.0f, -d, 2.0f, {}), 2.0f) == Approx(top).margin(1e-4));
+	}
+	// Halfway down the outer slope: smoothstep(12, 16, 14) = 0.5.
+	CHECK(Written(t.Evaluate(100.0f, 14.0f, 2.0f, {}), 2.0f) == Approx(2.0f + 0.5f * (top - 2.0f)).margin(1e-4));
+	CHECK(t.Evaluate(100.0f, 16.5f, 2.0f, {}).heightWeight == 0.0f);
+
+	// Every point that holds water but lies outside the bed is above the surface or below it only on the bank's
+	// way down, so the water's edge is where the bank crosses the surface, not where the water ends.
+	for (float d = 9.0f; d <= 12.0f; d += 0.25f)
+	{
+		const TerrainTarget target = t.Evaluate(100.0f, d, 2.0f, {});
+		CHECK(target.waterType == 1);
+		CHECK(Written(target, 2.0f) > target.waterHeight);
+	}
+}
+
+TEST_CASE("A river closes its upstream end like its banks", "[terrain_compose]")
+{
+	// The river runs along z = 0 from x = 0 (upstream, surface 9.6, bed 8.1) to x = 200.
+	PreparedTerrain t;
+	PrepareRiver(t, { MakeRiver(0.0f, 10.0f, 200.0f, 6.0f) }, Slope);
+
+	// Past the start the distance to the bed's end edge works like the distance past the width.
+	const float ground = Slope(-2.0f, 0.0f);
+	CHECK(Written(t.Evaluate(-2.0f, 0.0f, ground, {}), ground) == Approx(8.1f + 0.5f * (ground - 8.1f)).margin(1e-3));
+	CHECK(t.Evaluate(-2.0f, 0.0f, ground, {}).waterType == 1);
+	CHECK(t.Evaluate(-6.9f, 0.0f, ground, {}).waterHeight == Approx(9.6f).margin(1e-4));
+	CHECK(t.Evaluate(-7.1f, 0.0f, ground, {}).waterType == 0);
+	// hypot(8 - 5, 4) = 5: water still holds (<= 7), and low ground there is raised above the surface.
+	const TerrainTarget corner = t.Evaluate(-4.0f, 8.0f, 2.0f, {});
+	CHECK(corner.waterType == 1);
+	CHECK(Written(corner, 2.0f) == Approx(9.6f + 0.25f).margin(1e-4));
+}
+
+TEST_CASE("A river has a flat downstream end: no water and no bed past it", "[terrain_compose]")
 {
 	// Defaults (width 5, bank 4, depth 1.5, waterMargin 3); the river runs along z = 0 from x = 0 to x = 200.
 	PreparedTerrain t;
@@ -1033,27 +1077,25 @@ TEST_CASE("A river has flat end caps: no water and no bed past its ends", "[terr
 		CHECK(Written(inside, ground) == Approx(inside.waterHeight - 1.5f).margin(1e-4));
 	}
 
-	// Past either end (round caps reached width + waterMargin = 8 m with water and width = 5 m with the bed).
-	for (const float past : { 0.25f, 1.0f, 2.0f, 4.0f, 6.0f, 7.9f })
+	// Past the end (it flows into something: a waterfall, a lake).
+	for (const float past : { 0.25f, 1.0f, 2.0f, 4.0f, 6.0f, 7.9f, 11.9f })
 	{
 		for (const float z : { 0.0f, 3.0f, -4.9f, 7.5f })
 		{
-			for (const auto& [x, surface] : { std::make_pair(-past, 9.6f), std::make_pair(200.0f + past, 5.6f) })
+			const float x = 200.0f + past;
+			const float ground = Slope(x, z);
+			const TerrainTarget target = t.Evaluate(x, z, ground, {});
+			CHECK(target.waterType == 0);
+			// No owned bed: the bank closing the bed only lowers, less the further past the end.
+			const float bed = 5.6f - 1.5f;
+			if (past >= 1.0f)
 			{
-				const float ground = Slope(x, z);
-				const TerrainTarget target = t.Evaluate(x, z, ground, {});
-				CHECK(target.waterType == 0);
-				// No owned bed: the bank closing the bed only lowers, less the further past the end.
-				const float bed = surface - 1.5f;
-				if (past >= 1.0f)
-				{
-					CHECK(Written(target, ground) > bed + 0.1f);
-				}
-				CHECK(Written(target, ground) <= ground);
-				if (past >= 4.0f)
-				{
-					CHECK(target.heightWeight == 0.0f);
-				}
+				CHECK(Written(target, ground) > bed + 0.1f);
+			}
+			CHECK(Written(target, ground) <= ground);
+			if (past >= 4.0f)
+			{
+				CHECK(target.heightWeight == 0.0f);
 			}
 		}
 	}
@@ -1118,7 +1160,7 @@ TEST_CASE("River flow paths follow the river inside the region", "[terrain_compo
 	for (size_t i = 0; i < path.size(); ++i)
 	{
 		CHECK(path[i].z == Approx(0.0f).margin(1e-5));
-		CHECK(path[i].halfWidth == Approx(4.5f));
+		CHECK(path[i].halfWidth == Approx(8.5f));
 		if (i > 0)
 		{
 			CHECK(path[i].x - path[i - 1].x == Approx(4.0f));
@@ -1134,7 +1176,7 @@ TEST_CASE("River flow paths follow the river inside the region", "[terrain_compo
 	CHECK(paths[0].front().x == Approx(0.0f));
 	CHECK(paths[0].back().x == Approx(30.0f));
 	CHECK(paths[0][7].x == Approx(28.0f));
-	CHECK(paths[0][0].halfWidth == Approx(8.0f));
+	CHECK(paths[0][0].halfWidth == Approx(12.0f));
 
 	// No rivers, no paths.
 	PreparedTerrain none;

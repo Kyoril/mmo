@@ -114,7 +114,7 @@ namespace mmo::pcg::graph
 				  { "bank", 4.0f, "Distance (m) beyond the bed over which the bank rises back to the ground" },
 				  { "depth", 1.5f, "Depth (m) of the bed below the water surface" },
 				  { "surfaceOffset", -0.4f, "Water surface relative to the spline height (m); the surface never climbs downstream" },
-				  { "waterMargin", 3.0f, "Distance (m) past the bed that still holds water, covering the bank's waterline" } },
+				  { "waterMargin", 3.0f, "Distance (m) past the bank's top that still holds water (keep it >= the terrain quad's half diagonal, ~3 m)" } },
 				"splines" };
 			switch (type)
 			{

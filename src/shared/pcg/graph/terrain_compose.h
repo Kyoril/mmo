@@ -128,13 +128,18 @@ namespace mmo::pcg::graph
 	///   the area, so the shore starts at the running height and the bed lies depth under the water after shoreWidth.
 	///   Outside the edge heights are untouched. Prepare then also warns once if the base ground along the outline
 	///   (sampled every 2 m) is below the water level. depth 0 writes no heights.
-	/// - River (open spline of at least 2 points; width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 2,
+	/// - River (open spline of at least 2 points; width 5, bank 4, depth 1.5, surfaceOffset -0.4, waterMargin 3,
 	///   op.asset = water material): the spline is sampled every 1 m downstream (first to last point); the water surface
 	///   surface(s) is the running minimum of y(s) + surfaceOffset, so it never climbs (Prepare warns once, naming the
-	///   largest climb, where the spline rises more than 0.5 m above it). With d the distance to the spline and t the
-	///   surface at the projected arc distance: target = t - depth within width; over bank, target =
-	///   min(h, lerp(h, t - depth, smoothstep(width + bank, width, d))); weight 1 wherever d <= width + bank. Water:
-	///   waterType 1 and waterHeight = t where d <= width + waterMargin.
+	///   largest climb, where the spline rises more than 0.5 m above it). With d the distance to the spline, t the
+	///   surface at the projected arc distance and top = max(h, t + 0.25): target = t - depth within width; over bank,
+	///   target = lerp(t - depth, top, smoothstep(width, width + bank, d)), so the bank lowers high ground and lifts low
+	///   ground just above the water; past width + bank, ground below t + 0.25 is lifted to it up to
+	///   reach = width + bank + waterMargin and fades back over another bank (weight 1 wherever written). Water:
+	///   waterType 1 and waterHeight = t where d <= reach, so the water's visible edge is where the bank crosses the
+	///   surface, never the edge of the watered quads. Past the upstream end, d is width plus the distance to the bed's
+	///   end edge (the end closes like the banks); past the downstream end there is no water and no owned bed, only a
+	///   bank that lowers the running height towards the bed by that distance (the river flows into a lake or a fall).
 	/// Splat targets are composited in op order (each op's layer weights over the previous ones at its weight x
 	/// fade); water is last writer wins inside the region. Heights are only written where an op touches: the result
 	/// is then (final h, weight 1), else weight 0. Splat and water do not depend on the base height. Like all ops,

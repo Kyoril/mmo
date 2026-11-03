@@ -136,7 +136,7 @@ namespace mmo::pcg::graph
 		/// the first sample or after the last, along the end segment). Then `past` is the distance beyond the end line and
 		/// `lateral` the distance from the end segment's line.
 		bool RiverPastEnd(const std::vector<SplineSample>& samples, const NearestHit& hit, const float x, const float z,
-			float& past, float& lateral)
+			float& past, float& lateral, bool& atStartOut)
 		{
 			if (samples.size() < 2)
 			{
@@ -170,8 +170,13 @@ namespace mmo::pcg::graph
 			}
 			past = beyond;
 			lateral = std::abs(oz * ux - ox * uz);
+			atStartOut = atStart;
 			return true;
 		}
+
+		/// A river's bank tops out at least this far above its water surface, so the water's visible edge is where the
+		/// bank crosses the surface and not the edge of the watered quads.
+		constexpr float kRiverFreeboard = 0.25f;
 
 		/// A river spline may climb this far above its running water surface without a warning.
 		constexpr float kRiverClimbTolerance = 0.5f;
@@ -306,6 +311,12 @@ namespace mmo::pcg::graph
 		float surfaceStep = kRiverSurfaceStep;
 		/// Bed edges at +-width (left of the flow, then right), one point per surface sample, y = bed height.
 		std::array<std::vector<Vector3>, 2> bedEdges;
+
+		/// River: distance from the spline that still holds water (the bank's top plus waterMargin).
+		float WaterReach() const
+		{
+			return width + bank + margin;
+		}
 
 		/// River: water surface at an arc distance, interpolated between the surface samples (clamped to the ends).
 		float SurfaceAt(const float distance) const
@@ -751,7 +762,8 @@ namespace mmo::pcg::graph
 				prepared->depth = std::max(0.0f, SettingFloat(op.params, "depth", 1.5f));
 				prepared->margin = std::max(0.0f, SettingFloat(op.params, "waterMargin", 3.0f));
 				const float surfaceOffset = SettingFloat(op.params, "surfaceOffset", -0.4f);
-				const float reach = prepared->width + std::max(prepared->bank, prepared->margin);
+				// The bank's top holds to the end of the water and fades back to the ground over another bank.
+				const float reach = prepared->WaterReach() + prepared->bank;
 				const float length = path.GetLength();
 				if (!(reach > 0.0f) || !std::isfinite(reach))
 				{
@@ -1128,37 +1140,53 @@ namespace mmo::pcg::graph
 				const float along = samples[hit.a].distance + (samples[hit.b].distance - samples[hit.a].distance) * hit.t;
 				const float surface = op.SurfaceAt(along);
 
-				// Flat end caps: past an end of the spline there is no water and no owned bed. Only the bank closes
-				// the bed there, by the distance to the bed's end edge, and it only ever lowers the running height.
+				// The downstream end is flat: past it there is no water and no owned bed (the river flows into something
+				// there, a waterfall or a lake). Only the bank closes the bed, by the distance to the bed's end edge, and it
+				// only ever lowers the running height. The upstream end closes like the banks, by the same distance.
 				float past = 0.0f;
 				float lateral = hit.distance;
-				if (RiverPastEnd(samples, hit, x, z, past, lateral))
+				bool atStart = false;
+				float distance = hit.distance;
+				if (RiverPastEnd(samples, hit, x, z, past, lateral, atStart))
 				{
-					if (wantHeights && op.bank > 0.0f)
+					const float d = std::hypot(std::max(0.0f, lateral - op.width), past);
+					if (!atStart)
 					{
-						const float d = std::hypot(std::max(0.0f, lateral - op.width), past);
-						if (d < op.bank)
+						if (wantHeights && op.bank > 0.0f && d < op.bank)
 						{
 							const float w = 1.0f - Smoothstep01(d / op.bank);
 							blendHeight(std::min(h, h + (surface - op.depth - h) * w), 1.0f);
 						}
+						break;
 					}
-					break;
+					distance = op.width + d;
 				}
 
-				if (wantHeights && hit.distance <= op.width + op.bank)
+				if (wantHeights)
 				{
-					// The bed is owned by the river; the bank only ever lowers the running height.
+					// Bed within width; over the bank it climbs to the ground, or to just above the water where the ground
+					// is lower; that top holds to the end of the water and fades back to the ground over another bank.
 					const float bed = surface - op.depth;
-					float target = bed;
-					if (hit.distance > op.width)
+					const float top = surface + kRiverFreeboard;
+					if (distance <= op.width)
 					{
-						const float w = op.bank > 0.0f ? 1.0f - Smoothstep01((hit.distance - op.width) / op.bank) : 0.0f;
-						target = std::min(h, h + (bed - h) * w);
+						blendHeight(bed, 1.0f);
 					}
-					blendHeight(target, 1.0f);
+					else if (distance <= op.width + op.bank)
+					{
+						const float s = op.bank > 0.0f ? Smoothstep01((distance - op.width) / op.bank) : 1.0f;
+						blendHeight(bed + (std::max(h, top) - bed) * s, 1.0f);
+					}
+					else if (h < top && distance < op.WaterReach() + op.bank)
+					{
+						const float w = op.bank > 0.0f ? 1.0f - Smoothstep01((distance - op.WaterReach()) / op.bank) : 1.0f;
+						if (w > 0.0f)
+						{
+							blendHeight(h + (top - h) * w, 1.0f);
+						}
+					}
 				}
-				if (wantWater && hit.distance <= op.width + op.margin)
+				if (wantWater && distance <= op.WaterReach())
 				{
 					out.waterType = 1;
 					out.waterHeight = surface;
@@ -1291,7 +1319,7 @@ namespace mmo::pcg::graph
 					terrain_io::water_flow::FlowPoint point;
 					point.x = s.x;
 					point.z = s.z;
-					point.halfWidth = op->width + op->margin;
+					point.halfWidth = op->WaterReach();
 					run.push_back(point);
 				}
 				else

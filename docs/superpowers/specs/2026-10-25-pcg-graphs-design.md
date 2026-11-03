@@ -345,7 +345,7 @@ From the rulings made while the phase was executed:
 - **A missing `section` on Stamp Section at Points is a node error,** as for Lay Section, even with no points.
 - **Inside `width` the river owns the bed height** (surface − depth, even where the ground is lower), like a section
   corridor; a river across a deep hollow builds a raised bed there.
-- **A river has flat end caps.** Past the first and the last point (projected along the end segment) there is no
+- **A river has a flat downstream end** (the upstream end closes like the banks, see "River banks" below). Past the last point (projected along the end segment) there is no
   water and no owned bed; only the bank closes the bed there, by the distance to the bed's end edge, and it only
   lowers. Round caps put a sheet of river water up to `width` + `waterMargin` past the end, floating over a waterfall
   pool.
@@ -391,3 +391,12 @@ Task 7 (Falwyn stream and waterfall):
 - **Translucent meshes must be entities, not foliage.** As a foliage instance `SM_Waterfall2` draws only as white
   fragments (the same mesh renders correctly as an entity, as in Korash). An engine bug in the foliage path, not fixed
   here.
+- **River banks rise above the water (2026-11-03, after the user saw stepped river edges).** Water is per terrain quad
+  (~4.2 m), decided at the quad centre, so wherever the ground at the mask's edge was below the surface the water
+  ended on quad edges. 58 of 105 edge vertices of the MeadowStream were below it (up to 1.4 m: the stream runs across
+  the terrace's slope, and the upstream end had no water past it but a lowered bed). Now the bank climbs from the
+  bed to max(ground, surface + 0.25) over `bank`, that top holds to the end of the water (width + bank +
+  `waterMargin`, >= a quad's half diagonal) and fades back over another `bank`; low ground gets a small levee. The
+  visible shoreline is where the bank crosses the surface. The upstream end closes the same way by the distance to
+  the bed's end edge; the downstream end stays flat (it flows into a lake or a fall). 4 edge vertices remain within
+  0.24 m (the region fade and the fall's section own the ground there). Capture: `pcg-graphs/phase3b-river-banks.png`.
