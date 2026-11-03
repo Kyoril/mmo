@@ -79,6 +79,11 @@ namespace mmo
 		/// @param victim The unit the owner attacks.
 		void OnOwnerAttack(GameUnitS& victim);
 
+		/// @return The unit the owner attacked last (auto attack or harmful spell) while it is alive
+		///         and in the owner's world, otherwise nullptr. Remembered even while the owner has no
+		///         pets, so pets summoned into a fight know what their owner fights.
+		[[nodiscard]] GameUnitS* GetOwnerTarget() const;
+
 		/// Called when a unit starts attacking the owner. Assisting pets defend their owner.
 		/// @param attackerGuid Guid of the attacking unit.
 		void OnOwnerAttacked(uint64 attackerGuid);
@@ -131,6 +136,8 @@ namespace mmo
 		std::vector<std::unique_ptr<TemporaryPet>> m_temporaryPets;
 		std::weak_ptr<GameCreatureS> m_persistentPet;
 		scoped_connection m_persistentPetDespawned;
+		/// The unit the owner attacked last.
+		std::weak_ptr<GameUnitS> m_ownerTarget;
 	};
 
 	/// How long the corpse of a pet stays in the world before it despawns, in milliseconds.

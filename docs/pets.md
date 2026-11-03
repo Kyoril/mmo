@@ -20,6 +20,21 @@ faction template; *owner-aware friendliness* (`src/shared/game/owner_chain.h`) m
 check use the top owner instead. So an undead skeleton raised by a player is friendly to that
 player's allies and hostile to its enemies.
 
+Out of combat every pet follows its owner on a slot of its own (right, left, behind; a swarm spreads
+on an arc behind the owner), so several pets do not stack on one spot.
+
+Assisting differs between the two kinds:
+
+- A **persistent pet** attacks its owner's target, defends its owner against attackers and fights
+  back when attacked itself.
+- A **temporary pet** attacks *only* what its owner attacks (the unit the owner attacked last, by auto
+  attack or a harmful spell) or what it is commanded to attack. It ignores units attacking its owner
+  or itself and goes back to its owner once that target dies. A temporary pet summoned into a running
+  fight goes straight for the owner's target.
+
+A summon that should behave like a pet must use `SummonPet` (43), not `Summon` (25): a `Summon`
+add is no pet: it rolls its level from its unit entry, aggroes on its own and does not follow.
+
 ## Spell effects
 
 New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:

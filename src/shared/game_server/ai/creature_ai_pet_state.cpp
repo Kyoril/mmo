@@ -217,25 +217,32 @@ namespace mmo
 			}
 		}
 
-		const uint64 ownerVictim = usable(owner.GetVictim()) ? owner.GetVictim()->GetGuid() : 0;
+		// A pet that only fights its owner's target takes what the owner attacked last and leaves
+		// the units attacking its owner or itself alone.
+		const bool ownerTargetOnly = ai.IsPetOwnerTargetOnly();
+		const GameUnitS* ownerTarget = ownerTargetOnly ? ai.FindPetOwnerTarget() : owner.GetVictim();
+		const uint64 ownerVictim = usable(ownerTarget) ? ownerTarget->GetGuid() : 0;
 
 		std::vector<uint64> ownerAttackers;
-		owner.ForEachAttacker([&](const GameUnitS& attacker)
-			{
-				if (usable(&attacker))
-				{
-					ownerAttackers.push_back(attacker.GetGuid());
-				}
-			});
-
 		std::vector<uint64> selfAttackers;
-		controlled.ForEachAttacker([&](const GameUnitS& attacker)
-			{
-				if (usable(&attacker))
+		if (!ownerTargetOnly)
+		{
+			owner.ForEachAttacker([&](const GameUnitS& attacker)
 				{
-					selfAttackers.push_back(attacker.GetGuid());
-				}
-			});
+					if (usable(&attacker))
+					{
+						ownerAttackers.push_back(attacker.GetGuid());
+					}
+				});
+
+			controlled.ForEachAttacker([&](const GameUnitS& attacker)
+				{
+					if (usable(&attacker))
+					{
+						selfAttackers.push_back(attacker.GetGuid());
+					}
+				});
+		}
 
 		const uint64 targetGuid = ChoosePetTarget(commanded, ownerVictim, ownerAttackers, selfAttackers, ai.GetPetStrategy());
 		if (targetGuid == 0)

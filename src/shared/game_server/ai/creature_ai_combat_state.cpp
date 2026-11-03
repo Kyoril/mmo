@@ -469,8 +469,9 @@ namespace mmo
 
 		// Find the unit with the highest threat. A pet goes by its strategy first (commanded
 		// target, the owner's victim) and only falls back to threat.
+		// A pet that only fights its owner's target never falls back to threat.
 		GameUnitS* newVictim = GetAI().IsPetMode() ? SelectPetVictim() : nullptr;
-		if (!newVictim)
+		if (!newVictim && !GetAI().IsPetOwnerTargetOnly())
 		{
 			newVictim = GetTopThreatener();
 		}
@@ -2088,7 +2089,8 @@ namespace mmo
 		{
 			if (const auto owner = ai.GetPetOwner())
 			{
-				if (GameUnitS* ownerVictim = owner->GetVictim(); usable(ownerVictim) && ai.IsWithinPetStayReach(*ownerVictim))
+				GameUnitS* ownerVictim = ai.IsPetOwnerTargetOnly() ? ai.FindPetOwnerTarget() : owner->GetVictim();
+				if (usable(ownerVictim) && ai.IsWithinPetStayReach(*ownerVictim))
 				{
 					preferred = ownerVictim;
 				}
@@ -2144,6 +2146,17 @@ namespace mmo
 				{
 					return true;
 				}
+			}
+		}
+
+		// A pet that only fights its owner's target is done once the owner fights nothing it can
+		// take on (no threat fallback).
+		if (ai.IsPetOwnerTargetOnly() && ai.GetPetCommandedTarget() == 0)
+		{
+			const GameUnitS* ownerTarget = ai.FindPetOwnerTarget();
+			if (!ownerTarget || !ai.IsWithinPetStayReach(*ownerTarget))
+			{
+				return true;
 			}
 		}
 

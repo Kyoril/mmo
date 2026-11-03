@@ -53,6 +53,8 @@ ICONS = "Interface/Icons/Spells/"
 
 # --- Enum values (src/shared/game/spell.h, aura.h, spell_target_map.h) -------------------------
 APPLY_AURA, SCHOOL_DAMAGE, HEAL, APPLY_AREA_AURA, SUMMON = 6, 2, 10, 49, 25
+SUMMON_PET = 43
+PET_LEVEL_CLASS = 2     # pet_level_source (src/shared/game/pet_defines.h): the caster's class level
 ENERGIZE, WEAPON_PERCENT_DAMAGE = 27, 28
 MOD_STAT_PCT, ADD_FLAT, ADD_PCT, PROC_TRIGGER = 31, 18, 19, 12
 MOD_ATTACK_SPEED, MOD_DECREASE_SPEED, MOD_FEAR = 3, 15, 28
@@ -915,7 +917,8 @@ ACOLYTE = {
                     "attributes": [0x10, 128], "spellSchool": SCHOOL_SHADOW, "duration": 8000,
                     "icon": ICONS + "Acolyte_GloomTether.htex",
                     "visualization_id": 150,  # Acolyte - Gloom Tether
-                    "effects": [{"type": SUMMON, "basepoints": 1, "targeta": T_ENEMY, "radius": 2.0, "summonunit": 123}],
+                    "effects": [{"type": SUMMON_PET, "basepoints": 1, "targeta": T_ENEMY, "radius": 2.0, "summonunit": 123,
+                                 "pet_max_count": 3, "pet_level_source": PET_LEVEL_CLASS}],
                     **text_fields(("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
                                   ("Ruft $D lang einen Düsterling herbei.", "Calls a Gloomling for $D.",
                                    "Appelle un ombrelin pendant $D.", "Призывает мрачного бесёнка на $D."))})]),
@@ -972,7 +975,8 @@ ACOLYTE = {
                 "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_BroodHorror.htex",
                 "duration": 20000, "cooldown": "180000", "cost": 80, "rangetype": 2,
                 "visualization_id": 152,  # Acolyte - Brood Horror
-                "effects": [{"type": SUMMON, "basepoints": 1, "targeta": T_ENEMY, "radius": 3.0, "summonunit": 124}],
+                "effects": [{"type": SUMMON_PET, "basepoints": 1, "targeta": T_ENEMY, "radius": 3.0, "summonunit": 124,
+                             "pet_level_source": PET_LEVEL_CLASS}],
                 **text_fields(("Brutschrecken", "Brood Horror", "Horreur de la couvée", "Ужас выводка"),
                               ("Ruft $D lang einen Brutschrecken aus der Leere herbei. Er greift Euer Ziel an.",
                                "Calls a Brood Horror out of the void for $D. It attacks your target.",
