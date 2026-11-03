@@ -5,8 +5,12 @@
 #include "fake_terrain.h"
 #include "pcg/terrain_contribution.h"
 
+#include <atomic>
 #include <cmath>
 #include <map>
+#include <mutex>
+#include <set>
+#include <thread>
 
 using namespace mmo;
 using namespace mmo::pcg;
@@ -112,6 +116,89 @@ TEST_CASE("A channel target writes what the plain target writes, one channel per
 	CHECK(calls[terrain_channel::Splat] > 0);
 	CHECK(calls[terrain_channel::Water] > 0);
 	CHECK(calls[terrain_channel::Material] > 0);
+}
+
+TEST_CASE("Apply with several worker targets writes what one target writes", "[terrain_contribution]")
+{
+	// Heights and splat depend on the position and the base, so a sample written from the wrong row would show.
+	const auto ripple = [](const float x, const float z, const float baseHeight)
+	{
+		TerrainTarget t = Bowl(x, z, baseHeight);
+		t.height = baseHeight + std::sin(x * 0.7f) + std::cos(z * 0.3f);
+		t.splatWeight = 0.25f + 0.5f * std::abs(std::sin(x + 2.0f * z));
+		return t;
+	};
+
+	FakeTerrain singleTerrain;
+	TerrainContribution single;
+	Apply(singleTerrain, FullRect, ripple, "Grass", single);
+
+	// Each worker target notes whether it was ever entered while already running, and the threads it ran on.
+	constexpr size_t workers = 4;
+	std::vector<std::atomic<int>> running(workers);
+	std::atomic<bool> overlapped{ false };
+	std::mutex threadsLock;
+	std::set<std::thread::id> threads;
+	std::vector<ChannelTerrainTargetFunction> targets;
+	for (size_t i = 0; i < workers; ++i)
+	{
+		targets.push_back([&, i](const float x, const float z, const float baseHeight, terrain_channel::Type)
+		{
+			if (running[i]++ != 0)
+			{
+				overlapped = true;
+			}
+			{
+				const std::lock_guard<std::mutex> lock(threadsLock);
+				threads.insert(std::this_thread::get_id());
+			}
+			const TerrainTarget t = ripple(x, z, baseHeight);
+			--running[i];
+			return t;
+		});
+	}
+	FakeTerrain parallelTerrain;
+	TerrainContribution parallel;
+	Apply(parallelTerrain, FullRect, targets, "Grass", parallel);
+
+	CHECK(parallelTerrain.m_data == singleTerrain.m_data);
+	const auto sameEntries = [](const auto& a, const auto& b)
+	{
+		if (a.size() != b.size())
+		{
+			return false;
+		}
+		for (size_t i = 0; i < a.size(); ++i)
+		{
+			if (a[i].x != b[i].x || a[i].z != b[i].z || a[i].base != b[i].base || a[i].written != b[i].written)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+	CHECK(sameEntries(parallel.outer, single.outer));
+	CHECK(sameEntries(parallel.inner, single.inner));
+	CHECK(sameEntries(parallel.splat, single.splat));
+	CHECK(sameEntries(parallel.waterQuads, single.waterQuads));
+	CHECK(sameEntries(parallel.waterHeights, single.waterHeights));
+	CHECK(sameEntries(parallel.materials, single.materials));
+	CHECK(parallel.touchedOuter.minX == single.touchedOuter.minX);
+	CHECK(parallel.touchedOuter.minZ == single.touchedOuter.minZ);
+	CHECK(parallel.touchedOuter.maxX == single.touchedOuter.maxX);
+	CHECK(parallel.touchedOuter.maxZ == single.touchedOuter.maxZ);
+
+	// A worker target is never called from two threads at once (how the rows were shared out is up to the threads).
+	CHECK_FALSE(overlapped);
+	CHECK_FALSE(threads.empty());
+
+	// No targets: nothing is written.
+	FakeTerrain untouched;
+	const FakeTerrain::Data original = untouched.m_data;
+	TerrainContribution none;
+	Apply(untouched, FullRect, std::vector<ChannelTerrainTargetFunction>{}, "Grass", none);
+	CHECK(none.IsEmpty());
+	CHECK(untouched.m_data == original);
 }
 
 TEST_CASE("Rebuild twice is identical", "[terrain_contribution]")

@@ -6,8 +6,12 @@
 
 #include "math/vector3.h"
 #include "pcg/section_asset.h"
+#include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
+
+#include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
@@ -34,7 +38,7 @@ namespace mmo
 		{
 			TileTextures textures;
 			int32 pageX = 0, pageZ = 0, localX = 0, localZ = 0;
-			if (m_terrain.GetPageIndexFromGlobalTileIndex(tileX, tileZ, pageX, pageZ) &&
+			if (!m_cacheOnly && m_terrain.GetPageIndexFromGlobalTileIndex(tileX, tileZ, pageX, pageZ) &&
 				m_terrain.GetLocalTileIndexByGlobalTileIndex(tileX, tileZ, localX, localZ))
 			{
 				if (const terrain::Page* page = m_terrain.GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ)))
@@ -102,6 +106,40 @@ namespace mmo
 			return -1;
 		}
 		return FindLayer(tileX, tileZ, textureKey);
+	}
+
+	void EditorTextureLayers::Prewarm(const pcg::WorldRect& rect)
+	{
+		int32 minX = 0, minZ = 0, maxX = 0, maxZ = 0;
+		if (!GetTileIndex(rect.minX, rect.minZ, minX, minZ) || !GetTileIndex(rect.maxX, rect.maxZ, maxX, maxZ))
+		{
+			// A corner off the terrain: clamp through the corners that are on it, tile by tile.
+			const int32 tiles = static_cast<int32>(m_terrain.GetWidth() * terrain::constants::TilesPerPage);
+			const int32 rows = static_cast<int32>(m_terrain.GetHeight() * terrain::constants::TilesPerPage);
+			const float half = m_terrain.GetWidth() * terrain::constants::PageSize * 0.5f;
+			const float halfZ = m_terrain.GetHeight() * terrain::constants::PageSize * 0.5f;
+			minX = std::clamp(static_cast<int32>(std::floor((rect.minX + half) / terrain::constants::TileSize)), 0, tiles - 1);
+			maxX = std::clamp(static_cast<int32>(std::floor((rect.maxX + half) / terrain::constants::TileSize)), 0, tiles - 1);
+			minZ = std::clamp(static_cast<int32>(std::floor((rect.minZ + halfZ) / terrain::constants::TileSize)), 0, rows - 1);
+			maxZ = std::clamp(static_cast<int32>(std::floor((rect.maxZ + halfZ) / terrain::constants::TileSize)), 0, rows - 1);
+		}
+
+		for (int32 z = minZ - 1; z <= maxZ + 1; ++z)
+		{
+			for (int32 x = minX - 1; x <= maxX + 1; ++x)
+			{
+				GetTile(x, z);
+			}
+		}
+	}
+
+	std::unique_ptr<EditorTextureLayers> EditorTextureLayers::CopyWarmCache() const
+	{
+		auto copy = std::make_unique<EditorTextureLayers>(m_terrain);
+		copy->m_tiles = m_tiles;
+		copy->m_queries = m_queries;
+		copy->m_cacheOnly = true;
+		return copy;
 	}
 
 	pcg::graph::TextureLayerLookup EditorTextureLayers::MakeLookup()

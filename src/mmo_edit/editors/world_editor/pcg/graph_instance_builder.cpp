@@ -32,6 +32,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <thread>
 
 namespace mmo
 {
@@ -151,9 +152,24 @@ namespace mmo
 			std::unique_ptr<EditorTextureLayers> layers;
 			pcg::graph::TextureLayerLookup lookup;
 
+			/// The other worker threads of the terrain step: a copy of the warmed layer cache, its lookup and the notes
+			/// of each (merged into `notes` after the write).
+			std::vector<std::unique_ptr<EditorTextureLayers>> workerLayers;
+			std::vector<pcg::graph::TextureLayerLookup> workerLookups;
+			std::vector<pcg::graph::TerrainEvaluateNotes> workerNotes;
+
 			/// Warnings of the evaluation on the base, the terrain preparation and the placement step.
 			std::vector<String> warnings;
 		};
+
+		/// The section assets of rebuilds. They stay loaded from one rebuild to the next (parsing and the staleness check
+		/// of a large section take a good part of a second each); an asset whose files changed since is read again.
+		std::shared_ptr<SectionAssetCache> RebuildSectionAssets()
+		{
+			static const std::shared_ptr<SectionAssetCache> cache = std::make_shared<SectionAssetCache>();
+			cache->DropChanged();
+			return cache;
+		}
 
 		/// Evaluates out.graph (already read) with a freshly built context, the way EvaluateGraphInstance does.
 		bool EvaluateLoadedGraph(IWorldEditor& editor, const pcg::GraphInstanceRecord& record, ProceduralEditMode& controls,
@@ -810,7 +826,7 @@ namespace mmo
 			CollectSeamNeighbours(record, otherInstances, neighbourAreas, &neighbourNames);
 		}
 
-		const auto sections = std::make_shared<SectionAssetCache>();
+		const std::shared_ptr<SectionAssetCache> sections = RebuildSectionAssets();
 		pcg::graph::PreparedTerrain dryTerrain;
 		if (!PrepareTerrainOps(dryRun, record, liveGround, *sections, neighbourAreas, dryTerrain, error))
 		{
@@ -911,6 +927,36 @@ namespace mmo
 			return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes, channels);
 		};
 
+		// One target per hardware thread: the main one, then copies of the layer cache warmed over the influence (the
+		// copies never read the terrain, so they may run on other threads).
+		content.terrainWorkers = [state, areaRect]()
+		{
+			const uint32 workers = std::max(1u, std::thread::hardware_concurrency());
+			state->layers->Prewarm(areaRect);
+			state->workerLayers.clear();
+			state->workerLookups.clear();
+			state->workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
+			for (uint32 i = 1; i < workers; ++i)
+			{
+				state->workerLayers.push_back(state->layers->CopyWarmCache());
+				state->workerLookups.push_back(state->workerLayers.back()->MakeLookup());
+			}
+
+			std::vector<pcg::ChannelTerrainTargetFunction> targets;
+			targets.push_back([state](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
+			{
+				return state->terrain.Evaluate(x, z, baseHeight, state->lookup, &state->notes, channels);
+			});
+			for (size_t i = 0; i + 1 < workers; ++i)
+			{
+				targets.push_back([state, i](const float x, const float z, const float baseHeight, const pcg::terrain_channel::Type channels)
+				{
+					return state->terrain.Evaluate(x, z, baseHeight, state->workerLookups[i], &state->workerNotes[i], channels);
+				});
+			}
+			return targets;
+		};
+
 		content.placements = [state](const GroundFunction& ground, const GroundFunction&, std::vector<pcg::Placement>& out)
 		{
 			// Spawns keep their height above the ground, now the final one.
@@ -946,6 +992,11 @@ namespace mmo
 		};
 
 		report = ApplyGeneratedContent(editor, content, record.content, record.id, GraphInstanceLabel);
+		for (const pcg::graph::TerrainEvaluateNotes& notes : state->workerNotes)
+		{
+			state->notes.missingLayerOps.insert(notes.missingLayerOps.begin(), notes.missingLayerOps.end());
+			state->notes.missingSectionLayers.insert(notes.missingSectionLayers.begin(), notes.missingSectionLayers.end());
+		}
 		report.warnings.insert(report.warnings.end(), state->warnings.begin(), state->warnings.end());
 		state->terrain.DescribeNotes(state->notes, report.warnings);
 		report.milliseconds = MillisecondsSince(start);

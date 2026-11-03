@@ -385,7 +385,16 @@ namespace mmo
 		if (writesTerrain)
 		{
 			owned.influence = content.influence;
-			pcg::Apply(access, owned.influence, content.terrain, content.tileMaterial, owned.terrain);
+			std::vector<pcg::ChannelTerrainTargetFunction> targets;
+			if (content.terrainWorkers)
+			{
+				targets = content.terrainWorkers();
+			}
+			if (targets.empty())
+			{
+				targets.push_back(content.terrain);
+			}
+			pcg::Apply(access, owned.influence, targets, content.tileMaterial, owned.terrain);
 			report.terrainSamples = CountSamples(owned.terrain);
 		}
 		else if (owned.terrain.IsEmpty())

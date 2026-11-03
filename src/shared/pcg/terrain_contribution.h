@@ -118,4 +118,13 @@ namespace mmo::pcg
 	/// Material. Writes the same as Apply with a target that fills every channel the same way.
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const ChannelTerrainTargetFunction& target,
 		const String& material, TerrainContribution& out);
+
+	/// Apply with one target per worker thread: the height and splat passes evaluate their samples on
+	/// targets.size() threads (no target is called from two threads at once, but different targets run
+	/// concurrently) and then write in the same order as Apply with a single target, so the result is the
+	/// same. Every target must return the same as targets[0]; the water and material passes use targets[0]
+	/// only. The terrain's height Get methods are called concurrently and must only read. Nothing is
+	/// written when `targets` is empty.
+	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
+		const String& material, TerrainContribution& out);
 }

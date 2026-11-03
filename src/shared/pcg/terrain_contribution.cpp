@@ -2,6 +2,8 @@
 
 #include "terrain_contribution.h"
 
+#include "parallel_for.h"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -43,6 +45,17 @@ namespace mmo::pcg
 			r.lo = static_cast<int32>(std::ceil((minW - origin) / step - offset));
 			r.hi = static_cast<int32>(std::floor((maxW - origin) / step - offset));
 			return r;
+		}
+
+		/// Calls body(target, row) for every row in [0, rows), each row exactly once, on one thread per target (see
+		/// ParallelFor), so no target is called from two threads at once; returns when every row is done.
+		void ForEachRow(const std::vector<ChannelTerrainTargetFunction>& targets, const int32 rows,
+			const std::function<void(const ChannelTerrainTargetFunction& target, int32 row)>& body)
+		{
+			ParallelFor(static_cast<size_t>(std::max(0, rows)), targets.size(), [&](const size_t worker, const size_t row)
+			{
+				body(targets[worker], static_cast<int32>(row));
+			});
 		}
 
 		float Lerp(float a, float b, float t)
@@ -282,7 +295,18 @@ namespace mmo::pcg
 	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const ChannelTerrainTargetFunction& target,
 		const String& material, TerrainContribution& out)
 	{
+		Apply(terrain, rect, std::vector<ChannelTerrainTargetFunction>{ target }, material, out);
+	}
+
+	void Apply(ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
+		const String& material, TerrainContribution& out)
+	{
 		out.Clear();
+		if (targets.empty())
+		{
+			return;
+		}
+		const ChannelTerrainTargetFunction& target = targets.front();
 
 		const GridLayout& l = terrain.GetLayout();
 		const double vs = l.vertexSpacing;
@@ -306,19 +330,46 @@ namespace mmo::pcg
 			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, vs, offset);
 			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, vs, offset);
 			auto& list = pass == 0 ? out.outer : out.inner;
-			for (int32 z = rz.lo; z <= rz.hi; ++z)
+			const int32 width = rx.hi - rx.lo + 1;
+			const int32 rows = rz.hi - rz.lo + 1;
+			if (width <= 0 || rows <= 0)
 			{
+				continue;
+			}
+
+			// The targets are evaluated first (concurrently with several targets; each sample reads only its own base,
+			// which nothing writes before this pass's write loop), then written in order.
+			struct HeightSample
+			{
+				float base, height, weight;
+			};
+			std::vector<HeightSample> samples(static_cast<size_t>(width) * static_cast<size_t>(rows));
+			ForEachRow(targets, rows, [&](const ChannelTerrainTargetFunction& rowTarget, const int32 row)
+			{
+				const int32 z = rz.lo + row;
+				const double wz = l.originZ + (z + offset) * vs;
 				for (int32 x = rx.lo; x <= rx.hi; ++x)
 				{
 					const float base = pass == 0 ? terrain.GetOuterHeight(x, z) : terrain.GetInnerHeight(x, z);
 					const double wx = l.originX + (x + offset) * vs;
-					const double wz = l.originZ + (z + offset) * vs;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), base, terrain_channel::Heights);
-					if (t.heightWeight <= 0.0f)
+					const TerrainTarget t = rowTarget(static_cast<float>(wx), static_cast<float>(wz), base, terrain_channel::Heights);
+					samples[static_cast<size_t>(row) * width + (x - rx.lo)] = { base, t.height, t.heightWeight };
+				}
+			});
+
+			for (int32 z = rz.lo; z <= rz.hi; ++z)
+			{
+				const double wz = l.originZ + (z + offset) * vs;
+				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				{
+					const HeightSample& t = samples[static_cast<size_t>(z - rz.lo) * width + (x - rx.lo)];
+					if (t.weight <= 0.0f)
 					{
 						continue;
 					}
-					const float written = Lerp(base, t.height, std::min(1.0f, t.heightWeight));
+					const double wx = l.originX + (x + offset) * vs;
+					const float base = t.base;
+					const float written = Lerp(base, t.height, std::min(1.0f, t.weight));
 					if (written == base)
 					{
 						continue;
@@ -341,20 +392,42 @@ namespace mmo::pcg
 		{
 			const IndexRange rx = RangeFor(rect.minX, rect.maxX, l.originX, l.pixelSpacing, 0.0);
 			const IndexRange rz = RangeFor(rect.minZ, rect.maxZ, l.originZ, l.pixelSpacing, 0.0);
+			const int32 width = std::max(0, rx.hi - rx.lo + 1);
+			const int32 rows = std::max(0, rz.hi - rz.lo + 1);
+
+			// Evaluated first (concurrently with several targets), then blended and written in order.
+			struct SplatSample
+			{
+				float weight;
+				std::array<uint8, 4> splat;
+			};
+			std::vector<SplatSample> samples(static_cast<size_t>(width) * static_cast<size_t>(rows));
+			ForEachRow(targets, width > 0 ? rows : 0, [&](const ChannelTerrainTargetFunction& rowTarget, const int32 row)
+			{
+				const int32 z = rz.lo + row;
+				const double wz = l.originZ + z * l.pixelSpacing;
+				for (int32 x = rx.lo; x <= rx.hi; ++x)
+				{
+					const double wx = l.originX + x * l.pixelSpacing;
+					const TerrainTarget t = rowTarget(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Splat);
+					samples[static_cast<size_t>(row) * width + (x - rx.lo)] = { t.splatWeight, t.splat };
+				}
+			});
+
 			for (int32 z = rz.lo; z <= rz.hi; ++z)
 			{
 				for (int32 x = rx.lo; x <= rx.hi; ++x)
 				{
 					const double wx = l.originX + x * l.pixelSpacing;
 					const double wz = l.originZ + z * l.pixelSpacing;
-					const TerrainTarget t = target(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Splat);
-					if (t.splatWeight <= 0.0f)
+					const SplatSample& t = samples[static_cast<size_t>(z - rz.lo) * width + (x - rx.lo)];
+					if (t.weight <= 0.0f)
 					{
 						continue;
 					}
 					const uint32 base = terrain.GetSplat(x, z);
 					const std::array<uint8, 4> baseW = Unpack(base);
-					const float w = std::min(1.0f, t.splatWeight);
+					const float w = std::min(1.0f, t.weight);
 					std::array<double, 4> blended{};
 					for (size_t i = 0; i < 4; ++i)
 					{

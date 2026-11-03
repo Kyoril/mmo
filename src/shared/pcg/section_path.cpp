@@ -2,6 +2,7 @@
 
 #include "section_path.h"
 
+#include "parallel_for.h"
 #include "pcg_random.h"
 
 #include <algorithm>
@@ -315,14 +316,18 @@ namespace mmo::pcg
 
 			const Box pathBox{ minX, minZ, maxX, maxZ };
 			const double reachSq = (reach + kNearestSlack) * (reach + kNearestSlack);
-			const size_t cells = static_cast<size_t>(grid.columns) * static_cast<size_t>(grid.rows);
-			grid.cellStart.assign(cells + 1, 0);
-			for (int32 cz = 0; cz < grid.rows; ++cz)
+
+			// Rows are independent: each collects its cells' candidates on some thread, then they are joined in row order.
+			const size_t columns = static_cast<size_t>(grid.columns);
+			std::vector<std::vector<uint32>> rowSegments(static_cast<size_t>(grid.rows));
+			std::vector<std::vector<uint32>> rowCounts(static_cast<size_t>(grid.rows), std::vector<uint32>(columns, 0));
+			ParallelFor(static_cast<size_t>(grid.rows), HardwareWorkers(), [&](size_t, const size_t row)
 			{
+				const int32 cz = static_cast<int32>(row);
+				std::vector<uint32>& found = rowSegments[row];
 				for (int32 cx = 0; cx < grid.columns; ++cx)
 				{
-					const size_t cell = static_cast<size_t>(cz) * grid.columns + cx;
-					grid.cellStart[cell + 1] = static_cast<uint32>(grid.segments.size());
+					const size_t before = found.size();
 					const Box box{ grid.originX + static_cast<double>(cx) * kNearestCell, grid.originZ + static_cast<double>(cz) * kNearestCell,
 						grid.originX + static_cast<double>(cx + 1) * kNearestCell, grid.originZ + static_cast<double>(cz + 1) * kNearestCell };
 					if (BoxBoxDistanceSq(box, pathBox) > reachSq)
@@ -352,12 +357,24 @@ namespace mmo::pcg
 							const SplineSample& b = samples[(i + 1) % n];
 							if (BoxSegmentDistanceSq(box, a.x, a.z, b.x, b.z) <= limitSq)
 							{
-								grid.segments.push_back(static_cast<uint32>(i));
+								found.push_back(static_cast<uint32>(i));
 							}
 						}
 					}
-					grid.cellStart[cell + 1] = static_cast<uint32>(grid.segments.size());
+					rowCounts[row][static_cast<size_t>(cx)] = static_cast<uint32>(found.size() - before);
 				}
+			});
+
+			const size_t cells = columns * static_cast<size_t>(grid.rows);
+			grid.cellStart.assign(cells + 1, 0);
+			for (size_t row = 0; row < rowSegments.size(); ++row)
+			{
+				for (size_t cx = 0; cx < columns; ++cx)
+				{
+					const size_t cell = row * columns + cx;
+					grid.cellStart[cell + 1] = grid.cellStart[cell] + rowCounts[row][cx];
+				}
+				grid.segments.insert(grid.segments.end(), rowSegments[row].begin(), rowSegments[row].end());
 			}
 		}
 	}

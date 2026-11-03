@@ -8,6 +8,7 @@
 
 #include <array>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,8 @@ namespace mmo
 	///        Albedo0N fallback) compared with pcg::TextureKeysMatch, first matching layer wins.
 	/// @details Caches the four layer textures per tile (raw and normalised) and the normalised form of every
 	///          queried key for its lifetime, so it must not outlive a change of tile materials it should see (one
-	///          build). Main thread only (the terrain is not thread safe, the cache is not synchronised).
+	///          build). Main thread only (the terrain is not thread safe, the cache is not synchronised), except for
+	///          copies made by CopyWarmCache, which never read the terrain.
 	class EditorTextureLayers final : public NonCopyable
 	{
 	public:
@@ -45,6 +47,14 @@ namespace mmo
 
 		/// @brief FindLayer for the tile under a world position; -1 outside the terrain.
 		int8 FindLayer(float x, float z, const String& textureKey);
+
+		/// @brief Reads the layer textures of every tile overlapping rect (grown by one tile) into the cache.
+		void Prewarm(const pcg::WorldRect& rect);
+
+		/// @brief A copy of the cache that never reads the terrain: a tile it has not cached has no layer textures. It
+		///        may be used on another thread (one copy per thread) while nothing changes tile materials. Must not
+		///        outlive this adapter's terrain.
+		[[nodiscard]] std::unique_ptr<EditorTextureLayers> CopyWarmCache() const;
 
 		/// @brief A lookup for pcg::graph::PreparedTerrain::Evaluate that calls FindLayer on this adapter, which must
 		///        outlive the returned function.
@@ -77,5 +87,8 @@ namespace mmo
 
 		/// Queried keys and their normalised form.
 		std::vector<std::pair<String, String>> m_queries;
+
+		/// A CopyWarmCache copy: a tile missing from m_tiles is not read from the terrain.
+		bool m_cacheOnly = false;
 	};
 }

@@ -89,6 +89,12 @@ namespace mmo
 		///        names the channel it reads (see pcg::Apply), so a target may skip work only other channels need.
 		pcg::ChannelTerrainTargetFunction terrain;
 
+		/// @brief Optional: called right before the terrain is written (after prepare, with the pages materialised) to
+		///        make one target per worker thread for pcg::Apply. Each must return what `terrain` returns; the first
+		///        runs on the calling thread and also writes water and tile materials. Empty, or returning none: `terrain`
+		///        alone on the calling thread.
+		std::function<std::vector<pcg::ChannelTerrainTargetFunction>()> terrainWorkers;
+
 		/// @brief Material set on tiles where a target asks for it ("" = none).
 		String tileMaterial;
 

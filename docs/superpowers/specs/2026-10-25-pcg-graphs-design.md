@@ -400,3 +400,12 @@ Task 7 (Falwyn stream and waterfall):
   visible shoreline is where the bank crosses the surface. The upstream end closes the same way by the distance to
   the bed's end edge; the downstream end stays flat (it flows into a lake or a fall). 4 edge vertices remain within
   0.24 m (the region fade and the fall's section own the ground there). Capture: `pcg-graphs/phase3b-river-banks.png`.
+- **Rebuild speed (2026-11-03, the user found rebuilds very slow).** FalwynValley took 21.4 s in the Debug editor:
+  14.6 s splat pass (4.4 M pixels, 13.9 s of it SectionPath: ValleyWall projection and mass noise), 2 x 1.75 s
+  `BuildNearestGrid` for the ValleyWall mass (every cell against every chunk, dry run and base run), 1.2 s page
+  loading (CLI only) and ~0.8 s section asset loading per rebuild. Now: `pcg::Apply` takes one target per worker
+  thread and evaluates the height and splat samples in parallel before writing them in the old order (output byte
+  for byte the same; the editor gives each worker a copy of the warmed texture layer cache and its own notes);
+  `BuildNearestGrid` builds its rows in parallel (`pcg::ParallelFor`, plain threads: the editor and tools do not
+  initialise the TaskSystem); rebuilds keep section assets loaded (`DropChanged` rereads changed files). 5.0 s in
+  the CLI (Debug), of which ~2 s are the one-time page and asset loads an open editor does not repeat.
