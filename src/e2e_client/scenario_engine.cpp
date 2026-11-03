@@ -293,6 +293,21 @@ namespace mmo
 			g_runtime->session->ClearLastSpellVisual();
 		}
 
+		/// How the unit last appeared at this client: "spawned" (just added to the world, creation block
+		/// flagged object_update_flags::Spawned), "came_into_sight" or "none".
+		std::string luaSpawnReason(const std::string& guid)
+		{
+			switch (g_runtime->session->GetLastSpawnReason(guidFromString(guid)))
+			{
+			case game::spawn_reason::Spawned:
+				return "spawned";
+			case game::spawn_reason::CameIntoSight:
+				return "came_into_sight";
+			default:
+				return "none";
+			}
+		}
+
 		/// Why the server last removed the object from this client: "destroyed" (removed from the
 		/// world, despawn_reason::Destroyed), "out_of_sight" (left our view) or "none".
 		std::string luaDespawnReason(const std::string& guid)
@@ -2010,6 +2025,7 @@ namespace mmo
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
 				luabind::def_lambda("SoundSource", &luaSoundSource),
 				luabind::def_lambda("DespawnReason", &luaDespawnReason),
+				luabind::def_lambda("SpawnReason", &luaSpawnReason),
 				luabind::def_lambda("SoundCount", &luaSoundCount),
 				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),

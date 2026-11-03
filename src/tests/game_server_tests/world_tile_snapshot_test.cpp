@@ -51,7 +51,7 @@ namespace
 
 		GameUnitS& GetGameUnit() const override { return unit; }
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override { updates += objects.size(); }
-		void NotifyObjectsSpawned(const std::vector<GameObjectS*>&) override {}
+		void NotifyObjectsSpawned(const std::vector<GameObjectS*>&, game::spawn_reason::Type) override {}
 		void NotifyObjectsDespawned(const std::vector<GameObjectS*>&, game::despawn_reason::Type) override {}
 		GameTime ClientToServerTime(const GameTime clientTimestamp) const override { return clientTimestamp; }
 		GameTime ServerToClientTime(const GameTime serverTimestamp) const override { return serverTimestamp; }

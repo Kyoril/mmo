@@ -109,7 +109,7 @@ namespace mmo
 		}
 	}
 
-	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation) const
+	void GameObjectS::WriteObjectUpdateBlock(io::Writer& writer, bool creation, bool spawned) const
 	{
 		writer
 			<< io::write<uint8>(GetTypeId())
@@ -125,6 +125,11 @@ namespace mmo
 		if (HasMovementInfo() && creation)
 		{
 			flags |= object_update_flags::HasMovementInfo;
+		}
+
+		if (spawned && creation)
+		{
+			flags |= object_update_flags::Spawned;
 		}
 
 		writer << io::write<uint32>(flags);

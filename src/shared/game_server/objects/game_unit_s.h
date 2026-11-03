@@ -615,7 +615,7 @@ namespace mmo
 		/// Writes object update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.
-		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
+		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true, bool spawned = false) const override;
 
 		/// Writes value update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.

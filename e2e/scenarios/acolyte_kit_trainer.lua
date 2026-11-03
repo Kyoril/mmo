@@ -167,7 +167,10 @@ Assert(WaitUntil(function() return CountUnitsOwnedBy(me, GLOOMLING) == 2 end, 50
 local gloomlings = GetOwnedUnits(me, GLOOMLING)
 for _, gloomling in ipairs(gloomlings) do
 	Assert(GetOwner(gloomling) == me, "each Gloomling should be owned by the caster")
+	-- Summoned into the world, not walked into sight: clients play the Gloomling's spawn effect.
+	Assert(SpawnReason(gloomling) == "spawned", "a summoned Gloomling should arrive spawned, got " .. SpawnReason(gloomling))
 end
+Assert(SpawnReason(dummy) == "spawned", "a GM-created dummy is added to the world too")
 Assert(WaitUntil(function()
 	for _, gloomling in ipairs(gloomlings) do
 		if GetTarget(gloomling) ~= dummy then return false end

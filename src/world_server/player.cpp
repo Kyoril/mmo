@@ -565,7 +565,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested, const game::spawn_reason::Type reason)
 	{
 		// None of these GUIDs may already be known to the client — receiving a second creation
 		// packet for the same GUID crashes the client (duplicate entity name in
@@ -625,7 +625,7 @@ namespace mmo
 			writer << io::write<uint16>(objects.size());
 			for (const auto& object : objects)
 			{
-				object->WriteObjectUpdateBlock(writer);
+				object->WriteObjectUpdateBlock(writer, true, reason == game::spawn_reason::Spawned);
 			}
 
 			SendObjectUpdate(body, true);

@@ -2310,6 +2310,11 @@ namespace mmo
 		// Add or update in object manager
 		m_objectManager.AddOrUpdateUnit(unit);
 
+		if (creation)
+		{
+			m_spawnReasons[guid] = (updateFlags & object_update_flags::Spawned) != 0 ? game::spawn_reason::Spawned : game::spawn_reason::CameIntoSight;
+		}
+
 		// Set self guid if this is our character
 		if (guid == m_selectedCharacterGuid)
 		{

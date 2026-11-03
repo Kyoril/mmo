@@ -26,7 +26,11 @@ namespace mmo
 
 		virtual void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) = 0;
 
-		virtual void NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects) = 0;
+		/// Tells the subscriber that objects it did not know appear in its view.
+		/// @param objects The objects that appear.
+		/// @param reason game::spawn_reason::Spawned when the objects were just added to the world
+		///        instance, CameIntoSight otherwise. Clients play a unit's spawn effect only for Spawned.
+		virtual void NotifyObjectsSpawned(const std::vector<GameObjectS*>& objects, game::spawn_reason::Type reason) = 0;
 
 		/// Tells the subscriber that objects it knows disappear from its view.
 		/// @param objects The objects that disappear.

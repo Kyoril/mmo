@@ -88,6 +88,20 @@ namespace mmo
 			};
 		}
 
+		/// Why objects appear at a client. Not a field of its own on the wire: Spawned sets
+		/// object_update_flags::Spawned in the objects' creation blocks.
+		namespace spawn_reason
+		{
+			enum Type
+			{
+				/// The objects came into the client's sight (it moved, they moved, they became visible).
+				CameIntoSight = 0,
+
+				/// The objects were just added to the world instance (summoned, respawned, entered it).
+				Spawned = 1,
+			};
+		}
+
 		/// Why the objects of a DestroyObjects packet disappear from the client. Sent once per
 		/// packet, right after the object count.
 		namespace despawn_reason
@@ -119,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000025;
+		constexpr uint32 ProtocolVersion = 0x00000026;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
