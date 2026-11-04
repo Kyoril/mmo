@@ -323,7 +323,7 @@ namespace mmo
 	void Player::OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
-		NotifyObjectsDespawned(objects);
+		NotifyObjectsDespawned(objects, game::despawn_reason::Destroyed);
 	}
 
 	void Player::UpdateCharacterGroup(uint64 groupId, const std::optional<std::pair<LootMethod, uint8>> lootRules)
@@ -565,7 +565,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested, const game::spawn_reason::Type reason)
 	{
 		// None of these GUIDs may already be known to the client — receiving a second creation
 		// packet for the same GUID crashes the client (duplicate entity name in
@@ -625,7 +625,7 @@ namespace mmo
 			writer << io::write<uint16>(objects.size());
 			for (const auto& object : objects)
 			{
-				object->WriteObjectUpdateBlock(writer);
+				object->WriteObjectUpdateBlock(writer, true, reason == game::spawn_reason::Spawned);
 			}
 
 			SendObjectUpdate(body, true);
@@ -686,7 +686,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects)
+	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects, const game::despawn_reason::Type reason)
 	{
 		for (const auto* object : objects)
 		{
@@ -708,10 +708,11 @@ namespace mmo
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-		SendPacket([&objects](game::OutgoingPacket& outPacket)
+		SendPacket([&objects, reason](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::DestroyObjects);
 			outPacket << io::write<uint16>(objects.size());
+			outPacket << io::write<uint8>(reason);
 			for (const auto *gameObject : objects)
 			{
 				outPacket << io::write_packed_guid(gameObject->GetGuid());
@@ -794,7 +795,7 @@ namespace mmo
 		{
 			// True invisibility keeps its original despawn semantics.
 			const std::vector<GameObjectS*> objects{ &unit };
-			NotifyObjectsDespawned(objects);
+			NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
 		}
 	}
 
@@ -1829,6 +1830,7 @@ namespace mmo
 				{
 					outPacket.Start(game::realm_client_packet::DestroyObjects);
 					outPacket << io::write<uint16>(static_cast<uint16>(toDestroy.size()));
+					outPacket << io::write<uint8>(game::despawn_reason::OutOfSight);
 					for (const uint64 guid : toDestroy)
 					{
 						outPacket << io::write_packed_guid(guid);

@@ -301,7 +301,7 @@ namespace mmo
 
 		/// Sets the loot master GUID.
 		void SetLootMasterGuid(const uint64 guid) noexcept { m_lootMasterGuid = guid; }
-		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
+		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true, bool spawned = false) const override;
 
 		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit) override;
 

@@ -84,9 +84,9 @@ namespace mmo
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
-	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
+	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation, bool spawned) const
 	{
-		GameUnitS::WriteObjectUpdateBlock(writer, creation);
+		GameUnitS::WriteObjectUpdateBlock(writer, creation, spawned);
 
 		// Apply configuration
 		if (creation)

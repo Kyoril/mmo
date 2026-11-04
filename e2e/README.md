@@ -91,6 +91,10 @@ one error, and the swing that lands again reports one recovery),
 several objects of one entry, e.g. the Hollow Choir's seals),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
 `GetUnitFlags(g)` (the unit's replicated Flags field),
+`DespawnReason(g)` (why the server last removed `g` from this client: `"destroyed"` = removed from
+the world, `"out_of_sight"` = left our view, `"none"` = never removed),
+`SpawnReason(g)` (how unit `g` last appeared: `"spawned"` = just added to the world,
+`"came_into_sight"`, `"none"`),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
 `OffhandSwingCount(g)` (the off-hand swings among them, flagged `LeftSwing` by the server),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`

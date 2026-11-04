@@ -9,6 +9,7 @@
 #include "base/profiler.h"
 #include "base/task_system.h"
 #include "scene_graph/animation_state.h"
+#include "scene_graph/entity.h"
 #include "client_data/project.h"
 #include "mmo_client/party_unit_handle.h"
 #include "mmo_client/systems/party_info.h"
@@ -34,6 +35,7 @@ namespace mmo
 	}
 
 	std::map<uint64, std::shared_ptr<GameObjectC>> ObjectMgr::ms_objectyByGuid;
+	std::map<uint64, std::shared_ptr<GameUnitC>> ObjectMgr::ms_despawningUnits;
 	uint64 ObjectMgr::ms_activePlayerGuid = 0;
 	uint64 ObjectMgr::ms_activePetGuid = 0;
 	uint64 ObjectMgr::ms_selectedObjectGuid = 0;
@@ -51,6 +53,7 @@ namespace mmo
 	{
 		ms_project = &project;
 		ms_objectyByGuid.clear();
+		ms_despawningUnits.clear();
 		ms_activePlayerGuid = 0;
 		ms_activePetGuid = 0;
 		ms_selectedObjectGuid = 0;
@@ -79,13 +82,26 @@ namespace mmo
 		// Snapshot all units (shared_ptr so a notify handler removing objects below
 		// cannot leave dangling pointers behind).
 		std::vector<std::shared_ptr<GameObjectC>> units;
-		units.reserve(ms_objectyByGuid.size());
+		units.reserve(ms_objectyByGuid.size() + ms_despawningUnits.size());
 		for (const auto& [guid, object] : ms_objectyByGuid)
 		{
 			if (object->IsUnit())
 			{
 				units.push_back(object);
 			}
+		}
+
+		// Despawning units run their effect instead of the normal update, and leave once it ends.
+		for (auto it = ms_despawningUnits.begin(); it != ms_despawningUnits.end(); )
+		{
+			if (it->second->UpdateDespawnEffect(deltaTime))
+			{
+				it = ms_despawningUnits.erase(it);
+				continue;
+			}
+
+			units.push_back(it->second);
+			++it;
 		}
 
 		{
@@ -112,6 +128,10 @@ namespace mmo
 	void ObjectMgr::AddObject(std::shared_ptr<GameObjectC> object)
 	{
 		ASSERT(object);
+
+		// Normally cancelled while the object deserializes, before it builds scene objects; this
+		// covers objects added without going through creation deserialization.
+		CancelDespawn(object->GetGuid());
 		ASSERT(!ms_objectyByGuid.contains(object->GetGuid()));
 		ms_objectyByGuid[object->GetGuid()] = object;
 
@@ -168,6 +188,50 @@ namespace mmo
 
 			ms_objectyByGuid.erase(it);
 		}
+	}
+
+	bool ObjectMgr::DespawnObject(const uint64 guid)
+	{
+		const auto it = ms_objectyByGuid.find(guid);
+		if (it == ms_objectyByGuid.end() || !it->second->IsUnit() || guid == ms_activePlayerGuid)
+		{
+			RemoveObject(guid);
+			return false;
+		}
+
+		const std::shared_ptr<GameUnitC> unit = std::static_pointer_cast<GameUnitC>(it->second);
+		if (!unit->BeginDespawnEffect())
+		{
+			RemoveObject(guid);
+			return false;
+		}
+
+		// Spawning a guid cancels its earlier despawn, so no older unit of this guid is left here.
+		ms_despawningUnits[guid] = unit;
+		RemoveObject(guid);
+		return true;
+	}
+
+	void ObjectMgr::CancelDespawn(const uint64 guid)
+	{
+		const auto it = ms_despawningUnits.find(guid);
+		if (it == ms_despawningUnits.end())
+		{
+			return;
+		}
+
+		// Hide it right away in case something else still holds a reference and delays destruction.
+		if (Entity* entity = it->second->GetEntity())
+		{
+			entity->SetVisible(false);
+		}
+
+		ms_despawningUnits.erase(it);
+	}
+
+	bool ObjectMgr::IsDespawning(const uint64 guid)
+	{
+		return ms_despawningUnits.contains(guid);
 	}
 
 	std::shared_ptr<UnitHandle> ObjectMgr::GetUnitHandleByName(const std::string& unitName)
@@ -300,6 +364,7 @@ namespace mmo
 		ms_itemCount.clear();
 		ms_itemConnections.clear();
 		ms_objectyByGuid.clear();
+		ms_despawningUnits.clear();
 		ms_activePlayerGuid = 0;
 	}
 

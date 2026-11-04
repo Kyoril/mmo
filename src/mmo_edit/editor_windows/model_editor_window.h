@@ -31,6 +31,9 @@ namespace mmo
 
 		void DrawDetailsImpl(EntryType& currentEntry) override;
 
+		/// Draws the fields of a spawn or despawn effect (ModelDataEntry spawn_effect / despawn_effect).
+		void DrawTransitionEffect(proto::UnitTransitionEffect& effect, ImGuiTextFilter& soundFilter, const char* soundLabel);
+
 		void OnNewEntry(proto::TemplateManager<proto::ModelDatas, proto::ModelDataEntry>::EntryType& entry) override;
 
 		void OnAssetImported(const Path& path);
@@ -65,6 +68,8 @@ namespace mmo
 		ImGuiTextFilter m_critHitVoiceFilter;
 		ImGuiTextFilter m_aggroSoundFilter;
 		ImGuiTextFilter m_deathSoundFilter;
+		ImGuiTextFilter m_despawnSoundFilter;
+		ImGuiTextFilter m_spawnSoundFilter;
 
 		/// Search text of the item display combo in the Outfit section.
 		String m_itemDisplayFilter;

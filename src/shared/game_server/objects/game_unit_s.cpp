@@ -137,9 +137,9 @@ namespace mmo
 		m_despawnCountdown.SetEnd(GetAsyncTimeMs() + despawnDelay);
 	}
 
-	void GameUnitS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
+	void GameUnitS::WriteObjectUpdateBlock(io::Writer &writer, bool creation, bool spawned) const
 	{
-		GameObjectS::WriteObjectUpdateBlock(writer, creation);
+		GameObjectS::WriteObjectUpdateBlock(writer, creation, spawned);
 
 		// Speeds — if there is a pending forced speed change (ack not yet received),
 		// write the pending target speed so the object update does not overwrite the

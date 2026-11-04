@@ -9,6 +9,7 @@
 #include "log/default_log_levels.h"
 #include "scene_graph/scene.h"
 #include "game_unit_c.h"
+#include "object_mgr.h"
 
 namespace mmo
 {
@@ -165,6 +166,10 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			// The server spawned a guid whose previous unit still plays its despawn effect: that
+			// effect ends now, before this object builds its own scene objects.
+			ObjectMgr::CancelDespawn(GetGuid());
 
 			SetupSceneObjects();
 		}

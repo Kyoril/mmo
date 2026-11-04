@@ -167,7 +167,10 @@ Assert(WaitUntil(function() return CountUnitsOwnedBy(me, GLOOMLING) == 2 end, 50
 local gloomlings = GetOwnedUnits(me, GLOOMLING)
 for _, gloomling in ipairs(gloomlings) do
 	Assert(GetOwner(gloomling) == me, "each Gloomling should be owned by the caster")
+	-- Summoned into the world, not walked into sight: clients play the Gloomling's spawn effect.
+	Assert(SpawnReason(gloomling) == "spawned", "a summoned Gloomling should arrive spawned, got " .. SpawnReason(gloomling))
 end
+Assert(SpawnReason(dummy) == "spawned", "a GM-created dummy is added to the world too")
 Assert(WaitUntil(function()
 	for _, gloomling in ipairs(gloomlings) do
 		if GetTarget(gloomling) ~= dummy then return false end
@@ -176,6 +179,11 @@ Assert(WaitUntil(function()
 end, 8000, "gloomlings attack"), "both Gloomlings should attack the caster's target")
 Assert(WaitUntil(function() return CountUnitsOwnedBy(me, GLOOMLING) == 0 end, 20000, "gloomlings leave"),
 	"the Gloomlings should leave after 15 s")
+-- Expiring is a removal from the world, so clients play the Gloomling's despawn effect.
+for _, gloomling in ipairs(gloomlings) do
+	Assert(DespawnReason(gloomling) == "destroyed",
+		"an expired Gloomling should be destroyed, not leave sight, got " .. DespawnReason(gloomling))
+end
 Log("Two Gloomlings attacked the dummy and left")
 
 TargetUnit("0x0")
