@@ -1444,7 +1444,11 @@ CLASSES = [MAGE, WARRIOR, CLERIC, ACOLYTE, SCOUT]
 # Family flag changes so every modifier above hits exactly the spells it names.
 FAMILY_FLAGS = {
     23: 0x11, 74: 0x11,      # Shadowbolt: own bit 0x10 (Corrupting Touch shares 0x1)
-    73: 0x4, 38: 0x8,        # Fear, Veil of Shadows
+    73: 0x5, 38: 0x8,        # Fear (0x1: Veil of Shadows cost reduction), Veil of Shadows
+    # Veil of Shadows modifies bit 0x1, so every other acolyte shadow spell carries it too.
+    1328: 0x1, 302: 0x1, 1345: 0x1, 1352: 0x1,   # Embrace of Dread, Summon/Empower Duskling, Brood Horror
+    1330: 0x41, 1333: 0x101, 1335: 0x401,        # Curse of Frailty, Curse of the Mire, Call Gloomlings
+    1363: 0x2001, 1360: 0x1001,                  # Wail of the Lost, Tangled Tongue
     168: 0x10, 167: 0x20,    # Twin Slash, Throwing Knife (shared bits with Knockout/Sprint)
     163: 0x40, 166: 0x80,    # Quick Cut, Evasive Step
     169: 0x100,              # Mark Weakness
