@@ -149,29 +149,32 @@ namespace mmo
 				auto groupId = m_character->GetGroupId();
 				std::vector<uint64> nearbyMembers;
 
-				// Determine nearby party members
-				instance.GetUnitFinder().FindUnits(Circle(location.x, location.z, 40.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
-					{
-						// Only characters
-						if (!unit.IsPlayer())
+				// Determine nearby party members (they see the character itself and need no report)
+				if (groupId != 0)
+				{
+					instance.GetUnitFinder().FindUnits(Circle(location.x, location.z, 40.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
 						{
+							// Only characters
+							if (!unit.IsPlayer())
+							{
+								return true;
+							}
+
+							// Check characters group
+							GamePlayerS* character = static_cast<GamePlayerS*>(&unit);
+							if (character->GetGroupId() == groupId &&
+								character->GetGuid() != GetCharacterGuid())
+							{
+								nearbyMembers.push_back(character->GetGuid());
+							}
+
 							return true;
-						}
+						});
+				}
 
-						// Check characters group
-						GamePlayerS* character = static_cast<GamePlayerS*>(&unit);
-						if (character->GetGroupId() == groupId &&
-							character->GetGuid() != GetCharacterGuid())
-						{
-							nearbyMembers.push_back(character->GetGuid());
-						}
-
-						return true;
-					});
-
-				// Send packet to world node
+				// Send packet to the realm
 				m_connector.SendCharacterGroupUpdate(*m_character, nearbyMembers);
-				m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+				RefreshMemberReports();
 			});
 
 
@@ -390,16 +393,7 @@ namespace mmo
 				});
 		}
 
-		if (groupId != 0)
-		{
-			// Trigger next group member update
-			m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
-		}
-		else
-		{
-			// Stop group member update
-			m_groupUpdate.Cancel();
-		}
+		RefreshMemberReports();
 	}
 
 	void Player::UpdateCharacterGuild(uint64 guildId)
@@ -410,6 +404,21 @@ namespace mmo
 		}
 
 		m_character->Set<uint64>(object_fields::Guild, guildId);
+		RefreshMemberReports();
+	}
+
+	void Player::RefreshMemberReports()
+	{
+		if (!m_character || (m_character->GetGroupId() == 0 && m_character->Get<uint64>(object_fields::Guild) == 0))
+		{
+			m_groupUpdate.Cancel();
+			return;
+		}
+
+		if (!m_groupUpdate.IsRunning())
+		{
+			m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+		}
 	}
 
 	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
@@ -1727,6 +1736,9 @@ namespace mmo
 		{
 			UpdateCharacterGroup(m_characterData.groupId);
 		}
+
+		// Guild mates see the character on their maps even without a group
+		RefreshMemberReports();
 
 		// Send current game time to player
 		SendGameTimeInfo();

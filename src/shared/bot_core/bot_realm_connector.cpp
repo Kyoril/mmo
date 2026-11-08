@@ -1593,11 +1593,11 @@ namespace mmo
 			member.hasLevel = true;
 		}
 
-		if (updateFlags & group_update_flags::Zone)
+		if (updateFlags & group_update_flags::Map)
 		{
-			if (!(packet >> io::skip<uint16>()))
+			if (!(packet >> io::skip<uint32>()))
 			{
-				ELOG("Failed to read PartyMemberStats zone");
+				ELOG("Failed to read PartyMemberStats map");
 				return PacketParseResult::Disconnect;
 			}
 		}

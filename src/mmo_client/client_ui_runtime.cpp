@@ -8,6 +8,8 @@
 #include "ui/cooldown_frame.h"
 #include "ui/minimap.h"
 #include "ui/minimap_frame.h"
+#include "ui/world_map.h"
+#include "ui/world_map_frame.h"
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 #include "ui/unit_model_frame.h"
@@ -31,7 +33,7 @@ namespace mmo
 	}
 
 	/// @copydoc ClientUiRuntime::Initialize
-	bool ClientUiRuntime::Initialize(GameScript& gameScript, Minimap& minimap, Cursor& cursor)
+	bool ClientUiRuntime::Initialize(GameScript& gameScript, Minimap& minimap, WorldMap& worldMap, Cursor& cursor)
 	{
 		if (m_initialized)
 		{
@@ -64,6 +66,10 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("Minimap", [&minimap](const std::string& name)
 			{
 				return std::make_shared<MinimapFrame>(name, minimap);
+			});
+		FrameManager::Get().RegisterFrameFactory("WorldMap", [&worldMap](const std::string& name)
+			{
+				return std::make_shared<WorldMapFrame>(name, worldMap);
 			});
 		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string& name)
 			{

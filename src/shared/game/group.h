@@ -137,11 +137,14 @@ namespace mmo
 			CurrentPower = 1 << 4,
 			MaxPower = 1 << 5,
 			Level = 1 << 6,
-			Zone = 1 << 7,
+			/// uint32 id of the map the member is on, so clients can tell whether the position below
+			/// is on their own map.
+			Map = 1 << 7,
+			/// Three floats: the member's last known position, as reported by its world node.
 			Position = 1 << 8,
 			Auras = 1 << 9,
 
-			Full = (Status | CurrentHP | MaxHP | PowerType | CurrentPower | MaxPower | Level | Zone | Position | Auras)
+			Full = (Status | CurrentHP | MaxHP | PowerType | CurrentPower | MaxPower | Level | Map | Position | Auras)
 		};
 	}
 

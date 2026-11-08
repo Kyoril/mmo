@@ -25,6 +25,7 @@
 #include "game_protocol/game_protocol.h"
 #include "scene_graph/axis_display.h"
 #include "ui/minimap.h"
+#include "ui/world_map.h"
 #include "world_ping_visualizer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/world_grid.h"
@@ -150,6 +151,7 @@ namespace mmo
 			GameTimeComponent &gameTime,
 			TalentClient &talentClient,
 			Minimap &minimap,
+			WorldMap &worldMap,
 			InventoryClient &inventoryClient,
 			TradeClient &tradeClient,
 			ChannelClient &channelClient,
@@ -865,6 +867,7 @@ namespace mmo
 		TalentClient &m_talentClient;
 
 		Minimap &m_minimap;
+		WorldMap &m_worldMap;
 
 		InventoryClient &m_inventoryClient;
 

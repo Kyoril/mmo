@@ -461,7 +461,9 @@ int main(int argc, char* arg[])
 	// Unattended jobs. `--rebuild-material <asset>` recompiles a material's shaders from its stored
 	// graph, then exits. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
-	// --force), then exits. `--derive-rooms <asset.hwmo> [--derive-rooms ...]` derives the world
+	// --force), then exits. `--bake-worldmap Worlds/<n>/<n>.hwld` bakes the world map (zone grid and
+	// map art pyramid, from the minimap tiles) into Textures/WorldMap/<n>/, then exits; minimap bakes
+	// do this on their own when they finish. `--derive-rooms <asset.hwmo> [--derive-rooms ...]` derives the world
 	// models' room volumes from their floors, fixes mislinked portals, saves them and exits.
 	// `--stairs-to-ramp <asset.hmsh> [--stairs-to-ramp ...]` replaces the steps in the meshes'
 	// collision with a ramp, saves them and exits.
@@ -1949,6 +1951,34 @@ int main(int argc, char* arg[])
 				else
 				{
 					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-worldmap")
+			{
+				static std::ofstream bakeLog("worldmap_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+
+				if (missingArgs(i, 1, "--bake-worldmap <world>"))
+				{
+					break;
+				}
+
+				// Exit code 1 when the bake failed, for scripted use.
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					PostQuitMessage(mmo::WorldEditorInstance::GetLastCreated()->GenerateWorldMap() ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-worldmap: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
 				break;

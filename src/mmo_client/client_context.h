@@ -18,6 +18,7 @@ namespace mmo
 
 	class GameScript;
 	class Minimap;
+	class WorldMap;
 	class TimerQueue;
 	class IAudio;
 	class AudioSettings;
@@ -79,6 +80,9 @@ namespace mmo
 		std::unique_ptr<GameScript> gameScript;
 		/// @brief Shared minimap subsystem used by world UI and script bindings.
 		std::unique_ptr<Minimap> minimap;
+
+		/// @brief Shared world map subsystem used by world UI and script bindings.
+		std::unique_ptr<WorldMap> worldMap;
 
 		/// @brief Timer queue tied to the client main loop.
 		std::unique_ptr<TimerQueue> timerQueue;

@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <set>
 #include <vector>
 #include <zstr/zstr.hpp>
 #include <zlib.h>
@@ -348,7 +349,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, SoundEntryPlayer &soundEntryPlayer, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
-						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient, MailClient &mailClient)
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, WorldMap &worldMap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient, MailClient &mailClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -380,6 +381,7 @@ namespace mmo
 		, m_discord(discord)
 		, m_talentClient(talentClient)
 		, m_minimap(minimap)
+		, m_worldMap(worldMap)
 		, m_inventoryClient(inventoryClient)
 		, m_tradeClient(tradeClient)
 		, m_channelClient(channelClient)
@@ -1304,25 +1306,58 @@ namespace mmo
 
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
 
-			// Gather visible party member positions for minimap dots
-			std::vector<Minimap::PartyMemberDot> partyPositions;
+			m_worldMap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
+
+			// Party and guild members on this map, for the minimap and the world map. A spawned member's
+			// unit has the live position; members out of sight use the last position the realm reported.
+			std::vector<MapMemberDot> memberDots;
+			std::set<uint64> shownMembers;
 			const uint32 memberCount = m_partyInfo.GetMemberCount();
 			const uint64 selfGuid = controlled->GetGuid();
 			for (uint32 i = 0; i < memberCount; ++i)
 			{
 				const int32 idx = static_cast<int32>(i);
-				const uint64 memberGuid = m_partyInfo.GetMemberGuid(idx);
-				if (memberGuid == selfGuid)
+				const PartyMember* member = m_partyInfo.GetMember(idx);
+				if (!member || member->guid == selfGuid || (member->status & group_member_status::Online) == 0)
 				{
 					continue;
 				}
-				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(memberGuid))
+
+				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(member->guid))
 				{
-					const auto* member = m_partyInfo.GetMember(idx);
-					partyPositions.push_back({ memberUnit->GetPosition(), member ? member->name : memberUnit->GetName() });
+					memberDots.push_back({ memberUnit->GetPosition(), member->name, false });
+				}
+				else if (member->hasPosition && member->mapId == g_mapId)
+				{
+					memberDots.push_back({ member->position, member->name, false });
+				}
+				else
+				{
+					continue;
+				}
+				shownMembers.insert(member->guid);
+			}
+
+			m_guildClient.UpdateMemberPositions();
+			for (const GuildMemberPosition& mate : m_guildClient.GetMemberPositions())
+			{
+				if (mate.guid == selfGuid || shownMembers.contains(mate.guid))
+				{
+					continue;
+				}
+
+				if (const auto mateUnit = ObjectMgr::Get<GameUnitC>(mate.guid))
+				{
+					memberDots.push_back({ mateUnit->GetPosition(), mate.name, true });
+				}
+				else
+				{
+					memberDots.push_back({ Vector3(mate.x, 0.0f, mate.z), mate.name, true });
 				}
 			}
-			m_minimap.UpdatePartyPositions(std::move(partyPositions));
+
+			m_minimap.UpdateMemberDots(memberDots);
+			m_worldMap.UpdateMemberDots(std::move(memberDots));
 
 			// Gather quest giver dots for minimap
 			std::vector<Minimap::QuestGiverDot> questDots;
@@ -5056,6 +5091,7 @@ namespace mmo
 
 		// Minimap!
 		m_minimap.NotifyWorldChanged(map->directory());
+		m_worldMap.NotifyWorldChanged(map->directory(), map->name());
 
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);

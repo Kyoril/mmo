@@ -122,6 +122,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 39 | 2026-11-08 | World map member positions: `group_update_flags::Zone` (bit 7) becomes `Map` and carries the member's uint32 map id instead of an always-zero uint16 zone, so `PartyMemberStats` lets clients place far-away party members on their own map. Client `GuildMemberPositions` (no payload, handled by the realm, at most one per second) is answered by server `GuildMemberPositions` (uint16 count, then per member uint64 guid, uint8-length name, float x, float z) listing the online guild mates in the sender's world instance |
 | 38 | 2026-11-03 | Creation blocks gain `object_update_flags::Spawned` (0x2) for objects just added to the world (summoned, respawned, entered the instance) rather than come into sight; clients play a unit's spawn effect (`ModelDataEntry.spawn_effect`) only then |
 | 37 | 2026-11-03 | `DestroyObjects` gains a uint8 `despawn_reason` right after the object count: 0 `OutOfSight` (the objects left the client's view and still exist), 1 `Destroyed` (removed from the world instance). Clients play a unit's despawn effect (`ModelDataEntry.despawn_effect`) only for `Destroyed` |
 | 36 | 2026-11-02 | Pet damage numbers: `damage_flags` gains `Pet` (0x10). A unit without its own connection (a pet) forwards its `SpellDamageLog` to its owner with that bit set, so the owner's client shows it in the pet colour and credits it to the pet |

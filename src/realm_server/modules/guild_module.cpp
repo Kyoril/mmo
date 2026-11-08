@@ -6,9 +6,13 @@
 #include "guild_mgr.h"
 #include "player_manager.h"
 
+#include "base/clock.h"
 #include "base/utilities.h"
 #include "game/guild_info.h"
 #include "log/default_log_levels.h"
+
+#include <limits>
+#include <vector>
 
 namespace mmo
 {
@@ -78,6 +82,18 @@ namespace mmo
 			return OnGuildRoster(player, packet);
 		});
 
+		// Polled by the client's world map and minimap. Like the roster, a request that arrives
+		// while the subsystem is off is dropped without an answer.
+		handlers += player.RegisterAutoPacketHandler(game::client_realm_packet::GuildMemberPositions, [this, &player](game::IncomingPacket& packet)
+		{
+			if (!IsAvailableTo(player))
+			{
+				return PacketParseResult::Pass;
+			}
+
+			return OnGuildMemberPositions(player, packet);
+		});
+
 #if MMO_WITH_DEV_COMMANDS
 		handlers += player.RegisterAutoPacketHandler(game::client_realm_packet::GuildCreate, [this, &player](game::IncomingPacket& packet)
 		{
@@ -117,6 +133,7 @@ namespace mmo
 	{
 		// An invite is for the character, not the session: it ends when the character leaves
 		m_pendingInvites.erase(player.GetCharacterGuid());
+		m_lastPositionRequest.erase(player.GetCharacterGuid());
 
 		if (!IsAvailableTo(player))
 		{
@@ -662,6 +679,85 @@ namespace mmo
 				outPacket.Finish();
 			});
 		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult GuildModule::OnGuildMemberPositions(Player& player, game::IncomingPacket& /*packet*/)
+	{
+		if (!player.HasCharacterGuid())
+		{
+			return PacketParseResult::Pass;
+		}
+
+		// The client polls every few seconds; anything faster is dropped instead of answered.
+		const GameTime now = GetAsyncTimeMs();
+		GameTime& lastRequest = m_lastPositionRequest[player.GetCharacterGuid()];
+		if (lastRequest != 0 && now < lastRequest + constants::OneSecond)
+		{
+			return PacketParseResult::Pass;
+		}
+		lastRequest = now;
+
+		Guild* guild = GetPlayerGuild(player);
+		if (!guild)
+		{
+			return PacketParseResult::Pass;
+		}
+
+		const CharacterData& self = player.GetCharacterData();
+		const InstanceId& instanceId = player.GetWorldInstanceId();
+
+		struct MemberPosition
+		{
+			uint64 guid;
+			const String* name;
+			Vector3 position;
+		};
+
+		std::vector<MemberPosition> positions;
+		for (const GuildMember& member : guild->GetMembers())
+		{
+			if (member.guid == player.GetCharacterGuid())
+			{
+				continue;
+			}
+
+			// Only mates in the same world instance: someone in another copy of a dungeon must not
+			// show up on this player's map of it.
+			const Player* mate = m_playerManager.GetPlayerByCharacterGuid(member.guid);
+			if (!mate || !mate->HasCharacterGuid() || mate->GetWorldInstanceId() != instanceId)
+			{
+				continue;
+			}
+
+			const CharacterData& data = mate->GetCharacterData();
+			if (data.mapId != self.mapId)
+			{
+				continue;
+			}
+
+			positions.push_back({ member.guid, &member.name, data.position });
+			if (positions.size() >= std::numeric_limits<uint16>::max())
+			{
+				break;
+			}
+		}
+
+		player.SendPacket([&positions](game::OutgoingPacket& outPacket)
+		{
+			outPacket.Start(game::realm_client_packet::GuildMemberPositions);
+			outPacket << io::write<uint16>(positions.size());
+			for (const MemberPosition& entry : positions)
+			{
+				outPacket
+					<< io::write<uint64>(entry.guid)
+					<< io::write_dynamic_range<uint8>(*entry.name)
+					<< io::write<float>(entry.position.x)
+					<< io::write<float>(entry.position.z);
+			}
+			outPacket.Finish();
+		});
 
 		return PacketParseResult::Pass;
 	}

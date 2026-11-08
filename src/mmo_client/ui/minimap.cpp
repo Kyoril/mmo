@@ -4,6 +4,7 @@
 #include "frame_ui/geometry_helper.h"
 #include "graphics/texture_mgr.h"
 #include "terrain/terrain.h"
+#include "game/world_map.h"
 #include "log/default_log_levels.h"
 
 #include "luabind_lambda.h"
@@ -50,6 +51,12 @@ namespace mmo
 			m_partyMemberGeom.SetActiveTexture(m_partyMemberTexture);
 			GeometryHelper::CreateRect(m_partyMemberGeom, Color(0.4f, 0.6f, 1.0f, 1.0f),
 				Rect(-16.0f, -16.0f, 16.0f, 16.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f),
+				1, 1);
+
+			m_guildMemberGeom.SetActiveTexture(m_partyMemberTexture);
+			GeometryHelper::CreateRect(m_guildMemberGeom, Color(0.3f, 0.95f, 0.4f, 1.0f),
+				Rect(-14.0f, -14.0f, 14.0f, 14.0f),
 				Rect(0.0f, 0.0f, 1.0f, 1.0f),
 				1, 1);
 		}
@@ -244,16 +251,26 @@ namespace mmo
 		gx.SetTextureFilter(TextureFilter::Trilinear);
 		m_geometryBuffer.Draw();
 
-		if (m_partyMemberTexture && !m_partyPositions.empty())
+		if (m_partyMemberTexture && !m_memberDots.empty())
 		{
+			// Guild mates first, so party members (who may also be guild mates) stay on top
 			const float dotScale = GetMarkerScale();
-			for (const PartyMemberDot& member : m_partyPositions)
+			for (const bool guildPass : { true, false })
 			{
-				Matrix4 world = Matrix4::Identity;
-				world = world * Matrix4::GetTrans(Vector3(member.position.x, member.position.z, 0.0f));
-				world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
-				gx.SetTransformMatrix(World, world);
-				m_partyMemberGeom.Draw();
+				for (const MemberDot& member : m_memberDots)
+				{
+					if (member.guild != guildPass)
+					{
+						continue;
+					}
+
+					const Vector3 position = GetMemberDisplayPosition(member);
+					Matrix4 world = Matrix4::Identity;
+					world = world * Matrix4::GetTrans(Vector3(position.x, position.z, 0.0f));
+					world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+					gx.SetTransformMatrix(World, world);
+					(member.guild ? m_guildMemberGeom : m_partyMemberGeom).Draw();
+				}
 			}
 		}
 
@@ -338,16 +355,24 @@ namespace mmo
 		m_currentTileX = -1;
 		m_currentTileY = -1;
 		m_loadedTextures.clear();
-		m_partyPositions.clear();
+		m_memberDots.clear();
 		m_questGiverDots.clear();
 		m_pings.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
 	}
 
-	void Minimap::UpdatePartyPositions(std::vector<PartyMemberDot> members)
+	void Minimap::UpdateMemberDots(std::vector<MemberDot> members)
 	{
-		m_partyPositions = std::move(members);
+		m_memberDots = std::move(members);
+	}
+
+	Vector3 Minimap::GetMemberDisplayPosition(const MemberDot& member) const
+	{
+		float dx = member.position.x - m_playerPosition.x;
+		float dz = member.position.z - m_playerPosition.z;
+		world_map::ClampToCircle(dx, dz, GetWorldCoverage() * s_edgeRadiusFactor);
+		return Vector3(m_playerPosition.x + dx, member.position.y, m_playerPosition.z + dz);
 	}
 
 	void Minimap::UpdateQuestGiverDots(std::vector<QuestGiverDot> dots)
@@ -385,13 +410,13 @@ namespace mmo
 		luabind::object result = luabind::newtable(L);
 		int index = 1;
 
-		// Party members
-		for (const PartyMemberDot& member : m_partyPositions)
+		// Party and guild members, where their dots are drawn
+		for (const MemberDot& member : m_memberDots)
 		{
-			if (distSq(member.position) <= hitRadiusSq)
+			if (distSq(GetMemberDisplayPosition(member)) <= hitRadiusSq)
 			{
 				luabind::object entry = luabind::newtable(L);
-				entry["type"] = std::string("party");
+				entry["type"] = std::string(member.guild ? "guild" : "party");
 				entry["name"] = member.name;
 				result[index++] = entry;
 			}

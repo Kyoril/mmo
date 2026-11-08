@@ -38,6 +38,10 @@ namespace mmo
 			{
 				return std::make_shared<Frame>("Minimap", name);
 			});
+		frameMgr.RegisterFrameFactory("WorldMap", [](const std::string& name)
+			{
+				return std::make_shared<Frame>("WorldMap", name);
+			});
 		frameMgr.RegisterFrameFactory("World", [](const std::string& name)
 			{
 				return std::make_shared<Frame>("World", name);

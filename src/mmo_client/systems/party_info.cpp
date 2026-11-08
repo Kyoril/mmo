@@ -404,9 +404,9 @@ namespace mmo
 			}
 		}
 
-		if (groupUpdateFlags & group_update_flags::Zone)
+		if (groupUpdateFlags & group_update_flags::Map)
 		{
-			if (!(packet >> io::skip<uint16>()))
+			if (!(packet >> io::read<uint32>(it->mapId)))
 			{
 				return PacketParseResult::Disconnect;
 			}
@@ -414,11 +414,11 @@ namespace mmo
 
 		if (groupUpdateFlags & group_update_flags::Position)
 		{
-			Vector3 location;
-			if (!(packet >> io::read<float>(location.x) >> io::read<float>(location.y) >> io::read<float>(location.z)))
+			if (!(packet >> io::read<float>(it->position.x) >> io::read<float>(it->position.y) >> io::read<float>(it->position.z)))
 			{
 				return PacketParseResult::Disconnect;
 			}
+			it->hasPosition = true;
 		}
 
 		ForMemberIndex(playerGuid, [playerGuid, groupUpdateFlags](int32 index)
