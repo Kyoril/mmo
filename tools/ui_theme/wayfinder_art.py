@@ -121,7 +121,7 @@ def interface_glyphs():
         "Chevron": [[(15, 25), (32, 41), (49, 25)]],
         "Plus": [[(16, 32), (48, 32)], [(32, 16), (32, 48)]],
         "Minus": [[(16, 32), (48, 32)]],
-        "Moon": [[(42, 11), (32, 17), (25, 28), (26, 39), (34, 47), (46, 48), (37, 54), (24, 54), (13, 46), (9, 34), (13, 22), (23, 13), (33, 9), (42, 11)]],
+
     }
     for name, strokes in paths.items():
         image = Image.new("RGBA", (64, 64))
@@ -130,33 +130,73 @@ def interface_glyphs():
             draw.line(stroke, fill=IVORY, width=4, joint="curve")
         save(f"Glyph{name}", image)
 
-    for name, steps in (("Settings", 8), ("Sun", 8)):
-        image = Image.new("RGBA", (64, 64))
-        draw = ImageDraw.Draw(image)
-        draw.ellipse((19, 19, 45, 45), outline=IVORY, width=4)
-        for i in range(steps):
-            angle = i * 2 * pi / steps
-            p = lambda r: (32 + r * cos(angle), 32 + r * sin(angle))
-            draw.line((p(16), p(26)), fill=IVORY, width=5 if name == "Settings" else 3)
-        save(f"Glyph{name}", image)
+    image = Image.new("RGBA", (64, 64))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((19, 19, 45, 45), outline=IVORY, width=4)
+    for i in range(8):
+        angle = i * pi / 4
+        p = lambda r: (32 + r * cos(angle), 32 + r * sin(angle))
+        draw.line((p(16), p(26)), fill=IVORY, width=5)
+    save("GlyphSettings", image)
 
 
 def map_ring():
-    ring = Image.new("RGBA", (512, 512))
+    # Paint in the same 384-unit coordinate system as SetupMinimap, with supersampled edges.
+    scale = 4
+    ring = Image.new("RGBA", (384 * scale, 384 * scale))
     draw = ImageDraw.Draw(ring)
-    draw.ellipse((3, 3, 508, 508), outline=(12, 17, 22, 255), width=21)
-    draw.ellipse((6, 6, 505, 505), outline=GOLD, width=3)
-    draw.ellipse((17, 17, 494, 494), outline=SHADE, width=3)
-    for i in range(24):
-        a = i * pi / 12
-        p = lambda r: (255.5 + r * cos(a), 255.5 + r * sin(a))
-        draw.line((p(242), p(247)), fill=GOLD, width=3 if i % 3 == 0 else 2)
-    for a in (0, pi / 2, pi, 3 * pi / 2):
-        p = lambda r, d: (255.5 + r * cos(a) - d * sin(a), 255.5 + r * sin(a) + d * cos(a))
-        points = [p(254, 0), p(238, 14), p(221, 0), p(238, -14)]
-        draw.polygon(points, fill=(16, 22, 27, 255))
-        draw.line(points + points[:1], fill=GOLD, width=2)
-    save("MapRing", ring)
+
+    def bounds(x, y, radius):
+        return tuple(round(v * scale) for v in (x - radius, y - radius, x + radius, y + radius))
+
+    def rim(radius, color, thickness):
+        draw.ellipse(bounds(192, 192, radius), outline=color, width=round(thickness * scale))
+
+    rim(191.5, (8, 11, 15, 255), 17)
+    rim(188.5, (98, 76, 48, 255), 11)
+    rim(186.5, (210, 178, 120, 255), 2.4)
+    rim(183.5, (41, 37, 32, 255), 5.0)
+    rim(178.5, (109, 126, 126, 255), 1.4)
+    rim(177, (9, 13, 18, 235), 3.0)
+
+    for i in range(8):
+        angle = (i + 0.5) * pi / 4
+        points = [(round((192 + r * cos(angle)) * scale), round((192 + r * sin(angle)) * scale))
+                  for r in (179.5, 183.5)]
+        draw.line(points, fill=(161, 130, 86, 255), width=round(1.4 * scale))
+
+    # The lower-right zoom mount is part of the same brass ring.
+    draw.arc(bounds(192, 192, 196), 33, 67, fill=(8, 11, 15, 255), width=30 * scale)
+    draw.arc(bounds(192, 192, 192.5), 33, 67, fill=(140, 112, 71, 255), width=2 * scale)
+    draw.arc(bounds(192, 192, 173.5), 33, 67, fill=(116, 92, 59, 255), width=2 * scale)
+    for x, y, radius in ((324, 61, 31), (334, 304, 24), (278, 351, 24)):
+        for inset, color in (
+            (0, (8, 12, 17, 255)), (2, (198, 163, 106, 255)),
+            (4, (83, 67, 49, 255)), (6, (15, 22, 28, 255)),
+        ):
+            draw.ellipse(bounds(x, y, radius - inset), fill=color)
+
+    save("MapRing", ring.resize((512, 512), Image.Resampling.LANCZOS))
+
+
+def map_time_glyphs():
+    day = Image.new("RGBA", (256, 256))
+    draw = ImageDraw.Draw(day)
+    for i in range(8):
+        angle = i * pi / 4
+        p = lambda r: (128 + r * cos(angle), 128 + r * sin(angle))
+        draw.line((p(65), p(91)), fill=(255, 200, 103, 255), width=11)
+    draw.ellipse((80, 80, 176, 176), fill=(220, 151, 57, 255))
+    draw.ellipse((86, 84, 170, 169), fill=(255, 222, 144, 255))
+    save("GlyphSun", day.resize((128, 128), Image.Resampling.LANCZOS))
+
+    night = Image.new("RGBA", (256, 256))
+    draw = ImageDraw.Draw(night)
+    draw.ellipse((56, 48, 180, 192), fill=(176, 215, 247, 255))
+    draw.ellipse((104, 31, 205, 151), fill=(0, 0, 0, 0))
+    draw.polygon([(181, 62), (186, 75), (199, 80), (186, 85), (181, 98), (176, 85), (163, 80), (176, 75)],
+                 fill=(235, 245, 255, 255))
+    save("GlyphMoon", night.resize((128, 128), Image.Resampling.LANCZOS))
 
 
 def meter_ornaments():
@@ -238,6 +278,7 @@ def main():
                         (95, 73, 45, 255), (70, 55, 34, 160)], 16)
     underline()
     map_ring()
+    map_time_glyphs()
     meter_ornaments()
     quest_tracker_art()
     interface_glyphs()
