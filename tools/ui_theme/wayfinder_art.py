@@ -118,6 +118,9 @@ def interface_glyphs():
                    [(22, 25), (12, 16)], [(42, 25), (52, 16)], [(19, 33), (8, 32)], [(45, 33), (56, 32)],
                    [(20, 42), (11, 48)], [(44, 42), (53, 48)]],
         "Close": [[(18, 18), (46, 46)], [(46, 18), (18, 46)]],
+        "ChevronRight": [[(24, 13), (42, 32), (24, 51)]],
+        "ChevronLeft": [[(40, 13), (22, 32), (40, 51)]],
+        "Search": [[(37, 38), (53, 54)]],
         "Chevron": [[(15, 25), (32, 41), (49, 25)]],
         "Plus": [[(16, 32), (48, 32)], [(32, 16), (32, 48)]],
         "Minus": [[(16, 32), (48, 32)]],
@@ -128,6 +131,8 @@ def interface_glyphs():
         draw = ImageDraw.Draw(image)
         for stroke in strokes:
             draw.line(stroke, fill=IVORY, width=4, joint="curve")
+        if name == "Search":
+            draw.ellipse((10, 10, 42, 42), outline=IVORY, width=4)
         save(f"Glyph{name}", image)
 
     image = Image.new("RGBA", (64, 64))
