@@ -143,18 +143,30 @@ TEST_CASE("Progress fills stay inside their inset housing at low and full values
 	CHECK(areas.empty());
 }
 
-TEST_CASE("Wayfinder Glue loads its base theme and shared window chrome", "[theme][glue]")
+TEST_CASE("Glue templates define the fonts and controls the screens inherit", "[theme][glue]")
 {
 	ThemeFixture fixture;
 	auto& manager = FrameManager::Get();
 	manager.SetTopFrame(manager.Create("Frame", "GlueThemeTestRoot"));
-	manager.LoadUIFile("Interface/GlueUI/Themes/Wayfinder/Theme.toc");
+	manager.LoadUIFile("Interface/GlueUI/GlueTemplates.xml");
 
 	REQUIRE(manager.GetFontMap("DefaultHeader") != nullptr);
-	REQUIRE(manager.Find("WayfinderTitleRule") != nullptr);
-	auto button = manager.Find("ThemeGlueGlueButtonVisual");
+	REQUIRE(manager.GetFontMap("GlueTitleFont") != nullptr);
+
+	auto button = manager.Find("GlueButton");
 	REQUIRE(button != nullptr);
-	CHECK(button->GetImagerySectionByName("Base") != nullptr);
+	CHECK(button->GetImagerySectionByName("Rest") != nullptr);
+	CHECK(button->GetStateImageryByName("Disabled") != nullptr);
+
+	// Every primary button carries the hover glint as its first child.
+	auto primary = manager.Find("GlueButtonPrimary");
+	REQUIRE(primary != nullptr);
+	REQUIRE(primary->GetChildCount() == 1);
+	CHECK(primary->GetChild(0)->HasAnimation("Glint"));
+
+	auto field = manager.Find("GlueTextField");
+	REQUIRE(field != nullptr);
+	CHECK(field->GetProperty("RimColor") != nullptr);
 }
 
 TEST_CASE("Appearance copies replace imagery without changing behavior or layout", "[theme]")
