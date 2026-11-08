@@ -35,6 +35,12 @@ namespace mmo
 		/// will also be updated.
 		void Draw();
 
+		/// @brief Draws only the vertices in [firstVertex, firstVertex + count), honouring the
+		///        texture batches. Lets a frame draw custom geometry between two parts of its buffer.
+		/// @param firstVertex Index of the first vertex to draw.
+		/// @param count Number of vertices to draw. Clamped to the buffered vertex count.
+		void DrawRange(uint32 firstVertex, uint32 count);
+
 		/// Sets the current clipping rectangle for drawing the geometry buffer.
 		void SetClippingRegion(const Rect& region);
 

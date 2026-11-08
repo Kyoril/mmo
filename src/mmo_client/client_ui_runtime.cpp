@@ -6,6 +6,7 @@
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_mgr.h"
 #include "ui/cooldown_frame.h"
+#include "ui/material_progress_bar.h"
 #include "ui/minimap.h"
 #include "ui/minimap_frame.h"
 #include "ui/world_map.h"
@@ -74,6 +75,13 @@ namespace mmo
 		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string& name)
 			{
 				return std::make_shared<CooldownFrame>(name);
+			});
+
+		// Progress bars may draw their fill with a material; without one they render like the base type.
+		FrameManager::Get().UnregisterFrameFactory("ProgressBar");
+		FrameManager::Get().RegisterFrameFactory("ProgressBar", [](const std::string& name)
+			{
+				return std::make_shared<MaterialProgressBar>(name);
 			});
 
 		cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
@@ -150,7 +158,10 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<CooldownFrame, Frame>("CooldownFrame")
 				.def("SetProgress", &CooldownFrame::SetProgress)
-				.def("GetProgress", &CooldownFrame::GetProgress)));
+				.def("GetProgress", &CooldownFrame::GetProgress)),
+
+			luabind::scope(
+				luabind::class_<MaterialProgressBar, ProgressBar>("MaterialProgressBar")));
 
 		m_initialized = true;
 		return true;
