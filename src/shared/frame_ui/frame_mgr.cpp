@@ -535,6 +535,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
 					.def("SetProgress", &ProgressBar::SetProgress)
+					.def("SetProgressInstant", &ProgressBar::SetProgressInstant)
 					.def("GetProgress", &ProgressBar::GetProgress)
 			),
 
