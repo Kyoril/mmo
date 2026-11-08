@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "char_select.h"
+#include "character_avatar_builder.h"
 
 #include "base/macros.h"
 #include "console/console_var.h"
@@ -13,6 +14,8 @@
 #include "client_locale.h"
 #include "frame_ui/frame_mgr.h"
 #include "game_client/plaza_roster.h"
+#include "scene_graph/entity.h"
+#include "ui/model_frame.h"
 
 #include "luabind_lambda.h"
 
@@ -37,6 +40,61 @@ namespace mmo
 
 		/// Space kept between nameplates moved apart, in UI units.
 		constexpr float nameplateGap = 12.0f;
+
+		class CharacterPreviewFrame final : public ModelFrame
+		{
+		public:
+			explicit CharacterPreviewFrame(const std::string& name)
+				: ModelFrame(name)
+			{
+			}
+
+			~CharacterPreviewFrame() override
+			{
+				ClearAvatar();
+			}
+
+			void SetCharacter(const proto_client::Project& project, const CharacterView* view)
+			{
+				ClearAvatar();
+				if (view)
+				{
+					CharacterAvatarBuilder builder(project);
+					m_entity = builder.Build(m_scene, *m_entityNode, *view, "SelectedCharacter", m_attachments);
+				}
+
+				if (m_entity && !GetRenderer())
+				{
+					SetRenderer("ModelRenderer");
+				}
+				RebindAnimationState();
+				InvalidateModel();
+				SetVisible(m_entity != nullptr);
+			}
+
+		private:
+			void ClearAvatar()
+			{
+				if (m_entity)
+				{
+					ClearItemDisplayAttachments(m_scene, *m_entity, m_attachments);
+					m_entityNode->DetachObject(*m_entity);
+					m_scene.DestroyEntity(*m_entity);
+					m_entity = nullptr;
+					m_animationState = nullptr;
+				}
+			}
+
+			ItemDisplayAttachmentMap m_attachments;
+		};
+	}
+
+	void CharSelect::RegisterPreviewFrameFactory()
+	{
+		FrameManager::Get().RegisterFrameFactory("CharacterPreview", [](const std::string& name)
+		{
+			return std::make_shared<CharacterPreviewFrame>(name);
+		});
 	}
 
 	CharSelect::CharSelect(RealmConnector& realmConnector, const proto_client::Project& project)
@@ -51,6 +109,13 @@ namespace mmo
 			luabind::def_lambda("GetNumCharacters", [this]() { return GetNumCharacters(); }),
 			luabind::def_lambda("GetCharacterInfo", [this](int32 index) { return GetCharacterView(index); }),
 			luabind::def_lambda("SelectCharacter", [this](int32 index) { return SelectCharacter(index); }),
+			luabind::def_lambda("SetCharacterPreview", [this](Frame* frame, int32 index)
+				{
+					if (auto* preview = dynamic_cast<CharacterPreviewFrame*>(frame))
+					{
+						preview->SetCharacter(m_project, GetCharacterView(index));
+					}
+				}),
 			luabind::def_lambda("GetSelectedCharacterIndex", [this]() { return GetSelectedCharacter(); }),
 			luabind::def_lambda("IsCharacterDisabled", [this](int32 index) { return IsCharacterDisabled(index); }),
 			luabind::def_lambda("GetCharacterZoneName", [this](int32 index) { return GetCharacterZoneName(index); }),
@@ -64,6 +129,13 @@ namespace mmo
 					if (m_glueScene)
 					{
 						m_glueScene->GetPlazaAvatars().Rotate(degrees);
+					}
+					else if (const auto preview = FrameManager::Get().Find("CharSelectPreview"))
+					{
+						if (auto* model = dynamic_cast<CharacterPreviewFrame*>(preview.get()))
+						{
+							model->Yaw(degrees);
+						}
 					}
 				}),
 

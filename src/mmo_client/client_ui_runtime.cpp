@@ -1,4 +1,5 @@
 #include "client_ui_runtime.h"
+#include "char_creation/char_select.h"
 
 #include "cursor.h"
 #include "event_loop.h"
@@ -60,6 +61,7 @@ namespace mmo
 			{
 				return std::make_shared<ModelFrame>(name);
 			});
+		CharSelect::RegisterPreviewFrameFactory();
 		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string& name)
 			{
 				return std::make_shared<UnitModelFrame>(name);

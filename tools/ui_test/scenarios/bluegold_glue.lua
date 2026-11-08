@@ -22,6 +22,11 @@ function GetInitialCharacterIndex() return 0 end
 function GetSelectedCharacterIndex() return 0 end
 function IsCharacterCreationAvailable() return true end
 function GetCharacterInfo(i) return characters[i+1] end
+function GetCharacterZoneName(i) return characters[i+1] and characters[i+1].zone or "" end
+function SetCharacterPreview(frame, i)
+	UiTest.previewIndex = i
+	frame:SetProperty("Visible", i >= 0 and "true" or "false")
+end
 function GetClassNameById(i) return i==1 and "Warrior" or "Scout" end
 function IsCharacterDisabled() return false end
 function GetNumRaces() return 2 end

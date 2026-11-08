@@ -44,6 +44,9 @@ namespace mmo
 		/// Registers the character selection's Lua functions.
 		void RegisterScriptFunctions(lua_State* lua);
 
+		/// Registers the model frame used by the lightweight character roster.
+		static void RegisterPreviewFrameFactory();
+
 		/// Sets the glue scene whose plaza shows the characters. Called with the scene when the
 		/// login state is entered and with nullptr before the scene is destroyed.
 		/// @param scene The glue scene, or nullptr.

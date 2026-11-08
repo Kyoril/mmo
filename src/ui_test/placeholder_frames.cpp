@@ -26,6 +26,10 @@ namespace mmo
 			{
 				return std::make_shared<PlaceholderModelFrame>("Model", name);
 			});
+		frameMgr.RegisterFrameFactory("CharacterPreview", [](const std::string& name)
+			{
+				return std::make_shared<PlaceholderModelFrame>("CharacterPreview", name);
+			});
 		frameMgr.RegisterFrameFactory("UnitModel", [](const std::string& name)
 			{
 				return std::make_shared<PlaceholderUnitModelFrame>(name);

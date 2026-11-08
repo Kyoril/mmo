@@ -215,8 +215,7 @@ namespace mmo
 		topFrame->SetAnchor(anchor_point::Bottom, anchor_point::Bottom, nullptr);
 		frameMgr.SetTopFrame(topFrame);
 
-		// The scene behind the glue screens. Its renderer must be known before the UI loads, as
-		// GlueParent.xml creates the frame that uses it.
+		// The theme decides whether to load a cinematic scene or use its own artwork.
 		m_enterTime = GetAsyncTimeMs();
 		m_glueSceneReadySent = false;
 		m_plazaReadyLogged = false;
@@ -224,27 +223,35 @@ namespace mmo
 		// The world state turns the listener with its camera; the glue screens listen straight ahead.
 		m_audio.SetListenerOrientation(Vector3(0.0f, 0.0f, -1.0f), Vector3::UnitY);
 
-		CreateGlueScene();
-		if (m_glueScene)
+		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
+
+		const auto sceneFrame = frameMgr.Find("GlueSceneFrame");
+		const auto* cinematic = sceneFrame ? sceneFrame->GetProperty("Cinematic") : nullptr;
+		if (cinematic && cinematic->GetBoolValue())
 		{
-			GlueScene* const glueScene = m_glueScene.get();
-			frameMgr.RegisterFrameRenderer("GlueSceneRenderer", [glueScene](const std::string& name)
+			CreateGlueScene();
+			if (m_glueScene)
+			{
+				GlueScene* const glueScene = m_glueScene.get();
+				frameMgr.RegisterFrameRenderer("GlueSceneRenderer", [glueScene](const std::string& name)
 				{
 					return std::make_unique<WorldRenderer>(name, glueScene->GetScene());
 				});
+				sceneFrame->SetRenderer("GlueSceneRenderer");
+			}
 		}
 
-		// Before the UI loads, so the character screen's first selection already finds the plaza.
 		m_charSelect.SetGlueScene(m_glueScene.get());
-
-		// Load ui file
-		frameMgr.LoadUIFile("Interface/GlueUI/GlueUI.toc");
 
 		if (!m_glueScene)
 		{
 			// Without a scene there is nothing to wait for: lift the dark fill at once.
 			m_glueSceneReadySent = true;
 			frameMgr.TriggerLuaEvent("GLUE_SCENE_READY");
+			if (cinematic && !cinematic->GetBoolValue())
+			{
+				ILOG("Glue UI: artwork front end loaded after " << (GetAsyncTimeMs() - m_enterTime) << " ms");
+			}
 		}
 
 		// Register drawing of the login ui

@@ -328,6 +328,7 @@ UiTest.StubApi({
 	"SetCVar",
 	"SetCharCreateOutfitVisible",
 	"SetCharCustomizeFrame",
+	"SetCharacterPreview",
 	"SetCharacterClass",
 	"SetCharacterGender",
 	"SetCharacterRace",
