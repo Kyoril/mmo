@@ -246,11 +246,6 @@ def quest_tracker_art():
             alpha = round(198 * v * min(1, x / 12) * (1 - u**2.2))
             ink.putpixel((x, y), (9, 14, 19, alpha))
     save("TrackerInk", ink)
-    trail = Image.new("RGBA", (4, 64))
-    draw = ImageDraw.Draw(trail)
-    for y in range(64):
-        draw.line((0, y, 3, y), fill=(185, 149, 93, round(142 * (1 - y / 63))))
-    save("TrackerTrail", trail)
 
     for name in ("Quest", "QuestDone", "QuestFailed"):
         glyph = Image.new("RGBA", (64, 64))
