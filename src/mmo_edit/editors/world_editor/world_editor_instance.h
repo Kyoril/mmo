@@ -73,7 +73,6 @@
 #include "entity_factory.h"
 #include "minimap_baker.h"
 #include "minimap_grid_view.h"
-#include "glue_bake/glue_bake_placement.h"
 #include "pcg/graph/debug_geometry.h"
 
 namespace mmo
@@ -869,18 +868,12 @@ namespace mmo
 		size_t GetProceduralControlCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetControlCount() : 0; }
 
 		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
-		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and
+		///        did, for one-shot jobs. Pages this loads are tracked like the minimap bake's and
 		///        released by ReleaseForcedPages; streaming takes a page over when it arrives.
 		void ForceLoadPages(const std::vector<PagePosition>& pages);
 
 		/// @brief Unloads every page's entities and foliage that ForceLoadPages (or the minimap bake) loaded.
 		void ReleaseForcedPages();
-
-		/// @brief Calls the visitor for every loaded placement (mesh or world model), in world space.
-		void ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const;
-
-		/// @brief Calls the visitor for every authored foliage instance of the given pages that is loaded.
-		void ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const;
 
 		/// @brief Collects every loaded map entity and authored foliage instance as world-space placements:
 		///        meshes with their material overrides (sorted by slot), world models with their kit paths,
@@ -894,24 +887,6 @@ namespace mmo
 		/// @brief Whether ForceLoadPages (or the minimap bake) loaded entities or foliage that
 		///        ReleaseForcedPages would unload.
 		[[nodiscard]] bool HasForcedPages() const { return !m_bakeEntityPages.empty() || !m_bakeFoliagePages.empty(); }
-
-		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
-		///        heights, layers and water. Null when the world has no terrain, the page is out of
-		///        range or it has no .tile file.
-		/// @remark Meant for one-shot jobs such as the glue bake: preparing a page resets its pending
-		///         unload request (Page::BeginPrepare), and the page stays prepared afterwards, holding
-		///         its CPU data until streaming unloads it.
-		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
-
-		/// @brief Renders terrain pages' top-down, unlit colour like the distant-terrain bake does
-		///        (see TerrainLodBaker::RenderPageColor) with one renderer, for one-shot jobs such as the glue bake.
-		/// @param pages The pages.
-		/// @param textureSize Edge length of each image in texels.
-		/// @param options Encoding and water.
-		/// @param out Receives one image per page (textureSize² RGBA8 texels; texel (u, v) maps to page-local
-		///        (x, z)); empty for a page that could not be rendered.
-		/// @return False when there is no terrain or any page could not be rendered.
-		bool RenderTerrainPageColors(const std::vector<PagePosition>& pages, uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out);
 
 		/// @brief The scene the world is shown in, for one-shot editor jobs that render it offscreen.
 		[[nodiscard]] Scene& GetScene() { return m_scene; }

@@ -14,7 +14,7 @@ namespace mmo
 		FrameManager& frameMgr = FrameManager::Get();
 
 		// Renderers of 3D content: the frame's own imagery still renders, the 3D part is left out.
-		for (const char* rendererName : { "ModelRenderer", "WorldRenderer", "GlueSceneRenderer" })
+		for (const char* rendererName : { "ModelRenderer", "WorldRenderer" })
 		{
 			frameMgr.RegisterFrameRenderer(rendererName, [](const std::string& name)
 				{

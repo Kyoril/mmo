@@ -71,7 +71,7 @@ namespace mmo
 	};
 
 	/// @brief Registers frame factories, renderers and Lua classes for the frame types and
-	///        renderers only the game client provides (models, minimap, world, glue scene).
+	///        renderers only the game client provides (models, minimap, world).
 	/// @param luaState The UI's Lua state.
 	void RegisterPlaceholderFrames(lua_State* luaState);
 }

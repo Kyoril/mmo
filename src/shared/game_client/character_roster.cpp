@@ -1,34 +1,12 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
-#include "plaza_roster.h"
+#include "character_roster.h"
 
 #include <algorithm>
 #include <cstdint>
 
 namespace mmo
 {
-	bool PlazaAppearance::operator==(const PlazaAppearance& other) const
-	{
-		return displayId == other.displayId &&
-			raceId == other.raceId &&
-			gender == other.gender &&
-			equipmentDisplayIds == other.equipmentDisplayIds &&
-			chosenOptionPerGroup == other.chosenOptionPerGroup &&
-			scalarValues == other.scalarValues;
-	}
-
-	PlazaAppearance MakePlazaAppearance(const CharacterView& view)
-	{
-		PlazaAppearance appearance;
-		appearance.displayId = view.GetDisplayId();
-		appearance.raceId = view.GetRaceId();
-		appearance.gender = view.GetGender();
-		appearance.chosenOptionPerGroup = view.GetConfiguration().chosenOptionPerGroup;
-		appearance.scalarValues = view.GetConfiguration().scalarValues;
-		appearance.equipmentDisplayIds = view.GetEquipmentDisplayIds();
-		return appearance;
-	}
-
 	namespace
 	{
 		bool parseDecimal(const String& text, uint64& out)
@@ -88,31 +66,6 @@ namespace mmo
 
 			return result;
 		}
-	}
-
-	PlazaAssignment AssignPlaza(int32 numCharacters, int32 selectedIndex)
-	{
-		PlazaAssignment result;
-		result.spotCharacter.fill(-1);
-		result.visitor = -1;
-
-		if (numCharacters <= 0)
-		{
-			return result;
-		}
-
-		// Plaza characters keep their spot when selected; only a visitor comes in.
-		for (int32 i = 0; i < PlazaSpotCount && i < numCharacters; ++i)
-		{
-			result.spotCharacter[i] = i;
-		}
-
-		if (selectedIndex >= PlazaSpotCount && selectedIndex < numCharacters)
-		{
-			result.visitor = selectedIndex;
-		}
-
-		return result;
 	}
 
 	int32 ResolveInitialSelection(const std::vector<uint64>& orderedGuids, uint64 lastPlayedGuid)
@@ -181,18 +134,5 @@ namespace mmo
 		}
 
 		return result;
-	}
-
-	GlueArrival DecideGlueArrival(bool plazaReady, bool returningFromWorld)
-	{
-		// Back from the world the player has seen the flight already: always a cut. A fresh login
-		// always flies, even when the list beats the scene (common with auto-login): the fade
-		// stays up until the scene is ready, so the gate and the flight are never skipped.
-		if (returningFromWorld)
-		{
-			return plazaReady ? GlueArrival::Snap : GlueArrival::SnapWhenReady;
-		}
-
-		return plazaReady ? GlueArrival::FlyIn : GlueArrival::FlyInWhenReady;
 	}
 }

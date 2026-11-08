@@ -8,7 +8,7 @@ namespace mmo
 	struct EnvironmentState;
 
 	/// Pushes the non-fog part of an environment state (exposure, bloom, light scattering and color
-	/// grading) into a deferred renderer. Shared by the world and the glue scene.
+	/// grading) into a deferred renderer.
 	/// @param renderer The renderer to configure.
 	/// @param state The blended environment state of this frame.
 	/// @param brightness The player's brightness setting, multiplied into the state's exposure.
