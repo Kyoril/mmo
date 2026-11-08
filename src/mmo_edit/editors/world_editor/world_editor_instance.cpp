@@ -63,7 +63,6 @@
 #include "world_map_baker.h"
 #include "page_bake_utils.h"
 #include "terrain_lod_baker.h"
-#include "glue_bake/glue_scene_baker.h"
 #include "terrain/far_terrain.h"
 #include "tex/png_writer.h"
 #include "graphics/material_instance.h"
@@ -395,15 +394,7 @@ namespace mmo
 			[this]()
 			{ m_openMinimapBakeDialog = true; },
 			[this]()
-			{ GenerateTerrainLod(true); },
-			[this]()
-			{
-				String summary;
-				if (!BakeGlueScene(*this, GlueSceneDefinitionPath, summary))
-				{
-					ELOG("Bake Glue Scene failed: " << summary);
-				}
-			});
+			{ GenerateTerrainLod(true); });
 
 		// Load and set transform mode icons
 		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
@@ -1330,7 +1321,6 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world file " << GetAssetPath());
-		RemindGlueBakeMayBeStale(*this);
 
 		struct MaterialOverride
 		{
@@ -3181,94 +3171,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_bakeFoliagePages.clear();
 	}
 
-	void WorldEditorInstance::ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const
-	{
-		for (const auto& mapEntity : m_mapEntities)
-		{
-			if (!mapEntity)
-			{
-				continue;
-			}
 
-			const SceneNode& node = mapEntity->GetSceneNode();
-
-			GlueBakePlacement placement;
-			placement.position = node.GetDerivedPosition();
-			placement.rotation = node.GetDerivedOrientation();
-			placement.scale = node.GetDerivedScale();
-
-			if (mapEntity->IsWorldModelEntity())
-			{
-				const WorldModelInstance* instance = mapEntity->GetWorldModelInstance();
-				if (!instance || !instance->GetWorldModel())
-				{
-					continue;
-				}
-
-				placement.isWorldModel = true;
-				placement.assetPath = mapEntity->GetAssetName();
-				placement.worldModel = instance->GetWorldModel();
-				placement.doodadSet = instance->GetActiveDoodadSet();
-				placement.kitPaths = mapEntity->GetKitPaths();
-			}
-			else
-			{
-				const Entity* entity = mapEntity->GetEntity();
-				if (!entity || !entity->GetMesh())
-				{
-					continue;
-				}
-
-				placement.mesh = entity->GetMesh();
-				placement.assetPath = String(placement.mesh->GetName());
-
-				// Overrides are applied to the sub entities; the .wobj's list is not kept around.
-				bool anyOverride = false;
-				std::vector<String> overrides(entity->GetNumSubEntities());
-				for (uint16 i = 0; i < entity->GetNumSubEntities(); ++i)
-				{
-					const SubEntity* subEntity = entity->GetSubEntity(i);
-					const MaterialPtr material = subEntity ? subEntity->GetMaterial() : nullptr;
-					if (material && material != subEntity->GetSubMesh().GetMaterial())
-					{
-						overrides[i] = String(material->GetName());
-						anyOverride = true;
-					}
-				}
-
-				if (anyOverride)
-				{
-					placement.materialOverrides = std::move(overrides);
-				}
-			}
-
-			visitor(placement);
-		}
-	}
-
-	void WorldEditorInstance::ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const
-	{
-		if (!m_foliage)
-		{
-			return;
-		}
-
-		std::vector<InstancedFoliageInstance> instances;
-		for (const PagePosition& page : pages)
-		{
-			if (page.x() > 0xFF || page.y() > 0xFF)
-			{
-				continue;
-			}
-
-			instances.clear();
-			m_foliage->GetInstancesForPage(BuildPageIndex(static_cast<uint8>(page.x()), static_cast<uint8>(page.y())), instances);
-			for (const InstancedFoliageInstance& instance : instances)
-			{
-				visitor(instance);
-			}
-		}
-	}
 
 	void WorldEditorInstance::CollectWorldPlacements(std::vector<pcg::Placement>& out) const
 	{
@@ -3363,63 +3266,7 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		});
 	}
 
-	const terrain::Page* WorldEditorInstance::GetPreparedTerrainPage(const PagePosition& page)
-	{
-		if (!m_terrain || !m_hasTerrain || page.x() >= m_terrain->GetWidth() || page.y() >= m_terrain->GetHeight())
-		{
-			return nullptr;
-		}
 
-		const String pageFile = m_terrain->GetBaseFileName() + "/" + std::to_string(page.x()) + "_" + std::to_string(page.y()) + ".tile";
-		if (!AssetRegistry::HasFile(pageFile))
-		{
-			return nullptr;
-		}
-
-		terrain::Page* terrainPage = m_terrain->GetPage(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()));
-		if (!terrainPage || !terrainPage->Prepare() || terrainPage->IsOceanPlaceholder())
-		{
-			return nullptr;
-		}
-
-		return terrainPage;
-	}
-
-	bool WorldEditorInstance::RenderTerrainPageColors(const std::vector<PagePosition>& pages, const uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out)
-	{
-		out.assign(pages.size(), std::vector<uint8>());
-		if (!m_terrain || !m_hasTerrain)
-		{
-			return false;
-		}
-
-		// Hidden by the baker along with everything else outside the terrain, but foliage keeps its own
-		// visibility flag on top of its scene objects (see GenerateTerrainLod).
-		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
-		if (m_foliage)
-		{
-			m_foliage->SetVisible(false);
-		}
-
-		bool success = true;
-		{
-			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; }, textureSize);
-			for (size_t i = 0; i < pages.size(); ++i)
-			{
-				if (!baker.RenderPageColor(static_cast<uint32>(pages[i].x()), static_cast<uint32>(pages[i].y()), out[i], options))
-				{
-					out[i].clear();
-					success = false;
-				}
-			}
-		}
-
-		if (m_foliage)
-		{
-			m_foliage->SetVisible(foliageWasVisible);
-		}
-		return success;
-	}
 
 	bool WorldEditorInstance::SetFoliageVisible(const bool visible)
 	{
