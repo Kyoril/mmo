@@ -11,8 +11,11 @@ namespace mmo
 	/// @brief Client progress bar that can draw its fill with a UI material instead of imagery.
 	///
 	/// Without a "FillMaterial" it behaves exactly like ProgressBar. With one, the background and
-	/// overlay imagery are still drawn from the geometry buffer, and a single material quad covering
-	/// the inset fill rect is drawn between them. The material receives these parameters:
+	/// overlay imagery are still drawn from the geometry buffer. Between them, the bar's "Progress"
+	/// imagery is laid over the whole inset fill rect and drawn with the material, so the fill keeps the
+	/// theme's shape: its texture is bound in place of the material's first texture ("Mask", whose alpha
+	/// clips the fill) and its vertex colours carry the bar-space position (R = u, G = v). The material
+	/// also receives these parameters:
 	/// - Scalar "Progress": the displayed fill (0..1)
 	/// - Scalar "Trail": the displayed trail end behind a loss (>= Progress)
 	/// - Scalar "Time": seconds since the bar was created, for animated highlights
@@ -52,8 +55,9 @@ namespace mmo
 		/// @brief Parses the "FillMaterialTint" property.
 		void OnFillMaterialTintChanged(const Property& prop);
 
-		/// @brief Draws the material quad over the fill rect.
-		void DrawMaterialFill();
+		/// @brief Draws the fill with the material: the given buffer range (the fill imagery), or the plain
+		///        fill quad when the range is empty.
+		void DrawMaterialFill(uint32 firstVertex, uint32 vertexCount);
 
 	private:
 		scoped_connection_container m_materialConnections;
@@ -61,11 +65,13 @@ namespace mmo
 		/// Fill material, or null to fall back to the imagery fill.
 		std::shared_ptr<MaterialInstance> m_material;
 
-		/// Quad covering the inset fill rect.
+		/// Quad covering the inset fill rect, used when the bar has no fill imagery.
 		VertexBufferPtr m_hwBuffer;
 
-		/// Vertex count of the background part of the geometry buffer; the overlay follows it.
-		uint32 m_overlayStartVertex = 0;
+		/// Geometry buffer range of the fill imagery, drawn with the material. The background comes
+		/// before it, the overlay after it.
+		uint32 m_fillStartVertex = 0;
+		uint32 m_fillEndVertex = 0;
 
 		/// Multiplied into ProgressColor for the material, replacing the fill imagery's tint.
 		Color m_fillMaterialTint = Color::White;

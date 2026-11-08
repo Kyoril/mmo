@@ -51,7 +51,7 @@ namespace mmo
 		}
 	}
 
-	void GeometryBuffer::DrawRange(const uint32 firstVertex, const uint32 count)
+	void GeometryBuffer::DrawRange(const uint32 firstVertex, const uint32 count, const bool applyState)
 	{
 		const uint32 total = static_cast<uint32>(m_vertices.size());
 		if (count == 0 || firstVertex >= total)
@@ -65,8 +65,11 @@ namespace mmo
 			SyncHardwareBuffer();
 		}
 
-		gx.SetBlendMode(BlendMode::Alpha);
-		gx.SetVertexFormat(VertexFormat::PosColorTex1);
+		if (applyState)
+		{
+			gx.SetBlendMode(BlendMode::Alpha);
+			gx.SetVertexFormat(VertexFormat::PosColorTex1);
+		}
 
 		const uint32 rangeEnd = std::min(total, firstVertex + count);
 		uint32 pos = 0;
@@ -88,6 +91,19 @@ namespace mmo
 				break;
 			}
 		}
+	}
+
+	const GeometryBuffer::Vertex& GeometryBuffer::GetVertex(const uint32 index) const
+	{
+		ASSERT(index < m_vertices.size());
+		return m_vertices[index];
+	}
+
+	void GeometryBuffer::SetVertexColor(const uint32 index, const uint32 argb)
+	{
+		ASSERT(index < m_vertices.size());
+		m_vertices[index].color = argb;
+		m_sync = false;
 	}
 
 	void GeometryBuffer::SetClippingRegion(const Rect & region)

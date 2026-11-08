@@ -57,31 +57,58 @@ namespace mmo
 		}
 
 		Frame::PopulateGeometryBuffer();
+		GeometryBuffer& buffer = GetGeometryBuffer();
 
 		RenderBackground();
-		m_overlayStartVertex = GetGeometryBuffer().GetVertexCount();
-		RenderOverlay();
+		m_fillStartVertex = buffer.GetVertexCount();
 
-		if (!m_hwBuffer)
-		{
-			m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
-		}
-
+		// The theme's own fill imagery, laid over the whole fill rect, gives the fill its shape (end caps,
+		// rounded or pointed ends): the material draws these vertices and uses the texture's alpha as a
+		// mask. Its vertex colours are replaced by the bar-space position (R = u, G = v), so the material
+		// knows where along the bar each pixel lies however the imagery is sliced.
 		const Rect rect = GetFillRect();
 		m_aspect = rect.GetHeight() > 0.0f ? rect.GetWidth() / rect.GetHeight() : 1.0f;
+		if (const auto* progressImagery = GetStateImageryByName("Progress"); progressImagery && rect.GetWidth() > 0.0f && rect.GetHeight() > 0.0f)
+		{
+			progressImagery->Render(rect, Color::White);
+		}
 
-		const POS_COL_TEX_VERTEX vertices[] = {
-			{ Vector3{ rect.left, rect.bottom, 0.0f }, Color::White, { 0.0f, 1.0f } },
-			{ Vector3{ rect.left, rect.top, 0.0f }, Color::White, { 0.0f, 0.0f } },
-			{ Vector3{ rect.right, rect.top, 0.0f }, Color::White, { 1.0f, 0.0f } },
+		m_fillEndVertex = buffer.GetVertexCount();
+		for (uint32 i = m_fillStartVertex; i < m_fillEndVertex; ++i)
+		{
+			const auto& vertex = buffer.GetVertex(i);
+			const float u = std::clamp((vertex.pos.x - rect.left) / std::max(rect.GetWidth(), 1.0f), 0.0f, 1.0f);
+			const float v = std::clamp((vertex.pos.y - rect.top) / std::max(rect.GetHeight(), 1.0f), 0.0f, 1.0f);
+			buffer.SetVertexColor(i, Color(u, v, 0.0f, 1.0f).GetARGB());
+		}
 
-			{ Vector3{ rect.right, rect.top, 0.0f }, Color::White, { 1.0f, 0.0f } },
-			{ Vector3{ rect.right, rect.bottom, 0.0f }, Color::White, { 1.0f, 1.0f } },
-			{ Vector3{ rect.left, rect.bottom, 0.0f }, Color::White, { 0.0f, 1.0f } }
-		};
+		RenderOverlay();
 
-		std::memcpy(m_hwBuffer->Map(LockOptions::Discard), vertices, sizeof(vertices));
-		m_hwBuffer->Unmap();
+		// Without fill imagery, the material covers the plain fill rect (its mask parameter defaults to white).
+		if (m_fillEndVertex == m_fillStartVertex)
+		{
+			if (!m_hwBuffer)
+			{
+				m_hwBuffer = GraphicsDevice::Get().CreateVertexBuffer(6, sizeof(POS_COL_TEX_VERTEX), BufferUsage::DynamicWriteOnlyDiscardable, nullptr);
+			}
+
+			const uint32 topLeft = Color(0.0f, 0.0f, 0.0f, 1.0f).GetARGB();
+			const uint32 topRight = Color(1.0f, 0.0f, 0.0f, 1.0f).GetARGB();
+			const uint32 bottomLeft = Color(0.0f, 1.0f, 0.0f, 1.0f).GetARGB();
+			const uint32 bottomRight = Color(1.0f, 1.0f, 0.0f, 1.0f).GetARGB();
+			const POS_COL_TEX_VERTEX vertices[] = {
+				{ Vector3{ rect.left, rect.bottom, 0.0f }, bottomLeft, { 0.0f, 1.0f } },
+				{ Vector3{ rect.left, rect.top, 0.0f }, topLeft, { 0.0f, 0.0f } },
+				{ Vector3{ rect.right, rect.top, 0.0f }, topRight, { 1.0f, 0.0f } },
+
+				{ Vector3{ rect.right, rect.top, 0.0f }, topRight, { 1.0f, 0.0f } },
+				{ Vector3{ rect.right, rect.bottom, 0.0f }, bottomRight, { 1.0f, 1.0f } },
+				{ Vector3{ rect.left, rect.bottom, 0.0f }, bottomLeft, { 0.0f, 1.0f } }
+			};
+
+			std::memcpy(m_hwBuffer->Map(LockOptions::Discard), vertices, sizeof(vertices));
+			m_hwBuffer->Unmap();
+		}
 	}
 
 	void MaterialProgressBar::DrawSelf()
@@ -96,19 +123,20 @@ namespace mmo
 
 		GeometryBuffer& buffer = GetGeometryBuffer();
 		const uint32 vertexCount = buffer.GetVertexCount();
-		const uint32 split = std::min(m_overlayStartVertex, vertexCount);
+		const uint32 fillStart = std::min(m_fillStartVertex, vertexCount);
+		const uint32 fillEnd = std::clamp(m_fillEndVertex, fillStart, vertexCount);
 
-		buffer.DrawRange(0, split);
+		buffer.DrawRange(0, fillStart);
 
 		if ((m_displayProgress > 0.0f || m_trailProgress > 0.0f) && GetFillRect().GetWidth() > 0.0f)
 		{
-			DrawMaterialFill();
+			DrawMaterialFill(fillStart, fillEnd - fillStart);
 		}
 
-		buffer.DrawRange(split, vertexCount - split);
+		buffer.DrawRange(fillEnd, vertexCount - fillEnd);
 	}
 
-	void MaterialProgressBar::DrawMaterialFill()
+	void MaterialProgressBar::DrawMaterialFill(const uint32 firstVertex, const uint32 vertexCount)
 	{
 		const float opacity = GetOpacity(true);
 		m_material->SetScalarParameter("Progress", std::clamp(m_displayProgress, 0.0f, 1.0f));
@@ -135,12 +163,19 @@ namespace mmo
 			vectorBuffer->BindToStage(ShaderType::PixelShader, psStartSlot++);
 		}
 
-		m_hwBuffer->Set(0);
-		gx.Draw(m_hwBuffer->GetVertexCount(), 0);
+		if (vertexCount > 0)
+		{
+			// The fill imagery's texture replaces the material's "Mask" parameter (texture slot 0).
+			GetGeometryBuffer().DrawRange(firstVertex, vertexCount, false);
+		}
+		else if (m_hwBuffer)
+		{
+			m_hwBuffer->Set(0);
+			gx.Draw(m_hwBuffer->GetVertexCount(), 0);
+		}
 
 		gx.RestoreState();
 	}
-
 	void MaterialProgressBar::OnFillMaterialChanged(const Property& prop)
 	{
 		const String& materialPath = prop.GetValue();
