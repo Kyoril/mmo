@@ -271,6 +271,34 @@ def meter_ornaments():
     save("MeterLabelShade", shadow)
 
 
+def level_diamond():
+    """Brass diamond ("Raute") holding a unit's level on the target frame, in the meter rim's metals."""
+    size = 128
+
+    def diamond(inset):
+        lo, hi, mid = inset, size - 1 - inset, (size - 1) / 2
+        return [(mid, lo), (hi, mid), (mid, hi), (lo, mid)]
+
+    image = Image.new("RGBA", (size, size))
+    draw = ImageDraw.Draw(image)
+    metals = [(8, 11, 15, 255), (99, 74, 47, 255), (229, 194, 135, 255),
+              (204, 165, 107, 255), (71, 57, 41, 255), (25, 24, 22, 255)]
+    for inset, color in zip((1, 4, 7, 11, 14, 17), metals):
+        draw.polygon(diamond(inset), fill=color)
+
+    # Dark well with a faint top-down sheen, so light digits read clearly.
+    face = Image.new("RGBA", (size, size))
+    face_draw = ImageDraw.Draw(face)
+    for y in range(size):
+        t = y / (size - 1)
+        light = round(10 * exp(-((t - 0.3) / 0.22) ** 2))
+        face_draw.line((0, y, size - 1, y), fill=(14 + light, 19 + light, 24 + light, 255))
+    mask = Image.new("L", (size, size))
+    ImageDraw.Draw(mask).polygon(diamond(21), fill=255)
+    image.paste(face, mask=mask)
+    save("LevelDiamond", image)
+
+
 def quest_tracker_art():
     ink = Image.new("RGBA", (256, 128))
     for y in range(128):
@@ -310,6 +338,7 @@ def main():
     map_ring()
     map_time_glyphs()
     meter_ornaments()
+    level_diamond()
     quest_tracker_art()
     interface_glyphs()
     compass()
