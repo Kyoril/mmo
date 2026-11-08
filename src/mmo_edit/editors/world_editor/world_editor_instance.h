@@ -726,6 +726,11 @@ namespace mmo
 		/// @return False when any page failed.
 		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
+		/// @brief Bakes the world map (see WorldMapBaker) into Textures/WorldMap/<world>/ from the zones of
+		///        every page and the minimap tiles. Minimap bakes run it when they finish.
+		/// @return False when the world has no terrain or a file could not be written.
+		bool GenerateWorldMap();
+
 		/// @brief Starts an interactive minimap bake that runs a few pages per frame (see TickMinimapBake),
 		///        so the editor stays responsive and the bake can be cancelled.
 		/// @param onlyStale Skip pages whose tile is newer than their .tile file.

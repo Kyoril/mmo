@@ -43,6 +43,7 @@
 #include "systems/inventory_client.h"
 
 #include "ui/minimap.h"
+#include "ui/world_map.h"
 
 #include "base/create_process.h"
 #include "game_client/object_mgr.h"

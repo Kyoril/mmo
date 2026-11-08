@@ -60,6 +60,7 @@
 
 #include "stb_dxt.h"
 #include "minimap_baker.h"
+#include "world_map_baker.h"
 #include "page_bake_utils.h"
 #include "terrain_lod_baker.h"
 #include "glue_bake/glue_scene_baker.h"
@@ -2884,7 +2885,29 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
 
-		return stats.failed == 0;
+		// The world map is made from the minimap tiles
+		const bool worldMapBaked = GenerateWorldMap();
+
+		return stats.failed == 0 && worldMapBaked;
+	}
+
+	bool WorldEditorInstance::GenerateWorldMap()
+	{
+		if (!m_terrain || !m_hasTerrain)
+		{
+			ELOG("Cannot generate the world map: no terrain available");
+			return false;
+		}
+
+		const auto& zones = m_editor.GetProject().zones;
+		WorldMapBaker baker(m_assetPath.filename().replace_extension().string(),
+			[this](const uint32 x, const uint32 z) { return m_terrain->GetPageFilename(x, z); },
+			[&zones](const uint32 zoneId) -> uint32
+			{
+				const auto* zone = zones.getById(zoneId);
+				return zone ? zone->parentzone() : 0;
+			});
+		return baker.Bake();
 	}
 
 	void WorldEditorInstance::StartMinimapBake(const bool onlyStale)
@@ -2965,6 +2988,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
+
+		// The world map is made from the minimap tiles
+		if (m_minimapBakeStats.baked > 0)
+		{
+			GenerateWorldMap();
+		}
 	}
 
 	void WorldEditorInstance::DrawMinimapBakeDialog()

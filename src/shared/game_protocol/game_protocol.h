@@ -133,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000026;
+		constexpr uint32 ProtocolVersion = 0x00000027;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -560,6 +560,11 @@ namespace mmo
 				/// GAME MASTER. Makes the sender's selected creature the sender's temporary pet without
 				/// a duration. Proxied to the world node. No payload.
 				CheatPetMake, // GAME MASTER
+
+				/// Asks for the positions of the sender's online guild mates in the sender's world
+				/// instance. Handled by the realm, answered with realm_client_packet::GuildMemberPositions.
+				/// Requests closer together than one second are dropped. No payload.
+				GuildMemberPositions,
 
 				/// Counter constant
 				Count_,
@@ -1003,6 +1008,11 @@ namespace mmo
 
 				/// A pet action of the receiver failed. Payload (game::PetResultData): uint8 pet_result.
 				PetResult,
+
+				/// Answer to client_realm_packet::GuildMemberPositions: the receiver's online guild mates
+				/// in the receiver's world instance at their last positions reported by the world node.
+				/// Payload: uint16 count, then per member uint64 guid, uint8-length name, float x, float z.
+				GuildMemberPositions,
 
 				/// Counter constant
 				Count_,
