@@ -229,7 +229,7 @@ namespace mmo
 					continue;
 
 				// Load the ui file
-				LoadUIFile((p / line).generic_string());
+				LoadUIFile((p / line).lexically_normal().generic_string());
 			}
 		}
 
@@ -440,6 +440,7 @@ namespace mmo
 					.def("IsVisible", &Frame::Lua_IsVisible)
 					.def("RemoveAllChildren", &Frame::RemoveAllChildren)
 					.def("Clone", &Frame::Clone)
+					.def("CopyVisuals", &Frame::CopyVisuals)
 					.def("AddChild", &Frame::AddChild)
 					.def("GetChildCount", &Frame::GetChildCount)
 					.def("GetChild", &Frame::GetChild)

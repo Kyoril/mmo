@@ -31,9 +31,13 @@ UiTest.data.bags = { [0] = 0, [1] = 0, [2] = 0, [3] = 0 }
 UiTest.data.units.target = UiTest.MakeUnit({ name = "Training Dummy", level = 10, health = 1000, maxHealth = 1000 })
 
 local icons = { "acolyte_robe_icon", "acolyte_staff_icon", "arcane_cord_icon", "ashen_quarterstaff_icon", "barrowfront_mail_hauberk_icon", "belt_of_sanctity_icon", "berserker_ring_icon", "boots_of_the_templar_icon", "cadet_shield_icon", "cloak_of_radiant_devotion_icon" }
+local itemNames = { "Acolyte Robe", "Acolyte Staff", "Arcane Cord", "Ashen Quarterstaff",
+	"Barrowfront Mail Hauberk", "Belt of Sanctity", "Berserker Ring", "Boots of the Templar",
+	"Cadet's Shield", "Cloak of Radiant Devotion" }
 local function item(index, quality)
 	local object = {}
 	function object:GetIcon() return "Interface/Icons/Items/" .. icons[index] .. ".htex" end
+	function object:GetName() return itemNames[index] end
 	function object:GetStackCount() return index == 3 and 4 or 1 end
 	function object:GetQuality() return quality end
 	function object:IsUsable() return true end
