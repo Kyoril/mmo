@@ -54,6 +54,35 @@ def underline():
     save("Underline", image)
 
 
+def primary_button():
+    size = 128
+    cut = 20
+    image = Image.new("RGBA", (size, size))
+    draw = ImageDraw.Draw(image)
+    for inset, color in enumerate(((41, 28, 19, 255), (132, 91, 52, 255),
+                                   (255, 225, 167, 255), (126, 81, 43, 255),
+                                   (167, 117, 62, 255)), 1):
+        draw.polygon(octagon(size, inset, cut), fill=color)
+
+    face = Image.new("RGBA", (size, size))
+    face_draw = ImageDraw.Draw(face)
+    for y in range(size):
+        t = max(0, min(1, (y - 6) / (size - 13)))
+        light = round(5 * exp(-((t - 0.16) / 0.16)**2) + sin(y * 1.8))
+        color = tuple(round(top + (bottom - top) * t + light)
+                      for top, bottom in zip((240, 205, 141), (168, 119, 64)))
+        face_draw.line((0, y, size - 1, y), fill=(*color, 255))
+    mask = Image.new("L", (size, size))
+    ImageDraw.Draw(mask).polygon(octagon(size, 6, cut), fill=255)
+    image.paste(face, mask=mask)
+    save("PrimaryButton", image)
+
+    sheen = Image.new("RGBA", (size, size))
+    top = octagon(size, 3, cut)
+    ImageDraw.Draw(sheen).line((top[7], top[0], top[1], top[2]), fill=(255, 245, 206, 255), width=4)
+    save("PrimaryButtonSheen", sheen)
+
+
 def compass():
     image = Image.new("RGBA", (128, 128))
     draw = ImageDraw.Draw(image)
@@ -277,6 +306,7 @@ def main():
     frame("Selection", [(22, 19, 14, 175), (167, 128, 76, 255), (230, 192, 133, 230),
                         (95, 73, 45, 255), (70, 55, 34, 160)], 16)
     underline()
+    primary_button()
     map_ring()
     map_time_glyphs()
     meter_ornaments()
