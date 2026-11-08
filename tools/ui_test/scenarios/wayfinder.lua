@@ -8,7 +8,7 @@ UiTest.data.units.target = UiTest.MakeUnit({
 });
 UiTest.FireEvent("PLAYER_TARGET_CHANGED");
 UiTest.data.units.player.power[0] = 660;
-UiTest.FireEvent("UNIT_POWER_UPDATED", "player");
+UiTest.FireEvent("PLAYER_POWER_CHANGED");
 SetCVar("ShowActionBar2", "1");
 
 local getSpell = GetActionButtonSpell;
@@ -32,6 +32,27 @@ ActionBar_UpdateSecondBarVisibility();
 ActionBar_UpdateButtons(ActionBar);
 ActionBar_UpdateButtons(ActionBar2);
 ActionBar_UpdateShortcutLabels(1);
+
+local quests = {
+	{ id = 101, status = 3, quest = { title = "Wolves at the Watch" } },
+	{ id = 102, status = 3, quest = { title = "Good Cloth" } },
+	{ id = 103, status = 1, quest = { title = "Thinning the Roadside Packs" } },
+};
+local objectives = {
+	[101] = { "Duskfang stalkers slain: 2/6", "Report to the Briarwatch sentry: 1/1" },
+	[102] = { "Linen cloth: 4/6" },
+};
+local selected = 0;
+function GetNumQuestLogEntries() return #quests; end
+function GetQuestLogEntry(index) return quests[index + 1]; end
+function QuestLogSelectQuest(id) selected = id; end
+function GetQuestLogSelection() return selected; end
+function GetQuestObjectiveCount() return #(objectives[selected] or {}); end
+function GetQuestObjectiveText(index) return objectives[selected][index + 1]; end
+function GetQuestLogTimeLeft() return 0; end
+function IsQuestAllowedForClass() return true; end
+function IsClassUnlockQuest() return false; end
+UiTest.FireEvent("QUEST_LOG_UPDATE");
 
 ShowUIPanel(FriendsFrame);
 FriendsList_SelectFriend(FriendListContent:GetChild(0));

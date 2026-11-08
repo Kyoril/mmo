@@ -160,15 +160,33 @@ def map_ring():
 
 
 def meter_ornaments():
-    frame("MeterWell", [(11, 14, 17, 255), (126, 104, 73, 255), (214, 183, 133, 255),
-                        (63, 52, 38, 255), (15, 20, 24, 255)], 25)
-    rim = Image.new("RGBA", (128, 128))
-    draw = ImageDraw.Draw(rim)
-    for inset, color in enumerate([(21, 18, 16, 255), (154, 121, 80, 255), (232, 198, 140, 255),
-                                  (86, 64, 42, 255), (23, 24, 25, 255)], 1):
-        draw.polygon(octagon(128, inset, 25), fill=color)
-    draw.polygon(octagon(128, 8, 26), fill=(0, 0, 0, 0))
-    save("MeterRim", rim)
+    def silhouette(inset):
+        far = 127 - inset
+        shoulder = 45 + inset
+        return [(inset, 63), (shoulder, inset), (127 - shoulder, inset),
+                (far, 63), (127 - shoulder, far), (shoulder, far)]
+
+    metals = [(8, 11, 15, 255), (99, 74, 47, 255), (229, 194, 135, 255),
+              (204, 165, 107, 255), (71, 57, 41, 255), (25, 24, 22, 255)]
+    for name, inner in (("MeterWell", (14, 19, 23, 255)), ("MeterRim", (0, 0, 0, 0))):
+        rail = Image.new("RGBA", (128, 128))
+        draw = ImageDraw.Draw(rail)
+        for inset, color in zip((1, 3, 5, 8, 10, 12), metals):
+            draw.polygon(silhouette(inset), fill=color)
+        draw.polygon(silhouette(15), fill=inner)
+        save(name, rail)
+
+    fill = Image.new("RGBA", (128, 128))
+    mask = Image.new("L", fill.size)
+    ImageDraw.Draw(mask).polygon(silhouette(1), fill=255)
+    draw = ImageDraw.Draw(fill)
+    stops = [(0, 100), (8, 220), (18, 253), (45, 221), (83, 152), (111, 103), (125, 64), (127, 43)]
+    for (y0, light0), (y1, light1) in zip(stops, stops[1:]):
+        for y in range(y0, y1 + 1):
+            light = round(light0 + (light1 - light0) * (y - y0) / (y1 - y0))
+            draw.line((0, y, 127, y), fill=(light, light, light, 255))
+    fill.putalpha(mask)
+    save("MeterFill", fill)
     shadow = Image.new("RGBA", (128, 32))
     for y in range(32):
         for x in range(128):
@@ -177,6 +195,37 @@ def meter_ornaments():
                 alpha = round(204 * exp(-12 * dx**4 - 1.5 * dy**4) * (1 - (dx / 0.60)**3) * (1 - dy**3))
                 shadow.putpixel((x, y), (8, 11, 15, alpha))
     save("MeterLabelShade", shadow)
+
+
+def quest_tracker_art():
+    ink = Image.new("RGBA", (256, 128))
+    for y in range(128):
+        v = min(1, y / 8, (127 - y) / 14)
+        for x in range(256):
+            u = x / 255
+            alpha = round(198 * v * min(1, x / 12) * (1 - u**2.2))
+            ink.putpixel((x, y), (9, 14, 19, alpha))
+    save("TrackerInk", ink)
+    trail = Image.new("RGBA", (4, 64))
+    draw = ImageDraw.Draw(trail)
+    for y in range(64):
+        draw.line((0, y, 3, y), fill=(185, 149, 93, round(142 * (1 - y / 63))))
+    save("TrackerTrail", trail)
+
+    for name in ("Quest", "QuestDone", "QuestFailed"):
+        glyph = Image.new("RGBA", (64, 64))
+        draw = ImageDraw.Draw(glyph)
+        points = [(32, 8), (55, 32), (32, 56), (9, 32)]
+        draw.polygon(points, fill=(12, 17, 23, 230))
+        draw.line(points + points[:1], fill=IVORY, width=4)
+        if name == "QuestDone":
+            draw.line([(20, 32), (28, 40), (44, 24)], fill=IVORY, width=4)
+        elif name == "QuestFailed":
+            draw.line((32, 20, 32, 35), fill=IVORY, width=5)
+            draw.ellipse((30, 40, 34, 44), fill=IVORY)
+        else:
+            draw.polygon([(32, 23), (41, 32), (32, 41), (23, 32)], fill=IVORY)
+        save("Glyph" + name, glyph)
 
 
 def main():
@@ -190,6 +239,7 @@ def main():
     underline()
     map_ring()
     meter_ornaments()
+    quest_tracker_art()
     interface_glyphs()
     compass()
     ticks = Image.new("RGBA", (256, 8))
