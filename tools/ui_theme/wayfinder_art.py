@@ -1,6 +1,6 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """Draw the Wayfinder UI ornaments and write mipmapped RGBA HTEX files."""
-from math import cos, pi, sin
+from math import cos, exp, pi, sin
 from pathlib import Path
 import struct
 
@@ -38,6 +38,13 @@ def frame(name, colors, cut):
     draw = ImageDraw.Draw(image)
     for inset, color in enumerate(colors, 1):
         draw.polygon(octagon(128, inset, cut), fill=color)
+    if name == "PanelRim":
+        base = colors[-1]
+        for y in range(128):
+            for x in range(128):
+                if image.getpixel((x, y)) == base:
+                    sheen = round(5 * (1 - y / 127) + 1.1 * sin(x * 0.19 + y * 0.32))
+                    image.putpixel((x, y), tuple(v + sheen for v in base[:3]) + (255,))
     save(name, image)
 
 
@@ -90,21 +97,100 @@ def class_glyph(name):
     save(name, image)
 
 
+def interface_glyphs():
+    paths = {
+        "Character": [[(12, 31), (14, 18), (22, 10), (32, 6), (42, 10), (50, 18), (52, 31), (45, 49), (32, 56), (19, 49), (12, 31)],
+                      [(14, 24), (32, 32), (50, 24)], [(32, 11), (32, 51)], [(20, 40), (26, 43)], [(38, 43), (44, 40)]],
+        "Book": [[(32, 17), (24, 12), (9, 12), (9, 46), (24, 46), (32, 52), (40, 46), (55, 46), (55, 12), (40, 12), (32, 17), (32, 52)],
+                 [(16, 23), (25, 25)], [(16, 32), (25, 34)], [(39, 25), (48, 23)], [(39, 34), (48, 32)]],
+        "Craft": [[(10, 19), (53, 19), (47, 28), (37, 32), (35, 42), (46, 49), (18, 49), (28, 42), (26, 33), (15, 30), (10, 19)],
+                  [(17, 13), (44, 13)]],
+        "Emotes": [[(12, 14), (52, 14), (55, 19), (55, 39), (50, 44), (30, 44), (16, 54), (18, 44), (9, 44), (9, 19), (12, 14)],
+                   [(21, 28), (24, 28)], [(31, 28), (34, 28)], [(41, 28), (44, 28)]],
+        "Bag": [[(16, 24), (48, 24), (53, 43), (51, 53), (13, 53), (11, 43), (16, 24)], [(22, 24), (22, 15), (32, 10), (42, 15), (42, 24)],
+                [(14, 33), (28, 39), (36, 39), (50, 33)], [(29, 36), (29, 43), (36, 43), (36, 36)]],
+        "Quests": [[(15, 14), (49, 14), (43, 21), (43, 48), (48, 52), (16, 52), (21, 46), (21, 21), (15, 14)],
+                   [(29, 24), (36, 24)], [(29, 32), (36, 32)], [(29, 40), (36, 40)]],
+        "Talents": [[(32, 45), (32, 21)], [(32, 38), (17, 29), (14, 23)], [(32, 38), (47, 29), (50, 23)],
+                    [(32, 9), (38, 15), (32, 21), (26, 15), (32, 9)], [(32, 45), (39, 52), (32, 59), (25, 52), (32, 45)],
+                    [(14, 11), (20, 17), (14, 23), (8, 17), (14, 11)], [(50, 11), (56, 17), (50, 23), (44, 17), (50, 11)]],
+        "Report": [[(21, 24), (32, 17), (43, 24), (45, 43), (32, 53), (19, 43), (21, 24)], [(32, 26), (32, 48)],
+                   [(22, 25), (12, 16)], [(42, 25), (52, 16)], [(19, 33), (8, 32)], [(45, 33), (56, 32)],
+                   [(20, 42), (11, 48)], [(44, 42), (53, 48)]],
+        "Close": [[(18, 18), (46, 46)], [(46, 18), (18, 46)]],
+        "Chevron": [[(15, 25), (32, 41), (49, 25)]],
+        "Plus": [[(16, 32), (48, 32)], [(32, 16), (32, 48)]],
+        "Minus": [[(16, 32), (48, 32)]],
+        "Moon": [[(42, 11), (32, 17), (25, 28), (26, 39), (34, 47), (46, 48), (37, 54), (24, 54), (13, 46), (9, 34), (13, 22), (23, 13), (33, 9), (42, 11)]],
+    }
+    for name, strokes in paths.items():
+        image = Image.new("RGBA", (64, 64))
+        draw = ImageDraw.Draw(image)
+        for stroke in strokes:
+            draw.line(stroke, fill=IVORY, width=4, joint="curve")
+        save(f"Glyph{name}", image)
+
+    for name, steps in (("Settings", 8), ("Sun", 8)):
+        image = Image.new("RGBA", (64, 64))
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((19, 19, 45, 45), outline=IVORY, width=4)
+        for i in range(steps):
+            angle = i * 2 * pi / steps
+            p = lambda r: (32 + r * cos(angle), 32 + r * sin(angle))
+            draw.line((p(16), p(26)), fill=IVORY, width=5 if name == "Settings" else 3)
+        save(f"Glyph{name}", image)
+
+
+def map_ring():
+    ring = Image.new("RGBA", (512, 512))
+    draw = ImageDraw.Draw(ring)
+    draw.ellipse((3, 3, 508, 508), outline=(12, 17, 22, 255), width=21)
+    draw.ellipse((6, 6, 505, 505), outline=GOLD, width=3)
+    draw.ellipse((17, 17, 494, 494), outline=SHADE, width=3)
+    for i in range(24):
+        a = i * pi / 12
+        p = lambda r: (255.5 + r * cos(a), 255.5 + r * sin(a))
+        draw.line((p(242), p(247)), fill=GOLD, width=3 if i % 3 == 0 else 2)
+    for a in (0, pi / 2, pi, 3 * pi / 2):
+        p = lambda r, d: (255.5 + r * cos(a) - d * sin(a), 255.5 + r * sin(a) + d * cos(a))
+        points = [p(254, 0), p(238, 14), p(221, 0), p(238, -14)]
+        draw.polygon(points, fill=(16, 22, 27, 255))
+        draw.line(points + points[:1], fill=GOLD, width=2)
+    save("MapRing", ring)
+
+
+def meter_ornaments():
+    frame("MeterWell", [(11, 14, 17, 255), (126, 104, 73, 255), (214, 183, 133, 255),
+                        (63, 52, 38, 255), (15, 20, 24, 255)], 25)
+    rim = Image.new("RGBA", (128, 128))
+    draw = ImageDraw.Draw(rim)
+    for inset, color in enumerate([(21, 18, 16, 255), (154, 121, 80, 255), (232, 198, 140, 255),
+                                  (86, 64, 42, 255), (23, 24, 25, 255)], 1):
+        draw.polygon(octagon(128, inset, 25), fill=color)
+    draw.polygon(octagon(128, 8, 26), fill=(0, 0, 0, 0))
+    save("MeterRim", rim)
+    shadow = Image.new("RGBA", (128, 32))
+    for y in range(32):
+        for x in range(128):
+            dx, dy = abs(x - 63.5) / 63.5, abs(y - 15.5) / 15.5
+            if dx < 0.60 and dy < 0.98:
+                alpha = round(204 * exp(-12 * dx**4 - 1.5 * dy**4) * (1 - (dx / 0.60)**3) * (1 - dy**3))
+                shadow.putpixel((x, y), (8, 11, 15, alpha))
+    save("MeterLabelShade", shadow)
+
+
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     frame("PanelRim", [(9, 10, 13, 230), (167, 140, 98, 255), (226, 194, 143, 255),
-                       (100, 85, 63, 255), (26, 32, 38, 255)], 17)
+                       (85, 72, 54, 255), (16, 22, 27, 255)], 17)
     frame("SocketRim", [(9, 10, 13, 230), (104, 108, 110, 255), (164, 164, 150, 255),
                         (45, 48, 48, 255), (13, 20, 26, 246)], 20)
     frame("Selection", [(22, 19, 14, 175), (167, 128, 76, 255), (230, 192, 133, 230),
                         (95, 73, 45, 255), (70, 55, 34, 160)], 16)
     underline()
-    ring = Image.new("RGBA", (512, 512))
-    draw = ImageDraw.Draw(ring)
-    draw.ellipse((3, 3, 508, 508), outline=(10, 12, 14, 244), width=24)
-    draw.ellipse((6, 6, 505, 505), outline=GOLD, width=3)
-    draw.ellipse((17, 17, 494, 494), outline=SHADE, width=4)
-    save("MapRing", ring)
+    map_ring()
+    meter_ornaments()
+    interface_glyphs()
     compass()
     ticks = Image.new("RGBA", (256, 8))
     draw = ImageDraw.Draw(ticks)
