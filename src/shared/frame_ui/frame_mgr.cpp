@@ -229,7 +229,7 @@ namespace mmo
 					continue;
 
 				// Load the ui file
-				LoadUIFile((p / line).generic_string());
+				LoadUIFile((p / line).lexically_normal().generic_string());
 			}
 		}
 

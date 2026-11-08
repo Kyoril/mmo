@@ -143,6 +143,20 @@ TEST_CASE("Progress fills stay inside their inset housing at low and full values
 	CHECK(areas.empty());
 }
 
+TEST_CASE("Wayfinder Glue loads its base theme and shared window chrome", "[theme][glue]")
+{
+	ThemeFixture fixture;
+	auto& manager = FrameManager::Get();
+	manager.SetTopFrame(manager.Create("Frame", "GlueThemeTestRoot"));
+	manager.LoadUIFile("Interface/GlueUI/Themes/Wayfinder/Theme.toc");
+
+	REQUIRE(manager.GetFontMap("DefaultHeader") != nullptr);
+	REQUIRE(manager.Find("WayfinderTitleRule") != nullptr);
+	auto button = manager.Find("ThemeGlueGlueButtonVisual");
+	REQUIRE(button != nullptr);
+	CHECK(button->GetImagerySectionByName("Base") != nullptr);
+}
+
 TEST_CASE("Appearance copies replace imagery without changing behavior or layout", "[theme]")
 {
 	ThemeFixture fixture;
