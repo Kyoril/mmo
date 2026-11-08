@@ -440,6 +440,7 @@ namespace mmo
 					.def("IsVisible", &Frame::Lua_IsVisible)
 					.def("RemoveAllChildren", &Frame::RemoveAllChildren)
 					.def("Clone", &Frame::Clone)
+					.def("CopyVisuals", &Frame::CopyVisuals)
 					.def("AddChild", &Frame::AddChild)
 					.def("GetChildCount", &Frame::GetChildCount)
 					.def("GetChild", &Frame::GetChild)
