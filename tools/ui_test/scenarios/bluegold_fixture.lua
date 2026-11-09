@@ -77,7 +77,7 @@ function GetGraphicsHardwareInfo() return { gpu = "NVIDIA GeForce RTX 2080 Ti", 
 function GetGraphicsPresetValues() return {} end
 local values =
 {
-	gxMonitor = "0", gxWindow = "1", gxResolution = "2560x1440", gxRenderScale = "1", gxVSync = "1",
+	gxMonitor = "0", gxWindow = "1", gxResolution = "2560x1440", gxRenderScale = "1", gxUpscaleFilter = "3", gxVSync = "1",
 	gxMaxFpsEnabled = "1", gxMaxFps = "60", gxMaxFpsBkEnabled = "1", gxMaxFpsBk = "30",
 	gxTargetFpsEnabled = "0", gxTargetFps = "60", gxExposure = "1", gxQuality = "2", ShowActionBar2 = "0",
 }

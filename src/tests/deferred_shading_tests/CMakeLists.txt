@@ -7,4 +7,5 @@ mmo_add_test(deferred_shading_tests
 target_sources(deferred_shading_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/deferred_shading/water_volume_system.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/deferred_shading/fog_noise.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/deferred_shading/upscale_filter.cpp
 )

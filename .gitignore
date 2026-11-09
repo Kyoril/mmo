@@ -73,6 +73,9 @@ bin/Debug2/
 /src/shared/deferred_shading/shaders/CS_FogTemporal.h
 /src/shared/deferred_shading/shaders/CS_FogIntegrate.h
 /src/shared/deferred_shading/shaders/PS_FogComposite.h
+/src/shared/deferred_shading/shaders/PS_Upscale.h
+/src/shared/deferred_shading/shaders/PS_FsrEasu.h
+/src/shared/deferred_shading/shaders/PS_FsrRcas.h
 *.local.json
 .claude/*
 !.claude/commands/

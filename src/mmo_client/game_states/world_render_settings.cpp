@@ -53,6 +53,11 @@ namespace mmo
 		// GPUs. Read directly by WorldRenderer each frame, so no change handler is required here.
 		Add("gxRenderScale", "3D render resolution scale (0.25 to 1.0). Lower values improve performance by rendering the world at a lower resolution and upscaling.", "1.0");
 
+		// How a world rendered below native resolution (gxRenderScale or the dynamic resolution of
+		// gxTargetFps) is brought up to the frame size. Read by WorldRenderer each frame.
+		Add("gxUpscaleFilter", "Upscale filter when the world renders below native resolution: 0 = Point, 1 = Bilinear, 2 = Bicubic, 3 = FidelityFX Super Resolution 1.0.", "3");
+		Add("gxUpscaleSharpness", "FSR sharpening strength in stops: 0 = strongest, each step of 1 halves it (0 to 2).", "0.2");
+
 		m_depthPrepass = Add("gxDepthPrepass", "Render an opaque depth pre-pass before the G-Buffer pass. Reduces overdraw shading cost in scenes with heavy opaque overdraw (e.g. dense foliage). 1 = on, 0 = off.", "1", &WorldRenderSettings::ApplyDepthPrepass);
 
 		// Screen-space ambient occlusion (visibility-bitmask / SSILVB occlusion core). All
