@@ -11,6 +11,7 @@
 #include "math/matrix4.h"
 #include "math/ray.h"
 #include "math/vector4.h"
+#include "pcg/graph/control_transform.h"
 #include "pcg/graph/hashing.h"
 #include "pcg/oasis_recipe.h"
 #include "pcg/pcg_random.h"
@@ -521,6 +522,7 @@ namespace mmo
 		EndRectangleDrag();
 		ClearPointSelection();
 		ClearTransformSelection();
+		ClearShapeSelection();
 		m_splineEditor.Select(index, -1);
 
 		// A volume or point has no spline to click; the gizmo edits it as soon as it is picked.
@@ -537,9 +539,10 @@ namespace mmo
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
 		EndRectangleDrag();
-		// A point or transform selection is meaningless outside this mode (no handles, no overlay).
+		// A point, transform or whole-control selection is meaningless outside this mode (no handles, no overlay).
 		ClearPointSelection();
 		ClearTransformSelection();
+		ClearShapeSelection();
 		m_brushPositionValid = false;
 	}
 
@@ -596,6 +599,64 @@ namespace mmo
 		if (&selectable == m_transformSelectable)
 		{
 			m_transformSelectable = nullptr;
+		}
+	}
+
+	void ProceduralEditMode::SelectShapeInEditor(const int32 controlIndex)
+	{
+		// Forget the old handles first: their Deselect() must not reset what was just picked.
+		m_pointSelectable = nullptr;
+		m_transformSelectable = nullptr;
+		m_shapeSelectable = nullptr;
+		m_worldEditor.ClearSelection();
+		m_splineEditor.CancelDrag();
+		m_splineEditor.Select(controlIndex, -1);
+
+		if (controlIndex < 0 || controlIndex >= static_cast<int32>(m_controls.size()) || !m_controls[controlIndex].HasShape())
+		{
+			return;
+		}
+
+		m_selected = controlIndex;
+		auto selectable = std::make_unique<SelectedControlShape>(*this, m_controls[controlIndex].Id());
+		m_shapeSelectable = selectable.get();
+		m_worldEditor.AddToSelection(std::move(selectable));
+	}
+
+	void ProceduralEditMode::ClearShapeSelection()
+	{
+		if (m_shapeSelectable)
+		{
+			m_shapeSelectable = nullptr;
+			m_worldEditor.ClearSelection();
+		}
+	}
+
+	pcg::graph::ControlInstance* ProceduralEditMode::FindShapeControl(const uint64 controlId)
+	{
+		const int32 index = FindControl(controlId);
+		if (index < 0 || !m_controls[index].HasShape())
+		{
+			return nullptr;
+		}
+
+		return &m_controls[index].placed;
+	}
+
+	void ProceduralEditMode::OnControlShapeEdited(const uint64 controlId)
+	{
+		const int32 index = FindControl(controlId);
+		if (index >= 0)
+		{
+			MarkChanged(m_controls[index]);
+		}
+	}
+
+	void ProceduralEditMode::OnControlShapeDeselected(const SelectedControlShape& selectable)
+	{
+		if (&selectable == m_shapeSelectable)
+		{
+			m_shapeSelectable = nullptr;
 		}
 	}
 
@@ -1611,6 +1672,55 @@ namespace mmo
 		{
 			control.placed.overrides = std::move(overrides);
 			MarkChanged(control);
+		}
+		return true;
+	}
+
+	bool ProceduralEditMode::TransformPlacedControl(const uint64 id, const PlacedControlTransformEdit& edit, String& error)
+	{
+		const int32 index = FindControl(id);
+		if (index < 0 || m_controls[index].kind != ControlKind::Placed)
+		{
+			error = "No placed control with id " + FormatId(id);
+			return false;
+		}
+
+		// Checked first, so a bad value changes nothing.
+		if ((edit.move && (!std::isfinite(edit.move->first) || !std::isfinite(edit.move->second)))
+			|| (edit.rotateDegrees && !std::isfinite(*edit.rotateDegrees))
+			|| (edit.scale && (!std::isfinite(edit.scale->first) || !std::isfinite(edit.scale->second))))
+		{
+			error = "Move, rotate and scale values must be finite.";
+			return false;
+		}
+
+		Control& control = m_controls[index];
+		if (edit.move)
+		{
+			pcg::graph::TranslateControl(control.placed, Vector3(edit.move->first, 0.0f, edit.move->second));
+		}
+		if (edit.rotateDegrees)
+		{
+			pcg::graph::RotateControl(control.placed, *edit.rotateDegrees * PiValue / 180.0f);
+		}
+		if (edit.scale)
+		{
+			pcg::graph::ScaleControl(control.placed, edit.scale->first, edit.scale->second);
+		}
+
+		if (edit.move || edit.rotateDegrees || edit.scale)
+		{
+			MarkChanged(control);
+
+			// The gizmo follows when it sits on this control.
+			if (m_transformSelectable && m_transformSelectable->GetControlId() == id)
+			{
+				m_transformSelectable->NotifyTransformChanged();
+			}
+			if (m_shapeSelectable && m_shapeSelectable->GetControlId() == id)
+			{
+				m_shapeSelectable->positionChanged(*m_shapeSelectable);
+			}
 		}
 		return true;
 	}
@@ -3164,6 +3274,19 @@ namespace mmo
 		{
 			ImGui::TextWrapped("%s: %d points. Click a point to select it (the gizmo moves it, height included; Rotate tilts and turns its tangents) or drag it at its height, Alt+click the curve to add a point, Delete or Ctrl+click removes a point (minimum %u).",
 				instance.spline.closed ? "Loop" : "Spline", static_cast<int>(instance.spline.points.size()), GetMinPoints(control));
+
+			// Whole-control editing: the gizmo on the pivot moves, rotates and scales every point together.
+			const bool wholeSelected = m_shapeSelectable && m_shapeSelectable->GetControlId() == instance.id;
+			ImGui::BeginDisabled(wholeSelected);
+			if (ImGui::Button("Transform whole control"))
+			{
+				SelectShapeInEditor(FindControl(instance.id));
+			}
+			ImGui::EndDisabled();
+			ImGui::TextDisabled(wholeSelected
+				? "The gizmo moves, rotates and scales the whole control about its centre. Click a point to edit points again."
+				: "Or click the diamond at its centre in the viewport. Click a point to edit points again.");
+
 			DrawPointDetails(control);
 		}
 
@@ -3813,6 +3936,16 @@ namespace mmo
 				SelectTransformInEditor(transformIndex);
 				return;
 			}
+
+			// A click on the pivot marker of the selected loop or spline selects it as a whole for the gizmo. A point
+			// under the cursor wins, so single points are picked exactly as before.
+			int32 hitControl = -1;
+			int32 hitPoint = -1;
+			if (HitTestShapePivot(io.MousePos.x, io.MousePos.y) && !m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, hitControl, hitPoint))
+			{
+				SelectShapeInEditor(GetSelectedShape());
+				return;
+			}
 		}
 
 		// Point counts before the click, to find a point the click inserts (it needs an id on a section path
@@ -3874,6 +4007,11 @@ namespace mmo
 		{
 			// A click elsewhere drops the gizmo of a volume or point (the control stays selected).
 			ClearTransformSelection();
+		}
+		else if (m_shapeSelectable)
+		{
+			// A click elsewhere drops the whole-control gizmo of a loop or spline (the control stays selected).
+			ClearShapeSelection();
 		}
 	}
 
@@ -4042,6 +4180,59 @@ namespace mmo
 			}
 		}
 		return best;
+	}
+
+	int32 ProceduralEditMode::GetSelectedShape() const
+	{
+		if (m_selected < 0 || m_selected >= static_cast<int32>(m_controls.size()) || !m_controls[m_selected].HasShape())
+		{
+			return -1;
+		}
+		return m_selected;
+	}
+
+	bool ProceduralEditMode::ProjectShapePivot(ImVec2& screen) const
+	{
+		const int32 index = GetSelectedShape();
+		if (index < 0)
+		{
+			return false;
+		}
+
+		const Vector3 pivot = pcg::graph::ControlPivot(m_controls[index].placed);
+		return ProjectToScreen(Vector3(pivot.x, GetHandleHeight(pivot.x, pivot.z), pivot.z), screen);
+	}
+
+	bool ProceduralEditMode::HitTestShapePivot(const float screenX, const float screenY) const
+	{
+		ImVec2 screen;
+		if (!ProjectShapePivot(screen))
+		{
+			return false;
+		}
+
+		const float dx = screen.x - screenX;
+		const float dy = screen.y - screenY;
+		return dx * dx + dy * dy <= TransformHandleRadius * TransformHandleRadius;
+	}
+
+	void ProceduralEditMode::DrawShapePivot(ImDrawList& drawList) const
+	{
+		ImVec2 centre;
+		if (!ProjectShapePivot(centre))
+		{
+			return;
+		}
+
+		// A diamond (point handles are round), filled white while the whole control is selected.
+		const bool active = m_shapeSelectable && m_shapeSelectable->GetControlId() == m_controls[GetSelectedShape()].Id();
+		const float size = TransformHandleRadius * 0.8f;
+		const ImVec2 top(centre.x, centre.y - size);
+		const ImVec2 right(centre.x + size, centre.y);
+		const ImVec2 bottom(centre.x, centre.y + size);
+		const ImVec2 left(centre.x - size, centre.y);
+		drawList.AddQuadFilled(top, right, bottom, left, active ? IM_COL32(255, 255, 255, 255) : IM_COL32(190, 255, 160, 220));
+		drawList.AddQuad(top, right, bottom, left, IM_COL32(20, 20, 20, 255), 1.5f);
 	}
 
 	int32 ProceduralEditMode::GetSelectedRectangle()
@@ -4244,6 +4435,10 @@ namespace mmo
 		{
 			ClearTransformSelection();
 		}
+		if (m_shapeSelectable && !m_shapeSelectable->IsValid())
+		{
+			ClearShapeSelection();
+		}
 
 		drawList->PushClipRect(viewportMin, ImVec2(viewportMin.x + viewportSize.x, viewportMin.y + viewportSize.y), true);
 
@@ -4320,6 +4515,7 @@ namespace mmo
 		}
 		m_splineEditor.Draw(*drawList, viewportMin, viewportSize, splines, styles);
 		DrawPlacedTransforms(*drawList);
+		DrawShapePivot(*drawList);
 
 		// The corner piece chosen at each control point of the selected section path (laid like a build, flat ground).
 		if (m_selected >= 0 && m_selected < static_cast<int32>(m_controls.size()) && m_controls[m_selected].kind == ControlKind::SectionPath)

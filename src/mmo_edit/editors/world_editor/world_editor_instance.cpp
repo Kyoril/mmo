@@ -14,6 +14,7 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "selected_kit_prop.h"
+#include "selected_control_shape.h"
 #include "selected_control_transform.h"
 #include "selected_spline_point.h"
 #include "editors/world_model_editor/panels/world_model_properties_panel.h"
@@ -1191,6 +1192,17 @@ namespace mmo
 		return m_proceduralEditMode->SetPlacedControlProperties(id, settings, error);
 	}
 
+	bool WorldEditorInstance::TransformProceduralControl(const uint64 id, const PlacedControlTransformEdit& edit, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->TransformPlacedControl(id, edit, error);
+	}
+
 	bool WorldEditorInstance::CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed,
 		const String& name, const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
 	{
@@ -2126,6 +2138,7 @@ namespace mmo
 			void Visit(SelectedFogVolume&) override {}
 			void Visit(SelectedSplinePoint&) override {}
 			void Visit(SelectedControlTransform&) override {}
+			void Visit(SelectedControlShape&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -4720,6 +4733,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		ImGui::TextDisabled(selectable.IsVolume()
 			? "Translate moves it (height too), Rotate turns it around up, Scale sets its half extents. Properties are in the mode panel."
 			: "Translate moves it (height too), Rotate turns it around up. Properties are in the mode panel.");
+	}
+
+	void WorldEditorInstance::Visit(SelectedControlShape &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected control no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Placed %s Control (whole)", selectable.IsLoop() ? "Loop" : "Spline");
+		ImGui::TextDisabled("Translate moves every point, Rotate turns it around up and Scale stretches it along x/z, about its centre. Click a point to edit points again.");
 	}
 
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)

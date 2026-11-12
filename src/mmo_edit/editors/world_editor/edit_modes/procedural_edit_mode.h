@@ -15,6 +15,7 @@
 #include "pcg/graph/controls.h"
 #include "pcg/graph/graph.h"
 #include "pcg/graph/rectangle_shape.h"
+#include "../selected_control_shape.h"
 #include "../selected_control_transform.h"
 #include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
@@ -49,6 +50,19 @@ namespace mmo
 		std::optional<float> yawDegrees;
 	};
 
+	/// @brief A whole-control transform of a placed control, for unattended runs (mmo_edit --pcg-transform-control).
+	///        Applied in this order: move, rotate, scale (see pcg::graph::TranslateControl, RotateControl and
+	///        ScaleControl). Unset values are skipped.
+	struct PlacedControlTransformEdit
+	{
+		/// World offset on x and z in metres.
+		std::optional<std::pair<float, float>> move;
+		/// Yaw around up about the control's pivot, in degrees.
+		std::optional<float> rotateDegrees;
+		/// Scale factors along world x and z about the control's pivot.
+		std::optional<std::pair<float, float>> scale;
+	};
+
 	/// @brief Edit mode for procedurally generated content. Three kinds of control objects:
 	///        - an oasis: a closed spline, a seed and parameters (terrain, paint, water and objects);
 	///        - a section path: an open 3D spline that lays a baked section asset (.hsec) along it;
@@ -63,8 +77,9 @@ namespace mmo
 	///        placed controls as .hpcgc (JSON) in the same folder.
 	///        A clicked spline point becomes the editor selection (SelectedSplinePoint), so the transform
 	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport. A
-	///        placed volume or point becomes the editor selection as a SelectedControlTransform.
-	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner, public IControlTransformOwner
+	///        placed volume or point becomes the editor selection as a SelectedControlTransform; a placed loop or
+	///        spline is selected as a whole (SelectedControlShape) by its pivot marker or the details panel.
+	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner, public IControlTransformOwner, public IControlShapeOwner
 	{
 	public:
 		/// @brief Creates the mode.
@@ -251,6 +266,14 @@ namespace mmo
 		/// @return True if every setting was applied.
 		bool SetPlacedControlProperties(uint64 id, const std::vector<std::pair<String, String>>& settings, String& error);
 
+		/// @brief Moves, rotates and scales a placed control (any shape) as a whole, in that order. Does not build
+		///        anything.
+		/// @param id Id of the placed control.
+		/// @param edit The transform; unset parts are skipped.
+		/// @param error Receives the reason when the call returns false (nothing is changed then).
+		/// @return False if the id names no placed control or a value is not finite.
+		bool TransformPlacedControl(uint64 id, const PlacedControlTransformEdit& edit, String& error);
+
 		/// @brief Adds a graph instance over a closed area through the given x/z points (sharp corners: manual,
 		///        zero tangents, so the area is the polygon; heights from the terrain, which is loaded under the
 		///        points first). Does not build it. The "New Graph Instance" button uses this with a 128 m square
@@ -367,6 +390,16 @@ namespace mmo
 
 		/// @brief Drops the transform selection when the editor selection drops it.
 		void OnControlTransformDeselected(const SelectedControlTransform& selectable) override;
+
+	public:
+		/// @brief Gets the placed loop or spline control with the id, or null.
+		pcg::graph::ControlInstance* FindShapeControl(uint64 controlId) override;
+
+		/// @brief Marks the control changed.
+		void OnControlShapeEdited(uint64 controlId) override;
+
+		/// @brief Drops the whole-control selection when the editor selection drops it.
+		void OnControlShapeDeselected(const SelectedControlShape& selectable) override;
 
 	private:
 		/// @brief Kind of a control object.
@@ -508,6 +541,9 @@ namespace mmo
 			/// @brief Whether this is a placed volume or point (no spline; edited through a SelectedControlTransform).
 			bool HasTransform() const { return kind == ControlKind::Placed && placed.spline.points.empty(); }
 
+			/// @brief Whether this is a placed loop or spline (can be selected as a whole through a SelectedControlShape).
+			bool HasShape() const { return kind == ControlKind::Placed && !placed.spline.points.empty(); }
+
 			/// @brief Shared empty content of placed controls.
 			static const pcg::OwnedContent& NoContent();
 		};
@@ -629,6 +665,27 @@ namespace mmo
 		/// @brief Hit-tests the handles of placed volumes and points in the viewport.
 		/// @return Index of the control under the cursor, or -1.
 		int32 HitTestTransformControl(float screenX, float screenY) const;
+
+		/// @brief Makes the placed loop or spline at the index the editor selection as a whole (replacing whatever was
+		///        selected), so the transform widget moves, rotates and scales it about its pivot.
+		/// @param controlIndex Index of the control in the list.
+		void SelectShapeInEditor(int32 controlIndex);
+
+		/// @brief Drops the whole-control selection from the editor selection if it holds it.
+		void ClearShapeSelection();
+
+		/// @brief Index of the selected control if it is a placed loop or spline, else -1.
+		int32 GetSelectedShape() const;
+
+		/// @brief Screen position of the selected loop's or spline's pivot marker as drawn (pivot x/z at GetHandleHeight).
+		/// @return False if no placed loop or spline is selected or the marker is behind the camera.
+		bool ProjectShapePivot(ImVec2& screen) const;
+
+		/// @brief Hit-tests the pivot marker of the selected placed loop or spline (radius TransformHandleRadius).
+		bool HitTestShapePivot(float screenX, float screenY) const;
+
+		/// @brief Draws the pivot marker of the selected placed loop or spline (a diamond, unlike the round point handles).
+		void DrawShapePivot(ImDrawList& drawList) const;
 
 		/// @brief Index of the selected control if it is a placed rectangle, else -1.
 		int32 GetSelectedRectangle();
@@ -774,6 +831,10 @@ namespace mmo
 		/// The selected volume's or point's handle while the editor selection holds it (owned by the
 		/// selection; reset through OnControlTransformDeselected when the selection drops it).
 		SelectedControlTransform* m_transformSelectable = nullptr;
+
+		/// The handle of the loop or spline selected as a whole while the editor selection holds it (owned by the
+		/// selection; reset through OnControlShapeDeselected when the selection drops it).
+		SelectedControlShape* m_shapeSelectable = nullptr;
 
 		/// Control types of the placed controls, and the types the "New Control" menu offers.
 		ControlLibrary m_controlLibrary;

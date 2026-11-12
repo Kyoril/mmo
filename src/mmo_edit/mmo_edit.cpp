@@ -1600,6 +1600,94 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--pcg-transform-control")
+			{
+				// mmo_edit --pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]
+				// Moves, rotates (around up, about the control's pivot) and scales (along world x/z, about the pivot) a
+				// placed control of any shape as a whole, in that order, like the whole-control gizmo. Loops and splines
+				// change their points (ids, widths and heights stay), volumes, rectangles and points their position,
+				// rotation and half extents. Saves the world (0 = success); an unknown id or a bad value saves nothing (1).
+				mmo::RedirectUnattendedLog("pcg_transform_control");
+
+				const char* usage = "--pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 controlId = 0;
+				mmo::PlacedControlTransformEdit edit;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--id" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseOasisId(args[++j], controlId);
+					}
+					else if ((option == "--move" || option == "--scale") && j + 1 < argCount)
+					{
+						std::vector<std::pair<float, float>> values;
+						argumentsValid = mmo::ParsePointList(args[++j], values, 1) && values.size() == 1;
+						if (argumentsValid)
+						{
+							(option == "--move" ? edit.move : edit.scale) = values.front();
+						}
+					}
+					else if (option == "--rotate" && j + 1 < argCount)
+					{
+						float degrees = 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], degrees);
+						if (argumentsValid)
+						{
+							edit.rotateDegrees = degrees;
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-transform-control: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && controlId == 0)
+				{
+					ELOG("--pcg-transform-control: --id is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-transform-control", args[i + 1]))
+				{
+					std::string error;
+					if (!world->TransformProceduralControl(controlId, edit, error))
+					{
+						// The world is not saved: a refused run changes nothing.
+						ELOG("--pcg-transform-control: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-transform-control: saving the world failed");
+					}
+					else
+					{
+						ILOG("--pcg-transform-control: done");
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--pcg-new-graph-instance")
 			{
 				// mmo_edit --pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N]
