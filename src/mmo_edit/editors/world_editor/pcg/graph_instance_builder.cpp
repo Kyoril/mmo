@@ -58,6 +58,39 @@ namespace mmo
 			return String(buffer);
 		}
 
+		/// The rect from the first to the last centre of the tiles whose centre lies in `rect`: exactly the tiles the
+		/// material pass of pcg::ComputeTerrainSamples samples over `rect` (inverted if there are none).
+		pcg::WorldRect TileCentreRect(const pcg::GridLayout& layout, const pcg::WorldRect& rect)
+		{
+			const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
+			const double x0 = std::ceil((rect.minX - layout.originX) / tileSize - 0.5);
+			const double x1 = std::floor((rect.maxX - layout.originX) / tileSize - 0.5);
+			const double z0 = std::ceil((rect.minZ - layout.originZ) / tileSize - 0.5);
+			const double z1 = std::floor((rect.maxZ - layout.originZ) / tileSize - 0.5);
+			pcg::WorldRect centres;
+			centres.minX = static_cast<float>(layout.originX + (x0 + 0.5) * tileSize);
+			centres.minZ = static_cast<float>(layout.originZ + (z0 + 0.5) * tileSize);
+			centres.maxX = static_cast<float>(layout.originX + (x1 + 0.5) * tileSize);
+			centres.maxZ = static_cast<float>(layout.originZ + (z1 + 0.5) * tileSize);
+			return centres;
+		}
+
+		/// The splat of a pixel before a build wrote `written`: the recorded base where the build changed it, else the
+		/// terrain's current value. `written.splat` is sorted by (z, x).
+		uint32 SplatBefore(const pcg::ITerrainAccess& terrain, const pcg::TerrainContribution& written, const int32 x, const int32 z)
+		{
+			const auto it = std::lower_bound(written.splat.begin(), written.splat.end(), std::make_pair(z, x),
+				[](const pcg::TerrainContribution::Entry<uint32>& e, const std::pair<int32, int32>& key)
+				{
+					return std::make_pair(e.z, e.x) < key;
+				});
+			if (it != written.splat.end() && it->z == z && it->x == x)
+			{
+				return it->base;
+			}
+			return terrain.GetSplat(x, z);
+		}
+
 		/// Salt of the keys of section placements, keeping them apart from the spawn keys (CollectPlacements).
 		constexpr uint64 SectionPlacementKeySalt = 0x5EC7A11Du;
 
@@ -757,14 +790,94 @@ namespace mmo
 		/// Read-only terrain access of Run (the session's access writes, and is main thread only).
 		std::unique_ptr<EditorTerrainAccess> readAccess;
 
-		/// Texture key to tile layer matching of the terrain samples: the warmed main cache, then one copy per further
-		/// worker thread with its own notes.
+		/// The adapter the layer copies below are made from (main thread only): warmed in Start; the tile materials of
+		/// Paint ops are read into it on the main thread (LoadSectionAssets), and the copies made again.
+		std::unique_ptr<EditorTextureLayers> warmLayers;
+		/// Texture key to tile layer matching of the terrain samples: a copy of the warmed cache, then one copy per
+		/// further worker thread with its own notes. Run sets the tile material overrides of the prepared ops on them.
 		std::unique_ptr<EditorTextureLayers> layers;
 		pcg::graph::TextureLayerLookup lookup;
 		pcg::graph::TerrainEvaluateNotes notes;
 		std::vector<std::unique_ptr<EditorTextureLayers>> workerLayers;
 		std::vector<pcg::graph::TextureLayerLookup> workerLookups;
 		std::vector<pcg::graph::TerrainEvaluateNotes> workerNotes;
+		/// Tile materials the last Run switches tiles to whose layer textures are not cached yet.
+		std::set<String> missingTileMaterials;
+
+		/// (Re)makes the layer copies from warmLayers (main thread, while Run is not running).
+		void MakeLayerCopies()
+		{
+			layers = warmLayers->CopyWarmCache();
+			lookup = layers->MakeLookup();
+			workerLayers.clear();
+			workerLookups.clear();
+			const size_t workers = pcg::HardwareWorkers();
+			workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
+			for (size_t i = 1; i < workers; ++i)
+			{
+				workerLayers.push_back(warmLayers->CopyWarmCache());
+				workerLookups.push_back(workerLayers.back()->MakeLookup());
+			}
+		}
+
+		/// Appends a warning for every tile of `written` that was switched to another material, per layer slot whose
+		/// texture differs between the old and the new material, if that slot had weight before the build wrote
+		/// (SplatBefore) at a pixel of the tile where no Paint op with that tile material paints: the new material
+		/// shows its texture there (main thread, after the write).
+		void DescribeTileMaterialSideEffects(const pcg::TerrainContribution& written, std::vector<String>& warnings)
+		{
+			const pcg::GridLayout& layout = readAccess->GetLayout();
+			const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
+			const double pixel = layout.pixelSpacing;
+			if (!(tileSize > 0.0) || !(pixel > 0.0))
+			{
+				return;
+			}
+			for (const pcg::TerrainContribution::Entry<String>& entry : written.materials)
+			{
+				// EditorTerrainAccess names the default material ""; LoadMaterialLayers reads it as such.
+				warmLayers->LoadMaterialLayers(entry.base);
+				warmLayers->LoadMaterialLayers(entry.written);
+				const std::array<String, 4>* before = warmLayers->GetNormalizedMaterialLayers(entry.base);
+				const std::array<String, 4>* after = warmLayers->GetNormalizedMaterialLayers(entry.written);
+				if (before == nullptr || after == nullptr)
+				{
+					continue;
+				}
+
+				// Pixels on the tile, its border pixels included.
+				const int32 px0 = static_cast<int32>(std::ceil(entry.x * tileSize / pixel - 1e-6));
+				const int32 px1 = static_cast<int32>(std::floor((entry.x + 1) * tileSize / pixel + 1e-6));
+				const int32 pz0 = static_cast<int32>(std::ceil(entry.z * tileSize / pixel - 1e-6));
+				const int32 pz1 = static_cast<int32>(std::floor((entry.z + 1) * tileSize / pixel + 1e-6));
+				for (uint32 layer = 0; layer < 4; ++layer)
+				{
+					if ((*before)[layer] == (*after)[layer])
+					{
+						continue;
+					}
+					bool outside = false;
+					for (int32 pz = pz0; pz <= pz1 && !outside; ++pz)
+					{
+						for (int32 px = px0; px <= px1 && !outside; ++px)
+						{
+							if (((SplatBefore(*readAccess, written, px, pz) >> (layer * 8)) & 0xFFu) == 0)
+							{
+								continue;
+							}
+							const float wx = static_cast<float>(layout.originX + px * pixel);
+							const float wz = static_cast<float>(layout.originZ + pz * pixel);
+							outside = !prepared.IsTileMaterialPaint(wx, wz);
+						}
+					}
+					if (outside)
+					{
+						warnings.push_back("Tile (" + std::to_string(entry.x) + ", " + std::to_string(entry.z) + "): switching to '"
+							+ entry.written + "' changes layer " + std::to_string(layer) + " outside the painted area");
+					}
+				}
+			}
+		}
 
 		// Results of Run.
 		bool ran = false;
@@ -813,7 +926,7 @@ namespace mmo
 
 	bool GraphRebuildJob::NeedsSectionAssets() const
 	{
-		return !m_impl->missingSections.empty();
+		return !m_impl->missingSections.empty() || !m_impl->missingTileMaterials.empty();
 	}
 
 	void GraphRebuildJob::LoadSectionAssets()
@@ -824,6 +937,17 @@ namespace mmo
 			m_impl->sections->Get(path, ignored);
 		}
 		m_impl->missingSections.clear();
+
+		// Materials load on the main thread only; the copies Run reads are made again with them.
+		if (!m_impl->missingTileMaterials.empty())
+		{
+			for (const String& material : m_impl->missingTileMaterials)
+			{
+				m_impl->warmLayers->LoadMaterialLayers(material);
+			}
+			m_impl->missingTileMaterials.clear();
+			m_impl->MakeLayerCopies();
+		}
 	}
 
 	std::unique_ptr<GraphRebuildJob> GraphRebuildJob::Start(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
@@ -945,17 +1069,9 @@ namespace mmo
 
 		impl.readAccess = std::make_unique<EditorTerrainAccess>(*terrain);
 		// Warmed on the main thread; Run only uses copies, which never read the terrain.
-		EditorTextureLayers warm(*terrain);
-		warm.Prewarm(areaRect);
-		impl.layers = warm.CopyWarmCache();
-		impl.lookup = impl.layers->MakeLookup();
-		const size_t workers = pcg::HardwareWorkers();
-		impl.workerNotes.assign(workers - 1, pcg::graph::TerrainEvaluateNotes{});
-		for (size_t i = 1; i < workers; ++i)
-		{
-			impl.workerLayers.push_back(warm.CopyWarmCache());
-			impl.workerLookups.push_back(impl.workerLayers.back()->MakeLookup());
-		}
+		impl.warmLayers = std::make_unique<EditorTextureLayers>(*terrain);
+		impl.warmLayers->Prewarm(areaRect);
+		impl.MakeLayerCopies();
 		return job;
 	}
 
@@ -965,6 +1081,7 @@ namespace mmo
 		impl.ran = false;
 		impl.runError.clear();
 		impl.missingSections.clear();
+		impl.missingTileMaterials.clear();
 		impl.notes = pcg::graph::TerrainEvaluateNotes{};
 		for (pcg::graph::TerrainEvaluateNotes& notes : impl.workerNotes)
 		{
@@ -1028,6 +1145,29 @@ namespace mmo
 		if (impl.canceled)
 		{
 			return;
+		}
+
+		// Tiles a Paint op switches to its tile material are painted against that material's layers. Only tiles whose
+		// centre lies in the area rect are resolved: the material pass below samples no others, so a tile it would
+		// not switch keeps answering with its own layers. The materials are read on the main thread (LoadSectionAssets)
+		// and the job runs again.
+		impl.prepared.ResolveTileMaterials(impl.readAccess->GetLayout(), TileCentreRect(impl.readAccess->GetLayout(), impl.areaRect));
+		const std::vector<pcg::graph::TileMaterialRequest>& tileMaterials = impl.prepared.GetTileMaterials();
+		for (const pcg::graph::TileMaterialRequest& request : tileMaterials)
+		{
+			if (!impl.layers->HasMaterialLayers(request.material))
+			{
+				impl.missingTileMaterials.insert(request.material);
+			}
+		}
+		if (!impl.missingTileMaterials.empty())
+		{
+			return;
+		}
+		impl.layers->SetTileMaterialOverrides(tileMaterials);
+		for (const std::unique_ptr<EditorTextureLayers>& copy : impl.workerLayers)
+		{
+			copy->SetTileMaterialOverrides(tileMaterials);
 		}
 
 		// Every terrain sample, on one target per hardware thread.
@@ -1186,6 +1326,10 @@ namespace mmo
 			ELOG("PCG: " << report.error);
 			return report;
 		}
+
+		// Decided after the write: record.content.terrain now lists exactly the tiles that were switched and the splat
+		// each changed pixel had before (the terrain data still holds it for the others).
+		impl.DescribeTileMaterialSideEffects(record.content.terrain, report.warnings);
 
 		// The terrain write succeeded: the river paths of the terrain that was actually applied join the world's flow.
 		std::vector<terrain_io::water_flow::FlowPath> flowPaths;

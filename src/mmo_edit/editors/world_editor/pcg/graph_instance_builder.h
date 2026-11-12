@@ -283,15 +283,17 @@ namespace mmo
 			const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls, String& error);
 
 		/// @brief Evaluates, prepares the terrain ops and computes the terrain samples (any one thread; see the class).
-		///        Returns early once canceled. If a section asset was not loaded yet, NeedsSectionAssets is true afterwards:
-		///        call LoadSectionAssets on the main thread and Run again, until it is false (each run stops at the first
-		///        missing asset; each round loads at least one).
+		///        Returns early once canceled. If a section asset was not loaded yet, or a Paint op switches tiles to a
+		///        tile material whose layer textures are not read yet, NeedsSectionAssets is true afterwards: call
+		///        LoadSectionAssets on the main thread and Run again, until it is false (each run stops at the first
+		///        missing section asset, or after resolving the tile materials; each round loads at least one).
 		void Run();
 
-		/// @brief Whether the last Run stopped for section assets that are not loaded yet.
+		/// @brief Whether the last Run stopped for section assets or tile materials that are not loaded yet.
 		[[nodiscard]] bool NeedsSectionAssets() const;
 
-		/// @brief Loads the section assets the last Run asked for (main thread).
+		/// @brief Loads the section assets and the layer textures of the tile materials the last Run asked for (main
+		///        thread).
 		void LoadSectionAssets();
 
 		/// @brief Asks Run to stop at its next step; Commit then refuses. Any thread.
@@ -354,7 +356,11 @@ namespace mmo
 	///        against what oases and section paths built).
 	/// @return The report. Warnings: control resolution, parameter merge, node and collection warnings of the run on
 	///         the base terrain, terrain op preparation and section placement warnings, and paint skipped on tiles
-	///         without the texture (Paint ops and section paint, one warning per op).
+	///         without the texture (Paint ops and section paint, one warning per op). Paint ops with a tileMaterial
+	///         switch the tiles they paint on whose centre lies in the area's bounds (pcg::graph::PreparedTerrain::
+	///         ResolveTileMaterials) and paint against that material's layers; warned: a tile two such ops ask different
+	///         materials for, and a switched tile where a layer slot whose texture the switch changes had weight before
+	///         the build outside the paint of those ops.
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
 		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
 		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap = {});
