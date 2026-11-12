@@ -73,6 +73,10 @@ changed in the terrain or the placed props.
 
 Chains: 78 → 79 and 81; 83 → (token) 84 → 85; 87 → 90 → 91 → 92; 53 → 94. Everything else is free.
 
+One change to existing quests: Haven's two welcome errands, 73 "Welcome to Haven" and 74 "Coin and
+Keeping", are offered from level 6 instead of 8, because the dispatch run and the cider delivery
+bring players through the north gate that early.
+
 Two of the seventeen are plain kills (89, and 83's final target). Total quest experience is 15,300.
 
 ### Ambient life
