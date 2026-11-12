@@ -1080,7 +1080,14 @@ class BugLoop:
 			self._finish(bug_id, "already-shipped", announce=False, commit=shipped)
 			return
 		if not head or current != head:
-			self._park(bug_id, branch, ["branch moved since it was parked (or no candidate commit is recorded); decide again"])
+			reasons = ["branch moved since it was parked (or no candidate commit is recorded); decide again"]
+			if current:
+				# A maintainer reworked the parked branch (the documented way to fix up a parked fix).
+				# Its tip becomes the candidate and its diff the one shown for review, so the next ship
+				# decision approves what would actually ship. Keeping the old candidate re-parked every
+				# click forever, since the page kept showing the stale diff.
+				self._adopt_candidate(bug_id, branch, current, reasons)
+			self._park(bug_id, branch, reasons)
 			return
 		# The maintainer approved a diff, not a commit id: ship only if the diff uploaded for the
 		# recorded commit is the one they saw (the review diff is writable with the reader key).
@@ -1110,6 +1117,12 @@ class BugLoop:
 			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head, by_maintainer=True)
+
+	def _adopt_candidate(self, bug_id, branch, head, reasons):
+		"""Makes `head` of `branch` the candidate: decision.json records it and diff.patch (uploaded
+		by the following park) is its diff. A ship decision still has to approve that diff's hash."""
+		self._write(bug_id, "diff.patch", self.worktree.unified_diff(self.worktree.fork_point(branch), head))
+		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 
 	def _recover_candidate(self, bug_id, branch):
 		"""A bug parked on another machine has no decision.json and no diff.patch here. Its branch
