@@ -344,6 +344,29 @@ namespace mmo::pcg::graph
 		String sectionAsset;
 		/// Section layers the section paints somewhere (variant paint with coverage, or the mass paint layer).
 		std::array<bool, 4> paintedLayers{};
+		/// Exclusion shapes as the items PrepareControl prepared (the prepared controls point into them).
+		std::vector<std::unique_ptr<DataItem>> exclusionItems;
+		/// Exclusion areas and splines, prepared as Difference prepares its Subtract input.
+		std::vector<PreparedControl> exclusionAreas;
+		std::vector<SplineTarget> exclusionSplines;
+
+		/// SectionPath: whether a prop at (x, z) is cut by an exclusion (the same tests as Difference).
+		bool Excluded(const float x, const float z) const
+		{
+			if (InsideAny(exclusionAreas, x, z))
+			{
+				return true;
+			}
+			for (const SplineTarget& spline : exclusionSplines)
+			{
+				float d = 0.0f;
+				if (spline.control.curve->Nearest(x, z, spline.radius, d))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 	};
 
 	std::vector<TerrainOpInput> CollectTerrainOps(const Graph& graph, const EvalResult& result)
@@ -380,6 +403,7 @@ namespace mmo::pcg::graph
 				in.points = item.points;
 				in.sourceId = item.sourceId;
 				in.itemIndex = static_cast<uint32>(i);
+				in.exclusions = item.exclusions;
 				gathered.emplace_back(item.op.stackOrder, item.op.order, id, i, std::move(in));
 			}
 		}
@@ -637,6 +661,42 @@ namespace mmo::pcg::graph
 				if (prepared->shape.params.massEnabled && prepared->shape.massLayer >= 0 && prepared->shape.massLayer <= 3)
 				{
 					prepared->paintedLayers[static_cast<size_t>(prepared->shape.massLayer)] = true;
+				}
+
+				// Exclusions go through PrepareControl, so the inside / near tests are exactly those of Difference.
+				NodeOutput exclusionNotes;
+				for (const ExclusionShape& shape : in.exclusions)
+				{
+					if (!shape.area && !(shape.radius > 0.0f && std::isfinite(shape.radius)))
+					{
+						continue;
+					}
+					auto item = std::make_unique<DataItem>();
+					item->kind = shape.area ? ItemKind::Area : ItemKind::Spline;
+					item->spline = shape.spline;
+					if (shape.area)
+					{
+						PreparedControl control;
+						if (PrepareControl(exclusionNotes, *item, control))
+						{
+							prepared->exclusionAreas.push_back(std::move(control));
+							prepared->exclusionItems.push_back(std::move(item));
+						}
+					}
+					else
+					{
+						SplineTarget target;
+						if (PrepareControl(exclusionNotes, *item, target.control))
+						{
+							target.radius = shape.radius;
+							prepared->exclusionSplines.push_back(std::move(target));
+							prepared->exclusionItems.push_back(std::move(item));
+						}
+					}
+				}
+				for (const String& warning : exclusionNotes.warnings)
+				{
+					Warn(label + " (section asset '" + op.asset + "'), Exclude: " + warning + ".");
 				}
 				break;
 			}
@@ -1265,7 +1325,13 @@ namespace mmo::pcg::graph
 			{
 				continue;
 			}
-			BuildSectionPlacements(op->shape, ground, section);
+			PlacementExcludeFunction excluded;
+			if (!op->exclusionItems.empty())
+			{
+				const PreparedOp& prepared = *op;
+				excluded = [&prepared](const float x, const float z) { return prepared.Excluded(x, z); };
+			}
+			BuildSectionPlacements(op->shape, ground, section, excluded);
 			for (Placement& p : section)
 			{
 				if (RegionFade(p.position.x, p.position.z) < 0.5f)

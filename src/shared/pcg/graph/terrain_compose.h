@@ -48,6 +48,9 @@ namespace mmo::pcg::graph
 		/// @brief Index of the item in its node's Terrain output; distinguishes generated items of one node (their
 		///        fallback point ids mix it in).
 		uint32 itemIndex = 0;
+
+		/// @brief SectionPath: shapes whose positions get no section props (DataItem::exclusions).
+		std::vector<ExclusionShape> exclusions;
 	};
 
 	/// @brief What Evaluate found while evaluating, for the caller to report once after a pass.
@@ -213,7 +216,9 @@ namespace mmo::pcg::graph
 
 		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept where the
 		///        region fade is at least 0.5 (no props beside a road that has faded out at the border), sorted by key
-		///        (a duplicate key is dropped with a warning).
+		///        (a duplicate key is dropped with a warning). Props inside an exclusion area of their op, or within
+		///        the radius of one of its exclusion splines, are skipped (same tests as Difference); exclusion shapes
+		///        that are not usable are dropped with a warning in Prepare.
 		/// @param ground Final ground, passed to BuildSectionPlacements.
 		/// @param out Cleared, then receives the placements.
 		/// @param warnings If not null, receives the warnings.
