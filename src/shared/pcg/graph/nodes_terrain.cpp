@@ -7,7 +7,8 @@
 // TerrainNoise       In: Area.            Params: amplitude, wavelength, octaves, falloff, seed.
 // RaiseAlongSpline   In: Spline.          Params: width (per side), falloffPower.
 // CarveAlongSpline   In: Spline.          Params: width (per side), depth, bank.
-// PaintSplat         In: Area or Spline.  Params: texture (String), weight, falloff, and width on open splines (per side).
+// PaintSplat         In: Area or Spline.  Params: texture (String), weight, falloff, and width on open splines (per side);
+//                                         tileMaterial (String) only when not empty.
 // WaterArea          In: Area.            Params: level, levelOffset, margin, depth, shoreWidth; op.asset = water material (.hmat).
 // River              In: Spline.          Params: width (per side), bank, depth, surfaceOffset, waterMargin; op.asset = water material (.hmat).
 //
@@ -212,6 +213,12 @@ namespace mmo::pcg::graph
 						WarnOnce(out, "no texture: the 'texture' setting and the item attribute are empty, nothing is painted");
 					}
 					item.op.params["texture"] = texture;
+					// Only a named material enters the op, so a node without one hashes as before the setting existed.
+					const String tileMaterial = ResolveString(out, source, settings, "tileMaterial");
+					if (!tileMaterial.empty())
+					{
+						item.op.params["tileMaterial"] = tileMaterial;
+					}
 					break;
 				}
 				case TerrainOpType::WaterArea:
@@ -245,6 +252,10 @@ namespace mmo::pcg::graph
 				SettingDef texture{ "texture", String(), 0, 0, {}, "Texture (.htex) to paint; used when the item has no texture attribute" };
 				texture.widget = "asset:.htex";
 				def.settings.push_back(std::move(texture));
+				SettingDef tileMaterial{ "tileMaterial", String(), 0, 0, {},
+					"Tile material (.hmat/.hmi) every painted tile is switched to, so the texture is one of its layers; empty = keep the tile's material" };
+				tileMaterial.widget = "asset:.hmat;.hmi";
+				def.settings.push_back(std::move(tileMaterial));
 			}
 			for (const NumberParam& param : source.numbers)
 			{

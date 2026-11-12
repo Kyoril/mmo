@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <map>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -248,6 +249,113 @@ namespace mmo::pcg::graph
 			return lowest;
 		}
 
+		/// A region that only touches a tile's border does not claim the tile: tile rectangles are shrunk by this (m).
+		constexpr float kTileBorderTolerance = 1e-3f;
+
+		/// Whether the segment a-b has a point in the closed rect (Liang-Barsky clipping).
+		bool SegmentHitsRect(const SplineSample& a, const SplineSample& b, const WorldRect& r)
+		{
+			const double dx = static_cast<double>(b.x) - a.x;
+			const double dz = static_cast<double>(b.z) - a.z;
+			const std::array<double, 4> p{ -dx, dx, -dz, dz };
+			const std::array<double, 4> q{ static_cast<double>(a.x) - r.minX, static_cast<double>(r.maxX) - a.x,
+				static_cast<double>(a.z) - r.minZ, static_cast<double>(r.maxZ) - a.z };
+			double t0 = 0.0;
+			double t1 = 1.0;
+			for (size_t i = 0; i < 4; ++i)
+			{
+				if (p[i] == 0.0)
+				{
+					if (q[i] < 0.0)
+					{
+						return false;
+					}
+					continue;
+				}
+				const double t = q[i] / p[i];
+				if (p[i] < 0.0)
+				{
+					t0 = std::max(t0, t);
+				}
+				else
+				{
+					t1 = std::min(t1, t);
+				}
+				if (t0 > t1)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		double PointRectDistance(const double x, const double z, const WorldRect& r)
+		{
+			const double dx = std::max({ static_cast<double>(r.minX) - x, 0.0, x - r.maxX });
+			const double dz = std::max({ static_cast<double>(r.minZ) - z, 0.0, z - r.maxZ });
+			return std::hypot(dx, dz);
+		}
+
+		double PointSegmentDistance(const double x, const double z, const SplineSample& a, const SplineSample& b)
+		{
+			const double dx = static_cast<double>(b.x) - a.x;
+			const double dz = static_cast<double>(b.z) - a.z;
+			const double lengthSq = dx * dx + dz * dz;
+			const double t = lengthSq > 0.0 ? std::min(1.0, std::max(0.0, ((x - a.x) * dx + (z - a.z) * dz) / lengthSq)) : 0.0;
+			return std::hypot(x - (a.x + dx * t), z - (a.z + dz * t));
+		}
+
+		/// Distance between the segment a-b and the closed rect (0 if they meet).
+		double SegmentRectDistance(const SplineSample& a, const SplineSample& b, const WorldRect& r)
+		{
+			if (SegmentHitsRect(a, b, r))
+			{
+				return 0.0;
+			}
+			double d = std::min(PointRectDistance(a.x, a.z, r), PointRectDistance(b.x, b.z, r));
+			d = std::min(d, PointSegmentDistance(r.minX, r.minZ, a, b));
+			d = std::min(d, PointSegmentDistance(r.maxX, r.minZ, a, b));
+			d = std::min(d, PointSegmentDistance(r.minX, r.maxZ, a, b));
+			d = std::min(d, PointSegmentDistance(r.maxX, r.maxZ, a, b));
+			return d;
+		}
+
+		/// Whether the inside of the closed loop `samples` (contained by `polygon`) meets the rect: the rect's centre is
+		/// inside, or an edge of the loop crosses the rect (which includes a vertex lying in it).
+		bool LoopTouchesRect(const std::vector<SplineSample>& samples, const RowIndexedPolygon& polygon, const WorldRect& r)
+		{
+			if (polygon.Contains((r.minX + r.maxX) * 0.5f, (r.minZ + r.maxZ) * 0.5f))
+			{
+				return true;
+			}
+			const size_t count = samples.size();
+			for (size_t i = 0; i < count; ++i)
+			{
+				if (SegmentHitsRect(samples[i], samples[(i + 1) % count], r))
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
+		/// Whether the open polyline `samples`, grown by `width`, meets the rect.
+		bool LineTouchesRect(const std::vector<SplineSample>& samples, const float width, const WorldRect& r)
+		{
+			if (samples.size() == 1)
+			{
+				return PointRectDistance(samples[0].x, samples[0].z, r) < width;
+			}
+			for (size_t i = 0; i + 1 < samples.size(); ++i)
+			{
+				if (SegmentRectDistance(samples[i], samples[i + 1], r) < width)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		/// Adds the layer weights `splat` at `weight` over the composited paint (premultiplied, Porter-Duff over).
 		void CompositeSplat(std::array<double, 4>& premultiplied, double& alpha, const std::array<uint8, 4>& splat, const float weight)
 		{
@@ -295,6 +403,8 @@ namespace mmo::pcg::graph
 		String textureKey;
 		float weight = 1.0f;
 		bool area = false;
+		/// Material the painted tiles are switched to; empty = none.
+		String tileMaterial;
 
 		// WaterArea.
 		float level = 0.0f;
@@ -440,6 +550,9 @@ namespace mmo::pcg::graph
 		m_borderFade = std::isfinite(borderFade) ? std::max(0.0f, borderFade) : 0.0f;
 		m_seamHash = 0;
 		m_seamNeighbours.clear();
+		m_tileLayout = GridLayout();
+		m_tileMaterials.clear();
+		m_tileMaterialConflicts.clear();
 		error.clear();
 
 		auto ground = [&baseGround](const float x, const float z)
@@ -760,6 +873,7 @@ namespace mmo::pcg::graph
 				prepared->weight = Saturate(SettingFloat(op.params, "weight", 1.0f));
 				prepared->falloff = std::max(0.0f, SettingFloat(op.params, "falloff", 2.0f));
 				prepared->area = in.spline.closed;
+				prepared->tileMaterial = SettingString(op.params, "tileMaterial", String());
 				if (prepared->area)
 				{
 					prepared->polygon = MakePolygon(path);
@@ -995,6 +1109,14 @@ namespace mmo::pcg::graph
 		TerrainEvaluateNotes* notes, const terrain_channel::Type channels) const
 	{
 		TerrainTarget out;
+		if ((channels & terrain_channel::Material) != 0)
+		{
+			// The tile's resolved material, wherever in the tile (x, z) lies (the material pass samples tile centres).
+			if (const String* material = ResolvedTileMaterial(x, z))
+			{
+				out.material = *material;
+			}
+		}
 		const bool wantHeights = (channels & terrain_channel::Heights) != 0;
 		const bool wantSplat = (channels & terrain_channel::Splat) != 0;
 		const bool wantWater = (channels & terrain_channel::Water) != 0;
@@ -1137,23 +1259,12 @@ namespace mmo::pcg::graph
 			}
 			case TerrainOpType::Paint:
 			{
-				if (!wantSplat)
+				// An op that lost the tile to another material paints nothing there.
+				if (!wantSplat || LostTile(op, x, z))
 				{
 					break;
 				}
-				float weight = 0.0f;
-				NearestHit hit;
-				if (op.area)
-				{
-					if (op.polygon->Contains(x, z))
-					{
-						weight = op.falloff > 0.0f && op.edge.Nearest(x, z, hit) ? Smoothstep01(hit.distance / op.falloff) : 1.0f;
-					}
-				}
-				else if (op.edge.Nearest(x, z, hit))
-				{
-					weight = op.falloff > 0.0f ? Smoothstep01((op.width - hit.distance) / op.falloff) : 1.0f;
-				}
+				float weight = PaintEdgeWeight(op, x, z);
 				weight *= op.weight * fade;
 				if (weight <= 0.0f)
 				{
@@ -1312,6 +1423,189 @@ namespace mmo::pcg::graph
 			textures += (textures.empty() ? "'" : ", '") + m_ops[index]->shape.asset.layerTextures[layer] + "'";
 		}
 		flush();
+
+		warnings.insert(warnings.end(), m_tileMaterialConflicts.begin(), m_tileMaterialConflicts.end());
+	}
+
+	void PreparedTerrain::ResolveTileMaterials(const GridLayout& layout, const WorldRect& area)
+	{
+		m_tileLayout = layout;
+		m_tileMaterials.clear();
+		m_tileMaterialConflicts.clear();
+		const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
+		if (!(tileSize > 0.0) || !std::isfinite(tileSize) || !m_region || !(area.minX <= area.maxX) || !(area.minZ <= area.maxZ))
+		{
+			return;
+		}
+
+		// Tiles with a positive overlap (a degenerate rect: the tile it lies in).
+		const auto firstTile = [tileSize](const float min, const double origin)
+		{
+			return static_cast<int32>(std::floor((static_cast<double>(min) - origin) / tileSize));
+		};
+		const auto lastTile = [tileSize, &firstTile](const float min, const float max, const double origin)
+		{
+			return std::max(firstTile(min, origin), static_cast<int32>(std::ceil((static_cast<double>(max) - origin) / tileSize)) - 1);
+		};
+		const int32 areaX0 = firstTile(area.minX, layout.originX);
+		const int32 areaX1 = lastTile(area.minX, area.maxX, layout.originX);
+		const int32 areaZ0 = firstTile(area.minZ, layout.originZ);
+		const int32 areaZ1 = lastTile(area.minZ, area.maxZ, layout.originZ);
+
+		const auto tileRect = [&layout, tileSize](const int32 x, const int32 z)
+		{
+			WorldRect r;
+			r.minX = static_cast<float>(layout.originX + x * tileSize) + kTileBorderTolerance;
+			r.minZ = static_cast<float>(layout.originZ + z * tileSize) + kTileBorderTolerance;
+			r.maxX = static_cast<float>(layout.originX + (x + 1) * tileSize) - kTileBorderTolerance;
+			r.maxZ = static_cast<float>(layout.originZ + (z + 1) * tileSize) - kTileBorderTolerance;
+			return r;
+		};
+
+		// Requested materials per tile in stack order, keyed (z, x) so the result comes out sorted; whether the tile
+		// meets the region, decided once per tile.
+		std::map<std::pair<int32, int32>, std::vector<String>> requested;
+		std::map<std::pair<int32, int32>, bool> inRegion;
+		for (const auto& op : m_ops)
+		{
+			if (op->type != TerrainOpType::Paint || op->tileMaterial.empty() || !(op->weight > 0.0f))
+			{
+				continue;
+			}
+			const int32 x0 = std::max(areaX0, firstTile(op->bounds.minX, layout.originX));
+			const int32 x1 = std::min(areaX1, firstTile(op->bounds.maxX, layout.originX));
+			const int32 z0 = std::max(areaZ0, firstTile(op->bounds.minZ, layout.originZ));
+			const int32 z1 = std::min(areaZ1, firstTile(op->bounds.maxZ, layout.originZ));
+			for (int32 z = z0; z <= z1; ++z)
+			{
+				for (int32 x = x0; x <= x1; ++x)
+				{
+					const WorldRect r = tileRect(x, z);
+					const bool touches = op->area ? LoopTouchesRect(op->edge.GetSamples(), *op->polygon, r)
+						: LineTouchesRect(op->edge.GetSamples(), op->width, r);
+					if (!touches)
+					{
+						continue;
+					}
+					const auto key = std::make_pair(z, x);
+					auto region = inRegion.find(key);
+					if (region == inRegion.end())
+					{
+						region = inRegion.emplace(key, LoopTouchesRect(m_region->edge.GetSamples(), *m_region->polygon, r)).first;
+					}
+					if (region->second)
+					{
+						requested[key].push_back(op->tileMaterial);
+					}
+				}
+			}
+		}
+
+		for (const auto& [key, materials] : requested)
+		{
+			const String& winner = materials.back();
+			TileMaterialRequest request;
+			request.tileX = key.second;
+			request.tileZ = key.first;
+			request.material = winner;
+			m_tileMaterials.push_back(std::move(request));
+
+			std::vector<String> losers;
+			for (const String& material : materials)
+			{
+				if (material != winner && std::find(losers.begin(), losers.end(), material) == losers.end())
+				{
+					losers.push_back(material);
+					m_tileMaterialConflicts.push_back("Tile (" + std::to_string(key.second) + ", " + std::to_string(key.first) + "): '"
+						+ material + "' and '" + winner + "' both requested; '" + winner + "' wins");
+				}
+			}
+		}
+	}
+
+	const std::vector<TileMaterialRequest>& PreparedTerrain::GetTileMaterials() const
+	{
+		return m_tileMaterials;
+	}
+
+	bool PreparedTerrain::IsTileMaterialPaint(const float x, const float z) const
+	{
+		if (m_ops.empty() || !Contains(m_influence, x, z))
+		{
+			return false;
+		}
+		const float fade = RegionFade(x, z);
+		if (fade <= 0.0f)
+		{
+			return false;
+		}
+		for (const auto& op : m_ops)
+		{
+			if (op->type != TerrainOpType::Paint || op->tileMaterial.empty() || !Contains(op->bounds, x, z) || LostTile(*op, x, z))
+			{
+				continue;
+			}
+			if (PaintEdgeWeight(*op, x, z) * op->weight * fade > 0.0f)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	float PreparedTerrain::PaintEdgeWeight(const PreparedOp& op, const float x, const float z)
+	{
+		float weight = 0.0f;
+		NearestHit hit;
+		if (op.area)
+		{
+			if (op.polygon->Contains(x, z))
+			{
+				weight = op.falloff > 0.0f && op.edge.Nearest(x, z, hit) ? Smoothstep01(hit.distance / op.falloff) : 1.0f;
+			}
+		}
+		else if (op.edge.Nearest(x, z, hit))
+		{
+			weight = op.falloff > 0.0f ? Smoothstep01((op.width - hit.distance) / op.falloff) : 1.0f;
+		}
+		return weight;
+	}
+
+	const String* PreparedTerrain::ResolvedTileMaterial(const float x, const float z) const
+	{
+		if (m_tileMaterials.empty())
+		{
+			return nullptr;
+		}
+		const double tileSize = m_tileLayout.vertexSpacing * static_cast<double>(m_tileLayout.verticesPerTile);
+		const double fx = std::floor((static_cast<double>(x) - m_tileLayout.originX) / tileSize);
+		const double fz = std::floor((static_cast<double>(z) - m_tileLayout.originZ) / tileSize);
+		if (!(std::abs(fx) < 2.0e9) || !(std::abs(fz) < 2.0e9))
+		{
+			return nullptr;
+		}
+		const int32 tileX = static_cast<int32>(fx);
+		const int32 tileZ = static_cast<int32>(fz);
+		const auto it = std::lower_bound(m_tileMaterials.begin(), m_tileMaterials.end(), std::make_pair(tileZ, tileX),
+			[](const TileMaterialRequest& r, const std::pair<int32, int32>& key)
+			{
+				return std::make_pair(r.tileZ, r.tileX) < key;
+			});
+		if (it == m_tileMaterials.end() || it->tileZ != tileZ || it->tileX != tileX)
+		{
+			return nullptr;
+		}
+		return &it->material;
+	}
+
+	bool PreparedTerrain::LostTile(const PreparedOp& op, const float x, const float z) const
+	{
+		if (op.tileMaterial.empty())
+		{
+			return false;
+		}
+		const String* material = ResolvedTileMaterial(x, z);
+		return material != nullptr && *material != op.tileMaterial;
 	}
 
 	void PreparedTerrain::BuildPlacements(const std::function<float(float, float)>& ground, std::vector<Placement>& out,
