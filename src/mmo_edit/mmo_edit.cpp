@@ -1343,7 +1343,7 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-new-path")
 			{
 				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]
-				//          [--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror]
+				//          [--height-mode followSpline|followGround|smoothedGround|keepGround] [--smoothing W] [--mass] [--mirror]
 				//          [--set name=value ...]
 				// Adds a section path through the points (at terrain height), builds it, saves the world and
 				// logs the new id and its layout (0 = success). A missing or unreadable section asset is refused
@@ -1354,7 +1354,7 @@ int main(int argc, char* arg[])
 				mmo::RedirectUnattendedLog("pcg_new_path");
 
 				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed] "
-					"[--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
+					"[--height-mode followSpline|followGround|smoothedGround|keepGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;

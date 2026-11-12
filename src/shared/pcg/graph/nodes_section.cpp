@@ -194,7 +194,7 @@ namespace mmo::pcg::graph
 				if (name == "heightMode")
 				{
 					setting.defaultValue = String(heightModeDefault);
-					setting.enumValues = { "followSpline", "followGround", "smoothedGround" };
+					setting.enumValues = { "followSpline", "followGround", "smoothedGround", "keepGround" };
 				}
 				def.settings.push_back(std::move(setting));
 			}

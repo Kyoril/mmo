@@ -1065,6 +1065,11 @@ namespace mmo::pcg
 			error = "The section needs a positive length and half width and a non-negative side falloff.";
 			return false;
 		}
+		if (params.heightMode == SectionHeightMode::KeepGround && params.massEnabled)
+		{
+			error = "keepGround cannot be combined with the mass layer";
+			return false;
+		}
 		if ((params.heightMode == SectionHeightMode::FollowGround || params.heightMode == SectionHeightMode::SmoothedGround) && !baseGround)
 		{
 			error = "Follow-ground and smoothed-ground modes need the base ground.";
@@ -1148,7 +1153,9 @@ namespace mmo::pcg
 		out.centreHeights.reserve(samples.size());
 		for (const SplineSample& sample : samples)
 		{
-			out.centreHeights.push_back(params.heightMode == SectionHeightMode::FollowSpline ? sample.y : baseGround(sample.x, sample.z));
+			// keepGround never writes the height; the value is only read when props are laid without a ground function.
+			const bool useSpline = params.heightMode == SectionHeightMode::FollowSpline || (params.heightMode == SectionHeightMode::KeepGround && !baseGround);
+			out.centreHeights.push_back(useSpline ? sample.y : baseGround(sample.x, sample.z));
 		}
 		if (params.heightMode == SectionHeightMode::SmoothedGround)
 		{
@@ -1385,6 +1392,10 @@ namespace mmo::pcg
 			{
 				p.heightMode = SectionHeightMode::SmoothedGround;
 			}
+			else if (value == "keepGround")
+			{
+				p.heightMode = SectionHeightMode::KeepGround;
+			}
 			else
 			{
 				parsed = false;
@@ -1573,7 +1584,8 @@ namespace mmo::pcg
 			}
 
 			target.height = CentreHeightAt(shape, distance) + sample.height;
-			target.heightWeight = falloff;
+			// keepGround only paints: the terrain keeps its height.
+			target.heightWeight = shape.params.heightMode == SectionHeightMode::KeepGround ? 0.0f : falloff;
 			target.setMaterial = false;
 			std::array<int8, 4> map{ 0, 1, 2, 3 };
 			if (remap && sample.coverage / 255.0f * falloff > 0.0f)

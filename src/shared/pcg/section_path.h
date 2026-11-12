@@ -125,7 +125,10 @@ namespace mmo::pcg
 		FollowGround,
 		/// Centre line height = the base ground under the spline averaged along the path over groundSmoothing metres
 		/// (follows the large shape of the hand-made base, levels its bumps and steps).
-		SmoothedGround
+		SmoothedGround,
+		/// The section contributes no height at all (terrain weight 0) and only paints; props stand on the ground the
+		/// caller passes to BuildSectionPlacements. Needs no base ground and cannot be combined with the mass layer.
+		KeepGround
 	};
 
 	/// Per-path settings of a section path.
@@ -308,7 +311,7 @@ namespace mmo::pcg
 	SectionCopyFacade GetCopyFacade(const SectionPathShape& shape, const SectionCopy& copy);
 
 	/// Sets one SectionPathParams field by its member name (e.g. "massHeight", "mirrorCopies") from text; bools take
-	/// 0/1/true/false, heightMode followSpline/followGround/smoothedGround. For unattended tools.
+	/// 0/1/true/false, heightMode followSpline/followGround/smoothedGround/keepGround. For unattended tools.
 	/// @return False with a message for an unknown name or a value that does not parse (params unchanged then).
 	bool SetSectionPathParam(SectionPathParams& params, const String& name, const String& value, String& error);
 

@@ -3470,7 +3470,7 @@ namespace mmo
 			changed = ImGui::SliderFloat("Prop density", &rec.params.propDensity, 0.0f, 1.0f, "%.2f") || changed;
 
 			// Combo index = SectionHeightMode value.
-			const char* heightModes[] = { "Follow spline", "Follow ground", "Smoothed ground" };
+			const char* heightModes[] = { "Follow spline", "Follow ground", "Smoothed ground", "Keep ground" };
 			int heightMode = std::clamp(static_cast<int>(rec.params.heightMode), 0, IM_ARRAYSIZE(heightModes) - 1);
 			if (ImGui::Combo("Height mode", &heightMode, heightModes, IM_ARRAYSIZE(heightModes)))
 			{
@@ -3482,7 +3482,8 @@ namespace mmo
 				ImGui::SetTooltip("Follow spline: the centre line takes the curve's height.\n"
 					"Follow ground: the base ground under the centre line.\n"
 					"Smoothed ground: that ground averaged along the path over the smoothing window (keeps the\n"
-					"large shape of the hand-made ground, levels its bumps and steps).");
+					"large shape of the hand-made ground, levels its bumps and steps).\n"
+					"Keep ground: the terrain height is not touched; only paint and props are placed.");
 			}
 
 			if (rec.params.heightMode == pcg::SectionHeightMode::SmoothedGround)
