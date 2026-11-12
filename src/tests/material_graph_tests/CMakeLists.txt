@@ -5,4 +5,6 @@ mmo_add_test(material_graph_tests material_graph graphics assets tex tex_v1_0 bi
 target_link_libraries(material_graph_tests graphics_null ${OPENSSL_LIBRARIES})
 if (TARGET graphics_d3d11)
 	target_link_libraries(material_graph_tests graphics_d3d11)
+elseif (TARGET graphics_metal)
+	target_link_libraries(material_graph_tests graphics_metal)
 endif()

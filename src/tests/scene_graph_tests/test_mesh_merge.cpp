@@ -120,7 +120,7 @@ TEST_CASE("Sub mesh geometry is read back from its buffers", "[mesh_merge]")
 	REQUIRE(CanMergeMesh(*mesh));
 
 	MeshMergeGeometry geometry;
-	REQUIRE(ReadSubMeshGeometry(mesh->GetSubMesh(0), geometry));
+	REQUIRE(ReadSubMeshGeometry(mesh->GetSubMesh(uint16{0}), geometry));
 
 	REQUIRE(geometry.vertices.size() == 4);
 	CheckVector(geometry.vertices[2].pos, Vector3(1.0f, 0.0f, 1.0f));
@@ -175,11 +175,11 @@ TEST_CASE("Two quads with the same material merge into one submesh", "[mesh_merg
 	String name;
 	CHECK(merged->GetSubMeshName(0, name));
 	CHECK(name == "m0");
-	REQUIRE(merged->GetSubMesh(0).GetMaterial());
-	CHECK(merged->GetSubMesh(0).GetMaterial()->GetName() == QuadMaterial);
+	REQUIRE(merged->GetSubMesh(uint16{0}).GetMaterial());
+	CHECK(merged->GetSubMesh(uint16{0}).GetMaterial()->GetName() == QuadMaterial);
 
 	MeshMergeGeometry readBack;
-	REQUIRE(ReadSubMeshGeometry(merged->GetSubMesh(0), readBack));
+	REQUIRE(ReadSubMeshGeometry(merged->GetSubMesh(uint16{0}), readBack));
 	REQUIRE(readBack.vertices.size() == 8);
 	CheckVector(readBack.vertices[5].pos, second * source[1].pos);
 	CHECK(readBack.indices == bucket.indices);
@@ -350,12 +350,12 @@ TEST_CASE("A merged mesh survives a save and load", "[mesh_merge]")
 	String name;
 	CHECK(loaded->GetSubMeshName(0, name));
 	CHECK(name == "m0");
-	REQUIRE(loaded->GetSubMesh(0).GetMaterial());
-	CHECK(loaded->GetSubMesh(0).GetMaterial()->GetName() == QuadMaterial);
+	REQUIRE(loaded->GetSubMesh(uint16{0}).GetMaterial());
+	CHECK(loaded->GetSubMesh(uint16{0}).GetMaterial()->GetName() == QuadMaterial);
 	REQUIRE(CanMergeMesh(*loaded));
 
 	MeshMergeGeometry geometry;
-	REQUIRE(ReadSubMeshGeometry(loaded->GetSubMesh(0), geometry));
+	REQUIRE(ReadSubMeshGeometry(loaded->GetSubMesh(uint16{0}), geometry));
 	REQUIRE(geometry.vertices.size() == 4);
 	const std::vector<WorldModelMergeVertex> source = QuadVertices();
 	for (size_t i = 0; i < 4; ++i)
