@@ -256,6 +256,19 @@ TEST_CASE("dragging works in the rectangle's rotated frame", "[graph_rectangle]"
 		CHECK(cornerInst.halfExtents.x == Approx(7.0f));
 		CHECK(cornerInst.halfExtents.z == Approx(5.5f));
 		CheckSameCorner(RectangleCorners(cornerInst)[1], before[1]);
+
+		// A side dragged past its opposite clamps in the rotated frame too; the -x side stays.
+		ControlInstance clampInst = MakeInstance(Vector3(10, 0, 20), Vector3(6, 1, 4));
+		clampInst.rotation = Quaternion(Radian(yaw), Vector3::UnitY);
+		const float farX = -40.0f;
+		DragRectangleHandle(clampInst, RectangleHandle::SidePosX, 10.0f + c * farX, 20.0f - s * farX);
+		CHECK(clampInst.halfExtents.x == MinRectangleHalfExtent);
+		CHECK(clampInst.halfExtents.z == Approx(4.0f));
+		CHECK(std::isfinite(clampInst.position.x));
+		CHECK(std::isfinite(clampInst.position.z));
+		const std::array<SplinePoint, 4> clamped = RectangleCorners(clampInst);
+		CheckSameCorner(clamped[0], before[0]);
+		CheckSameCorner(clamped[3], before[3]);
 	}
 }
 

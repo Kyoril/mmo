@@ -855,8 +855,15 @@ namespace mmo
 			bool active = false;
 			uint64 controlId = 0;
 			pcg::graph::RectangleHandle handle = pcg::graph::RectangleHandle::SidePosX;
+			/// Whether the drag changed the rectangle.
+			bool moved = false;
 		};
 		RectangleDrag m_rectangleDrag;
+
+		/// @brief Ends a rectangle handle drag like a button release (marks the control changed if the drag moved it).
+		///        Called on mouse up, as soon as the left button is found released anywhere (a release outside the
+		///        viewport sends no OnMouseUp), and before a new click is handled.
+		void EndRectangleDrag();
 
 		String m_status;
 		StatusLevel m_statusLevel = StatusLevel::Ok;

@@ -518,7 +518,7 @@ namespace mmo
 		ApplyPendingTags();
 		m_selected = index;
 		m_splineEditor.CancelDrag();
-		m_rectangleDrag = RectangleDrag();
+		EndRectangleDrag();
 		ClearPointSelection();
 		ClearTransformSelection();
 		m_splineEditor.Select(index, -1);
@@ -536,7 +536,7 @@ namespace mmo
 		WaitForBackgroundRebuild();
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
-		m_rectangleDrag = RectangleDrag();
+		EndRectangleDrag();
 		// A point or transform selection is meaningless outside this mode (no handles, no overlay).
 		ClearPointSelection();
 		ClearTransformSelection();
@@ -1413,6 +1413,9 @@ namespace mmo
 		if (transform.halfExtents || transform.yawDegrees)
 		{
 			const bool sized = type->shape == pcg::graph::ControlShape::Volume || type->shape == pcg::graph::ControlShape::Rectangle;
+			// One minimum serves volumes (the gizmo's) and rectangles.
+			static_assert(SelectedControlTransform::MinHalfExtent == pcg::graph::MinRectangleHalfExtent,
+				"volumes and rectangles share the minimum half extent");
 			String transformError;
 			if (splineShape)
 			{
@@ -2235,7 +2238,29 @@ namespace mmo
 
 	void ProceduralEditMode::OnUpdate(float)
 	{
+		// A release outside the viewport sends no OnMouseUp: end a rectangle handle drag once the button is up.
+		if (m_rectangleDrag.active && ImGui::GetCurrentContext() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+		{
+			EndRectangleDrag();
+		}
+
 		UpdateBackgroundRebuild();
+	}
+
+	void ProceduralEditMode::EndRectangleDrag()
+	{
+		if (!m_rectangleDrag.active)
+		{
+			return;
+		}
+
+		const RectangleDrag drag = m_rectangleDrag;
+		m_rectangleDrag = RectangleDrag();
+		const int32 index = FindControl(drag.controlId);
+		if (drag.moved && index >= 0)
+		{
+			MarkChanged(m_controls[index]);
+		}
 	}
 
 	void ProceduralEditMode::SetLiveRebuild(const bool enabled)
@@ -3730,6 +3755,10 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseDown(x, y);
 
+		// A drag whose release was missed (outside the viewport) ends before this click is handled, also when the gizmo
+		// takes the click, so nothing can pull the stale side or corner.
+		EndRectangleDrag();
+
 		// The transform widget took the click (it sees the button first).
 		if (m_worldEditor.IsTransforming())
 		{
@@ -3852,13 +3881,19 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseHold(deltaSeconds);
 
+		// The button may have been released outside the viewport (no OnMouseUp): such a drag is over.
+		if (m_rectangleDrag.active && ImGui::GetCurrentContext() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+		{
+			EndRectangleDrag();
+		}
+
 		if (m_rectangleDrag.active)
 		{
 			const int32 index = FindControl(m_rectangleDrag.controlId);
 			if (index < 0 || !m_controls[index].HasTransform())
 			{
 				// The control went away during the drag.
-				m_rectangleDrag = RectangleDrag();
+				EndRectangleDrag();
 				return;
 			}
 
@@ -3874,6 +3909,7 @@ namespace mmo
 			pcg::graph::DragRectangleHandle(control.placed, m_rectangleDrag.handle, rectangleHit.x + m_dragOffsetX, rectangleHit.z + m_dragOffsetZ);
 			if (control.placed.position != oldPosition || control.placed.halfExtents != oldExtents)
 			{
+				m_rectangleDrag.moved = true;
 				MarkChanged(control);
 				if (m_transformSelectable && m_transformSelectable->GetControlId() == control.placed.id)
 				{
@@ -3924,11 +3960,8 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseUp(x, y);
 
-		if (m_rectangleDrag.active)
-		{
-			// Every move was marked changed in OnMouseHold; the live rebuild follows now that the edit is idle.
-			m_rectangleDrag = RectangleDrag();
-		}
+		// The live rebuild follows now that the edit is idle.
+		EndRectangleDrag();
 
 		if (m_splineEditor.IsDragging())
 		{
