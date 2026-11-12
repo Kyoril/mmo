@@ -68,6 +68,78 @@ attribute to whichever player happens to be nearest in the instance (harmless un
 player also carries the quest).
 </pattern>
 
+<pattern name="talk_a_creature_into_a_fight">
+Quest `79` `The King's Toll` (Tollmaster Brask, unit `129`): a friendly npc the player talks to,
+who turns hostile depending on what is said.
+
+- the npc is friendly and carries a gossip menu; its options have a gossip **condition** on the
+  quest being incomplete, so players without the quest never see them
+- each option is of type `Trigger`; an `OnGossipAction` trigger on the npc answers it
+- "it comes to blows": `SetFaction` with a hostile faction template and *attack triggering unit*,
+  then `SetSpawnState` for helpers kept on inactive, non-respawning spawners whose entry carries
+  `Despawn On Reset` (trigger `17`). Set the faction FIRST - helpers that spawn next to a still
+  friendly npc attack it
+- "it does not": `QuestKillCredit` for the npc's own entry, `MoveTo`, `Despawn`. The quest
+  requirement is a plain kill of the npc, so both endings complete it
+- a coin toss between two outcomes is a `RandomTrigger` over two triggers
+
+The faction override ends by itself when the creature resets or respawns.
+</pattern>
+
+<pattern name="lead_creatures_back">
+Quest `82` `Pigs in the Corn`: "bring N of them home" without an escort per creature.
+
+- the quest hands out an item (`srcitemid`) whose spell has a single `Dummy` effect on a friendly
+  target; the creatures carry an `OnSpellHit` trigger for that spell that runs `SetFollowTarget`
+- an area trigger at the destination runs `DeliverFollowers` for the creature entry: every one that
+  follows the triggering player within the radius gives a quest kill credit and despawns
+- the requirement is `creatureid + creaturecount` for that entry
+- the creatures need a faction that is friendly to players (or the spell cannot target them) and
+  that no hostile creature nearby counts as an enemy (or they are killed on the way): faction
+  template `13` `Livestock, Friendly`
+- give the radius room (25): the server's position of a follower trails the client's view
+</pattern>
+
+<pattern name="event_only_for_players_on_the_quest">
+Quest `81` (ambush on the road) and `87` (a scene to overhear): an area trigger whose trigger has a
+**condition** on the `QuestStatus` function, so it does nothing for passers-by.
+
+- `QuestStatus(questId) == 3` (incomplete) for a quest with open objectives
+- a quest WITHOUT objectives is complete (`1`) from the moment it is accepted; its events need
+  `QuestStatus == 3 OR QuestStatus == 1`
+- flag the trigger `OnlyOneInstance`
+- for an overheard scene use `Emote` actions (50 m) rather than `Say` (25 m): the player has to
+  stand outside aggro range (about 20 m), which is nearly out of earshot of a say
+- grant the credit with `QuestExplorationCredit` after the last line; the context keeps the
+  triggering player across `Delay` actions
+</pattern>
+
+<pattern name="question_npcs_with_dialogue_pages">
+Quest `90` `The Chandler's Customers`: "ask these three people".
+
+- each npc gets a main gossip menu with a `GossipMenu` option that opens a page with the answer,
+  and on that page a `Trigger` option; an `OnGossipAction` trigger for `[page id, option id]`
+  grants `QuestKillCredit` for a unit entry that is never spawned (its name is the log line:
+  `Wainwright's Account`)
+- options on sub pages are accepted by the server only when the page can be reached from the
+  npc's menu through options whose conditions the player meets
+- for a vendor, put the quest condition on the MENU (`GossipMenuEntry.conditionId`): without the
+  quest the menu is not offered at all and the vendor window opens directly, as before
+</pattern>
+
+<pattern name="object_starts_an_event">
+Quest `83` `The Scarecrow Watch`: using an object starts a fight in waves.
+
+- a `QuestObject` with `requiredquest` but NO object counter in the quest: it stays usable while
+  the quest is incomplete, so a player who died can start the event again
+- its `OnInteraction` trigger (`OnlyOneInstance`) summons the waves with `SummonCreature` and
+  `Delay`, then switches on the inactive spawner of the named creature with `SetSpawnState`
+- summons grant no experience, loot or quest credit: whatever the quest counts must come from a
+  spawner
+- the object is gone after its use (quest objects are consumed), so the trigger continues without
+  an owner; give `SummonCreature` explicit coordinates
+</pattern>
+
 <pattern name="multi_item_turn_in">
 Quest `19` demonstrates the current multi-objective item turn-in pattern:
 
@@ -151,6 +223,18 @@ Do not put important start behavior into `starttriggers` and assume it will fire
 
 <pitfall name="auto_reward_choice_items">
 Do not combine `AutoRewarded` with choice rewards — the runtime ignores the flag and falls back to manual turn-in (the validator rejects this combination). For auto-rewarded quests granting fixed reward ITEMS, still wire an ender NPC so a full-bags player is not stuck until the login-time retry.
+</pitfall>
+
+<pitfall name="open_spell_needs_peace">
+Every world object is used through the Open spell: a 5 second cast that cannot be started in
+combat. Do not place a quest object inside the aggro range of a hostile spawn unless killing it
+first is the point, and do not ask for twenty of them.
+</pitfall>
+
+<pitfall name="hostiles_next_to_townsfolk">
+Creatures attack npcs of an enemy faction as readily as players. A hostile spawn within about 24 m
+(plus its roaming radius) of a quest giver starts a brawl nobody asked for, and livestock with the
+townsfolk faction is eaten by the first boar.
 </pitfall>
 
 <pitfall name="escortee_in_aggro_range">
