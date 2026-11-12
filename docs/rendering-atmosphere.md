@@ -167,6 +167,8 @@ The shafts can only be as steady as the shadow maps they sample, so the same rul
 
 Measured with `graphics_test --fog-repro --nofog --step=0.004` (sub-centimetre camera steps, 1024 maps at Low): frame-to-frame instability −24 % strafing and −44 % walking forward (99.9th percentile halved), against the old filter and snap. The mean includes the true image change of every edge in view, so the shadow-only gain is larger.
 
+**Default brightness:** the exposure that reaches the renderer is the profile exposure times `gxExposure` times `DefaultEnvironmentBrightness(timeOfDay)` (`src/shared/scene_graph/environment_state.h`): a fixed lift of 1.1 by day rising to 1.55 at night, smoothstepped across the 0.2–0.3 and 0.7–0.8 twilight bands. The authored look read too dark on an average monitor, night most of all. It is applied at the two `SetExposure` call sites (client and world editor) rather than in `EvaluateEnvironment`, so profiles, their blending and the editor's curve preview keep showing the authored values.
+
 ## Known limitations
 
 - Water, particles and glass get closed-form fog only: no noise, no shafts.

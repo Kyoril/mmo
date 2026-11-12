@@ -26,6 +26,40 @@ namespace mmo
 		return Vector3(std::sin(radians), 0.0f, std::cos(radians));
 	}
 
+	float DefaultEnvironmentBrightness(const float normalizedTime)
+	{
+		float time = std::fmod(normalizedTime, 1.0f);
+		if (time < 0.0f)
+		{
+			time += 1.0f;
+		}
+
+		// Full night before dawn and after dusk, full day in between, smoothstepped across the two
+		// twilight bands so the lift never shows up as a step. The band edges bracket the dawn and
+		// dusk keys of the Default fog curve (0.27 and 0.73).
+		constexpr float dawnStart = 0.2f;
+		constexpr float dawnEnd = 0.3f;
+		constexpr float duskStart = 0.7f;
+		constexpr float duskEnd = 0.8f;
+
+		float dayAmount;
+		if (time <= dawnStart || time >= duskEnd)
+		{
+			dayAmount = 0.0f;
+		}
+		else if (time >= dawnEnd && time <= duskStart)
+		{
+			dayAmount = 1.0f;
+		}
+		else
+		{
+			const float edge = time < dawnEnd ? (time - dawnStart) / (dawnEnd - dawnStart) : (duskEnd - time) / (duskEnd - duskStart);
+			dayAmount = edge * edge * (3.0f - 2.0f * edge);
+		}
+
+		return lerpFloat(DefaultNightBrightness, DefaultDayBrightness, dayAmount);
+	}
+
 	EnvironmentState EvaluateEnvironment(const EnvironmentProfile& profile, const float normalizedTime)
 	{
 		EnvironmentState state;
