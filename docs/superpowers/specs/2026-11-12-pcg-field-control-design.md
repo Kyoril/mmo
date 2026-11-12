@@ -238,7 +238,8 @@ Every placed control can be moved, rotated and scaled as a whole with the editor
 - `pcg_tests`: `.hctl` / `.hpcgc` round trip of the rectangle shape; `GetControls` on a rectangle (corner order,
   ids stable under resize and rotation); section placements with exclusion (pieces removed, the others
   identical to the run without exclusion, by key and position); `keepGround` (no height contribution, props on
-  the ground); the existing acceptance tests unchanged.
+  the ground); `PaintSplat` with `tileMaterial` (tile switched and restored on unapply, conflict and
+  side-effect reports); the existing acceptance tests unchanged.
 - An acceptance test for the field branch in the style of `test_graph_acceptance.cpp`: a field, an exclusion
   area on one edge, a road through another edge.
 - In the editor on the Falwyn Forest world: place a field, drag sides and corners, rotate / move / scale it as
