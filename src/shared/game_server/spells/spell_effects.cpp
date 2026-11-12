@@ -14,6 +14,8 @@
 #include "game/spell_points.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/world/world_instance.h"
+#include "game_server/ai/creature_ai.h"
+#include "game_server/pets/pet_manager.h"
 #include "math/math_utils.h"
 #include "proto_data/trigger_helper.h"
 
@@ -727,6 +729,10 @@ namespace mmo
 						// The summon fights for whoever called it: its damage is the caster's own
 						// work when the kill rewards are handed out.
 						summon->SetSummonOwner(weakOwner.lock());
+						if (const auto summonOwner = weakOwner.lock())
+						{
+							summon->SetOwnerGuid(summonOwner->GetGuid());
+						}
 
 						GameCreatureS* summonPtr = summon.get();
 						summon->killed.connect([world, weakOwner, summonPtr](GameUnitS* /*killer*/)
@@ -754,7 +760,161 @@ namespace mmo
 				});
 		}
 
-		void HandleSummonPet(SpellEffectContext& /*ctx*/) {}
+		void HandleSummonPet(SpellEffectContext& ctx)
+		{
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+			WorldInstance* world = ctx.castContext.GetWorldInstance();
+			if (!world)
+			{
+				return;
+			}
+
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			const uint32 entryId = ctx.effect.summonunit() != 0 ? ctx.effect.summonunit() : static_cast<uint32>(ctx.effect.miscvaluea());
+			const proto::UnitEntry* unitEntry = executer.GetProject().units.getById(entryId);
+			if (!unitEntry)
+			{
+				ELOG("SummonPet effect of spell " << spell.id() << " names unknown creature entry " << entryId);
+				return;
+			}
+
+			const uint32 count = static_cast<uint32>(std::max(1, ctx.basePoints));
+			const uint32 group = GetSummonPetGroup(ctx.effect, spell.id());
+			const uint32 maxCount = GetSummonPetMaxCount(ctx.effect, count);
+			const auto policy = static_cast<pet_limit_policy::Type>(ctx.effect.pet_limit_policy());
+			const auto levelSource = static_cast<pet_level_source::Type>(ctx.effect.pet_level_source());
+
+			const std::vector<Vector3> positions = SummonPositions(
+				executer.GetPosition(), executer.GetFacing(), static_cast<int32>(count),
+				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
+			const int32 duration = spell.duration();
+			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
+
+			std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(executer.shared_from_this());
+			const float facing = executer.GetFacing().GetValueRadians();
+
+			// Deferred like HandleSummon: spawning must not happen inside the world update tick.
+			world->GetUniverse().Post([world, unitEntry, positions, facing, despawnMs, weakOwner, group, maxCount, policy, levelSource]()
+				{
+					// The owner may have died, left the world or been destroyed since the cast. Its
+					// world is only touched while the owner is still in it, which keeps it alive.
+					const std::shared_ptr<GameUnitS> owner = weakOwner.lock();
+					if (!owner || owner->GetWorldInstance() != world || !owner->IsAlive())
+					{
+						return;
+					}
+
+					PetManager& pets = owner->GetPets();
+					for (const Vector3& position : positions)
+					{
+						if (pets.CanAddToGroup(group, maxCount, policy) != pet_result::Ok)
+						{
+							break;
+						}
+
+						auto pet = world->CreateTemporaryCreature(*unitEntry, position, facing, 0.0f);
+						if (!pet)
+						{
+							continue;
+						}
+
+						// The pet keeps its own faction template: owner-aware friendliness makes it
+						// act with its owner's faction.
+						pet->SetGrantsKillRewards(false);
+						pet->SetSummonOwner(owner);
+						pet->SetOwnerGuid(owner->GetGuid());
+						pet->SetPetGroup(group);
+						pet->SetLevel(ResolvePetLevel(levelSource, *owner, *unitEntry));
+						pet->ClearFieldChanges();
+
+						world->AddGameObject(*pet);
+						pets.AddTemporaryPet(*pet, group, maxCount, policy);
+
+						if (despawnMs > 0)
+						{
+							pet->TriggerDespawnTimer(despawnMs);
+						}
+
+						if (CreatureAI* ai = pet->GetAI())
+						{
+							ai->EnterPetMode(*owner);
+						}
+					}
+				});
+		}
+
+		void HandleTameCreature(SpellEffectContext& ctx)
+		{
+			auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor());
+			if (!player)
+			{
+				return;
+			}
+
+			for (GameObjectS* target : ctx.effectTargets)
+			{
+				if (auto* creature = dynamic_cast<GameCreatureS*>(target))
+				{
+					ctx.markAffectedTarget(*creature);
+					player->TameCreature(*creature);
+					return;
+				}
+			}
+
+			// Players and objects cannot be tamed.
+			player->NotifyPetResult(pet_result::NotTamable);
+		}
+
+		void HandleLearnPetSpell(SpellEffectContext& ctx)
+		{
+			auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor());
+			if (!player)
+			{
+				return;
+			}
+
+			const uint32 spellId = ctx.effect.triggerspell();
+			if (spellId == 0)
+			{
+				ELOG("LearnPetSpell effect of spell " << ctx.castContext.GetSpell().id() << " has no trigger spell");
+				return;
+			}
+
+			player->LearnPetSpell(spellId);
+		}
+
+		void HandleSummonPersistentPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->SummonStoredPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+			}
+		}
+
+		void HandleGrantPersistentPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->GrantPersistentPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+			}
+		}
+
+		void HandleDismissPet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				player->DismissPersistentPet(false);
+			}
+		}
+
+		void HandleRevivePet(SpellEffectContext& ctx)
+		{
+			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			{
+				const uint32 healthPercent = ctx.basePoints > 0 ? static_cast<uint32>(ctx.basePoints) : 100;
+				player->RevivePet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())), healthPercent);
+			}
+		}
 
 		void HandleWeaponDamage(SpellEffectContext& ctx)
 		{

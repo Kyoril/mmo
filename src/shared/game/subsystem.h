@@ -26,6 +26,11 @@ namespace mmo
 				/// Guilds: guild commands, guild chat and member online events. Owned by the realm.
 				Guild = 2,
 
+				/// Persistent pets: summoning, granting, taming and reviving them. Owned by the world
+				/// node that hosts the player; the realm keeps loading and saving pet data while it
+				/// is off.
+				Pets = 3,
+
 				Count_
 			};
 		}
@@ -73,6 +78,7 @@ namespace mmo
 			{ subsystem::BugReport, "BUG_REPORT", subsystem_owner::World },
 			{ subsystem::Friends, "FRIENDS", subsystem_owner::Realm },
 			{ subsystem::Guild, "GUILD", subsystem_owner::Realm },
+			{ subsystem::Pets, "PETS", subsystem_owner::World },
 		}};
 
 		/// Returns the script name of a subsystem ("BUG_REPORT"), or an empty string if unknown.

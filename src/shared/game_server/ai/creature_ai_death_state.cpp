@@ -60,9 +60,10 @@ namespace mmo
 		const float playerDamageShare = controlled.GetPlayerDamageShare();
 
 		// Summons reward nobody: a boss raising adds on a timer would otherwise be a loot and
-		// experience farm. Neither does a creature the NPCs around killed: pulling a creature onto
-		// a guard and letting the guard do the work is not the player's kill.
-		if (controlled.IsTagged() && controlled.GrantsKillRewards() && playerDamageShare > MinPlayerDamageShare)
+		// experience farm. Pets (temporary or persistent) never reward their death either. Neither
+		// does a creature the NPCs around killed: pulling a creature onto a guard and letting the
+		// guard do the work is not the player's kill.
+		if (controlled.IsTagged() && controlled.GrantsKillRewards() && !controlled.IsPet() && playerDamageShare > MinPlayerDamageShare)
 		{
 			uint32 sumLevel = 0;
 
@@ -257,9 +258,14 @@ namespace mmo
 				const uint32 cutoffLevel = xp::GetExpCutoffLevel(character.second->GetLevel());
 				if (controlled.GetLevel() > cutoffLevel)
 				{
-					character.second->RewardExperience(static_cast<uint32>(
+					const uint32 characterXp = static_cast<uint32>(
 						xp * groupModifier *
-							(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel))));
+							(static_cast<float>(character.second->GetLevel()) / static_cast<float>(sumLevel)));
+					character.second->RewardExperience(characterXp);
+
+					// An OwnLevel persistent pet gains the same kill experience on top of its
+					// master's (its master's own level cap does not stop it).
+					character.second->AddPetExperience(characterXp);
 				}
 
 				// Class XP for the active class, gated by the CLASS level's grey cutoff instead of

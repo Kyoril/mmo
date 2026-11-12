@@ -704,6 +704,16 @@ namespace mmo
 			ImGui::TextDisabled("When set, auto-attack uses the spell system instead of hardcoded combat logic.");
 		}
 
+		if (const auto section = ScopedEditorSection("Pets", ImGuiTreeNodeFlags_None))
+		{
+			int maxPets = static_cast<int>(currentEntry.max_summoned_persistent_pets());
+			if (ImGui::InputInt("Max Summoned Persistent Pets", &maxPets))
+			{
+				currentEntry.set_max_summoned_persistent_pets(maxPets < 0 ? 0 : static_cast<uint32>(maxPets));
+			}
+			DrawHelpMarker("How many persistent pets a character of this class can have summoned at the same time.");
+		}
+
 		if (const auto section = ScopedEditorSection("Spells", ImGuiTreeNodeFlags_None))
 		{
 			// Add button

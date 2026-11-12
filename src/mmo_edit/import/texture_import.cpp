@@ -41,13 +41,14 @@ namespace mmo
 		return true;
 	}
 
-	bool TextureImport::ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, const TextureUsage usage, const bool compress, const bool generateHeightMap)
+	bool TextureImport::ImportUnattended(const std::vector<Path>& filenames, const Path& assetPath, const TextureUsage usage, const bool compress, const bool generateHeightMap, const bool generateMipMaps)
 	{
 		m_filesToImport = filenames;
 		m_importAssetPath = assetPath;
 		m_textureUsage = usage;
 		m_useCompression = compress;
 		m_generateHeightMap = generateHeightMap;
+		m_generateMipMaps = generateMipMaps;
 		return DoImportInternal();
 	}
 
@@ -508,6 +509,25 @@ namespace mmo
 
 		// Check the number of mip maps
 		header.hasMips = widthIsPow2 && heightIsPow2;
+		if (m_generateMipMaps)
+		{
+			if (applyCompression && !header.hasMips)
+			{
+				ELOG("Non-power-of-two mipmaps require an uncompressed import");
+				return false;
+			}
+
+			// D3D11 and Metal support NPOT mip chains. Keep both dimensions nonzero
+			// because runtime loaders derive each level using width/height >> level.
+			mipCount = 1;
+			for (uint32 width = header.width >> 1, height = header.height >> 1;
+				width > 0 && height > 0 && (width > 16 || height > 16);
+				width >>= 1, height >>= 1)
+			{
+				++mipCount;
+			}
+			header.hasMips = mipCount > 1;
+		}
 		ILOG("Image supports mip maps: " << (header.hasMips ? "true" : "false"));
 		if (header.hasMips)
 		{

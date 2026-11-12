@@ -99,6 +99,7 @@ PROTOCOLS = {
 			"src/shared/game/character_view.cpp",
 			"src/shared/game/mail.h",
 			"src/shared/game/trade_skill_data.h",
+			"src/shared/game/pet_packets.h",
 			"src/shared/game/game.h",
 
 			"src/shared/game_protocol/game_protocol.h",

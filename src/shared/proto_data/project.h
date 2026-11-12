@@ -22,6 +22,7 @@
 #include "shared/proto_data/skinning_loot.pb.h"
 #include "shared/proto_data/maps.pb.h"
 #include "shared/proto_data/emotes.pb.h"
+#include "shared/proto_data/pets.pb.h"
 #include "shared/proto_data/objects.pb.h"
 #include "shared/proto_data/skills.pb.h"
 #include "shared/proto_data/talents.pb.h"
@@ -74,6 +75,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::Units, mmo::proto::UnitEntry> UnitManager;
 		typedef TemplateManager<mmo::proto::Maps, mmo::proto::MapEntry> MapManager;
 		typedef TemplateManager<mmo::proto::Emotes, mmo::proto::EmoteEntry> EmoteManager;
+		typedef TemplateManager<mmo::proto::Pets, mmo::proto::PetEntry> PetManager;
 		typedef TemplateManager<mmo::proto::UnitLoot, mmo::proto::LootEntry> UnitLootManager;
 		typedef TemplateManager<mmo::proto::ObjectLoot, mmo::proto::LootEntry> ObjectLootManager;
 		typedef TemplateManager<mmo::proto::ItemLoot, mmo::proto::LootEntry> ItemLootManager;
@@ -156,6 +158,7 @@ namespace mmo
 			UnitManager units;
 			MapManager maps;
 			EmoteManager emotes;
+			PetManager pets;
 			UnitLootManager unitLoot;
 			ObjectLootManager objectLoot;
 			ItemLootManager itemLoot;
@@ -312,6 +315,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("objects", objects));
 				managers.push_back(ManagerEntry("maps", maps));
 				managers.push_back(ManagerEntry("emotes", emotes));
+				managers.push_back(ManagerEntry("pets", pets, true));
 				managers.push_back(ManagerEntry("unit_loot", unitLoot));
 				managers.push_back(ManagerEntry("object_loot", objectLoot));
 				managers.push_back(ManagerEntry("item_loot", itemLoot));
@@ -403,6 +407,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("objects", "objects", objects));
 				managers.push_back(ManagerEntry("maps", "maps", maps));
 				managers.push_back(ManagerEntry("emotes", "emotes", emotes));
+				managers.push_back(ManagerEntry("pets", "pets", pets));
 				managers.push_back(ManagerEntry("unit_loot", "unit_loot", unitLoot));
 				managers.push_back(ManagerEntry("object_loot", "object_loot", objectLoot));
 				managers.push_back(ManagerEntry("item_loot", "item_loot", itemLoot));

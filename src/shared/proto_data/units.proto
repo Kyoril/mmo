@@ -22,6 +22,8 @@ message UnitEntry {
 	required string name = 2;
 	optional string subname = 3;
 	reserved 57, 58;	// legacy positional 'repeated string' name_loc/subname_loc (unused)
+	// Pet entry (pets.proto) a player gets when taming this creature. 0 = not tamable.
+	optional uint32 tame_pet_entry = 88;
 	repeated LocalizedString name_loc = 200;
 	repeated LocalizedString subname_loc = 201;
 	required uint32 minlevel = 4;

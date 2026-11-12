@@ -212,6 +212,9 @@ namespace mmo
 		// Bug reports. Declared before the realm connector, which subscribes to the subsystem
 		// state: the connector (and its subscription) must be destroyed first.
 		WorldSubsystemState subsystems;
+
+		// Persistent pets need nothing of the node's configuration; the operator switch turns them off.
+		subsystems.SetConfigEnabled(game::subsystem::Pets, true);
 		BugReportService bugReports(ioService, subsystems, project, BugReportService::Config{
 			config.bugReportEnabled, config.bugReportApiUrl, config.bugReportApiKey, config.realmServerAuthName });
 

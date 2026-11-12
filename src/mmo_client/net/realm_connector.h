@@ -289,6 +289,20 @@ namespace mmo
 		///	@param spellId The id of the spell to learn.
 		void LearnSpell(uint32 spellId);
 
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Grants the selected player (or the controlled player if no player is selected) a stored pet.
+		/// @param petEntry The id of the pet entry.
+		void PetAdd(uint32 petEntry);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Removes the stored pet of an entry from the selected player (or the controlled player if no player is selected).
+		/// @param petEntry The id of the pet entry.
+		void PetRemove(uint32 petEntry);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Tames the selected creature, ignoring the level check.
+		void PetTame();
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Makes the selected creature a temporary pet of the controlled player.
+		void PetMake();
+
 		/// FROM CONSOLE COMMAND: GAME MASTER only. Unlocks a specific emote for the selected player (or the controlled player if no player is selected).
 		///	@param emoteId The id of the emote to unlock.
 		void LearnEmote(uint32 emoteId);
@@ -535,6 +549,26 @@ namespace mmo
 		///	to work, otherwise the server will ignore the request.
 		/// @param spellId The ID of the spell to cancel the aura for.
 		void CancelAura(uint32 spellId);
+
+		/// Gives a command to all pets of the player (temporary pets and the summoned persistent pet).
+		/// @param command The command (pet_command).
+		/// @param targetGuid The target of an Attack command, otherwise 0.
+		/// @param param The pet_strategy of a SetStrategy command, otherwise 0.
+		void PetCommand(uint8 command, uint64 targetGuid, uint32 param);
+
+		/// Makes the summoned persistent pet cast one of its spells. Failures are answered with a
+		/// SpellFailure for the pet's guid or with a PetResult.
+		/// @param spellId The spell, which the pet must know.
+		/// @param targetMap The spell targets, as in CastSpell.
+		void PetCastSpell(uint32 spellId, const SpellTargetMap& targetMap);
+
+		/// Renames the summoned persistent pet. Answered with PetSpells on success, PetResult otherwise.
+		/// @param name The new name.
+		void PetRename(const String& name);
+
+		/// Asks for the name of a persistent pet. Answered with PetNameQueryResult.
+		/// @param petGuid The guid of the pet.
+		void PetNameQuery(uint64 petGuid);
 
 		/// Sends a packet to the server indicating that the player wants to buy a spell from a trainer npc. The spell must be available for the player to buy and
 		///	the player must fulfill all requirements such as level and money. The trainer must be the current trainer, initiated by the TrainerMenu or the GossipHello packet.

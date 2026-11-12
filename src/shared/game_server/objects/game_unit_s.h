@@ -508,6 +508,7 @@ namespace mmo
 
 	// Forward declaration for the CC movement controller
 	class CCMovementController;
+	class PetManager;
 
 	/// Result of rolling a block against an incoming physical attack.
 	struct BlockResult
@@ -1621,6 +1622,14 @@ public:
 		/// Removes all attacking units from the list of attackers.
 		void RemoveAllAttackingUnits();
 
+		/// Checks whether one of this unit's pets is in combat (and so this unit is, too).
+		/// @returns true if a pet of this unit is in combat.
+		[[nodiscard]] bool IsAnyPetInCombat() const;
+
+		/// Leaves combat unless something still keeps the unit in it: attacking units, a running
+		/// pvp combat timer or a pet in combat. Called when a pet of this unit leaves combat.
+		void LeaveCombatIfIdle();
+
 		/// Gets the number of units currently attacking this unit.
 		/// @returns The number of attacking units.
 		size_t GetAttackerCount() const { return m_attackingUnits.size(); }
@@ -1695,6 +1704,33 @@ public:
 		/// @param other The other unit to check.
 		/// @returns true if the other unit is friendly, false otherwise.
 		bool UnitIsFriendly(const GameUnitS &other) const;
+
+		/// Maximum number of owner links followed when resolving the top owner of a unit.
+		static constexpr uint32 MaxOwnerChainDepth = 4;
+
+		/// Gets the guid of the unit which owns this unit (a pet's owner), or 0 if it has none.
+		[[nodiscard]] uint64 GetOwnerGuid() const;
+
+		/// Sets the guid of the unit which owns this unit.
+		/// @param ownerGuid Guid of the owner, or 0 to clear it.
+		void SetOwnerGuid(uint64 ownerGuid);
+
+		/// Follows the owner chain (at most MaxOwnerChainDepth links) to the unit at its top.
+		/// @returns The top owner, or this unit if it has no owner or the owner cannot be resolved.
+		[[nodiscard]] const GameUnitS& GetTopOwner() const;
+
+		/// Checks whether this unit and another one share the same top owner. Units without an
+		/// owner are their own top owner, so a unit also shares it with its own pets.
+		/// @param other The other unit to check.
+		[[nodiscard]] bool SharesTopOwnerWith(const GameUnitS& other) const;
+
+		/// Gets the pets of this unit, creating the (empty) pet manager on first use.
+		/// @returns The pet manager of this unit.
+		PetManager& GetPets();
+
+		/// Gets the pets of this unit without creating the pet manager.
+		/// @returns The pet manager, or nullptr if this unit never had pets.
+		[[nodiscard]] PetManager* FindPets() const { return m_pets.get(); }
 
 		/// Gets the faction template of the unit.
 		/// @returns A pointer to the faction template entry.
@@ -1910,6 +1946,12 @@ public:
 		}
 
 	private:
+		/// Faction based hostility check, ignoring ownership.
+		static bool FactionIsEnemy(const GameUnitS& unit, const GameUnitS& other);
+
+		/// Faction based friendliness check, ignoring ownership.
+		static bool FactionIsFriendly(const GameUnitS& unit, const GameUnitS& other);
+
 		/// Called when the despawn timer expires.
 		void OnDespawnTimer();
 
@@ -1967,6 +2009,8 @@ public:
 		Countdown m_despawnCountdown;
 		std::unique_ptr<UnitMover> m_mover;
 		std::unique_ptr<CCMovementController> m_ccMovementController;
+		/// Pets of this unit, created on first use.
+		std::unique_ptr<PetManager> m_pets;
 		Countdown m_attackSwingCountdown;
 		Countdown m_offhandSwingCountdown;
 		GameTime m_lastMainHand = 0, m_lastOffHand = 0;

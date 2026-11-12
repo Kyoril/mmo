@@ -843,6 +843,21 @@ namespace mmo
 			return;
 		}
 
+		// Appearance-only inheritance leaves behavior and geometry on the owning frame.
+		if (attributes.Exists(FrameInheritsAttribute))
+		{
+			const std::string name = attributes.GetValueAsString(FrameInheritsAttribute);
+			const auto appearance = FrameManager::Get().Find(name);
+			if (!appearance)
+			{
+				ELOG("Unable to find visual template '" << name << "' in file " << m_filename);
+			}
+			else
+			{
+				appearance->CopyVisuals(*m_frames.top());
+			}
+		}
+
 		m_hasVisualTag = true;
 	}
 
@@ -1122,7 +1137,8 @@ namespace mmo
 		auto borderComponent = std::make_unique<BorderComponent>(*m_frames.top(), texture, borderSize);
 
 		// Check for border size
-		if (!attributes.Exists(BorderComponentBorderSizeAttribute))
+		if (attributes.Exists(BorderComponentTopSizeAttribute) || attributes.Exists(BorderComponentLeftSizeAttribute) ||
+			attributes.Exists(BorderComponentRightSizeAttribute) || attributes.Exists(BorderComponentBottomSizeAttribute))
 		{
 			const float top = attributes.GetValueAsInt(BorderComponentTopSizeAttribute);
 			const float left = attributes.GetValueAsInt(BorderComponentLeftSizeAttribute);

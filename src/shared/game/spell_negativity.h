@@ -54,6 +54,37 @@ namespace mmo
 		return spell.attributes_size() > 0 && (spell.attributes(0) & spell_attributes::Negative) != 0;
 	}
 
+	/// @brief Returns true if casting the spell at a unit is an attack on it: it is flagged
+	///        spell_attributes::Negative or has an effect aimed at enemies. A spell that tames its
+	///        target is never an attack, whatever its targets.
+	/// @tparam TSpellEntry Either proto::SpellEntry (server / editor) or proto_client::SpellEntry.
+	template<typename TSpellEntry>
+	bool IsHarmfulSpell(const TSpellEntry& spell)
+	{
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.type() == spell_effects::TameCreature)
+			{
+				return false;
+			}
+		}
+
+		if (HasNegativeAttribute(spell))
+		{
+			return true;
+		}
+
+		for (const auto& effect : spell.effects())
+		{
+			if (IsHostileEffectTarget(effect.targeta()) || IsHostileEffectTarget(effect.targetb()))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/// @brief Decides whether an aura of the given spell is a debuff for the unit carrying it.
 	///        An explicit Negative flag always wins. Otherwise an aura counts as a debuff if the
 	///        spell aims an aura at enemies and was not cast by the aura's owner on itself (so a

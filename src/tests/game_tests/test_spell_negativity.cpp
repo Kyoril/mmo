@@ -78,3 +78,35 @@ TEST_CASE("Negative attribute always wins", "[spell_negativity]")
 
 	CHECK(IsNegativeAura(spell, caster, caster));
 }
+
+TEST_CASE("A spell aimed at enemies is harmful", "[spell_negativity][pets]")
+{
+	proto::SpellEntry spell;
+	spell.add_attributes(0);
+	AddEffect(spell, spell_effects::SchoolDamage, spell_effect_targets::TargetEnemy);
+	CHECK(IsHarmfulSpell(spell));
+}
+
+TEST_CASE("A Negative flagged spell is harmful whatever its targets", "[spell_negativity][pets]")
+{
+	proto::SpellEntry spell;
+	spell.add_attributes(spell_attributes::Negative);
+	AddEffect(spell, spell_effects::Dummy, spell_effect_targets::TargetAny);
+	CHECK(IsHarmfulSpell(spell));
+}
+
+TEST_CASE("A spell without enemy targets is not harmful", "[spell_negativity][pets]")
+{
+	proto::SpellEntry spell;
+	spell.add_attributes(0);
+	AddEffect(spell, spell_effects::Dummy, spell_effect_targets::TargetAny);
+	CHECK_FALSE(IsHarmfulSpell(spell));
+}
+
+TEST_CASE("A tame spell is never harmful", "[spell_negativity][pets]")
+{
+	proto::SpellEntry spell;
+	spell.add_attributes(spell_attributes::Negative);
+	AddEffect(spell, spell_effects::TameCreature, spell_effect_targets::TargetEnemy);
+	CHECK_FALSE(IsHarmfulSpell(spell));
+}

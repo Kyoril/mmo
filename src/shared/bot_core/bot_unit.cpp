@@ -2,6 +2,8 @@
 
 #include "bot_unit.h"
 
+#include "game/guid_utils.h"
+
 #include <algorithm>
 
 namespace mmo
@@ -149,6 +151,16 @@ namespace mmo
 		return (m_movementInfo.movementFlags & movementMask) != 0;
 	}
 
+	uint64 BotUnit::GetReactionOwnerGuid() const
+	{
+		return m_ownerGuid != 0 ? m_ownerGuid : m_guid;
+	}
+
+	bool BotUnit::IsOwnedByPlayer() const
+	{
+		return m_ownerGuid != 0 && IsPlayerGUID(m_ownerGuid);
+	}
+
 	bool BotUnit::IsHostileTo(const BotUnit& other) const
 	{
 		// Simplified hostility check
@@ -158,6 +170,27 @@ namespace mmo
 		if (m_guid == other.m_guid)
 		{
 			return false;
+		}
+
+		// Pets, summons and totems act with their owner's side (the server's top-owner rule; the bot
+		// knows only the direct owner). Units of the same owner are never hostile to each other.
+		if (GetReactionOwnerGuid() == other.GetReactionOwnerGuid())
+		{
+			return false;
+		}
+
+		if (IsOwnedByPlayer() || other.IsOwnedByPlayer())
+		{
+			const bool playerSide = IsPlayer() || IsOwnedByPlayer();
+			const bool otherPlayerSide = other.IsPlayer() || other.IsOwnedByPlayer();
+			if (playerSide && otherPlayerSide)
+			{
+				return false;
+			}
+
+			// A player's pet against a creature: the creature decides, as it would against a player.
+			const BotUnit& creature = playerSide ? other : *this;
+			return creature.m_npcFlags == 0;
 		}
 
 		// Players are generally not hostile to each other in PvE
@@ -228,8 +261,14 @@ namespace mmo
 			return true;
 		}
 
-		// Players are friendly to each other in PvE
-		if (IsPlayer() && other.IsPlayer())
+		// A unit is always friendly to its owner and to the other units of its owner.
+		if (GetReactionOwnerGuid() == other.GetReactionOwnerGuid())
+		{
+			return true;
+		}
+
+		// Players (and their pets) are friendly to each other in PvE
+		if ((IsPlayer() || IsOwnedByPlayer()) && (other.IsPlayer() || other.IsOwnedByPlayer()))
 		{
 			return true;
 		}

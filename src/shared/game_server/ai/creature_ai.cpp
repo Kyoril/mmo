@@ -12,6 +12,10 @@
 #include "objects/game_unit_s.h"
 #include "game_server/world/world_instance.h"
 #include "game_server/world/universe.h"
+#include "creature_ai_pet_state.h"
+#include "game_server/pets/pet_behavior.h"
+#include "game_server/pets/pet_manager.h"
+#include "shared/proto_data/units.pb.h"
 
 namespace mmo
 {
@@ -75,6 +79,13 @@ namespace mmo
 				}
 			});
 
+		// A pet that comes back into the world (respawned) goes straight back to its owner.
+		if (m_petMode)
+		{
+			SetState(std::make_shared<CreatureAIPetState>(*this));
+			return;
+		}
+
 		// Enter the preparation state
 		auto state = std::make_shared<CreatureAIPrepareState>(*this);
 		SetState(std::move(state));
@@ -87,6 +98,13 @@ namespace mmo
 
 	void CreatureAI::Idle()
 	{
+		// Owned creatures have no idle: they are with their owner.
+		if (m_petMode)
+		{
+			SetState(std::make_shared<CreatureAIPetState>(*this));
+			return;
+		}
+
 		auto state = std::make_shared<CreatureAIIdleState>(*this);
 		SetState(std::move(state));
 	}
@@ -140,6 +158,19 @@ namespace mmo
 
 	void CreatureAI::Reset()
 	{
+		// A pet does not reset home or evade-heal: when its fight is over it returns to its owner.
+		if (m_petMode)
+		{
+			SetState(std::make_shared<CreatureAIPetState>(*this));
+			return;
+		}
+
+		// The pets a creature summoned for its fight go away with the fight.
+		if (PetManager* pets = m_controlled.FindPets())
+		{
+			pets->DespawnTemporaryPets();
+		}
+
 		auto state = std::make_shared<CreatureAIResetState>(*this);
 		SetState(std::move(state));
 
@@ -329,4 +360,210 @@ namespace mmo
 		EnterCombat(threat);
 	}
 
+	void CreatureAI::EnterPetMode(GameUnitS& owner)
+	{
+		m_petMode = true;
+		m_petOwner = std::static_pointer_cast<GameUnitS>(owner.shared_from_this());
+		m_petStrategy = pet_strategy::Assist;
+		m_petStaying = false;
+		m_petCommandedTarget = 0;
+		m_petRecalled = false;
+		m_petNaturalRunBaseSpeed = m_controlled.GetBaseSpeed(movement_type::Run);
+
+		// The pet state does the following; an escort follow target would fight it.
+		m_controlled.ClearFollowedUnit();
+
+		// A pet never evades back to full health, so it regenerates all the time instead of only in
+		// combat like other creatures (see CreatureAICombatState::OnLeave).
+		m_controlled.SetRegeneration(regeneration_flags::Health | regeneration_flags::Power);
+		m_controlled.StartRegeneration();
+
+		SetState(std::make_shared<CreatureAIPetState>(*this));
+	}
+
+	void CreatureAI::OnPetCommand(const pet_command::Type command, const uint64 targetGuid, const uint32 param)
+	{
+		if (!m_petMode || !m_controlled.IsAlive())
+		{
+			return;
+		}
+
+		const bool fighting = dynamic_cast<CreatureAICombatState*>(m_state.get()) != nullptr;
+
+		switch (command)
+		{
+		case pet_command::Attack:
+			{
+				WorldInstance* world = m_controlled.GetWorldInstance();
+				GameUnitS* target = world ? world->FindByGuid<GameUnitS>(targetGuid) : nullptr;
+				if (!target || !target->IsAlive() || !m_controlled.UnitIsEnemy(*target))
+				{
+					return;
+				}
+
+				m_petCommandedTarget = targetGuid;
+				m_petRecalled = false;
+				EngagePetTarget(*target);
+			}
+			break;
+
+		case pet_command::Follow:
+			m_petStaying = false;
+			m_petCommandedTarget = 0;
+			if (fighting)
+			{
+				// Called back out of the fight: the pet does not run straight back into it.
+				m_petRecalled = true;
+				Reset();
+			}
+			else if (auto* petState = dynamic_cast<CreatureAIPetState*>(m_state.get()))
+			{
+				petState->Update();
+			}
+			break;
+
+		case pet_command::Stay:
+			m_petStaying = true;
+			m_petStayPosition = m_controlled.GetMover().GetCurrentLocation();
+			if (!fighting)
+			{
+				m_controlled.GetMover().StopMovement();
+			}
+			break;
+
+		case pet_command::SetStrategy:
+			if (param > pet_strategy::Passive)
+			{
+				return;
+			}
+
+			m_petStrategy = static_cast<pet_strategy::Type>(param);
+			if (fighting && m_petStrategy == pet_strategy::Passive && m_petCommandedTarget == 0)
+			{
+				// A passive pet only fights what it is told to.
+				Reset();
+			}
+			break;
+
+		case pet_command::Dismiss:
+		default:
+			// Dismissing is up to the pet manager, which owns the pet's lifetime.
+			break;
+		}
+	}
+
+	void CreatureAI::OnOwnerAttack(GameUnitS& victim)
+	{
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		{
+			return;
+		}
+
+		m_petRecalled = false;
+
+		// A commanded target goes first while it lives.
+		if (m_petCommandedTarget != 0)
+		{
+			WorldInstance* world = m_controlled.GetWorldInstance();
+			const GameUnitS* commanded = world ? world->FindByGuid<GameUnitS>(m_petCommandedTarget) : nullptr;
+			if (commanded && commanded->IsAlive())
+			{
+				return;
+			}
+
+			m_petCommandedTarget = 0;
+		}
+
+		if (IsWithinPetStayReach(victim))
+		{
+			EngagePetTarget(victim);
+		}
+	}
+
+	void CreatureAI::OnOwnerAttacked(GameUnitS& attacker)
+	{
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		{
+			return;
+		}
+
+		m_petRecalled = false;
+
+		// Already fighting: the current fight (the owner's target) goes first.
+		if (dynamic_cast<CreatureAIPetState*>(m_state.get()) == nullptr)
+		{
+			return;
+		}
+
+		if (IsWithinPetStayReach(attacker))
+		{
+			EngagePetTarget(attacker);
+		}
+	}
+
+	void CreatureAI::OnPetAttacked(GameUnitS& attacker)
+	{
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		{
+			return;
+		}
+
+		m_petRecalled = false;
+		if (IsWithinPetStayReach(attacker))
+		{
+			EngagePetTarget(attacker);
+		}
+	}
+
+	void CreatureAI::EngagePetTarget(GameUnitS& target)
+	{
+		if (!m_state || !m_controlled.IsAlive() || &target == &m_controlled || !target.IsAlive() || !m_controlled.UnitIsEnemy(target))
+		{
+			return;
+		}
+
+		if (target.GetWorldInstance() != m_controlled.GetWorldInstance() || !target.CanBeSeenBy(m_controlled))
+		{
+			return;
+		}
+
+		// A pet beyond its leash returns to its owner first: the combat state would break off at once.
+		if (const auto owner = m_petOwner.lock(); owner && m_controlled.GetSquaredDistanceTo(owner->GetPosition(), false) > PetLeashDistance * PetLeashDistance)
+		{
+			return;
+		}
+
+		if (auto* combat = dynamic_cast<CreatureAICombatState*>(m_state.get()))
+		{
+			combat->ReconsiderPetVictim();
+			return;
+		}
+
+		if (dynamic_cast<CreatureAIPetState*>(m_state.get()) == nullptr)
+		{
+			// Dead, or not yet in pet mode.
+			return;
+		}
+
+		// Warning: This destroys the current AI state as it enters the combat state
+		EnterCombat(target);
+	}
+
+	bool CreatureAI::IsWithinPetStayReach(const GameUnitS& unit) const
+	{
+		if (!m_petStaying)
+		{
+			return true;
+		}
+
+		const float reach = m_controlled.GetMeleeReach() + unit.GetMeleeReach();
+		const float dx = unit.GetPosition().x - m_petStayPosition.x;
+		const float dz = unit.GetPosition().z - m_petStayPosition.z;
+		return dx * dx + dz * dz <= reach * reach;
+	}
+
+	void CreatureAI::SetPetSpells(std::vector<proto::UnitSpellEntry> spells)
+	{
+		m_petSpells = std::move(spells);
+	}
 }

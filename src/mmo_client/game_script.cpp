@@ -164,6 +164,11 @@ namespace mmo
 				}
 			}
 
+			if (unitName == "pet")
+			{
+				return ObjectMgr::Get<GameUnitC>(ObjectMgr::GetActivePetGuid());
+			}
+
 			return nullptr;
 		}
 

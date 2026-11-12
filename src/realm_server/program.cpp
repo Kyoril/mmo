@@ -15,6 +15,7 @@
 #include "modules/bug_report_module.h"
 #include "modules/friend_module.h"
 #include "modules/guild_module.h"
+#include "modules/pet_module.h"
 #include "modules/realm_module.h"
 #include "chat_channel_mgr.h"
 #include "motd_manager.h"
@@ -221,6 +222,7 @@ namespace mmo
 		AsyncFriendDatabase asyncFriendDb{ makeWorker(InterfaceTag<IFriendDatabase>{}), sync };
 		AsyncMOTDDatabase   asyncMotdDb{ makeWorker(InterfaceTag<IMOTDDatabase>{}), sync };
 		AsyncChatChannelDatabase asyncChatChannelDb{ makeWorker(InterfaceTag<IChatChannelDatabase>{}), sync };
+		AsyncPetDatabase    asyncPetDb{ makeWorker(InterfaceTag<IPetDatabase>{}), sync };
 
 		IdGenerator<uint64> groupIdGenerator{ 1 };
 
@@ -294,8 +296,12 @@ namespace mmo
 			return 1;
 		}
 
+		// The pet module is added to the other modules below; world nodes report pet data to it.
+		auto petModuleOwner = std::make_unique<PetModule>(asyncPetDb);
+		PetModule& petModule = *petModuleOwner;
+
 		// Careful: Called by multiple threads!
-		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config, &timeOfDayManager](std::shared_ptr<World::Client> connection)
+		const auto createWorld = [&worldManager, &playerManager, &asyncDatabase, &project, &timerQueue, &config, &timeOfDayManager, &petModule](std::shared_ptr<World::Client> connection)
 		{
 			asio::ip::address address;
 
@@ -317,7 +323,7 @@ namespace mmo
 				return;
 			}
 
-			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project, timeOfDayManager);
+			auto world = std::make_shared<World>(timerQueue, worldManager, playerManager, asyncDatabase, connection, address.to_string(), project, timeOfDayManager, petModule);
 			ILOG("Incoming world node connection from " << address);
 			worldManager.AddWorld(std::move(world));
 
@@ -343,6 +349,7 @@ namespace mmo
 		modules.Add(std::make_unique<BugReportModule>());
 		modules.Add(std::make_unique<FriendModule>(friendMgr, playerManager, asyncDatabase));
 		modules.Add(std::make_unique<GuildModule>(guildMgr, playerManager, asyncDatabase));
+		modules.Add(std::move(petModuleOwner));
 
 		// Initialize chat channel manager from game data
 		ChannelMgr channelMgr{ project, asyncChatChannelDb, playerManager, timerQueue };

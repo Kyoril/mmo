@@ -13,6 +13,7 @@
 #include "game_server/ai/creature_combat_script.h"
 #include "game_server/ai/creature_combat_script_registry.h"
 #include "game_server/ai/creature_separation_manager.h"
+#include "game_server/pets/pet_behavior.h"
 #include "objects/game_creature_s.h"
 #include "game_server/world/universe.h"
 #include "log/default_log_levels.h"
@@ -123,9 +124,13 @@ namespace mmo
 			// entry. This ensures that if the creature dies in the same frame it enters
 			// combat (i.e. a one-shot from idle), the death state still finds a tagged
 			// creature and distributes XP and loot correctly.
-			if (initiator->IsPlayer() && !controlled.IsTagged())
+			if (!controlled.IsTagged())
 			{
-				controlled.AddLootRecipient(initiator->GetGuid());
+				// A pet tags for its owner.
+				if (const GameUnitS& tagger = initiator->GetTopOwner(); tagger.IsPlayer())
+				{
+					controlled.AddLootRecipient(tagger.GetGuid());
+				}
 			}
 		}
 		m_combatInitiator.reset();
@@ -197,8 +202,21 @@ namespace mmo
 		auto& controlled = GetControlled();
 		controlled.SetInCombat(false, false);
 
-		// Stop regeneration out of combat
-		controlled.StopRegeneration();
+		// The pet's combat was its owner's. SetInCombat tells the owner through the world, which a
+		// despawning pet (dismissed, duration over) has already left, so tell it directly as well.
+		if (GetAI().IsPetMode())
+		{
+			if (const auto owner = GetAI().GetPetOwner(); owner && owner->IsPlayer())
+			{
+				owner->LeaveCombatIfIdle();
+			}
+		}
+
+		// Stop regeneration out of combat. A pet keeps regenerating: it does not evade-heal.
+		if (!GetAI().IsPetMode())
+		{
+			controlled.StopRegeneration();
+		}
 
 		// Stop movement and reset movement state
 		controlled.GetMover().StopMovement();
@@ -232,11 +250,12 @@ namespace mmo
 
 		GetControlled().AddCombatParticipant(attacker);
 
-		if (attacker.IsPlayer())
+		// A pet tags for its owner: its damage is the owner's work.
+		if (!GetControlled().IsTagged())
 		{
-			if (!GetControlled().IsTagged())
+			if (const GameUnitS& tagger = attacker.GetTopOwner(); tagger.IsPlayer())
 			{
-				GetControlled().AddLootRecipient(attacker.GetGuid());
+				GetControlled().AddLootRecipient(tagger.GetGuid());
 			}
 		}
 
@@ -448,8 +467,13 @@ namespace mmo
 		GameCreatureS& controlled = GetControlled();
 		GameUnitS* currentVictim = controlled.GetVictim();
 
-		// Find the unit with the highest threat
-		GameUnitS* newVictim = GetTopThreatener();
+		// Find the unit with the highest threat. A pet goes by its strategy first (commanded
+		// target, the owner's victim) and only falls back to threat.
+		GameUnitS* newVictim = GetAI().IsPetMode() ? SelectPetVictim() : nullptr;
+		if (!newVictim)
+		{
+			newVictim = GetTopThreatener();
+		}
 
 		// Root fallback: if rooted and top target is out of melee reach, find nearest in-range alternative.
 		if (newVictim && controlled.IsRooted())
@@ -528,8 +552,8 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 
-		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
-		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), casting, or a staying pet
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting || IsHoldingPetPosition())
 		{
 			return false;
 		}
@@ -679,6 +703,12 @@ namespace mmo
 		if (m_script && !m_script->CanMove())
 		{
 			return true; // Script says we can't move, treat as success
+		}
+
+		// A staying pet fights from where it was told to stay
+		if (IsHoldingPetPosition())
+		{
+			return true;
 		}
 
 		// Also update waypoint recalculation check to use flat distance (matching OnAttackSwing)
@@ -892,6 +922,14 @@ namespace mmo
 				m_nextActionCountdown.SetEnd(currentTime + 250);
 				return;
 			}
+		}
+
+		// A pet whose fight is over for its owner goes back to it (Reset leads a pet to its owner,
+		// not home, and does not heal it).
+		if (GetAI().IsPetMode() && ShouldPetDisengage())
+		{
+			GetAI().Reset();
+			return;
 		}
 
 		// If a combat script is active and handles actions completely,
@@ -1118,7 +1156,8 @@ namespace mmo
 
 	bool CreatureAICombatState::ShouldResetAI(const GameUnitS* victim) const
 	{
-		if (!m_canReset)
+		// Pets have no home to be leashed to; ShouldPetDisengage leashes them to their owner.
+		if (!m_canReset || GetAI().IsPetMode())
 		{
 			return false;
 		}
@@ -1279,47 +1318,59 @@ namespace mmo
 	void CreatureAICombatState::InitializeSpells()
 	{
 		m_availableSpells.clear();
-		
+
 		const auto& controlled = GetControlled();
 		const auto& entry = controlled.GetEntry();
-		
+
 		// Load spells from creature entry
 		for (const auto& spellEntry : entry.creaturespells())
 		{
-			const auto* spell = controlled.GetProject().spells.getById(spellEntry.spellid());
-			if (!spell)
-			{
-				continue;
-			}
-			
-			// Skip passive spells
-			if (spell->attributes(0) & spell_attributes::Passive)
-			{
-				continue;
-			}
-			
-			// Determine range from spell or use defaults from creature spell entry
-			float minRange = spellEntry.minrange();
-			float maxRange = spellEntry.maxrange();
-			
-			// If no range specified in creature entry, use spell's range
-			if (maxRange <= 0.0f && spell->has_rangetype())
-			{
-				if (const auto* rangeType = controlled.GetProject().ranges.getById(spell->rangetype()))
-				{
-					maxRange = rangeType->range();
-				}
-			}
-			
-			// Default to melee range if still no range
-			if (maxRange <= 0.0f)
-			{
-				maxRange = controlled.GetMeleeReach() + 2.0f;
-			}
-			
-			m_availableSpells.emplace_back(spell, minRange, maxRange, spellEntry.priority(),
-				spellEntry.mincooldown(), spellEntry.maxcooldown());
+			AddCombatSpell(spellEntry);
 		}
+
+		// A pet adds the spells its owner's side gave it (see CreatureAI::SetPetSpells)
+		for (const auto& spellEntry : GetAI().GetPetSpells())
+		{
+			AddCombatSpell(spellEntry);
+		}
+	}
+
+	void CreatureAICombatState::AddCombatSpell(const proto::UnitSpellEntry& spellEntry)
+	{
+		const auto& controlled = GetControlled();
+		const auto* spell = controlled.GetProject().spells.getById(spellEntry.spellid());
+		if (!spell)
+		{
+			return;
+		}
+
+		// Skip passive spells
+		if (spell->attributes(0) & spell_attributes::Passive)
+		{
+			return;
+		}
+
+		// Determine range from spell or use defaults from creature spell entry
+		float minRange = spellEntry.minrange();
+		float maxRange = spellEntry.maxrange();
+		
+		// If no range specified in creature entry, use spell's range
+		if (maxRange <= 0.0f && spell->has_rangetype())
+		{
+			if (const auto* rangeType = controlled.GetProject().ranges.getById(spell->rangetype()))
+			{
+				maxRange = rangeType->range();
+			}
+		}
+		
+		// Default to melee range if still no range
+		if (maxRange <= 0.0f)
+		{
+			maxRange = controlled.GetMeleeReach() + 2.0f;
+		}
+		
+		m_availableSpells.emplace_back(spell, minRange, maxRange, spellEntry.priority(),
+			spellEntry.mincooldown(), spellEntry.maxcooldown());
 	}
 
 	/**
@@ -1791,8 +1842,8 @@ namespace mmo
 		auto& controlled = GetControlled();
 		auto& mover = controlled.GetMover();
 		
-		// Nothing to do when rooted, under forced movement (fear/disorient), or casting
-		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting)
+		// Nothing to do when rooted, under forced movement (fear/disorient), casting, or a staying pet
+		if (controlled.IsRooted() || controlled.IsUnderForcedMovement() || m_isCasting || IsHoldingPetPosition())
 		{
 			return false;
 		}
@@ -1975,5 +2026,147 @@ namespace mmo
 
 		// Immediately re-evaluate the victim so the taunt takes effect right away.
 		UpdateVictim();
+	}
+
+	// === Pet Mode ===
+
+	void CreatureAICombatState::ReconsiderPetVictim()
+	{
+		WorldInstance* world = GetControlled().GetWorldInstance();
+		if (!world || !m_entered)
+		{
+			return;
+		}
+
+		// Posted like every other re-entry into ChooseNextAction: this is called from the owner's
+		// attack and spell code, and ChooseNextAction may end this state.
+		std::weak_ptr weakThis = std::static_pointer_cast<CreatureAICombatState>(shared_from_this());
+		world->GetUniverse().Post([weakThis]()
+			{
+				if (const auto strongThis = weakThis.lock())
+				{
+					if (strongThis->IsActive() && !strongThis->m_isCasting)
+					{
+						strongThis->ChooseNextAction();
+					}
+				}
+			});
+	}
+
+	GameUnitS* CreatureAICombatState::SelectPetVictim()
+	{
+		CreatureAI& ai = GetAI();
+		GameCreatureS& controlled = GetControlled();
+		WorldInstance* world = controlled.GetWorldInstance();
+		if (!world)
+		{
+			return nullptr;
+		}
+
+		const auto usable = [&controlled](GameUnitS* unit)
+		{
+			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitIsEnemy(*unit) && unit->CanBeSeenBy(controlled);
+		};
+
+		GameUnitS* preferred = nullptr;
+		if (ai.GetPetCommandedTarget() != 0)
+		{
+			GameUnitS* commanded = world->FindByGuid<GameUnitS>(ai.GetPetCommandedTarget());
+			if (usable(commanded))
+			{
+				preferred = commanded;
+			}
+			else
+			{
+				ai.ClearPetCommandedTarget();
+			}
+		}
+
+		if (!preferred && ai.GetPetStrategy() == pet_strategy::Assist)
+		{
+			if (const auto owner = ai.GetPetOwner())
+			{
+				if (GameUnitS* ownerVictim = owner->GetVictim(); usable(ownerVictim) && ai.IsWithinPetStayReach(*ownerVictim))
+				{
+					preferred = ownerVictim;
+				}
+			}
+		}
+
+		if (preferred)
+		{
+			EnsureOnThreatList(*preferred);
+		}
+
+		return preferred;
+	}
+
+	bool CreatureAICombatState::ShouldPetDisengage()
+	{
+		CreatureAI& ai = GetAI();
+		GameCreatureS& controlled = GetControlled();
+
+		const auto owner = ai.GetPetOwner();
+		if (!owner || !owner->IsAlive() || owner->GetWorldInstance() != controlled.GetWorldInstance())
+		{
+			return true;
+		}
+
+		if (controlled.GetSquaredDistanceTo(owner->GetPosition(), false) > PetLeashDistance * PetLeashDistance)
+		{
+			return true;
+		}
+
+		if (ai.GetPetCommandedTarget() != 0)
+		{
+			const GameUnitS* commanded = controlled.GetWorldInstance()->FindByGuid<GameUnitS>(ai.GetPetCommandedTarget());
+			if (!commanded || !commanded->IsAlive())
+			{
+				ai.ClearPetCommandedTarget();
+			}
+		}
+
+		// A staying pet does not chase: a victim that left its reach (melee, or its longest spell)
+		// is given up on.
+		if (IsHoldingPetPosition())
+		{
+			if (const GameUnitS* victim = controlled.GetVictim())
+			{
+				float reach = controlled.GetMeleeReach() + victim->GetMeleeReach();
+				for (const CreatureSpell& spell : m_availableSpells)
+				{
+					reach = std::max(reach, spell.maxRange);
+				}
+
+				if (controlled.GetSquaredDistanceTo(victim->GetPosition(), false) > reach * reach)
+				{
+					return true;
+				}
+			}
+		}
+
+		// A passive pet only fights what it was told to.
+		return ai.GetPetStrategy() == pet_strategy::Passive && ai.GetPetCommandedTarget() == 0;
+	}
+
+	bool CreatureAICombatState::IsHoldingPetPosition() const
+	{
+		const CreatureAI& ai = GetAI();
+		return ai.IsPetMode() && ai.IsPetStaying() && ai.GetPetCommandedTarget() == 0;
+	}
+
+	void CreatureAICombatState::EnsureOnThreatList(GameUnitS& threatener)
+	{
+		if (!threatener.IsAlive() || m_threat.find(threatener.GetGuid()) != m_threat.end())
+		{
+			return;
+		}
+
+		const uint64 guid = threatener.GetGuid();
+		m_threat.emplace(guid, ThreatEntry(threatener, 0.0f));
+		SetupThreatenerSignals(threatener, guid);
+		threatener.AddAttackingUnit(GetControlled());
+		GetControlled().AddCombatParticipant(threatener);
+		m_lastThreatTime = GetAsyncTimeMs();
 	}
 }

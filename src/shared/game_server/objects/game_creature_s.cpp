@@ -10,6 +10,7 @@
 #include "binary_io/vector_sink.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace mmo
 {
@@ -47,6 +48,13 @@ namespace mmo
 			if (const auto followed = creature->GetFollowedUnit())
 			{
 				return fightsForPlayer(*followed, depth + 1);
+			}
+
+			// Pets (and anything else with an Owner) fight for whoever owns them, however they got linked.
+			const GameUnitS& topOwner = creature->GetTopOwner();
+			if (&topOwner != &unit)
+			{
+				return fightsForPlayer(topOwner, depth + 1);
 			}
 
 			return false;
@@ -744,6 +752,51 @@ namespace mmo
 			Set<uint32>(object_fields::Armor, m_entry->armor());
 			Set<float>(object_fields::MinDamage, m_entry->minmeleedmg());
 			Set<float>(object_fields::MaxDamage, m_entry->maxmeleedmg());
+
+			// SetEntry sets a legacy creature's max health and mana once. A pet scales them, so it
+			// recomputes them from the entry on every refresh instead of compounding its multipliers.
+			if (m_isPet)
+			{
+				Set<uint32>(object_fields::MaxHealth, m_entry->minlevelhealth());
+				Set<uint32>(object_fields::MaxMana, m_entry->minlevelmana());
+			}
+		}
+
+		if (m_isPet)
+		{
+			ApplyPetStats();
+		}
+	}
+
+	void GameCreatureS::SetPetStatMultipliers(const float health, const float mana, const float damage, const float armor)
+	{
+		m_petHealthMultiplier = health;
+		m_petManaMultiplier = mana;
+		m_petDamageMultiplier = damage;
+		m_petArmorMultiplier = armor;
+	}
+
+	void GameCreatureS::ApplyPetStats()
+	{
+		const auto scale = [](const uint32 value, const float multiplier)
+		{
+			return static_cast<uint32>(std::max(0.0f, std::round(static_cast<float>(value) * multiplier)));
+		};
+
+		Set<uint32>(object_fields::MaxHealth, std::max<uint32>(1, scale(Get<uint32>(object_fields::MaxHealth), m_petHealthMultiplier)));
+		Set<uint32>(object_fields::MaxMana, scale(Get<uint32>(object_fields::MaxMana), m_petManaMultiplier));
+		Set<uint32>(object_fields::Armor, scale(Get<uint32>(object_fields::Armor), m_petArmorMultiplier));
+		Set<float>(object_fields::MinDamage, Get<float>(object_fields::MinDamage) * m_petDamageMultiplier);
+		Set<float>(object_fields::MaxDamage, Get<float>(object_fields::MaxDamage) * m_petDamageMultiplier);
+
+		// Creatures have no health regeneration of their own: they heal by evading. A pet never
+		// evades, so it regenerates like a player out of combat - at its unit class rate, or a share
+		// of its max health per tick if the class has none.
+		const proto::UnitClassEntry* unitClass = GetStatUnitClass();
+		m_healthRegenPerTick = unitClass ? unitClass->healthregenpertick() : 0.0f;
+		if (m_healthRegenPerTick <= 0.0f)
+		{
+			m_healthRegenPerTick = static_cast<float>(GetMaxHealth()) * PetHealthRegenShare;
 		}
 	}
 
@@ -920,6 +973,11 @@ namespace mmo
 
 	const String& GameCreatureS::GetName() const
 	{
+		if (!m_customName.empty())
+		{
+			return m_customName;
+		}
+
 		return m_entry ? m_entry->name() : m_originalEntry.name();
 	}
 

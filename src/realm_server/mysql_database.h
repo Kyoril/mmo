@@ -216,6 +216,18 @@ namespace mmo
 		/// @copydoc IDatabase::MarkMailRead
 		void MarkMailRead(uint64 characterId, uint64 mailId) override;
 
+		/// @copydoc IPetDatabase::LoadCharacterPets
+		std::optional<std::vector<PersistentPetData>> LoadCharacterPets(uint64 characterId) override;
+
+		/// @copydoc IPetDatabase::SaveCharacterPets
+		void SaveCharacterPets(uint64 characterId, const std::vector<PersistentPetData>& pets, const std::vector<uint64>& removedPetIds) override;
+
+		/// @copydoc IPetDatabase::CreateCharacterPet
+		uint64 CreateCharacterPet(uint64 characterId, const PersistentPetData& pet) override;
+
+		/// @copydoc IPetDatabase::DeleteCharacterPets
+		void DeleteCharacterPets(uint64 characterId) override;
+
 	private:
 		/// Logs the last database error to the default logger.
 		void PrintDatabaseError();

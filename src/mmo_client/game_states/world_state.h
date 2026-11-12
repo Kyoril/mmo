@@ -504,6 +504,14 @@ namespace mmo
 
 		void Command_LearnEmote(const std::string &cmd, const std::string &args) const;
 
+		void Command_PetAdd(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetRemove(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetTame(const std::string &cmd, const std::string &args) const;
+
+		void Command_PetMake(const std::string &cmd, const std::string &args) const;
+
 		void Command_CreateMonster(const std::string &cmd, const std::string &args) const;
 
 		void Command_DestroyMonster(const std::string &cmd, const std::string &args) const;

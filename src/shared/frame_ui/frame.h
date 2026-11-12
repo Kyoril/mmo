@@ -116,6 +116,10 @@ namespace mmo
 		/// Called to copy this frame's properties over to another frame.
 		virtual void Copy(Frame& other);
 
+		/// Replaces another frame's imagery with independent copies bound to that frame.
+		/// Does not copy layout, properties, renderer, children, or script handlers.
+		void CopyVisuals(Frame& other) const;
+
 		/// Copies just the script handlers of this frame onto another one.
 		/// @remarks Split out of Copy because a frame inheriting from a template declared in the
 		///          same layout file is created before that template's handlers have been
