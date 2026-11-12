@@ -225,6 +225,8 @@ namespace mmo
 				return "Volume";
 			case pcg::graph::ControlShape::Point:
 				return "Point";
+			case pcg::graph::ControlShape::Rectangle:
+				return "Rectangle";
 			}
 			return "?";
 		}

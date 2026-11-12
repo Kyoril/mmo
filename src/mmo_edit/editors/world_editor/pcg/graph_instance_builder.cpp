@@ -427,6 +427,7 @@ namespace mmo
 			return pcg::graph::SplineBounds(instance.spline);
 
 		case pcg::graph::ControlShape::Volume:
+		case pcg::graph::ControlShape::Rectangle:
 			return GetVolumeFootprint(instance);
 
 		case pcg::graph::ControlShape::Point:

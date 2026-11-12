@@ -26,7 +26,11 @@ namespace mmo::pcg::graph
 		Volume,
 
 		/// @brief A single transform (position, rotation).
-		Point
+		Point,
+
+		/// @brief An oriented rectangle (position, yaw, half extents x/z), emitted as a closed linear area
+		///        with four stable point ids.
+		Rectangle
 	};
 
 	/// @brief Type of a control property. Each maps to one attribute type:
