@@ -355,7 +355,9 @@ not parked (see below). The loop consumes decisions before it does anything else
   bug whose branch is already merged on develop (a second click while the first ship waited in the
   queue) only notes "already shipped in <commit>" and keeps the bug resolved. If the branch tip
   no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
-  is re-parked and the maintainer must decide again. The panel sends the SHA-256 of the diff it
+  is re-parked and the maintainer must decide again. A branch that moved (a maintainer reworked
+  the parked fix) has its tip recorded as the new candidate and its diff uploaded with that
+  re-park, so the next "Ship" approves the reworked fix. The panel sends the SHA-256 of the diff it
   shows with the decision; the loop ships only if that matches the diff it uploaded for the
   recorded commit, otherwise it re-parks ("the diff you approved does not match the candidate
   commit; decide again") and uploads the real diff. The API refuses a new review diff while a
