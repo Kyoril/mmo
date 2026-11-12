@@ -1484,14 +1484,17 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-new-control")
 			{
 				// mmo_edit --pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]
+				//     [--half-extents x,z] [--yaw <deg>]
 				// Places a control of a control type (.hctl): a loop through at least three points, a spline through
-				// at least two, a volume or point at exactly one (heights from the terrain). --set overrides a property
-				// of the type (typed by its definition; colours as r,g,b). Saves the world and logs the new id
-				// (0 = success). A missing or invalid type, points that do not fit its shape or a bad --set are refused
-				// before anything is added or saved.
+				// at least two, a volume, rectangle or point at exactly one (heights from the terrain). --set overrides a
+				// property of the type (typed by its definition; colours as r,g,b). --half-extents (volume, rectangle) and
+				// --yaw (volume, rectangle, point) replace the default size and rotation. Saves the world and logs the new
+				// id (0 = success). A missing or invalid type, points that do not fit its shape, a bad --set or a transform
+				// the shape does not have are refused before anything is added or saved.
 				mmo::RedirectUnattendedLog("pcg_new_control");
 
-				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]";
+				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...] "
+					"[--half-extents x,z] [--yaw <deg>]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1501,6 +1504,7 @@ int main(int argc, char* arg[])
 				std::string typePath;
 				std::string name;
 				std::vector<std::pair<std::string, std::string>> settings;
+				mmo::NewPlacedControlTransform transform;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount && argumentsValid; ++j)
 				{
@@ -1508,6 +1512,25 @@ int main(int argc, char* arg[])
 					if (option == "--points" && j + 1 < argCount)
 					{
 						argumentsValid = mmo::ParsePointList(args[++j], points, 1);
+					}
+					else if (option == "--half-extents" && j + 1 < argCount)
+					{
+						// One "x,z" pair; the shape and the minimum are checked once the type is read.
+						std::vector<std::pair<float, float>> extents;
+						argumentsValid = mmo::ParsePointList(args[++j], extents, 1) && extents.size() == 1;
+						if (argumentsValid)
+						{
+							transform.halfExtents = extents.front();
+						}
+					}
+					else if (option == "--yaw" && j + 1 < argCount)
+					{
+						float yaw = 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], yaw);
+						if (argumentsValid)
+						{
+							transform.yawDegrees = yaw;
+						}
 					}
 					else if (option == "--type" && j + 1 < argCount)
 					{
@@ -1555,7 +1578,7 @@ int main(int argc, char* arg[])
 				{
 					uint64 id = 0;
 					std::string error;
-					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error))
+					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error, transform))
 					{
 						// The world is not saved: a refused run leaves no record behind.
 						ELOG("--pcg-new-control: " << error);

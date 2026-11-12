@@ -52,6 +52,22 @@ namespace mmo
 		/// Half extents of a new placed volume, in metres.
 		constexpr float NewVolumeHalfExtent = 16.0f;
 
+		/// Half extents on x and z of a new placed rectangle (20 m x 20 m), and its unused y half extent, in metres.
+		constexpr float NewRectangleHalfExtent = 10.0f;
+		constexpr float NewRectangleHalfHeight = 0.5f;
+
+		/// Length of one drawn segment of a rectangle's outline on the ground, and the most segments per side.
+		constexpr float RectangleOutlineStep = 2.0f;
+		constexpr int32 RectangleOutlineMaxSegments = 64;
+
+		/// The handles of a rectangle, in drawing and hit-test order (corners before sides: a corner wins at equal distance).
+		const pcg::graph::RectangleHandle RectangleHandles[] = {
+			pcg::graph::RectangleHandle::CornerNegNeg, pcg::graph::RectangleHandle::CornerPosNeg,
+			pcg::graph::RectangleHandle::CornerPosPos, pcg::graph::RectangleHandle::CornerNegPos,
+			pcg::graph::RectangleHandle::SideNegX, pcg::graph::RectangleHandle::SidePosX,
+			pcg::graph::RectangleHandle::SideNegZ, pcg::graph::RectangleHandle::SidePosZ
+		};
+
 		/// Side of the square area of a new graph instance, in metres.
 		constexpr float NewGraphInstanceSize = 128.0f;
 
@@ -439,6 +455,17 @@ namespace mmo
 		return !type || type->shape != pcg::graph::ControlShape::Point;
 	}
 
+	bool ProceduralEditMode::IsPlacedRectangle(const Control& control)
+	{
+		if (!control.HasTransform())
+		{
+			return false;
+		}
+
+		const pcg::graph::ControlType* type = m_controlLibrary.Find(control.placed.typePath);
+		return type && type->shape == pcg::graph::ControlShape::Rectangle;
+	}
+
 	const char* ProceduralEditMode::DescribeKind(const Control& control)
 	{
 		switch (control.kind)
@@ -491,6 +518,7 @@ namespace mmo
 		ApplyPendingTags();
 		m_selected = index;
 		m_splineEditor.CancelDrag();
+		m_rectangleDrag = RectangleDrag();
 		ClearPointSelection();
 		ClearTransformSelection();
 		m_splineEditor.Select(index, -1);
@@ -508,6 +536,7 @@ namespace mmo
 		WaitForBackgroundRebuild();
 		WorldEditMode::OnDeactivate();
 		m_splineEditor.CancelDrag();
+		m_rectangleDrag = RectangleDrag();
 		// A point or transform selection is meaningless outside this mode (no handles, no overlay).
 		ClearPointSelection();
 		ClearTransformSelection();
@@ -1338,6 +1367,7 @@ namespace mmo
 		}
 
 		case pcg::graph::ControlShape::Volume:
+		case pcg::graph::ControlShape::Rectangle:
 		case pcg::graph::ControlShape::Point:
 			points = { { x, z } };
 			break;
@@ -1348,7 +1378,7 @@ namespace mmo
 	}
 
 	bool ProceduralEditMode::CreatePlacedControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
-		uint64& id, String& error)
+		uint64& id, String& error, const NewPlacedControlTransform& transform)
 	{
 		id = 0;
 		const pcg::graph::ControlType* type = m_controlLibrary.Find(typePath, &error);
@@ -1372,9 +1402,44 @@ namespace mmo
 		}
 		else if (points.size() != 1)
 		{
-			error = "A " + String(type->shape == pcg::graph::ControlShape::Volume ? "volume" : "point") + " control needs exactly one point (its centre).";
+			const char* shapeText = type->shape == pcg::graph::ControlShape::Volume ? "volume"
+				: (type->shape == pcg::graph::ControlShape::Rectangle ? "rectangle" : "point");
+			error = "A " + String(shapeText) + " control needs exactly one point (its centre).";
 			SetStatus(error, StatusLevel::Error);
 			return false;
+		}
+
+		// An explicit transform fits only shapes that have one; half extents not a point.
+		if (transform.halfExtents || transform.yawDegrees)
+		{
+			const bool sized = type->shape == pcg::graph::ControlShape::Volume || type->shape == pcg::graph::ControlShape::Rectangle;
+			String transformError;
+			if (splineShape)
+			{
+				transformError = "Half extents and yaw apply only to volume, rectangle and point controls.";
+			}
+			else if (transform.halfExtents && !sized)
+			{
+				transformError = "Half extents apply only to volume and rectangle controls.";
+			}
+			else if (transform.halfExtents && (!std::isfinite(transform.halfExtents->first) || !std::isfinite(transform.halfExtents->second)
+				|| transform.halfExtents->first < SelectedControlTransform::MinHalfExtent || transform.halfExtents->second < SelectedControlTransform::MinHalfExtent))
+			{
+				char text[96];
+				std::snprintf(text, sizeof(text), "Half extents must be finite and at least %.2f m.", SelectedControlTransform::MinHalfExtent);
+				transformError = text;
+			}
+			else if (transform.yawDegrees && !std::isfinite(*transform.yawDegrees))
+			{
+				transformError = "The yaw must be finite.";
+			}
+
+			if (!transformError.empty())
+			{
+				error = transformError;
+				SetStatus(error, StatusLevel::Error);
+				return false;
+			}
 		}
 
 		for (const auto& [x, z] : points)
@@ -1441,6 +1506,20 @@ namespace mmo
 			if (type->shape == pcg::graph::ControlShape::Volume)
 			{
 				instance.halfExtents = Vector3(NewVolumeHalfExtent, NewVolumeHalfExtent, NewVolumeHalfExtent);
+			}
+			else if (type->shape == pcg::graph::ControlShape::Rectangle)
+			{
+				instance.halfExtents = Vector3(NewRectangleHalfExtent, NewRectangleHalfHeight, NewRectangleHalfExtent);
+			}
+
+			if (transform.halfExtents)
+			{
+				instance.halfExtents.x = transform.halfExtents->first;
+				instance.halfExtents.z = transform.halfExtents->second;
+			}
+			if (transform.yawDegrees)
+			{
+				instance.rotation = SelectedControlTransform::FromYaw(*transform.yawDegrees * PiValue / 180.0f);
 			}
 		}
 
@@ -1959,7 +2038,7 @@ namespace mmo
 	bool ProceduralEditMode::IsEditIdle() const
 	{
 		// A rebuild starts when an edit ends: no button held, no point, handle or gizmo dragged, no field being typed in.
-		if (m_splineEditor.IsDragging() || m_worldEditor.IsTransforming())
+		if (m_splineEditor.IsDragging() || m_rectangleDrag.active || m_worldEditor.IsTransforming())
 		{
 			return false;
 		}
@@ -2876,8 +2955,9 @@ namespace mmo
 		if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 		{
 			ImGui::SetTooltip("Places a control of one of the active biome's types at the viewport centre:\n"
-				"a loop as a %.0f m square, a spline as %.0f m along the view, a volume (half extents %.0f m) or a point.",
-				NewControlSize, NewControlSize, NewVolumeHalfExtent);
+				"a loop as a %.0f m square, a spline as %.0f m along the view, a volume (half extents %.0f m),\n"
+				"a rectangle (%.0f m x %.0f m) or a point.",
+				NewControlSize, NewControlSize, NewVolumeHalfExtent, NewRectangleHalfExtent * 2.0f, NewRectangleHalfExtent * 2.0f);
 		}
 
 		if (ImGui::BeginPopup("##newControlMenu"))
@@ -3003,9 +3083,12 @@ namespace mmo
 		if (control.HasTransform())
 		{
 			const bool volume = IsPlacedVolume(control);
-			ImGui::TextWrapped(volume
-				? "Volume: the gizmo moves it, Rotate turns it around up, Scale sets its half extents. Click its centre marker in the viewport to select it."
-				: "Point: the gizmo moves it and Rotate turns it around up. Click its marker in the viewport to select it.");
+			const bool rectangle = IsPlacedRectangle(control);
+			ImGui::TextWrapped(rectangle
+				? "Rectangle: drag a side or corner handle to resize it (the opposite side or corner stays); the gizmo moves it, Rotate turns it around up, Scale sets its half extents. Click its centre marker in the viewport to select it."
+				: (volume
+					? "Volume: the gizmo moves it, Rotate turns it around up, Scale sets its half extents. Click its centre marker in the viewport to select it."
+					: "Point: the gizmo moves it and Rotate turns it around up. Click its marker in the viewport to select it."));
 
 			bool changed = false;
 			float position[3] = { instance.position.x, instance.position.y, instance.position.z };
@@ -3022,7 +3105,18 @@ namespace mmo
 				changed = true;
 			}
 
-			if (volume)
+			if (rectangle)
+			{
+				// A rectangle has no height: only x and z.
+				float extents[2] = { instance.halfExtents.x, instance.halfExtents.z };
+				if (ImGui::DragFloat2("Half extents", extents, 0.1f, pcg::graph::MinRectangleHalfExtent, 10000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+				{
+					instance.halfExtents.x = extents[0];
+					instance.halfExtents.z = extents[1];
+					changed = true;
+				}
+			}
+			else if (volume)
 			{
 				float extents[3] = { instance.halfExtents.x, instance.halfExtents.y, instance.halfExtents.z };
 				if (ImGui::DragFloat3("Half extents", extents, 0.1f, SelectedControlTransform::MinHalfExtent, 10000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
@@ -3655,6 +3749,30 @@ namespace mmo
 			return;
 		}
 
+		// A click on a side or corner handle of the selected rectangle starts dragging that handle.
+		pcg::graph::RectangleHandle rectangleHandle = pcg::graph::RectangleHandle::SidePosX;
+		if (!io.KeyCtrl && !io.KeyAlt && HitTestRectangleHandle(io.MousePos.x, io.MousePos.y, rectangleHandle))
+		{
+			const pcg::graph::ControlInstance& instance = m_controls[m_selected].placed;
+			m_splineEditor.CancelDrag();
+			m_rectangleDrag.active = true;
+			m_rectangleDrag.controlId = instance.id;
+			m_rectangleDrag.handle = rectangleHandle;
+
+			// Keep the grab offset, so the handle does not jump to the cursor.
+			const Vector3 anchor = pcg::graph::RectangleHandlePosition(instance, rectangleHandle);
+			m_dragPlaneY = instance.position.y;
+			m_dragOffsetX = 0.0f;
+			m_dragOffsetZ = 0.0f;
+			Vector3 hit;
+			if (m_cursorRayValid && IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
+			{
+				m_dragOffsetX = anchor.x - hit.x;
+				m_dragOffsetZ = anchor.z - hit.z;
+			}
+			return;
+		}
+
 		// A click on the marker of a placed volume or point selects it for the gizmo.
 		if (!io.KeyCtrl && !io.KeyAlt)
 		{
@@ -3734,6 +3852,37 @@ namespace mmo
 	{
 		WorldEditMode::OnMouseHold(deltaSeconds);
 
+		if (m_rectangleDrag.active)
+		{
+			const int32 index = FindControl(m_rectangleDrag.controlId);
+			if (index < 0 || !m_controls[index].HasTransform())
+			{
+				// The control went away during the drag.
+				m_rectangleDrag = RectangleDrag();
+				return;
+			}
+
+			Vector3 rectangleHit;
+			if (!m_cursorRayValid || !IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, rectangleHit))
+			{
+				return;
+			}
+
+			Control& control = m_controls[index];
+			const Vector3 oldPosition = control.placed.position;
+			const Vector3 oldExtents = control.placed.halfExtents;
+			pcg::graph::DragRectangleHandle(control.placed, m_rectangleDrag.handle, rectangleHit.x + m_dragOffsetX, rectangleHit.z + m_dragOffsetZ);
+			if (control.placed.position != oldPosition || control.placed.halfExtents != oldExtents)
+			{
+				MarkChanged(control);
+				if (m_transformSelectable && m_transformSelectable->GetControlId() == control.placed.id)
+				{
+					m_transformSelectable->NotifyTransformChanged();
+				}
+			}
+			return;
+		}
+
 		Vector3 hit;
 		if (!m_splineEditor.IsDragging() || !m_cursorRayValid || !IntersectHorizontalPlane(m_cursorRay, m_dragPlaneY, hit))
 		{
@@ -3774,6 +3923,12 @@ namespace mmo
 	void ProceduralEditMode::OnMouseUp(const float x, const float y)
 	{
 		WorldEditMode::OnMouseUp(x, y);
+
+		if (m_rectangleDrag.active)
+		{
+			// Every move was marked changed in OnMouseHold; the live rebuild follows now that the edit is idle.
+			m_rectangleDrag = RectangleDrag();
+		}
 
 		if (m_splineEditor.IsDragging())
 		{
@@ -3856,6 +4011,54 @@ namespace mmo
 		return best;
 	}
 
+	int32 ProceduralEditMode::GetSelectedRectangle()
+	{
+		if (m_selected < 0 || m_selected >= static_cast<int32>(m_controls.size()) || !IsPlacedRectangle(m_controls[m_selected]))
+		{
+			return -1;
+		}
+		return m_selected;
+	}
+
+	bool ProceduralEditMode::ProjectRectangleHandle(const pcg::graph::ControlInstance& instance, const pcg::graph::RectangleHandle handle, ImVec2& screen) const
+	{
+		Vector3 position = pcg::graph::RectangleHandlePosition(instance, handle);
+		position.y = GetHandleHeight(position.x, position.z);
+		return ProjectToScreen(position, screen);
+	}
+
+	bool ProceduralEditMode::HitTestRectangleHandle(const float screenX, const float screenY, pcg::graph::RectangleHandle& handle)
+	{
+		const int32 index = GetSelectedRectangle();
+		if (index < 0)
+		{
+			return false;
+		}
+
+		const pcg::graph::ControlInstance& instance = m_controls[index].placed;
+		bool found = false;
+		float bestDistanceSq = TransformHandleRadius * TransformHandleRadius;
+		for (const pcg::graph::RectangleHandle candidate : RectangleHandles)
+		{
+			ImVec2 screen;
+			if (!ProjectRectangleHandle(instance, candidate, screen))
+			{
+				continue;
+			}
+
+			const float dx = screen.x - screenX;
+			const float dy = screen.y - screenY;
+			const float distanceSq = dx * dx + dy * dy;
+			if (distanceSq < bestDistanceSq || (!found && distanceSq <= bestDistanceSq))
+			{
+				handle = candidate;
+				bestDistanceSq = distanceSq;
+				found = true;
+			}
+		}
+		return found;
+	}
+
 	void ProceduralEditMode::DrawPlacedTransforms(ImDrawList& drawList)
 	{
 		for (size_t i = 0; i < m_controls.size(); ++i)
@@ -3873,8 +4076,66 @@ namespace mmo
 			const float yaw = SelectedControlTransform::ExtractYaw(instance.rotation);
 			const Quaternion rotation = SelectedControlTransform::FromYaw(yaw);
 
+			if (IsPlacedRectangle(control))
+			{
+				// The rectangle's outline on the ground (like a loop), its sides split so the line follows the terrain.
+				const std::array<SplinePoint, 4> corners = pcg::graph::RectangleCorners(instance);
+				for (size_t side = 0; side < corners.size(); ++side)
+				{
+					const SplinePoint& from = corners[side];
+					const SplinePoint& to = corners[(side + 1) % corners.size()];
+					const float length = std::sqrt((to.x - from.x) * (to.x - from.x) + (to.z - from.z) * (to.z - from.z));
+					const int32 segments = std::clamp(static_cast<int32>(std::ceil(length / RectangleOutlineStep)), 1, RectangleOutlineMaxSegments);
+					ImVec2 previous;
+					bool previousValid = false;
+					for (int32 s = 0; s <= segments; ++s)
+					{
+						const float t = static_cast<float>(s) / static_cast<float>(segments);
+						const float px = from.x + (to.x - from.x) * t;
+						const float pz = from.z + (to.z - from.z) * t;
+						ImVec2 current;
+						const bool currentValid = ProjectToScreen(Vector3(px, GetHandleHeight(px, pz), pz), current);
+						if (previousValid && currentValid)
+						{
+							drawList.AddLine(previous, current, color, selected ? 2.0f : 1.0f);
+						}
+						previous = current;
+						previousValid = currentValid;
+					}
+				}
+
+				// The selected rectangle's side and corner handles.
+				if (selected)
+				{
+					for (const pcg::graph::RectangleHandle handle : RectangleHandles)
+					{
+						ImVec2 screen;
+						if (!ProjectRectangleHandle(instance, handle, screen))
+						{
+							continue;
+						}
+
+						const bool dragged = m_rectangleDrag.active && m_rectangleDrag.controlId == instance.id && m_rectangleDrag.handle == handle;
+						// Corners are squares, sides are circles.
+						const float half = TransformHandleRadius * 0.5f;
+						const ImU32 fill = dragged ? IM_COL32(255, 255, 255, 255) : color;
+						const bool corner = handle == pcg::graph::RectangleHandle::CornerNegNeg || handle == pcg::graph::RectangleHandle::CornerPosNeg
+							|| handle == pcg::graph::RectangleHandle::CornerPosPos || handle == pcg::graph::RectangleHandle::CornerNegPos;
+						if (corner)
+						{
+							drawList.AddRectFilled(ImVec2(screen.x - half, screen.y - half), ImVec2(screen.x + half, screen.y + half), fill);
+							drawList.AddRect(ImVec2(screen.x - half, screen.y - half), ImVec2(screen.x + half, screen.y + half), IM_COL32(20, 20, 20, 255));
+						}
+						else
+						{
+							drawList.AddCircleFilled(screen, half, fill);
+							drawList.AddCircle(screen, half, IM_COL32(20, 20, 20, 255));
+						}
+					}
+				}
+			}
 			// The volume's box: rotated around up, half extents around the position.
-			if (IsPlacedVolume(control))
+			else if (IsPlacedVolume(control))
 			{
 				const Vector3& e = instance.halfExtents;
 				Vector3 corners[8];

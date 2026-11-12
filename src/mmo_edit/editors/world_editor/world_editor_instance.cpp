@@ -1167,7 +1167,7 @@ namespace mmo
 	}
 
 	bool WorldEditorInstance::CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
-		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error, const NewPlacedControlTransform& transform)
 	{
 		id = 0;
 		if (!m_proceduralEditMode)
@@ -1182,7 +1182,8 @@ namespace mmo
 			return false;
 		}
 
-		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error))
+		// The transform is checked before the control is added.
+		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error, transform))
 		{
 			return false;
 		}
