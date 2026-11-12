@@ -16,6 +16,9 @@ DEFAULT_MAX_DISTANCE = 250.0
 # Trigger actions (src/shared/proto_data/trigger_helper.h) that bring creatures into the world.
 ACTION_SET_SPAWN_STATE = 4     # targetname = spawn name, data[0] != 0 activates the spawner
 ACTION_SUMMON_CREATURE = 25    # data[0] = creature entry
+# Trigger actions that grant a quest kill credit without a kill.
+ACTION_QUEST_KILL_CREDIT = 16  # data[0] = creature entry (talking to an npc, a scripted scene)
+ACTION_DELIVER_FOLLOWERS = 41  # data[0] = creature entry (creatures led back to a place)
 TARGET_NAMED_WORLD_OBJECT = 4  # trigger_action_target (trigger_helper.h)
 TARGET_NAMED_CREATURE = 5
 _SEVERITY_ORDER = {"error": 0, "warning": 1}
@@ -53,6 +56,13 @@ def trigger_activated_spawn_names(data) -> set[tuple[str, str]]:
 
 def trigger_summoned_units(data) -> set[int]:
     return {action.data[0] for action in _trigger_actions(data, ACTION_SUMMON_CREATURE) if len(action.data)}
+
+
+def trigger_credited_units(data) -> set[int]:
+    """Unit entries some trigger grants a quest kill credit for. Such an objective needs no spawn
+    of that entry: the credit comes from a gossip option, an area trigger or a scripted scene."""
+    return {action.data[0] for action_type in (ACTION_QUEST_KILL_CREDIT, ACTION_DELIVER_FOLLOWERS)
+            for action in _trigger_actions(data, action_type) if len(action.data)}
 
 
 def _is_live(record, activated: set[tuple[str, str]] | frozenset = frozenset()) -> bool:
@@ -172,6 +182,7 @@ def check_reachability(data, map_entry, max_distance: float = DEFAULT_MAX_DISTAN
     givers = quest_givers(data, map_entry)
     enders = _quest_enders(data)
     summoned = trigger_summoned_units(data)
+    credited = trigger_credited_units(data)
     for quest_id in sorted(givers):
         quest = data.quests.get(quest_id)
         if quest is None:
@@ -194,6 +205,8 @@ def check_reachability(data, map_entry, max_distance: float = DEFAULT_MAX_DISTAN
             if not sources and requirement.creatureid and (requirement.creatureid in summoned or any(
                     (unit.killcredit or uid) == requirement.creatureid for uid, unit in data.units.items() if uid in summoned)):
                 continue  # summoned by a trigger (boss adds, events); no fixed position to measure
+            if not sources and requirement.creatureid in credited:
+                continue  # credited by a trigger (questioning an npc, a scripted scene); nothing to kill
             if not sources:
                 findings.append(Finding("no_active_source", "error", subject, f"{title}: '{label}' has no active source on map {map_entry.id}"))
                 continue

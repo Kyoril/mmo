@@ -150,6 +150,8 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(PlaySpellVisual)
 				MMO_HANDLE_TRIGGER_ACTION(PlaySound)
 				MMO_HANDLE_TRIGGER_ACTION(RandomTrigger)
+				MMO_HANDLE_TRIGGER_ACTION(SetFaction)
+				MMO_HANDLE_TRIGGER_ACTION(DeliverFollowers)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -1678,9 +1680,13 @@ namespace mmo
 		}
 
 		// Determine spawn position: explicit coordinates (data 1..3) or the position of the resolved
-		// target / owner.
+		// target / owner. All-zero coordinates count as "none given", so that a summon at the owner
+		// can still set the despawn time and the attack flag that follow them in the data.
+		const bool hasExplicitPosition = action.data_size() >= 4 &&
+			(GetActionData(action, 1) != 0 || GetActionData(action, 2) != 0 || GetActionData(action, 3) != 0);
+
 		Vector3 position;
-		if (action.data_size() >= 4)
+		if (hasExplicitPosition)
 		{
 			position = Vector3(
 				static_cast<float>(GetActionData(action, 1)),
@@ -1777,6 +1783,135 @@ namespace mmo
 					summon->threatened(*aggroTarget, 1.0f);
 				}
 			});
+	}
+
+	namespace
+	{
+		/// Collects the living creatures of one entry that follow the given unit and stand within a
+		/// radius of it. Collected up front, because handing a creature in changes its state and
+		/// that must not happen while the world is still being walked.
+		std::vector<GameCreatureS*> CollectFollowersOf(WorldInstance& world, const GameUnitS& followed, const uint32 entryId, const float radius)
+		{
+			std::vector<GameCreatureS*> followers;
+			const Vector3 center = followed.GetPosition();
+
+			world.ForEachObject([&](GameObjectS& object)
+				{
+					auto* creature = dynamic_cast<GameCreatureS*>(&object);
+					if (creature == nullptr || !creature->IsAlive() || creature->GetEntry().id() != entryId)
+					{
+						return true;
+					}
+
+					const auto followTarget = creature->GetFollowedUnit();
+					if (!followTarget || followTarget.get() != &followed)
+					{
+						return true;
+					}
+
+					if ((creature->GetPosition() - center).GetSquaredLength() <= radius * radius)
+					{
+						followers.push_back(creature);
+					}
+
+					return true;
+				});
+
+			return followers;
+		}
+	}
+
+	void TriggerHandler::HandleSetFaction(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		// The creature whose faction changes is the action target (defaults to the owner).
+		GameObjectS* targetObj = (action.target() != trigger_action_target::None) ? GetActionTarget(action, context) : context.owner;
+		auto* creature = dynamic_cast<GameCreatureS*>(targetObj);
+		if (!creature)
+		{
+			WLOG("TRIGGER_ACTION_SET_FACTION: Needs a creature target - action ignored");
+			return;
+		}
+
+		const uint32 factionTemplateId = static_cast<uint32>(GetActionData(action, 0));
+		if (factionTemplateId == 0)
+		{
+			creature->ClearFactionTemplateOverride();
+			return;
+		}
+
+		if (!creature->SetFactionTemplateOverride(factionTemplateId))
+		{
+			WLOG("TRIGGER_ACTION_SET_FACTION: Unknown faction template " << factionTemplateId << " - action ignored");
+			return;
+		}
+
+		// Asked to, pick the fight with whoever caused this, e.g. the player who refused the toll.
+		if (GetActionData(action, 1) != 0)
+		{
+			const auto triggering = context.triggeringUnit.lock();
+			if (triggering && triggering.get() != creature && triggering->IsAlive() && creature->IsAlive() &&
+				creature->UnitIsEnemy(*triggering))
+			{
+				// Generating threat causes the AI to enter combat with the target.
+				creature->threatened(*triggering, 1.0f);
+			}
+		}
+	}
+
+	void TriggerHandler::HandleDeliverFollowers(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr)
+		{
+			ELOG("TRIGGER_ACTION_DELIVER_FOLLOWERS: No target found, action will be ignored");
+			return;
+		}
+
+		if (!target->IsPlayer())
+		{
+			WLOG("TRIGGER_ACTION_DELIVER_FOLLOWERS: Needs a player target - action ignored");
+			return;
+		}
+
+		const uint32 entryId = static_cast<uint32>(GetActionData(action, 0));
+		if (entryId == 0)
+		{
+			WLOG("TRIGGER_ACTION_DELIVER_FOLLOWERS: Needs a valid unit entry - action ignored");
+			return;
+		}
+
+		auto* world = target->GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		const int32 radiusData = GetActionData(action, 1);
+		const int32 despawnData = GetActionData(action, 2);
+		const float radius = radiusData > 0 ? static_cast<float>(radiusData) : 15.0f;
+		const GameTime despawnDelay = despawnData > 0 ? static_cast<GameTime>(despawnData) : 3000;
+
+		GamePlayerS& player = target->AsPlayer();
+
+		const String& emoteText = GetActionText(action, 0);
+		const bool hasEmote = !emoteText.empty() && emoteText != "<INVALID_TEXT>";
+
+		const std::vector<GameCreatureS*> followers = CollectFollowersOf(*world, player, entryId, radius);
+		DLOG("TRIGGER_ACTION_DELIVER_FOLLOWERS: " << followers.size() << " creature(s) of entry " << entryId
+			<< " handed in by player " << log_hex_digit(player.GetGuid()));
+
+		for (GameCreatureS* creature : followers)
+		{
+			player.OnQuestKillCredit(creature->GetGuid(), creature->GetEntry());
+
+			creature->ClearFollowedUnit();
+			if (hasEmote)
+			{
+				creature->ChatEmote(emoteText, &action.texts_loc());
+			}
+
+			creature->TriggerDespawnTimer(despawnDelay);
+		}
 	}
 
 	void TriggerHandler::HandleTaunt(const proto::TriggerAction& action, TriggerContext& context)
@@ -2122,6 +2257,32 @@ namespace mmo
 			// the town flip back and forth while the sky sweeps to the new time.
 			auto* world = GetWorldInstance(context);
 			return world ? static_cast<double>(GetHourOfDay(world->GetGameTime().GetTargetTime())) : 0.0;
+		}
+
+		case proto::QuestStatus:
+		{
+			// FunctionData: [questId]. The quest status (quest_status::Type) of the player who raised
+			// the trigger, or of the owner if that is a player. Without a player this is -1, which
+			// matches no status, so a condition on it simply fails for creatures.
+			const uint32 questId = funcData.size() > 0 ? static_cast<uint32>(funcData[0]) : 0;
+			if (questId == 0)
+			{
+				WLOG("QuestStatus: no quest id given, treating as no status");
+				return -1.0;
+			}
+
+			const auto triggering = context.triggeringUnit.lock();
+			if (triggering && triggering->IsPlayer())
+			{
+				return static_cast<double>(triggering->AsPlayer().GetQuestStatus(questId));
+			}
+
+			if (owner && owner->IsPlayer())
+			{
+				return static_cast<double>(owner->AsPlayer().GetQuestStatus(questId));
+			}
+
+			return -1.0;
 		}
 
 		default:

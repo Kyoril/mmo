@@ -965,6 +965,12 @@ namespace mmo
 		/// @brief Uses a world object that is used without a spell, such as a mailbox.
 		void UseObject(uint64 objectGuid);
 
+		/// @brief Picks an option of an npc's gossip menu.
+		/// @param npcGuid The npc the bot is talking to.
+		/// @param gossipMenu Id of the menu page the option is on.
+		/// @param gossipOption Id of the option within that page.
+		void ExecuteGossipAction(uint64 npcGuid, uint32 gossipMenu, uint32 gossipOption);
+
 		/// @brief Asks to trade with a character the bot stands next to.
 		void InitiateTrade(uint64 targetGuid);
 		void AcceptTradeInvite();

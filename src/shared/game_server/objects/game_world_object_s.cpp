@@ -222,7 +222,22 @@ namespace mmo
 		// repeated credit; the spawner's respawn delay brings it back.
 		if (GetType() == GameWorldObjectType::QuestObject)
 		{
-			Despawn();
+			// Unusable from this moment on, but removed on the next tick only: the use comes out of
+			// a spell effect (OpenLock) that still holds this object, and removing it from the
+			// world right here would destroy it under that effect's hands.
+			Set<uint32>(object_fields::ObjectFlags, Get<uint32>(object_fields::ObjectFlags) | world_object_flags::Disabled);
+
+			if (WorldInstance* world = GetWorldInstance())
+			{
+				std::weak_ptr<GameObjectS> weakThis = shared_from_this();
+				world->GetUniverse().Post([weakThis]()
+					{
+						if (const auto strongThis = weakThis.lock())
+						{
+							strongThis->Despawn();
+						}
+					});
+			}
 		}
 	}
 

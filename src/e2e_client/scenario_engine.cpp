@@ -994,6 +994,31 @@ namespace mmo
 			return result;
 		}
 
+		/// The living creature of an entry closest to a position, for places with several of one
+		/// entry (a field of strayed sows): FindUnitByEntry yields whichever the client met first,
+		/// which may well stand out of reach.
+		std::string luaFindNearestUnitByEntry(const uint32 entry, const float x, const float y, const float z)
+		{
+			const Vector3 position(x, y, z);
+			std::string result;
+			float nearestSqr = std::numeric_limits<float>::max();
+			g_runtime->session->GetContext().GetObjectManager().ForEachCreature([&](const BotUnit& unit)
+				{
+					if (unit.GetEntry() != entry || !unit.IsAlive())
+					{
+						return;
+					}
+
+					const float distSqr = (unit.GetPosition() - position).GetSquaredLength();
+					if (distSqr < nearestSqr)
+					{
+						nearestSqr = distSqr;
+						result = guidToString(unit.GetGuid());
+					}
+				});
+			return result;
+		}
+
 		/// Counts creatures of a given entry the client currently knows about.
 		///
 		/// FindUnitByEntry only ever yields one guid, which makes "how many of these are up?"
@@ -1677,6 +1702,72 @@ namespace mmo
 			}
 		}
 
+		/// Takes the item in one slot of the open loot window into the backpack.
+		void luaTakeLootItem(const uint32 lootSlot)
+		{
+			g_runtime->session->GetRealm().AutoStoreLootItem(static_cast<uint8>(lootSlot));
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("TakeLootItem", { { "slot", lootSlot } });
+			}
+		}
+
+		/// Picks an option of an npc's gossip menu. The server accepts it only if the npc offers the
+		/// character that menu page and the option's condition is met.
+		void luaSelectGossipOption(const std::string& npc, const uint32 menuId, const uint32 optionId)
+		{
+			g_runtime->session->GetRealm().ExecuteGossipAction(guidFromString(npc), menuId, optionId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("SelectGossipOption", { { "npc", npc }, { "menu_id", menuId }, { "option_id", optionId } });
+			}
+		}
+
+		/// Uses an item from the backpack, optionally on a unit, the way a click on the item does.
+		/// @returns false if the character carries no such item in its backpack.
+		bool luaUseItem(const uint32 itemId, const std::string& targetStr)
+		{
+			BotRealmConnector& realm = g_runtime->session->GetRealm();
+			const BotObjectManager& objects = realm.GetObjectManager();
+
+			// The server wants the slot the item is in, so find the backpack slot holding it.
+			const BotItemState* item = nullptr;
+			uint8 itemSlot = 0;
+			for (uint8 slot = player_inventory_pack_slots::Start; slot < player_inventory_pack_slots::End && item == nullptr; ++slot)
+			{
+				const BotItemState* candidate = objects.GetItem(objects.GetSelfInventorySlot(slot));
+				if (candidate != nullptr && candidate->entry == itemId)
+				{
+					item = candidate;
+					itemSlot = slot;
+				}
+			}
+
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("UseItem", { { "item_id", itemId }, { "target", targetStr }, { "found", item != nullptr } });
+			}
+
+			if (item == nullptr)
+			{
+				return false;
+			}
+
+			SpellTargetMap targetMap{};
+			if (!targetStr.empty())
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+				targetMap.SetUnitTarget(guidFromString(targetStr));
+			}
+			else
+			{
+				targetMap.SetTargetMap(spell_cast_target_flags::Self);
+			}
+
+			realm.UseItem(player_inventory_slots::Bag_0, itemSlot, item->guid, targetMap);
+			return true;
+		}
+
 		void luaReleaseLoot(const std::string& guidStr)
 		{
 			g_runtime->session->GetRealm().LootRelease(guidFromString(guidStr));
@@ -2094,6 +2185,7 @@ namespace mmo
 				luabind::def_lambda("SwingRecoveryCount", &luaSwingRecoveryCount),
 				luabind::def_lambda("FindUnitByEntryImpl", &luaFindUnitByEntry),
 				luabind::def_lambda("FindUnitByNameImpl", &luaFindUnitByName),
+				luabind::def_lambda("FindNearestUnitByEntryImpl", &luaFindNearestUnitByEntry),
 				luabind::def_lambda("CountUnitsByEntryImpl", &luaCountUnitsByEntry),
 				luabind::def_lambda("FindObjectByEntryImpl", &luaFindObjectByEntry),
 				luabind::def_lambda("FindNearestObjectByEntryImpl", &luaFindNearestObjectByEntry),
@@ -2113,6 +2205,9 @@ namespace mmo
 				luabind::def_lambda("PetCommandImpl", &luaPetCommand),
 				luabind::def_lambda("PetRename", &luaPetRename),
 				luabind::def_lambda("LootUnit", &luaLootUnit),
+				luabind::def_lambda("TakeLootItem", &luaTakeLootItem),
+				luabind::def_lambda("SelectGossipOption", &luaSelectGossipOption),
+				luabind::def_lambda("UseItemImpl", &luaUseItem),
 				luabind::def_lambda("ReleaseLoot", &luaReleaseLoot),
 
 				// Actions
@@ -2200,6 +2295,16 @@ namespace mmo
 				local guid = FindUnitByEntryImpl(entry)
 				if guid == "" then return nil end
 				return guid
+			end
+
+			function FindNearestUnitByEntry(entry, x, y, z)
+				local guid = FindNearestUnitByEntryImpl(entry, x, y, z)
+				if guid == "" then return nil end
+				return guid
+			end
+
+			function UseItem(itemId, target)
+				return UseItemImpl(itemId, target or "")
 			end
 
 			function TurnInQuestAt(questGiver, questId, rewardChoice)

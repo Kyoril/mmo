@@ -73,6 +73,22 @@ class ReachabilityTests(unittest.TestCase):
 		data.triggers = {2: summon}
 		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
 
+	def test_trigger_credited_kill_objectives_need_no_spawn(self):
+		# "Talk to X" and "lead them back" objectives are kill credits a trigger grants: the
+		# credited entry is never killed and often never spawned at all.
+		for action_type in (16, 41):   # QuestKillCredit, DeliverFollowers
+			data, map_entry = build(target_active=False)
+			credit = data.modules["triggers"].TriggerEntry(id=3, name="Credit by trigger")
+			credit.actions.add(action=action_type, target=6, data=[2])
+			data.triggers = {3: credit}
+			self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, set())
+		# a credit for another entry does not excuse this objective
+		data, map_entry = build(target_active=False)
+		other = data.modules["triggers"].TriggerEntry(id=4, name="Credit for someone else")
+		other.actions.add(action=16, target=6, data=[99])
+		data.triggers = {4: other}
+		self.assertEqual({f.rule for f in check_reachability(data, map_entry)}, {"no_active_source"})
+
 	def test_loot_uses_list_or_legacy_like_the_server(self):
 		data, map_entry = build(requirement="item")
 		data.units[2].unitlootentries.append(51)   # the list wins; legacy 50 (with the item) is ignored

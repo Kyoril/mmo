@@ -23,6 +23,10 @@ namespace mmo
 		controlled.SetMovementMode(unit_movement_mode::Run);
 
 		controlled.RaiseTrigger(trigger_event::OnReset);
+
+		// A faction a trigger gave this creature (SetFaction) lasts for one fight only: evading
+		// turns the toll keeper who was provoked into a brawl back into someone you can talk to.
+		controlled.ClearFactionTemplateOverride();
 		controlled.RemoveLootRecipients();
 		controlled.ResetDamageContributions();
 		controlled.SetTarget(0);
