@@ -31,6 +31,10 @@ namespace mmo::pcg
 		uint8 waterType = 0;
 		float waterHeight = 0.0f;
 		bool setMaterial = false;
+		/// Tile material requested at this position; empty = none. Read in the terrain_channel::Material pass only.
+		/// A non-empty name is written to the tile whatever setMaterial says; with an empty name the tile gets the
+		/// call's material if setMaterial.
+		String material;
 	};
 
 	using TerrainTargetFunction = std::function<TerrainTarget(float x, float z, float baseHeight)>;
@@ -46,7 +50,7 @@ namespace mmo::pcg
 			Splat = 2,
 			/// waterType and waterHeight.
 			Water = 4,
-			/// setMaterial.
+			/// setMaterial and material.
 			Material = 8,
 			/// Every channel.
 			All = Heights | Splat | Water | Material
@@ -164,6 +168,8 @@ namespace mmo::pcg
 		std::vector<Water> waterSamples;
 		/// 1 = the tile's material is set.
 		std::vector<uint8> materialSamples;
+		/// Parallel to materialSamples: the material the target named for the tile, empty = no per-tile name.
+		std::vector<String> materialNames;
 	};
 
 	/// Evaluates the targets at every sample Apply writes over `rect`, reading only the base heights (the Get height

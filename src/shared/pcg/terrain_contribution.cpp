@@ -394,6 +394,7 @@ namespace mmo::pcg
 
 		setRange(out.materials, RangeFor(rect.minX, rect.maxX, l.originX, tileSize, 0.5), RangeFor(rect.minZ, rect.maxZ, l.originZ, tileSize, 0.5));
 		out.materialSamples.resize(out.materials.Count());
+		out.materialNames.assign(out.materials.Count(), String());
 		for (int32 row = 0; row < out.materials.rows; ++row)
 		{
 			const double wz = l.originZ + (out.materials.z0 + row + 0.5) * tileSize;
@@ -402,6 +403,7 @@ namespace mmo::pcg
 				const double wx = l.originX + (out.materials.x0 + i + 0.5) * tileSize;
 				const TerrainTarget t = first(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Material);
 				out.materialSamples[out.materials.Index(i, row)] = t.setMaterial ? 1 : 0;
+				out.materialNames[out.materials.Index(i, row)] = t.material;
 			}
 		}
 	}
@@ -577,20 +579,24 @@ namespace mmo::pcg
 			const int32 z = samples.materials.z0 + row;
 			for (int32 i = 0; i < samples.materials.width; ++i)
 			{
-				if (!samples.materialSamples[samples.materials.Index(i, row)])
+				const size_t index = samples.materials.Index(i, row);
+				// A named material wins; otherwise the call's material where the target asked for it.
+				const bool named = index < samples.materialNames.size() && !samples.materialNames[index].empty();
+				if (!named && !samples.materialSamples[index])
 				{
 					continue;
 				}
+				const String& tileMaterial = named ? samples.materialNames[index] : material;
 				const int32 x = samples.materials.x0 + i;
 				const double wx = l.originX + (x + 0.5) * tileSize;
 				const double wz = l.originZ + (z + 0.5) * tileSize;
 				const String base = terrain.GetTileMaterial(x, z);
-				if (base == material)
+				if (base == tileMaterial)
 				{
 					continue;
 				}
-				terrain.SetTileMaterial(x, z, material);
-				out.materials.push_back({ x, z, base, material });
+				terrain.SetTileMaterial(x, z, tileMaterial);
+				out.materials.push_back({ x, z, base, tileMaterial });
 				touchWorld(wx, wz);
 			}
 		}

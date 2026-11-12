@@ -508,3 +508,83 @@ TEST_CASE("Match ratio is in between for partly sculpted terrain", "[terrain_con
 	CHECK(ratio < 1.0f);
 	CHECK(matching == total - half);
 }
+
+TEST_CASE("a target can name a different material per tile", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	const FakeTerrain::Data original = terrain.m_data;
+	const TerrainTargetFunction target = [](float x, float z, float) -> TerrainTarget
+	{
+		TerrainTarget t;
+		if (z < 8.0f)
+		{
+			t.material = x < 8.0f ? "A.hmi" : "B.hmi";
+		}
+		return t;
+	};
+
+	TerrainContribution c;
+	Apply(terrain, FullRect, target, "", c);
+
+	CHECK(terrain.GetTileMaterial(0, 0) == "A.hmi");
+	CHECK(terrain.GetTileMaterial(1, 0) == "B.hmi");
+	CHECK(terrain.GetTileMaterial(0, 1) == "Base");
+	CHECK(terrain.GetTileMaterial(1, 1) == "Base");
+	REQUIRE(c.materials.size() == 2);
+	CHECK(c.materials[0].base == "Base");
+	CHECK(c.materials[0].written == "A.hmi");
+	CHECK(c.materials[1].base == "Base");
+	CHECK(c.materials[1].written == "B.hmi");
+
+	Unapply(terrain, c);
+	CHECK(terrain.m_data == original);
+}
+
+TEST_CASE("a tile that already has the named material is not recorded", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	terrain.SetTileMaterial(0, 0, "A.hmi");
+	const TerrainTargetFunction target = [](float x, float z, float) -> TerrainTarget
+	{
+		TerrainTarget t;
+		if (z < 8.0f)
+		{
+			t.material = x < 8.0f ? "A.hmi" : "B.hmi";
+		}
+		return t;
+	};
+
+	TerrainContribution c;
+	Apply(terrain, FullRect, target, "", c);
+
+	REQUIRE(c.materials.size() == 1);
+	CHECK(c.materials[0].x == 1);
+	CHECK(c.materials[0].z == 0);
+	CHECK(terrain.GetTileMaterial(0, 0) == "A.hmi");
+	CHECK(terrain.GetTileMaterial(1, 0) == "B.hmi");
+}
+
+TEST_CASE("setMaterial with the call's material still works", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	const TerrainTargetFunction target = [](float x, float z, float) -> TerrainTarget
+	{
+		TerrainTarget t;
+		t.setMaterial = true;
+		// A named tile wins over the call's material.
+		if (x > 8.0f && z < 8.0f)
+		{
+			t.material = "B.hmi";
+		}
+		return t;
+	};
+
+	TerrainContribution c;
+	Apply(terrain, FullRect, target, "Grass", c);
+
+	CHECK(terrain.GetTileMaterial(0, 0) == "Grass");
+	CHECK(terrain.GetTileMaterial(1, 0) == "B.hmi");
+	CHECK(terrain.GetTileMaterial(0, 1) == "Grass");
+	CHECK(terrain.GetTileMaterial(1, 1) == "Grass");
+	CHECK(c.materials.size() == 4);
+}
