@@ -48,9 +48,10 @@ link_directories(${OPENSSL_LIBRARY_DIR})
 # FMOD
 # ===============================================================================
 
-# Windows uses the SDK checked in under deps/fmod. On macOS the FMOD Engine SDK has to be
-# downloaded from fmod.com; point MMO_FMOD_MACOS_DIR at the extracted "FMOD Programmers API"
-# folder (or a folder with inc/ and lib/). Without it the client falls back to null audio.
+# Windows uses the SDK checked in under deps/fmod, macOS the core API checked in under
+# deps/fmod/macos (inc/ and the universal lib/libfmod.dylib, FMOD Engine 2.03.14). To try another
+# FMOD release, point MMO_FMOD_MACOS_DIR at its extracted "FMOD Programmers API" folder. Without
+# an SDK the client falls back to null audio.
 set(MMO_FMOD_INCLUDE_DIR "")
 set(MMO_FMOD_LIBRARY "")
 set(MMO_FMOD_RUNTIME_LIBRARY "")

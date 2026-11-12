@@ -115,8 +115,8 @@ namespace
 			mouseUp(x, y);
 		}
 
-		signal<bool(int32, int32)> mouseDown;
-		signal<bool(int32, int32)> mouseUp;
+		mmo::signal<bool(int32, int32)> mouseDown;
+		mmo::signal<bool(int32, int32)> mouseUp;
 		bool worldSawPress = false;
 		bool worldSawRelease = false;
 		scoped_connection_container connections;
