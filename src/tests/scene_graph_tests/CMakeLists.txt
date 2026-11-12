@@ -16,6 +16,8 @@ mmo_add_test(scene_graph_tests
 
 if (WIN32)
 	target_link_libraries(scene_graph_tests graphics_d3d11)
+elseif (TARGET graphics_metal)
+	target_link_libraries(scene_graph_tests graphics_metal)
 endif()
 
 # test_world_model_portal_culling.cpp checks shipped dungeon models from data/client when the

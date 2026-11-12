@@ -34,4 +34,6 @@ target_include_directories(movement_tests PRIVATE
 
 if (WIN32)
 	target_link_libraries(movement_tests graphics_d3d11)
+elseif (TARGET graphics_metal)
+	target_link_libraries(movement_tests graphics_metal)
 endif()

@@ -4,4 +4,6 @@ mmo_add_test(content_cook_tests content_cook material_graph graphics assets tex 
 target_link_libraries(content_cook_tests graphics_null ${OPENSSL_LIBRARIES})
 if (TARGET graphics_d3d11)
 	target_link_libraries(content_cook_tests graphics_d3d11)
+elseif (TARGET graphics_metal)
+	target_link_libraries(content_cook_tests graphics_metal)
 endif()
