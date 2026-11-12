@@ -699,6 +699,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::AttackSwingError, *this, &BotRealmConnector::OnAttackSwingError);
 		RegisterPacketHandler(game::realm_client_packet::AttackerStateUpdate, *this, &BotRealmConnector::OnAttackerStateUpdate);
 		RegisterPacketHandler(game::realm_client_packet::NonSpellDamageLog, *this, &BotRealmConnector::OnNonSpellDamageLog);
+		RegisterPacketHandler(game::realm_client_packet::PeriodicAuraLog, *this, &BotRealmConnector::OnPeriodicAuraLog);
 	}
 
 	PacketParseResult BotRealmConnector::OnAuthChallenge(game::IncomingPacket& packet)
@@ -1592,11 +1593,11 @@ namespace mmo
 			member.hasLevel = true;
 		}
 
-		if (updateFlags & group_update_flags::Zone)
+		if (updateFlags & group_update_flags::Map)
 		{
-			if (!(packet >> io::skip<uint16>()))
+			if (!(packet >> io::skip<uint32>()))
 			{
-				ELOG("Failed to read PartyMemberStats zone");
+				ELOG("Failed to read PartyMemberStats map");
 				return PacketParseResult::Disconnect;
 			}
 		}
@@ -1720,6 +1721,14 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// Bots drop destroyed objects at once, whatever the reason.
+		uint8 reason;
+		if (!(packet >> io::read<uint8>(reason)))
+		{
+			ELOG("Failed to read DestroyObjects reason");
+			return PacketParseResult::Disconnect;
+		}
+
 		for (uint16 i = 0; i < objectCount; ++i)
 		{
 			uint64 guid;
@@ -1728,6 +1737,8 @@ namespace mmo
 				ELOG("Failed to read destroyed object GUID #" << i);
 				return PacketParseResult::Disconnect;
 			}
+
+			m_despawnReasons[guid] = reason;
 
 			if (const BotUnit* gone = m_objectManager.GetUnit(guid); gone && gone->IsPlayer())
 			{
@@ -2298,6 +2309,11 @@ namespace mmo
 
 		// Add or update in object manager
 		m_objectManager.AddOrUpdateUnit(unit);
+
+		if (creation)
+		{
+			m_spawnReasons[guid] = (updateFlags & object_update_flags::Spawned) != 0 ? game::spawn_reason::Spawned : game::spawn_reason::CameIntoSight;
+		}
 
 		// Set self guid if this is our character
 		if (guid == m_selectedCharacterGuid)
@@ -3072,6 +3088,26 @@ namespace mmo
 		}
 
 		DamageReceived(targetGuid, amount, flags);
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnPeriodicAuraLog(game::IncomingPacket& packet)
+	{
+		// Damage, heal and energize ticks share this prefix; the damage variant appends school,
+		// absorbed and resisted amounts, which nothing reads yet.
+		uint64 victimGuid = 0;
+		uint64 casterGuid = 0;
+		uint32 spellId = 0;
+		uint32 auraType = 0;
+		uint32 amount = 0;
+		if (!(packet >> io::read_packed_guid(victimGuid) >> io::read_packed_guid(casterGuid) >> io::read<uint32>(spellId)
+			>> io::read<uint32>(auraType) >> io::read<uint32>(amount)))
+		{
+			return PacketParseResult::Pass;
+		}
+
+		PeriodicAuraTicked(victimGuid, casterGuid, spellId, auraType, amount);
 
 		return PacketParseResult::Pass;
 	}

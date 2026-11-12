@@ -48,6 +48,24 @@ namespace mmo
 		const std::string NameplateHealthBarTemplateName("NameplateHealthBarTemplate");
 		const std::string NameplateHighlightTemplateName("NameplateHighlightTemplate");
 		const std::string NameplateCastBarTemplateName("NameplateCastBarTemplate");
+		const std::string NameplateLevelTemplateName("NameplateLevelTemplate");
+		const std::string NameplateSkullTemplateName("NameplateSkullTemplate");
+
+		// Gap between the health bar's right end and the level text or skull.
+		constexpr float NameplateLevelGap = 6.0f;
+
+		// Hostile units this many levels above the player show a skull instead of their level
+		// (UNIT_LEVEL_SKULL_DIFFERENCE in TargetFrame.lua).
+		constexpr int32 NameplateSkullLevelDifference = 10;
+
+		// Level text colours by difficulty (unit level minus player level), matching
+		// UnitLevel_GetColor in TargetFrame.lua.
+		constexpr argb_t LevelColorImpossible = 0xFFFF4A3D;	// 5 or more above
+		constexpr argb_t LevelColorHard = 0xFFFF9A3C;			// 3 to 4 above
+		constexpr argb_t LevelColorEven = 0xFFFFD24F;			// within 2
+		constexpr argb_t LevelColorEasy = 0xFF6FD36F;			// 3 to 5 below
+		constexpr argb_t LevelColorTrivial = 0xFFA0A0A0;		// 6 or more below
+		constexpr argb_t LevelColorFriendly = 0xFFF3EAD8;
 
 		/// Reads a boolean console variable, falling back to a default if it doesn't
 		/// exist (same idiom as NameplateManager).
@@ -125,6 +143,33 @@ namespace mmo
 			return stream.str();
 		}
 
+		/// Returns the level text colour for a unit, by difficulty for units the player can fight.
+		argb_t GetLevelColor(const GameUnitC& unit, const int32 levelDifference)
+		{
+			if (unit.IsFriendly())
+			{
+				return LevelColorFriendly;
+			}
+
+			if (levelDifference >= 5)
+			{
+				return LevelColorImpossible;
+			}
+			if (levelDifference >= 3)
+			{
+				return LevelColorHard;
+			}
+			if (levelDifference >= -2)
+			{
+				return LevelColorEven;
+			}
+			if (levelDifference >= -5)
+			{
+				return LevelColorEasy;
+			}
+			return LevelColorTrivial;
+		}
+
 		/// Returns the bar and name colors for a unit based on its reaction towards the player.
 		const ReactionColors& GetColorsForUnit(const GameUnitC& unit)
 		{
@@ -182,7 +227,9 @@ namespace mmo
 		const FramePtr healthBarTemplate = FrameManager::Get().Find(NameplateHealthBarTemplateName);
 		const FramePtr nameTemplate = FrameManager::Get().Find(NameplateNameTemplateName);
 		const FramePtr castBarTemplate = FrameManager::Get().Find(NameplateCastBarTemplateName);
-		if (!highlightTemplate || !healthBarTemplate || !nameTemplate || !castBarTemplate)
+		const FramePtr levelTemplate = FrameManager::Get().Find(NameplateLevelTemplateName);
+		const FramePtr skullTemplate = FrameManager::Get().Find(NameplateSkullTemplateName);
+		if (!highlightTemplate || !healthBarTemplate || !nameTemplate || !castBarTemplate || !levelTemplate || !skullTemplate)
 		{
 			ELOG("Missing nameplate child templates - is Nameplate.xml loaded?");
 			return;
@@ -214,11 +261,24 @@ namespace mmo
 		m_castBar->SetEnabled(false);
 		m_castBar->SetVisible(false);
 
+		m_levelText = std::make_shared<Frame>("Frame", GetName() + "_Level");
+		levelTemplate->Copy(*m_levelText);
+		m_levelText->SetClickable(false);
+		m_levelText->SetEnabled(false);
+
+		m_levelSkull = std::make_shared<Frame>("Frame", GetName() + "_Skull");
+		skullTemplate->Copy(*m_levelSkull);
+		m_levelSkull->SetClickable(false);
+		m_levelSkull->SetEnabled(false);
+		m_levelSkull->SetVisible(false);
+
 		// Highlight first so it renders behind the health bar and reads as an outline.
 		AddChild(m_highlight);
 		AddChild(m_healthBar);
 		AddChild(m_nameText);
 		AddChild(m_castBar);
+		AddChild(m_levelText);
+		AddChild(m_levelSkull);
 
 		// Name spans the top of the plate; the bar spans the bottom (height from template).
 		m_nameText->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr, 0.0f);
@@ -240,6 +300,14 @@ namespace mmo
 		m_castBar->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr, 0.0f);
 		m_castBar->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr, 0.0f);
 		m_castBar->SetAnchor(anchor_point::Top, anchor_point::Bottom, m_healthBar, NameplateCastBarGap);
+
+		// Level text (or skull) right of the health bar, vertically centred on it. Like the
+		// highlight and cast bar, it renders outside the plate rect; size comes from the template.
+		for (const FramePtr& level : { m_levelText, m_levelSkull })
+		{
+			level->SetAnchor(anchor_point::Left, anchor_point::Right, m_healthBar, NameplateLevelGap);
+			level->SetAnchor(anchor_point::VerticalCenter, anchor_point::VerticalCenter, m_healthBar, 0.0f);
+		}
 	}
 
 	void NameplateFrame::UpdateContent(GameUnitC& unit)
@@ -298,7 +366,40 @@ namespace mmo
 
 		SetOpacity(selected || hovered ? 1.0f : NameplateUnselectedOpacity);
 
+		UpdateLevel(unit);
 		UpdateCastBar(unit);
+	}
+
+	void NameplateFrame::UpdateLevel(GameUnitC& unit)
+	{
+		if (!m_levelText || !m_levelSkull)
+		{
+			return;
+		}
+
+		const auto player = ObjectMgr::GetActivePlayer();
+		const int32 unitLevel = static_cast<int32>(unit.GetLevel());
+		const int32 difference = player ? unitLevel - static_cast<int32>(player->GetLevel()) : 0;
+		const bool skull = unit.IsHostile() && difference >= NameplateSkullLevelDifference;
+
+		if (skull != m_levelShowsSkull || unitLevel != m_shownLevel)
+		{
+			m_levelShowsSkull = skull;
+			m_shownLevel = unitLevel;
+			m_levelText->SetText(skull ? String() : std::to_string(unitLevel));
+			m_levelText->SetVisible(!skull);
+			m_levelSkull->SetVisible(skull);
+		}
+
+		const argb_t color = GetLevelColor(unit, difference);
+		if (color != m_levelColor)
+		{
+			m_levelColor = color;
+			if (Property* textColor = m_levelText->GetProperty("TextColor"))
+			{
+				textColor->Set(ToHexColor(color));
+			}
+		}
 	}
 
 	void NameplateFrame::UpdateCastBar(GameUnitC& unit)

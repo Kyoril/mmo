@@ -14,15 +14,17 @@ Like the mage and scout scripts this one writes ``spells.data``, but only
 ``visualization_id``. Acolyte spells pointed at shared pre-catalog entries: "Shadow Bolt" (16,
 also used by creature spells), "Fear" (15), "Veil of Shadows" (2, borrowed by Embrace of
 Dread), the default visualization (9) or the mage's "Arcane Pulse" (55). Those entries are left
-in place for their other users. The talent-built spells (Gloaming Trance, Leeching Rot, Umbral
-Bloom, Embrace of Dread) carry the same ids in ``tools/talent_trees/author_talent_trees.py``.
+in place for their other users. The talent-built spells (Leeching Rot, Embrace of Dread and the
+kit overhaul's talent actives and procs, ``TALENT_SPELLS``) carry the same ids in
+``tools/talent_trees/author_talent_trees.py``.
 
 Design rules that are easy to undo by accident (all validated below):
 
 * No kit sets ``duration_ms`` -- it time-warps the clip (see warrior_spell_visuals.md).
 * Kits use ``sound_ids`` and never ``sounds``.
-* Only CASTING kits may loop (the cast-bar channels); every other looping *particle* (trails,
-  aura idles) is torn down by projectile impact or aura removal.
+* Only CASTING and CHANNELING kits may loop (the cast-bar and channel loops); every other
+  looping *particle* (trails, aura idles, ground zones) is torn down by projectile impact,
+  aura removal or the zone's end.
 * No sound on AURA_APPLIED / AURA_IDLE / AURA_TICK: AURA_APPLIED re-fires whenever a unit
   carrying the aura comes into view, and a DoT tick sound every 2 s is noise. Buff feedback
   with a sound sits on CAST_SUCCEEDED or IMPACT.
@@ -46,6 +48,7 @@ PARTICLE_DIR = "Particles/Acolyte/"
 
 # Event ids from spell_visualizations.proto.
 CASTING, CAST, IMPACT, AURA, AURA_TICK, AURA_IDLE = "2", "3", "4", "5", "7", "8"
+CHANNELING, GROUND_ACTIVE, GROUND_EXPIRED = "9", "10", "11"
 
 # --- Sound catalog -------------------------------------------------------------------------
 # id, name, files, looped, volume, pitch_min, pitch_max. Ids 280-291 (240-252 scout, 260-263
@@ -65,6 +68,19 @@ SOUND_ENTRIES = [
     (289, "Acolyte - Umbral Bloom", ["UmbralBloom.wav"], False, 1.00, 0.97, 1.03),
     (290, "Acolyte - Gloaming Trance", ["GloamingTrance.wav"], False, 0.75, 0.98, 1.02),
     (291, "Acolyte - Void Resurgence", ["VoidResurgence.wav"], False, 0.85, 0.98, 1.02),
+    # Kit overhaul (2026-11-02): ids 432+ (424-431 are the Duskling's voice lines and ritual).
+    # Rot Field's cast bar reuses the Blight Channel loop; procs and ticks stay silent.
+    (432, "Acolyte - Curse of Frailty", ["CurseFrailty.wav"], False, 0.80, 0.96, 1.04),
+    (433, "Acolyte - Drain Channel", ["DrainChannelLoop.wav"], True, 0.55, 1.0, 1.0),
+    (434, "Acolyte - Curse of the Mire", ["CurseMire.wav"], False, 0.80, 0.96, 1.04),
+    (435, "Acolyte - Wasting Plague", ["WastingPlague.wav"], False, 0.85, 0.95, 1.05),
+    (436, "Acolyte - Call Gloomlings", ["CallGloomlings.wav"], False, 0.85, 0.97, 1.03),
+    (437, "Acolyte - Rot Field", ["RotFieldCast.wav"], False, 0.90, 0.97, 1.03),
+    (438, "Acolyte - Tangled Tongue", ["TangledTongue.wav"], False, 0.80, 0.96, 1.04),
+    (439, "Acolyte - Wail of the Lost", ["WailOfTheLost.wav"], False, 0.95, 0.98, 1.02),
+    (440, "Acolyte - Empower Duskling", ["EmpowerDuskling.wav"], False, 0.80, 0.97, 1.03),
+    (441, "Acolyte - Brood Horror", ["BroodHorror.wav"], False, 1.00, 0.98, 1.02),
+    (442, "Acolyte - Gloom Tether", ["GloomTether.wav"], False, 0.75, 0.95, 1.05),
 ]
 SND = {name[len("Acolyte - "):]: sid for sid, name, *_ in SOUND_ENTRIES}
 
@@ -184,6 +200,104 @@ def definitions():
                       flash=light(VOID_LIGHT, 1.8, 6.0, 0.2, 0.8))],
             AURA_IDLE: [fx("VoidResurgenceAura", scope="TARGET")],
         }, []),
+    ] + kit_overhaul_definitions()
+
+
+def kit_overhaul_definitions():
+    """The 2026-11-02 kit overhaul: curses, Drain Essence, Wasting Plague, Rot Field, the
+    summons and the Summoner/Blight/Dread talent actives and procs. Every curse idles with its
+    own particle so players can tell them apart; procs and ticks are silent."""
+    return [
+        ("Curse of Frailty", [1330], {
+            CAST: [release()],
+            IMPACT: [fx("FrailtyApply", "Curse of Frailty", "TARGET", "spine_03",
+                        flash=light(VOID_LIGHT, 1.8, 5.0, 0.05, 0.6))],
+            AURA_IDLE: [fx("FrailtyAura", scope="TARGET")],
+        }, []),
+        # Channeled: the server sends SpellStart, ChannelStart and SpellGo in the same tick, so
+        # the channel lives on CHANNELING (held until the channel ends) and there is no
+        # CastRelease, which would cut into the loop at channel start.
+        ("Drain Essence", [1331], {
+            CHANNELING: [channel("DrainChannel", "Drain Channel", VOID_LIGHT)],
+        }, []),
+        # Every tick of the channel: motes torn out of the victim. Silent (one every second).
+        ("Drain Essence Tick", [1332], {
+            IMPACT: [fx("DrainBeamMotes", scope="TARGET", bone="spine_03")],
+        }, []),
+        ("Curse of the Mire", [1333], {
+            CAST: [release()],
+            IMPACT: [fx("MireApply", "Curse of the Mire", "TARGET",
+                        flash=light(BLIGHT_LIGHT, 1.6, 5.0, 0.05, 0.6))],
+            AURA_IDLE: [fx("MireAura", scope="TARGET")],
+        }, []),
+        # Also cast by Venomous Backlash (1358) on a melee attacker.
+        ("Wasting Plague", [1334], {
+            CAST: [release()],
+            IMPACT: [fx("PlagueApply", "Wasting Plague", "TARGET", "spine_03",
+                        flash=light(BLIGHT_LIGHT, 1.8, 5.0, 0.05, 0.6),
+                        tint=pulse(0.60, 1.0, 0.45, 0.35, 400))],
+            AURA_TICK: [fx(None, scope="TARGET", tint=pulse(0.65, 1.0, 0.5, 0.25, 250))],
+            AURA_IDLE: [fx("PlagueAura", scope="TARGET")],
+        }, []),
+        ("Call Gloomlings", [1335], {
+            CAST: [release(), fx("GloomlingSummon", "Call Gloomlings",
+                                 flash=light(VOID_LIGHT, 2.2, 7.0, 0.05, 0.8))],
+        }, []),
+        # The zone lies on the ground for 8 s (12 s with Creeping Rot): the field loops at the
+        # zone's position until SpellZoneEnd and fades out on expiry.
+        ("Rot Field", [1336], {
+            CASTING: [channel("BlightHandChannel", "Blight Channel", BLIGHT_LIGHT)],
+            CAST: [release("Rot Field")],
+            GROUND_ACTIVE: [fx("RotFieldGround", flash=light(BLIGHT_LIGHT, 1.4, 9.0, 0.6, 1.0))],
+            GROUND_EXPIRED: [fx("RotFieldTick", flash=light(BLIGHT_LIGHT, 1.2, 8.0, 0.05, 1.0))],
+        }, []),
+        ("Rot Field Tick", [1337], {
+            IMPACT: [fx("RotFieldTick", scope="TARGET", bone="spine_03")],
+        }, []),
+        # The aura sits on the pet: the burst plays at the caster, the empowerment idles on
+        # the Duskling (aura events pass the aura holder as the target).
+        ("Empower Duskling", [1345], {
+            CAST: [release("Empower Duskling", "ShadowRelease")],
+            IMPACT: [fx(None, scope="TARGET", tint=pulse(0.70, 0.45, 1.0, 0.40, 500))],
+            AURA_IDLE: [fx("EmpowerAura", scope="TARGET")],
+        }, []),
+        # Gloom Tether's proc summon: a proc, so no CastRelease, but a summon worth hearing.
+        ("Gloom Tether", [1347], {
+            CAST: [fx("GloomlingSummon", "Gloom Tether", flash=light(VOID_LIGHT, 1.6, 5.0, 0.05, 0.6))],
+        }, []),
+        # Shared Night heals the pet on every Drain Essence tick: silent motes.
+        ("Shared Night", [1349], {
+            IMPACT: [fx("SharedNightHeal", scope="TARGET", bone="spine_03")],
+        }, []),
+        ("Brood Horror", [1352], {
+            CAST: [release(), fx("BroodSummon", "Brood Horror",
+                                 flash=light(VOID_LIGHT, 3.0, 10.0, 0.05, 1.0))],
+        }, []),
+        # Creeping Rot's slow, applied on every Rot Field tick: the mire idle, silent.
+        ("Creeping Rot", [1357], {
+            AURA_IDLE: [fx("MireAura", scope="TARGET")],
+        }, []),
+        ("Tangled Tongue", [1360], {
+            CAST: [release()],
+            IMPACT: [fx(None, "Tangled Tongue", "TARGET", "head",
+                        flash=light(DREAD_LIGHT, 1.6, 4.0, 0.05, 0.6))],
+            AURA_IDLE: [fx("TongueAura", scope="TARGET")],
+        }, []),
+        # Grasping Dread's 2 s root: the tendrils are a one-shot that runs out with the root,
+        # so they sit on IMPACT rather than replaying whenever the victim comes into view.
+        ("Grasping Dread", [1362], {
+            IMPACT: [fx("RootTendrils", scope="TARGET")],
+        }, []),
+        # Fleeing victims carry Fear's skull idle so a wail reads like a Fear.
+        ("Wail of the Lost", [1363], {
+            CAST: [release(), fx("WailBurst", "Wail of the Lost",
+                                 flash=light(DREAD_LIGHT, 2.6, 9.0, 0.05, 0.8),
+                                 tint=pulse(1.0, 0.35, 0.45, 0.35, 500))],
+            AURA_IDLE: [fx("FearAura", scope="TARGET")],
+        }, []),
+        ("Lingering Dread", [1365], {
+            AURA_IDLE: [fx("HealingBlight", scope="TARGET")],
+        }, []),
     ]
 
 
@@ -204,14 +318,14 @@ def validate_visualizations(dataset, sound_ids):
                 _require(not kit.HasField("duration_ms"),
                          f"{vis.name}: duration_ms time-warps the clip; leave it unset")
                 _require(not kit.sounds, f"{vis.name}: acolyte kits use sound_ids")
-                _require(not kit.loop or event == 2,
-                         f"{vis.name}: only CASTING kits may loop (event {event})")
+                _require(not kit.loop or event in (2, 9),
+                         f"{vis.name}: only CASTING/CHANNELING kits may loop (event {event})")
                 if event in (5, 7, 8):
                     _require(not kit.sound_ids,
                              f"{vis.name}: no sound on aura events -- they replay whenever a "
                              f"carrier comes into view, or every tick")
                     _require(kit.scope == 1, f"{vis.name}: aura kits must be TARGET-scoped")
-                if event in (2, 3):
+                if event in (2, 3, 9):
                     _require(kit.scope == 0, f"{vis.name}: cast events have no target list")
                 for sound_id in kit.sound_ids:
                     _require(sound_id in sound_ids, f"{vis.name}: unknown sound id {sound_id}")
@@ -311,11 +425,16 @@ EXPECTED_SPELLS = {
     38: "Veil of Shadows", 1309: "Umbral Bloom", 1328: "Embrace of Dread",
     1306: "Gloaming Trance", 1314: "Leeching Rot",
     119: "Void Resurgence", 120: "Void Resurgence", 121: "Void Resurgence",
+    1330: "Curse of Frailty", 1331: "Drain Essence", 1332: "Drain Essence",
+    1333: "Curse of the Mire", 1334: "Wasting Plague", 1335: "Call Gloomlings",
+    1336: "Rot Field", 1337: "Rot Field", 1345: "Empower Duskling", 1347: "Gloom Tether",
+    1349: "Shared Night", 1352: "Brood Horror", 1357: "Creeping Rot", 1360: "Tangled Tongue",
+    1362: "Grasping Dread", 1363: "Wail of the Lost", 1365: "Lingering Dread",
 }
 
 # The ids the talent authoring script must carry for the spells it builds (validated so the
 # two scripts cannot drift apart).
-TALENT_SPELLS = (1306, 1309, 1314, 1328)
+TALENT_SPELLS = (1314, 1328, 1345, 1347, 1349, 1352, 1357, 1360, 1362, 1363, 1365)
 
 
 def check_talent_script(links):

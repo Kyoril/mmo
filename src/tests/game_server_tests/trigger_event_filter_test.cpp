@@ -117,3 +117,11 @@ TEST_CASE("The stand state event has a value the data files can reference", "[tr
 	CHECK(static_cast<uint32>(trigger_event::OnPlayerStandStateChanged) == 26);
 	CHECK(trigger_event::OnPlayerStandStateChanged < trigger_event::Count_);
 }
+
+TEST_CASE("The quest reward event has a value the data files can reference", "[trigger_filter]")
+{
+	// Malrik Duskwright's binding trigger in triggers.data stores event type 28 as a raw integer.
+	CHECK(static_cast<uint32>(trigger_event::OnHourOfDay) == 27);
+	CHECK(static_cast<uint32>(trigger_event::OnQuestReward) == 28);
+	CHECK(trigger_event::OnQuestReward < trigger_event::Count_);
+}

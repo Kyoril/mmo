@@ -24,3 +24,8 @@ target_sources(game_server_tests PRIVATE
 	${CMAKE_SOURCE_DIR}/src/world_server/bug_report_transport.cpp
 	${CMAKE_SOURCE_DIR}/src/world_server/bug_report_document.cpp
 )
+
+# The pet, projectile and periodic-aura tests drive the io service in real time (RunFor/RunUntil),
+# so this suite takes about 80 s on an idle Windows Debug build and over 250 s in the Linux gate
+# under WSL. The default 120 s limit cut it off on both whenever the machine was busy.
+set_tests_properties(game_server_tests PROPERTIES TIMEOUT 600)

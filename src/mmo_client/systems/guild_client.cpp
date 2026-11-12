@@ -38,7 +38,8 @@ namespace mmo
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildUninvite, *this, &GuildClient::OnGuildUninvite);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildEvent, *this, &GuildClient::OnGuildEvent);
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildRoster, *this, &GuildClient::OnGuildRoster);
-		
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::GuildMemberPositions, *this, &GuildClient::OnGuildMemberPositions);
+
 
 #ifdef MMO_WITH_DEV_COMMANDS
 		Console::RegisterCommand("guildcreate", [this](const std::string& cmd, const std::string& args) { Command_GuildCreate(cmd, args); }, ConsoleCommandCategory::Gm, "Creates a new guild with yourself as the leader.");
@@ -314,6 +315,52 @@ namespace mmo
 		m_connector.GuildRoster();
 	}
 
+	void GuildClient::UpdateMemberPositions()
+	{
+		if (!IsInGuild())
+		{
+			return;
+		}
+
+		// The world node reports positions to the realm every three seconds; polling faster gains nothing.
+		const GameTime now = GetAsyncTimeMs();
+		if (now < m_nextPositionRequest)
+		{
+			return;
+		}
+		m_nextPositionRequest = now + constants::OneSecond * 3;
+
+		m_connector.sendSinglePacket([](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GuildMemberPositions);
+			packet.Finish();
+		});
+	}
+
+	PacketParseResult GuildClient::OnGuildMemberPositions(game::IncomingPacket& packet)
+	{
+		uint16 count = 0;
+		if (!(packet >> io::read<uint16>(count)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		std::vector<GuildMemberPosition> positions(count);
+		for (GuildMemberPosition& entry : positions)
+		{
+			if (!(packet
+				>> io::read<uint64>(entry.guid)
+				>> io::read_container<uint8>(entry.name)
+				>> io::read<float>(entry.x)
+				>> io::read<float>(entry.z)))
+			{
+				return PacketParseResult::Disconnect;
+			}
+		}
+
+		m_memberPositions = IsInGuild() ? std::move(positions) : std::vector<GuildMemberPosition>{};
+		return PacketParseResult::Pass;
+	}
+
 	void GuildClient::NotifyGuildChanged(const uint64 guildId)
 	{
 		if (m_guildId != guildId)
@@ -322,6 +369,8 @@ namespace mmo
 			m_guildRankNames.clear();
 			m_guildRankPermissions.clear();
 			m_guildRank = -1;
+			m_memberPositions.clear();
+			m_nextPositionRequest = 0;
 		}
 		m_guildId = guildId;
 

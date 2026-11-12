@@ -689,6 +689,12 @@ namespace mmo
 				return false;
 			}
 		}
+		else if ((procEx & proc_ex_flags::AvoidAttack) != 0 && (procEx & proc_ex_flags::SuccessHit) == 0)
+		{
+			// Avoided swings raise proc events too, but only procs that ask for the avoidance
+			// (procexflags Miss / Dodge / Parry) react to them: "when hit" procs stay on hits.
+			return false;
+		}
 
 		// Random roll (0-100)
 		std::uniform_real_distribution<float> distribution(0.0f, 100.0f);

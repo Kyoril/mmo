@@ -51,6 +51,21 @@ namespace mmo
 
 		static void RemoveObject(uint64 guid);
 
+		/// @brief Removes an object the server destroyed (despawn_reason::Destroyed). A unit whose
+		///        display model has a despawn effect leaves the object list at once (no lookups,
+		///        targeting or UI find it any more) but stays in the scene until its effect ends.
+		///        Anything else is removed like RemoveObject.
+		/// @return True if the object now plays its despawn effect.
+		static bool DespawnObject(uint64 guid);
+
+		/// @brief Ends the despawn effect of a unit with the given guid at once and destroys it.
+		///        Called when the server spawns that guid again while its old unit still dissolves:
+		///        the new object wins. No-op if no unit with that guid is despawning.
+		static void CancelDespawn(uint64 guid);
+
+		/// @brief Returns true if a unit with the given guid plays its despawn effect.
+		static bool IsDespawning(uint64 guid);
+
 		static void RemoveAllObjects();
 
 		static void SetActivePlayer(uint64 guid);
@@ -120,6 +135,9 @@ namespace mmo
 
 	private:
 		static std::map<uint64, std::shared_ptr<GameObjectC>> ms_objectyByGuid;
+
+		/// Units removed from ms_objectyByGuid that still play their despawn effect, by guid.
+		static std::map<uint64, std::shared_ptr<GameUnitC>> ms_despawningUnits;
 		static uint64 ms_activePlayerGuid;
 		static uint64 ms_activePetGuid;
 		static uint64 ms_selectedObjectGuid;

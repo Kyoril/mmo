@@ -21,6 +21,7 @@ namespace mmo
 
 	class GameCreatureS;
 	class GamePlayerS;
+	class GameUnitS;
 	class WorldInstance;
 
 	/// @return The creature entry a stored pet is made of: the creature it was tamed from, or the
@@ -89,6 +90,23 @@ namespace mmo
 	/// @param entry The pet's pet entry.
 	/// @param spells The spells the pet knows (GetKnownPetSpells).
 	void ApplyPersistentPetSpells(GameCreatureS& pet, const proto::PetEntry& entry, const std::vector<uint32>& spells);
+
+	/// Gives a persistent pet the stat multipliers of its owner's ModPetStatsPct auras and
+	/// refreshes its stats. A living pet keeps its health ratio (at least 1 health).
+	/// @param pet The persistent pet.
+	/// @param owner The pet's owner.
+	void RefreshPersistentPetOwnerStats(GameCreatureS& pet, const GameUnitS& owner);
+
+	/// Makes a persistent pet cast a passive spell (PetPassive) on itself, unless it already has
+	/// the spell's aura from itself.
+	/// @param pet The persistent pet, in the world.
+	/// @param spellId The passive spell.
+	void ApplyPetPassiveSpell(GameCreatureS& pet, uint32 spellId);
+
+	/// Removes the aura of a passive spell (PetPassive) the pet cast on itself.
+	/// @param pet The persistent pet.
+	/// @param spellId The passive spell.
+	void RemovePetPassiveSpell(GameCreatureS& pet, uint32 spellId);
 
 	/// Writes the live state of a summoned pet (health, power and, for MasterLevel pets, level)
 	/// into its stored data.

@@ -16,12 +16,16 @@ namespace mmo
 	static std::list<ScreenLayer> s_screenLayers;
 	/// A connection with the Paint event of the event loop.
 	static scoped_connection s_screenPaintCon;
+	/// Whether the screen layers are being painted right now.
+	static bool s_painting = false;
 
 	/// Paints all screen layers.
 	static void PaintScreenLayers()
 	{
 		// Get the current graphics device
 		auto& gx = GraphicsDevice::Get();
+
+		s_painting = true;
 
 		// Iterate through all screen layers (they are already in the correct order, so
 		// we don't need to do anything special here except to just iterate)
@@ -50,6 +54,13 @@ namespace mmo
 			// Call the paint function of the layer
 			layer.paintFunc();
 		}
+
+		s_painting = false;
+	}
+
+	bool Screen::IsPainting()
+	{
+		return s_painting;
 	}
 
 	void Screen::Initialize()

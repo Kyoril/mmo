@@ -317,6 +317,12 @@ namespace mmo
 			m_terrain.NotifyOceanMaskChanged();
 		}
 
+		void Page::MarkChanged()
+		{
+			m_changed = true;
+			m_terrain.NotifyDataChanged();
+		}
+
 		bool Page::IsOceanPlaceholder() const
 		{
 			return m_oceanPlaceholder && IsPrepared();
@@ -338,7 +344,7 @@ namespace mmo
 			std::fill(m_waterVertexHeights.begin(), m_waterVertexHeights.end(), seaLevel);
 
 			m_oceanPlaceholder = false;
-			m_changed = true;
+			MarkChanged();
 			NotifyOceanMaskChanged();
 
 			// A loaded placeholder has no tiles yet: build them now so the stroke that triggered this
@@ -1076,7 +1082,7 @@ namespace mmo
 			const Vector3 avgNormal = ((n00 + n10 + n01 + n11) * 0.25f).NormalizedCopy();
 			SetInnerNormalAt(x, y, avgNormal);
 
-			m_changed = true;
+			MarkChanged();
 		}
 
 		uint32 Page::GetInnerColorAt(size_t x, size_t y) const
@@ -1099,7 +1105,7 @@ namespace mmo
 			}
 
 			m_innerColors[x + y * constants::InnerVerticesPerPageSide] = color;
-			m_changed = true;
+			MarkChanged();
 		}
 
 		Vector3 Page::GetInnerNormalAt(size_t x, size_t y) const
@@ -1124,7 +1130,7 @@ namespace mmo
 			}
 
 			m_innerNormals[x + y * constants::InnerVerticesPerPageSide] = EncodeNormalSNorm8(normal.x, normal.y, normal.z);
-			m_changed = true;
+			MarkChanged();
 		}
 
 		Vector3 Page::CalculateNormalAt(const uint32 x, const uint32 z)
@@ -1590,7 +1596,7 @@ namespace mmo
 				m_materials[tileIndex] = material;
 			}
 
-			m_changed = true;
+			MarkChanged();
 		}
 
 		void Page::SetHeightAt(const unsigned int x, const unsigned int z, const float value)
@@ -1602,6 +1608,7 @@ namespace mmo
 
 			m_heightmap[x + z * constants::OuterVerticesPerPageSide] = value;
 			NotifyOceanMaskChanged();
+			MarkChanged();
 
 			// Recalculate normal at this vertex since height changed
 			CalculateNormalAt(x, z);
@@ -1634,7 +1641,7 @@ namespace mmo
 			}
 
 			m_colors[x + y * constants::OuterVerticesPerPageSide] = color;
-			m_changed = true;
+			MarkChanged();
 		}
 
 		void Page::SetLayerAt(const unsigned int x, const unsigned int z, const uint8 layer, const float value)
@@ -1703,7 +1710,18 @@ namespace mmo
 			v.w *= scale;
 			layers = CalculateARGB(v);
 
-			m_changed = true;
+			MarkChanged();
+		}
+
+		void Page::SetLayersAt(const unsigned int x, const unsigned int z, const uint32 packed)
+		{
+			if (m_layers.empty() || x >= constants::PixelsPerPage || z >= constants::PixelsPerPage)
+			{
+				return;
+			}
+
+			m_layers[x + z * constants::PixelsPerPage] = packed;
+			MarkChanged();
 		}
 
 		uint32 Page::GetArea(uint32 localTileX, uint32 localTileY) const
@@ -1729,7 +1747,7 @@ namespace mmo
 			}
 
 			m_tileZones[localTileX + localTileY * constants::TilesPerPage] = area;
-			m_changed = true;
+			MarkChanged();
 		}
 
 		bool Page::IsHole(uint32 localTileX, uint32 localTileY, uint32 innerX, uint32 innerY) const
@@ -1768,7 +1786,7 @@ namespace mmo
 				m_holeMap[tileIndex] &= ~bitMask;
 			}
 
-			m_changed = true;
+			MarkChanged();
 
 			// Update the tile's index buffer to reflect the hole change
 			if (Tile *tile = GetTile(localTileX, localTileY))
@@ -1803,7 +1821,7 @@ namespace mmo
 				return;
 			}
 			m_waterQuadMasks[localTileX + localTileY * constants::TilesPerPage] = mask;
-			m_changed = true;
+			MarkChanged();
 			NotifyOceanMaskChanged();
 		}
 
@@ -1827,7 +1845,7 @@ namespace mmo
 				m_waterQuadMasks[tileIdx] &= ~bit;
 			}
 
-			m_changed = true;
+			MarkChanged();
 			NotifyOceanMaskChanged();
 		}
 
@@ -1847,7 +1865,7 @@ namespace mmo
 				return;
 			}
 			m_waterVertexHeights[pageVertX + pageVertZ * constants::OuterVerticesPerPageSide] = height;
-			m_changed = true;
+			MarkChanged();
 		}
 
 		WaterType Page::GetWaterType(uint32 localTileX, uint32 localTileY) const
@@ -1866,7 +1884,7 @@ namespace mmo
 				return;
 			}
 			m_waterTypes[localTileX + localTileY * constants::TilesPerPage] = static_cast<uint8>(type);
-			m_changed = true;
+			MarkChanged();
 			NotifyOceanMaskChanged();
 		}
 
@@ -1884,7 +1902,7 @@ namespace mmo
 			const uint32 idx = localTileX + localTileY * constants::TilesPerPage;
 			m_waterQuadMasks[idx] = 0;
 			m_waterTypes[idx] = static_cast<uint8>(WaterType::None);
-			m_changed = true;
+			MarkChanged();
 			NotifyOceanMaskChanged();
 		}
 
@@ -1914,7 +1932,7 @@ namespace mmo
 			}
 
 			m_waterMaterialName = name;
-			m_changed = true;
+			MarkChanged();
 		}
 
 		void Page::SetWaterFlow(std::vector<float> uvs, std::vector<uint8> speeds)
@@ -1933,7 +1951,7 @@ namespace mmo
 
 			m_waterFlowUVs = std::move(uvs);
 			m_waterFlowSpeeds = std::move(speeds);
-			m_changed = true;
+			MarkChanged();
 		}
 
 		void Page::ClearWaterFlow()
@@ -1945,7 +1963,7 @@ namespace mmo
 
 			m_waterFlowUVs.clear();
 			m_waterFlowSpeeds.clear();
-			m_changed = true;
+			MarkChanged();
 		}
 
 		bool Page::GetWaterFlow(const uint32 pageVertX, const uint32 pageVertZ, float& u, float& v, float& speed) const

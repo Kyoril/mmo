@@ -87,6 +87,43 @@ behaviour for pending cast-phase kits, and only the channel loop plays. Embrace 
 instant, so its sound starts on the bell toll rather than a swell (a swell would put the hit
 0.9 s after the burst).
 
+## Kit overhaul (2026-11-02)
+
+The kit overhaul ([design](superpowers/specs/2026-11-02-acolyte-kit-overhaul-design.md)) added six
+trainer spells and the Summoner, Blight and Dread talent actives and procs. Same script, same
+rules; visualizations 141-157, sound entries 432-442 (424-431 belong to the Duskling). Particles:
+`tools/particle_gen/recipes/acolyte_kit.py` (18 effects in `data/client/Particles/Acolyte/`);
+sounds: the kit section of `tools/sfx_gen/recipes/acolyte.py` (11 finals in
+`data/client/Sound/Spells/Acolyte/`). Talent-built spells carry their ids in
+`tools/talent_trees/author_talent_trees.py` with a `# Acolyte - <name>` comment. Passive talents
+(Dark Bond, Swarm Lore, Shadow Sympathy and its pet aura 1344, Dark Tutelage, Soul Siphon, and the
+proc carriers) show nothing; Miasma and Venomous Backlash cast Corrupting Touch and Wasting
+Plague, which bring their own visualizations.
+
+| Spell (ids) | vis | Cast bar / channel | Cast (CAST_SUCCEEDED, caster) | Impact / aura / ground |
+|---|---|---|---|---|
+| Curse of Frailty (1330) | 141 | -- | `CastRelease` | `FrailtyApply` at `spine_03` + Curse of Frailty (432), violet light; AURA_IDLE `FrailtyAura` |
+| Drain Essence (1331) | 142 | CHANNELING: `CastLoop`, `DrainChannel` on `hand_r` + Drain Channel loop (433) + violet light; no `CastRelease` (it would cut into the channel at ChannelStart) | -- | -- |
+| Drain Essence tick (1332) | 143 | -- | -- | IMPACT `DrainBeamMotes` at `spine_03`, silent |
+| Curse of the Mire (1333) | 144 | -- | `CastRelease` | `MireApply` at the feet + Curse of the Mire (434), green light; AURA_IDLE `MireAura` |
+| Wasting Plague (1334; also Venomous Backlash) | 145 | -- | `CastRelease` | `PlagueApply` at `spine_03` + Wasting Plague (435), light, tint pulse; AURA_TICK tint pulse (silent); AURA_IDLE `PlagueAura` |
+| Call Gloomlings (1335) | 146 | -- | `CastRelease`, `GloomlingSummon` + Call Gloomlings (436), light | -- |
+| Rot Field (1336) | 147 | `CastLoop`, `BlightHandChannel` + the existing Blight Channel loop (281) + green light | `CastRelease` + Rot Field (437) | GROUND_ACTIVE `RotFieldGround` + a green light fading in over 0.6 s, held until the zone ends; GROUND_EXPIRED `RotFieldTick` + a fading light |
+| Rot Field tick (1337) | 148 | -- | -- | IMPACT `RotFieldTick` at `spine_03`, silent |
+| Empower Duskling (1345) | 149 | -- | `CastRelease`, `ShadowRelease` on `hand_r` + Empower Duskling (440) | IMPACT violet tint pulse on the pet; AURA_IDLE `EmpowerAura` on the pet |
+| Gloom Tether summon (1347) | 150 | -- | `GloomlingSummon` + Gloom Tether (442), small light (a proc: no `CastRelease`) | -- |
+| Shared Night heal (1349) | 151 | -- | -- | IMPACT `SharedNightHeal` at the pet's `spine_03`, silent |
+| Brood Horror (1352) | 152 | -- | `CastRelease`, `BroodSummon` + Brood Horror (441), big light | -- |
+| Creeping Rot slow (1357) | 153 | -- | -- | AURA_IDLE `MireAura` (reused: it is the same mire), silent |
+| Tangled Tongue (1360) | 154 | -- | `CastRelease` | IMPACT at `head`: Tangled Tongue (438), crimson light; AURA_IDLE `TongueAura` |
+| Grasping Dread root (1362) | 155 | -- | -- | IMPACT `RootTendrils` (one-shot, runs out with the 2 s root), silent |
+| Wail of the Lost (1363) | 156 | -- | `CastRelease`, `WailBurst` + Wail of the Lost (439), crimson light, tint pulse | AURA_IDLE `FearAura` (Fear's skull, so the flee reads as a Fear) |
+| Lingering Dread (1365) | 157 | -- | -- | AURA_IDLE `HealingBlight`, silent |
+
+The three curses idle with distinct particles (`FrailtyAura`, `MireAura`, `TongueAura`); the
+test enforces it. Only CASTING and CHANNELING kits loop; the Rot Field ground loop is held by
+the zone itself (`GROUND_ACTIVE` particles loop per their `.hpar` until SpellZoneEnd).
+
 ## Sounds
 
 16 layers, each generated on its own (one element per prompt, music excluded, voice excluded or
@@ -117,3 +154,7 @@ reel is `generated/acolyte_visuals/Acolyte_Audition.wav`.
   Shadowbolt" is a one-line change per spell if wanted.
 - Orc rigs lack `CastLoop` / `CastRelease`; the service skips the animation and still plays
   particles, lights and sound.
+- Kit overhaul: in-game acceptance of the 18 new effects and 11 sounds (mixed without
+  listening), the Rot Field ground loop on slopes, and `EmpowerAura` / `SharedNightHeal` sizes
+  on the Duskling. Wasting Plague cast by Venomous Backlash plays its `CastRelease` on the
+  acolyte, as Miasma's Corrupting Touch already does.

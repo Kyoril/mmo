@@ -8,11 +8,14 @@
 
 #include <chrono>
 #include <set>
+#include <sstream>
 #include "editor_host.h"
 #include "icon_font.h"
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "selected_kit_prop.h"
+#include "selected_control_transform.h"
+#include "selected_spline_point.h"
 #include "editors/world_model_editor/panels/world_model_properties_panel.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
 #include "binary_io/writer.h"
@@ -57,14 +60,21 @@
 
 #include "stb_dxt.h"
 #include "minimap_baker.h"
+#include "world_map_baker.h"
 #include "page_bake_utils.h"
 #include "terrain_lod_baker.h"
-#include "glue_bake/glue_scene_baker.h"
 #include "terrain/far_terrain.h"
 #include "tex/png_writer.h"
 #include "graphics/material_instance.h"
 #include "base/clock.h"
 #include "base/profiler.h"
+#include "pcg/placement.h"
+#include "section_panel.h"
+#include "pcg/section_bake_job.h"
+#include "pcg/pcg_debug_layer.h"
+
+#include <algorithm>
+#include <cctype>
 
 namespace mmo
 {
@@ -170,6 +180,9 @@ namespace mmo
 	WorldEditorInstance::WorldEditorInstance(EditorHost &host, WorldEditor &editor, Path asset)
 		: EditorInstance(host, std::move(asset)), m_editor(editor), m_wireFrame(false)
 	{
+		// Registered first so that an instance whose world file fails to load is still listed until it closes.
+		m_instanceSerial = ++s_lastInstanceSerial;
+		s_openInstances.push_back(this);
 
 		m_cameraAnchor = &m_scene.CreateSceneNode("CameraAnchor");
 		m_cameraNode = &m_scene.CreateSceneNode("CameraNode");
@@ -381,15 +394,7 @@ namespace mmo
 			[this]()
 			{ m_openMinimapBakeDialog = true; },
 			[this]()
-			{ GenerateTerrainLod(true); },
-			[this]()
-			{
-				String summary;
-				if (!BakeGlueScene(*this, GlueSceneDefinitionPath, summary))
-				{
-					ELOG("Bake Glue Scene failed: " << summary);
-				}
-			});
+			{ GenerateTerrainLod(true); });
 
 		// Load and set transform mode icons
 		static auto translateIcon = TextureManager::Get().CreateOrRetrieve("Editor/translate.htex");
@@ -448,6 +453,12 @@ namespace mmo
 			[this]() -> const proto::MapEntry* { return m_spawnEditMode ? m_spawnEditMode->GetMapEntry() : nullptr; });
 		m_waterEditMode = std::make_unique<WaterEditMode>(*this, *m_terrain, *m_camera);
 		m_terrainEditMode->SetWaterEditMode(m_waterEditMode.get());
+		m_proceduralEditMode = std::make_unique<ProceduralEditMode>(*this, *m_camera);
+		// Generated rivers share the world's flow with the hand-drawn ones; Water mode recollects them on every apply.
+		m_waterEditMode->SetGeneratedFlowPathsProvider([this]()
+		{
+			return m_proceduralEditMode ? m_proceduralEditMode->CollectGeneratedFlowPaths() : std::vector<terrain_io::water_flow::FlowPath>();
+		});
 
 		// Brush-based authoring for the instanced foliage created above (m_foliage).
 		m_foliageEditMode = std::make_unique<FoliageEditMode>(*this, *m_foliage, m_terrain.get(), *m_camera);
@@ -518,6 +529,22 @@ namespace mmo
 			m_waterEditMode->LoadFlowPaths(GetFlowPathsFileName());
 		}
 
+		// Oasis control objects (editor-only; the world carries the generated content).
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->Load(GetPcgFolderName());
+		}
+
+		// Section worlds (a .hsecdef next to the .hwld) get the section panel and its viewport overlay.
+		if (mmo::IsSectionWorld(GetAssetPath().generic_string()))
+		{
+			m_sectionPanel = std::make_unique<SectionPanel>(*this);
+			m_viewportPanel->SetExtraOverlay([this](ImDrawList* drawList, const ImVec2& viewportMin, const ImVec2& viewportSize)
+			{
+				m_sectionPanel->DrawViewportOverlay(drawList, viewportMin, viewportSize);
+			});
+		}
+
 		CreateFarTerrain();
 
 		m_worldSettingsPanel->SetExtraContent([this]() { DrawViewSettings(); });
@@ -532,11 +559,22 @@ namespace mmo
 			s_lastCreated = nullptr;
 		}
 
+		s_openInstances.erase(std::remove(s_openInstances.begin(), s_openInstances.end(), this), s_openInstances.end());
+
+		// A background PCG rebuild reads the terrain: stop it while everything is intact.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->CancelBackgroundRebuilds();
+		}
+
 		// Stop background loading thread
 		m_work.reset();
 		m_workQueue.stop();
 		m_dispatcher.stop();
 		m_backgroundLoader.join();
+
+		// PCG debug layers own scene objects; destroy them while the scene is intact.
+		m_pcgDebugLayers.clear();
 
 		m_transformWidget.reset();
 		m_kitCollisionOverlay.reset();
@@ -655,6 +693,11 @@ namespace mmo
 			m_editMode->OnStrokeInterrupted();
 		}
 
+		if (m_editMode)
+		{
+			m_editMode->OnUpdate(deltaTimeSeconds);
+		}
+
 		const auto pos = GetPagePositionFromCamera();
 		m_memoryPointOfView->UpdateCenter(pos);
 		m_visibleSection->UpdateCenter(pos);
@@ -709,7 +752,8 @@ namespace mmo
 			m_fogVolumeEditMode.get(),
 			m_atlasEditMode.get(),
 			m_navigationEditMode.get(),
-			m_skyEditMode.get()};
+			m_skyEditMode.get(),
+			m_proceduralEditMode.get()};
 		m_detailsPanel->Draw(
 			detailsId,
 			m_editMode,
@@ -730,6 +774,11 @@ namespace mmo
 
 		const String minimapId = "World Map##" + GetAssetPath().string();
 		DrawMinimapPanel(minimapId);
+
+		if (m_sectionPanel)
+		{
+			m_sectionPanel->Draw("Section##" + GetAssetPath().string());
+		}
 
 		// Kit prop removals requested this frame (Delete key, details panel) are applied once the
 		// selection is no longer being iterated.
@@ -849,6 +898,11 @@ namespace mmo
 		ImGui::DockBuilderDockWindow(detailsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(worldSettingsId.c_str(), sideId);
 		ImGui::DockBuilderDockWindow(spawnPaletteId.c_str(), sideId);
+		if (m_sectionPanel)
+		{
+			const String sectionId = "Section##" + GetAssetPath().string();
+			ImGui::DockBuilderDockWindow(sectionId.c_str(), sideId);
+		}
 
 		ImGui::DockBuilderFinish(dockspaceId);
 		m_initDockLayout = false;
@@ -986,7 +1040,8 @@ namespace mmo
 
 			// Skip camera rotation when the spawn editor is actively dragging a waypoint.
 			const bool isDraggingWaypoint = (m_editMode == m_spawnEditMode.get() && m_spawnEditMode->IsDraggingWaypoint()) ||
-				(m_editMode == m_atlasEditMode.get() && m_atlasEditMode->IsDragging());
+				(m_editMode == m_atlasEditMode.get() && m_atlasEditMode->IsDragging()) ||
+				(m_editMode == m_proceduralEditMode.get() && m_proceduralEditMode->IsDragging());
 
 			// TODO: Move this into edit modes handling of OnMouseMoved
 			if (m_rightButtonPressed || (m_leftButtonPressed && !isDraggingWaypoint && m_editMode != m_foliageEditMode.get() && (m_editMode != m_terrainEditMode.get() || (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Deform &&
@@ -1017,6 +1072,19 @@ namespace mmo
 				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y);
 		}
 
+		if (m_proceduralEditMode && m_editMode == m_proceduralEditMode.get() && m_terrain)
+		{
+			// Ground under the cursor, for dragging and inserting loop points.
+			const Ray ray = m_camera->GetCameraToViewportRay(
+				(mousePos.x - m_lastContentRectMin.x) / m_lastAvailViewportSize.x,
+				(mousePos.y - m_lastContentRectMin.y) / m_lastAvailViewportSize.y, 50000.0f);
+			m_proceduralEditMode->SetCursorRay(ray);
+			if (const auto hit = m_terrain->RayIntersects(ray); hit.first)
+			{
+				m_proceduralEditMode->SetBrushPosition(hit.second.position);
+			}
+		}
+
 		if (m_editMode == m_terrainEditMode.get())
 		{
 			if (m_terrainEditMode->GetTerrainEditType() != TerrainEditType::Select)
@@ -1037,8 +1105,146 @@ namespace mmo
 		return fileName;
 	}
 
+	bool WorldEditorInstance::GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings)
+	{
+		if (!m_waterEditMode)
+		{
+			return false;
+		}
+
+		m_waterEditMode->GetAppliedHandFlow(paths, settings);
+		return true;
+	}
+
+	String WorldEditorInstance::GetPcgFolderName() const
+	{
+		return "Editor/Pcg/Worlds/" + m_assetPath.stem().string();
+	}
+
+	bool WorldEditorInstance::RebuildProcedural(const uint64 idOrZero, String& error, const bool background)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		if (background && idOrZero != 0 && m_proceduralEditMode->FindGraphInstance(idOrZero))
+		{
+			return m_proceduralEditMode->RebuildInBackgroundAndWait(idOrZero, error);
+		}
+		return idOrZero == 0 ? m_proceduralEditMode->RebuildAll(error) : m_proceduralEditMode->Rebuild(idOrZero, error);
+	}
+
+	bool WorldEditorInstance::DeleteProceduralControl(const uint64 id, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->DeleteControl(id, error);
+	}
+
+	bool WorldEditorInstance::CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
+		const NewSectionPathOptions& options, const String& name, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Refuses a missing or unreadable section asset before anything is added.
+		if (!m_proceduralEditMode->CreateSectionPath(points, sectionAsset, options, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->Rebuild(id, error);
+	}
+
+	bool WorldEditorInstance::CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
+		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Settings are checked against the type first, so a refused run leaves nothing behind.
+		if (!m_proceduralEditMode->CheckPlacedControlSettings(typePath, settings, error))
+		{
+			return false;
+		}
+
+		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->SetPlacedControlProperties(id, settings, error);
+	}
+
+	bool WorldEditorInstance::CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed,
+		const String& name, const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->CreateGraphInstance(graphPath, points, seed, name, settings, id, error);
+	}
+
+	bool WorldEditorInstance::EvaluateProceduralGraphInstance(const uint64 id, GraphInstanceEvaluation& out, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->EvaluateInstance(id, out, error);
+	}
+
+	bool WorldEditorInstance::CreateProceduralOasis(const float x, const float z, const float radius, const uint64 seed, const String& name, uint64& id, String& error)
+	{
+		id = 0;
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		// Checked before adding, so a refused run leaves no unbuilt record behind.
+		if (!m_proceduralEditMode->CheckRecipe(error))
+		{
+			return false;
+		}
+
+		if (!m_proceduralEditMode->CreateOasisAt(x, z, radius, seed, name, id, error))
+		{
+			return false;
+		}
+
+		return m_proceduralEditMode->Rebuild(id, error);
+	}
+
 	bool WorldEditorInstance::Save()
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		// River flow first: a pending flow apply changes terrain pages, which are saved below.
 		if (m_waterEditMode)
 		{
@@ -1115,7 +1321,6 @@ namespace mmo
 		sink.Flush();
 
 		ILOG("Successfully saved world file " << GetAssetPath());
-		RemindGlueBakeMayBeStale(*this);
 
 		struct MaterialOverride
 		{
@@ -1359,10 +1564,26 @@ namespace mmo
 			}
 		}
 
+		// Oasis records last: they hold the base values needed to undo what the oasis generated into the
+		// pages, entities and foliage saved above. A record must never be newer than the data it
+		// describes, or the next rebuild would undo a contribution that was not saved.
+		bool oasesSaved = true;
+		if (m_proceduralEditMode && !m_proceduralEditMode->Save(GetPcgFolderName()))
+		{
+			// The procedural mode's status line names the control and the reason.
+			ELOG("Some procedural records could not be saved");
+			oasesSaved = false;
+		}
+
 		// Write kits edited in place. Kits shared with other loaded buildings wait for confirmation.
 		SaveDirtyKits();
 
-		return true;
+		if (m_sectionPanel)
+		{
+			m_sectionPanel->OnWorldSaved();
+		}
+
+		return oasesSaved;
 	}
 
 	void WorldEditorInstance::OnTerrainMouseMoved(const float viewportX, const float viewportY)
@@ -1597,7 +1818,8 @@ namespace mmo
 		if (DeferredRenderer* renderer = GetDeferredRenderer())
 		{
 			const EnvironmentState& state = m_environment.GetState();
-			renderer->SetExposure(state.exposure);
+			// Same default lift the client applies, so the editor keeps showing what players see.
+			renderer->SetExposure(state.exposure * DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()));
 			renderer->SetBloomIntensity(state.bloomIntensity);
 			renderer->SetBloomThreshold(state.bloomThreshold);
 			renderer->SetFogLightScattering(state.lightScattering);
@@ -1902,6 +2124,8 @@ namespace mmo
 			void Visit(SelectedObjectSpawn& selectable) override { entry = &selectable.GetEntry(); }
 			void Visit(SelectedAreaTrigger&) override {}
 			void Visit(SelectedFogVolume&) override {}
+			void Visit(SelectedSplinePoint&) override {}
+			void Visit(SelectedControlTransform&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -2584,6 +2808,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	bool WorldEditorInstance::GenerateTerrainLod(const bool onlyStale)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate terrain LOD: no terrain available");
@@ -2611,6 +2841,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 	bool WorldEditorInstance::GenerateMinimaps(const bool onlyStale, const MinimapBaker::Region& region)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (!m_terrain || !m_hasTerrain)
 		{
 			ELOG("Cannot generate minimaps: no terrain available");
@@ -2640,11 +2876,39 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
 
-		return stats.failed == 0;
+		// The world map is made from the minimap tiles
+		const bool worldMapBaked = GenerateWorldMap();
+
+		return stats.failed == 0 && worldMapBaked;
+	}
+
+	bool WorldEditorInstance::GenerateWorldMap()
+	{
+		if (!m_terrain || !m_hasTerrain)
+		{
+			ELOG("Cannot generate the world map: no terrain available");
+			return false;
+		}
+
+		const auto& zones = m_editor.GetProject().zones;
+		WorldMapBaker baker(m_assetPath.filename().replace_extension().string(),
+			[this](const uint32 x, const uint32 z) { return m_terrain->GetPageFilename(x, z); },
+			[&zones](const uint32 zoneId) -> uint32
+			{
+				const auto* zone = zones.getById(zoneId);
+				return zone ? zone->parentzone() : 0;
+			});
+		return baker.Bake();
 	}
 
 	void WorldEditorInstance::StartMinimapBake(const bool onlyStale)
 	{
+		// A background PCG rebuild holds the terrain without its old contribution until it is written: finish it first.
+		if (m_proceduralEditMode)
+		{
+			m_proceduralEditMode->WaitForBackgroundRebuild();
+		}
+
 		if (m_minimapBake || !m_terrain || !m_hasTerrain)
 		{
 			return;
@@ -2715,6 +2979,12 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 
 		// Force the minimap teleport panel to reload the freshly generated tiles.
 		m_minimapPanel.Refresh();
+
+		// The world map is made from the minimap tiles
+		if (m_minimapBakeStats.baked > 0)
+		{
+			GenerateWorldMap();
+		}
 	}
 
 	void WorldEditorInstance::DrawMinimapBakeDialog()
@@ -2902,8 +3172,11 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		m_bakeFoliagePages.clear();
 	}
 
-	void WorldEditorInstance::ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const
+
+
+	void WorldEditorInstance::CollectWorldPlacements(std::vector<pcg::Placement>& out) const
 	{
+		out.clear();
 		for (const auto& mapEntity : m_mapEntities)
 		{
 			if (!mapEntity)
@@ -2912,24 +3185,22 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 			}
 
 			const SceneNode& node = mapEntity->GetSceneNode();
-
-			GlueBakePlacement placement;
+			pcg::Placement placement;
+			placement.key = mapEntity->GetUniqueId();
 			placement.position = node.GetDerivedPosition();
 			placement.rotation = node.GetDerivedOrientation();
 			placement.scale = node.GetDerivedScale();
+			placement.collides = true;
 
 			if (mapEntity->IsWorldModelEntity())
 			{
-				const WorldModelInstance* instance = mapEntity->GetWorldModelInstance();
-				if (!instance || !instance->GetWorldModel())
+				if (!mapEntity->GetWorldModelInstance())
 				{
 					continue;
 				}
 
-				placement.isWorldModel = true;
-				placement.assetPath = mapEntity->GetAssetName();
-				placement.worldModel = instance->GetWorldModel();
-				placement.doodadSet = instance->GetActiveDoodadSet();
+				placement.kind = pcg::PlacementKind::WorldModel;
+				placement.asset = mapEntity->GetAssetName();
 				placement.kitPaths = mapEntity->GetKitPaths();
 			}
 			else
@@ -2940,114 +3211,63 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					continue;
 				}
 
-				placement.mesh = entity->GetMesh();
-				placement.assetPath = String(placement.mesh->GetName());
+				placement.kind = pcg::PlacementKind::Entity;
+				placement.asset = String(entity->GetMesh()->GetName());
 
-				// Overrides are applied to the sub entities; the .wobj's list is not kept around.
-				bool anyOverride = false;
-				std::vector<String> overrides(entity->GetNumSubEntities());
-				for (uint16 i = 0; i < entity->GetNumSubEntities(); ++i)
+				// Same rule as the save: every slot whose material differs from the mesh's, by slot index.
+				for (uint16 i = 0; i < entity->GetNumSubEntities() && i <= 0xFF; ++i)
 				{
 					const SubEntity* subEntity = entity->GetSubEntity(i);
 					const MaterialPtr material = subEntity ? subEntity->GetMaterial() : nullptr;
 					if (material && material != subEntity->GetSubMesh().GetMaterial())
 					{
-						overrides[i] = String(material->GetName());
-						anyOverride = true;
+						placement.materialOverrides.push_back(pcg::PlacementMaterialOverride{ static_cast<uint8>(i), String(material->GetName()) });
 					}
 				}
-
-				if (anyOverride)
-				{
-					placement.materialOverrides = std::move(overrides);
-				}
 			}
 
-			visitor(placement);
-		}
-	}
-
-	void WorldEditorInstance::ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const
-	{
-		if (!m_foliage)
-		{
-			return;
-		}
-
-		std::vector<InstancedFoliageInstance> instances;
-		for (const PagePosition& page : pages)
-		{
-			if (page.x() > 0xFF || page.y() > 0xFF)
-			{
-				continue;
-			}
-
-			instances.clear();
-			m_foliage->GetInstancesForPage(BuildPageIndex(static_cast<uint8>(page.x()), static_cast<uint8>(page.y())), instances);
-			for (const InstancedFoliageInstance& instance : instances)
-			{
-				visitor(instance);
-			}
-		}
-	}
-
-	const terrain::Page* WorldEditorInstance::GetPreparedTerrainPage(const PagePosition& page)
-	{
-		if (!m_terrain || !m_hasTerrain || page.x() >= m_terrain->GetWidth() || page.y() >= m_terrain->GetHeight())
-		{
-			return nullptr;
-		}
-
-		const String pageFile = m_terrain->GetBaseFileName() + "/" + std::to_string(page.x()) + "_" + std::to_string(page.y()) + ".tile";
-		if (!AssetRegistry::HasFile(pageFile))
-		{
-			return nullptr;
-		}
-
-		terrain::Page* terrainPage = m_terrain->GetPage(static_cast<uint32>(page.x()), static_cast<uint32>(page.y()));
-		if (!terrainPage || !terrainPage->Prepare() || terrainPage->IsOceanPlaceholder())
-		{
-			return nullptr;
-		}
-
-		return terrainPage;
-	}
-
-	bool WorldEditorInstance::RenderTerrainPageColors(const std::vector<PagePosition>& pages, const uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out)
-	{
-		out.assign(pages.size(), std::vector<uint8>());
-		if (!m_terrain || !m_hasTerrain)
-		{
-			return false;
-		}
-
-		// Hidden by the baker along with everything else outside the terrain, but foliage keeps its own
-		// visibility flag on top of its scene objects (see GenerateTerrainLod).
-		const bool foliageWasVisible = m_foliage && m_foliage->IsVisible();
-		if (m_foliage)
-		{
-			m_foliage->SetVisible(false);
-		}
-
-		bool success = true;
-		{
-			TerrainLodBaker baker(m_scene, *m_terrain, [this]() { return m_dispatcher.poll_one() > 0; }, textureSize);
-			for (size_t i = 0; i < pages.size(); ++i)
-			{
-				if (!baker.RenderPageColor(static_cast<uint32>(pages[i].x()), static_cast<uint32>(pages[i].y()), out[i], options))
-				{
-					out[i].clear();
-					success = false;
-				}
-			}
+			out.push_back(std::move(placement));
 		}
 
 		if (m_foliage)
 		{
-			m_foliage->SetVisible(foliageWasVisible);
+			std::vector<uint16> pages;
+			m_foliage->GetUsedPages(pages);
+			std::vector<InstancedFoliageInstance> instances;
+			for (const uint16 page : pages)
+			{
+				instances.clear();
+				m_foliage->GetInstancesForPage(page, instances);
+				for (const InstancedFoliageInstance& instance : instances)
+				{
+					pcg::Placement placement;
+					placement.key = instance.uniqueId;
+					placement.kind = pcg::PlacementKind::Foliage;
+					placement.asset = instance.meshName;
+					placement.position = instance.position;
+					placement.rotation = instance.rotation;
+					placement.scale = instance.scale;
+					placement.collides = instance.collides;
+					out.push_back(std::move(placement));
+				}
+			}
 		}
-		return success;
+
+		std::sort(out.begin(), out.end(), [](const pcg::Placement& a, const pcg::Placement& b)
+		{
+			if (a.kind != b.kind)
+			{
+				return a.kind < b.kind;
+			}
+			if (a.key != b.key)
+			{
+				return a.key < b.key;
+			}
+			return a.asset < b.asset;
+		});
 	}
+
+
 
 	bool WorldEditorInstance::SetFoliageVisible(const bool visible)
 	{
@@ -3706,6 +3926,13 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		MapEntity &mapEntity = selectable.GetEntity();
 		
 		ImGui::Text("Unique Id: %llu", mapEntity.GetUniqueId());
+
+		if (mapEntity.GetCategory() == "Pcg")
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.2f, 1.0f));
+			ImGui::TextWrapped("Owned by a procedural control (oasis or section path). Hand edits are overwritten when it is rebuilt.");
+			ImGui::PopStyleColor();
+		}
 
 		if (mapEntity.IsWorldModelEntity())
 		{
@@ -4469,6 +4696,32 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::Visit(SelectedSplinePoint &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected spline point no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Spline Point #%zu", selectable.GetPointIndex());
+		ImGui::TextDisabled("Translate moves it (height too), Rotate tilts and turns its tangents (yaw and pitch). Tangent tools are in the mode panel.");
+	}
+
+	void WorldEditorInstance::Visit(SelectedControlTransform &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected control no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Placed %s Control", selectable.IsVolume() ? "Volume" : "Point");
+		ImGui::TextDisabled(selectable.IsVolume()
+			? "Translate moves it (height too), Rotate turns it around up, Scale sets its half extents. Properties are in the mode panel."
+			: "Translate moves it (height too), Rotate turns it around up. Properties are in the mode panel.");
+	}
+
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)
 	{
 		if (ImGui::CollapsingHeader("Fog Volume", ImGuiTreeNodeFlags_DefaultOpen))
@@ -4833,6 +5086,14 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 	}
 
+	void WorldEditorInstance::AddToSelection(std::unique_ptr<Selectable> selectable)
+	{
+		if (selectable)
+		{
+			m_selection.AddSelectable(std::move(selectable));
+		}
+	}
+
 	bool WorldEditorInstance::IsTransforming() const
 	{
 		return m_transformWidget && m_transformWidget->IsActive();
@@ -4856,6 +5117,21 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 	void WorldEditorInstance::DestroySceneNode(const SceneNode& node)
 	{
 		m_scene.DestroySceneNode(node);
+	}
+
+	void WorldEditorInstance::SetPcgDebugLayer(const uint64 ownerKey, std::vector<pcg::graph::DebugLine> lines)
+	{
+		std::unique_ptr<PcgDebugLayer>& layer = m_pcgDebugLayers[ownerKey];
+		if (!layer)
+		{
+			layer = std::make_unique<PcgDebugLayer>(*this, ownerKey);
+		}
+		layer->SetLines(lines);
+	}
+
+	void WorldEditorInstance::ClearPcgDebugLayer(const uint64 ownerKey)
+	{
+		m_pcgDebugLayers.erase(ownerKey);
 	}
 
 	uint32 WorldEditorInstance::GenerateFogVolumeId()
@@ -5088,6 +5364,275 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		}
 
 		return nullptr;
+	}
+
+	void WorldEditorInstance::GetSelectedMapEntityIds(std::vector<uint64> &out) const
+	{
+		out.clear();
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto *selectedEntity = dynamic_cast<const SelectedMapEntity *>(selectable.get()))
+			{
+				out.push_back(selectedEntity->GetEntity().GetUniqueId());
+			}
+		}
+	}
+
+	bool WorldEditorInstance::CreatePlacementEntity(const pcg::Placement &placement, const uint64 uniqueId)
+	{
+		if (placement.kind == pcg::PlacementKind::Foliage)
+		{
+			WLOG("Foliage placement " << placement.asset << " is not a map entity");
+			return false;
+		}
+
+		static const String worldModelExtension = ".hwmo";
+		const bool isWorldModel = placement.kind == pcg::PlacementKind::WorldModel ||
+			(placement.asset.size() >= worldModelExtension.size() &&
+				std::equal(worldModelExtension.begin(), worldModelExtension.end(), placement.asset.end() - static_cast<std::ptrdiff_t>(worldModelExtension.size()),
+					[](const char a, const char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }));
+
+		if (isWorldModel)
+		{
+			WorldModelInstance *instance = CreateWorldModelEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId);
+			if (!instance)
+			{
+				return false;
+			}
+
+			MapEntity *mapEntity = instance->GetUserObject<MapEntity>();
+			if (mapEntity && !placement.kitPaths.empty())
+			{
+				// Same as loading a placement from its file: the paths are kept even when a kit fails to load.
+				mapEntity->SetKitPaths(placement.kitPaths);
+				ApplyKits(*mapEntity);
+			}
+
+			if (!placement.materialOverrides.empty())
+			{
+				WLOG("World model placement " << placement.asset << " ignores its material overrides");
+			}
+			return true;
+		}
+
+		Entity *entity = CreateMapEntity(placement.asset, placement.position, placement.rotation, placement.scale, uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		// Same as loading an entity from its file; the save writes every slot whose material differs.
+		for (const pcg::PlacementMaterialOverride &materialOverride : placement.materialOverrides)
+		{
+			if (materialOverride.materialIndex >= entity->GetNumSubEntities())
+			{
+				WLOG("Placement " << placement.asset << " has a material override for slot " << static_cast<uint32>(materialOverride.materialIndex)
+					<< " but the mesh has only " << entity->GetNumSubEntities() << "; skipping it");
+				continue;
+			}
+
+			entity->GetSubEntity(materialOverride.materialIndex)->SetMaterial(MaterialManager::Get().Load(materialOverride.materialName));
+		}
+
+		if (!placement.kitPaths.empty())
+		{
+			WLOG("Mesh placement " << placement.asset << " ignores its prop kit paths");
+		}
+		return true;
+	}
+
+	bool WorldEditorInstance::RemoveMapEntityById(const uint64 uniqueId)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		// Never leave a selection pointing at a destroyed entity.
+		bool selected = false;
+		for (const auto &selectable : m_selection.GetSelectedObjects())
+		{
+			if (const auto *selectedEntity = dynamic_cast<const SelectedMapEntity *>(selectable.get()))
+			{
+				if (&selectedEntity->GetEntity() == entity)
+				{
+					selected = true;
+					break;
+				}
+			}
+		}
+		if (selected)
+		{
+			m_selection.Clear();
+		}
+		if (entity->IsWorldModelEntity())
+		{
+			DeselectRemovedKitProps(*entity);
+		}
+
+		// Same path as deleting it by hand: OnMapEntityRemoved queues the file deletion and erases it.
+		entity->remove(*entity);
+		m_sceneOutlineWindow->Update();
+		return true;
+	}
+
+	bool WorldEditorInstance::HasMapEntity(const uint64 uniqueId) const
+	{
+		return FindMapEntity(uniqueId) != nullptr;
+	}
+
+	void WorldEditorInstance::SetMapEntityInfo(const uint64 uniqueId, const String &name, const String &category)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return;
+		}
+
+		entity->SetDisplayName(name);
+		entity->SetCategory(category);
+		m_sceneOutlineWindow->Update();
+	}
+
+	bool WorldEditorInstance::SetMapEntityTransform(const uint64 uniqueId, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale)
+	{
+		MapEntity *entity = FindMapEntity(uniqueId);
+		if (!entity)
+		{
+			return false;
+		}
+
+		SceneNode &node = entity->GetSceneNode();
+		node.SetPosition(position);
+		node.SetOrientation(orientation);
+		node.SetScale(scale);
+		entity->MarkModified();
+		entity->transformChanged(*entity);
+		return true;
+	}
+
+	uint64 WorldEditorInstance::GenerateEntityUniqueId()
+	{
+		return m_entityFactory->GenerateUniqueId();
+	}
+
+	void WorldEditorInstance::MarkFoliagePageDirty(const uint16 pageIndex)
+	{
+		if (m_foliageEditMode)
+		{
+			m_foliageEditMode->MarkPageDirty(pageIndex);
+		}
+	}
+
+	uint64 WorldEditorInstance::GenerateFoliageUniqueId()
+	{
+		return FoliageEditMode::GenerateInstanceId();
+	}
+
+	uint64 WorldEditorInstance::GetTerrainRevision() const
+	{
+		return m_terrain ? m_terrain->GetDataRevision() : 0;
+	}
+
+	WorldEditorInstance* WorldEditorInstance::FindOpenInstance(const uint64 serial)
+	{
+		if (serial == 0)
+		{
+			return nullptr;
+		}
+
+		for (WorldEditorInstance* instance : s_openInstances)
+		{
+			if (instance->m_instanceSerial == serial)
+			{
+				return instance;
+			}
+		}
+
+		return nullptr;
+	}
+
+	bool WorldEditorInstance::EnsurePagesLoaded(const float minX, const float minZ, const float maxX, const float maxZ, String &error)
+	{
+		error.clear();
+		if (!m_terrain)
+		{
+			error = "The world has no terrain";
+			return false;
+		}
+
+		// Page index convention of OnMapEntityRemoved / FoliageEditMode::PageIndexFromPosition:
+		// floor(world / PageSize) + half the page count (32 on a 64 page map).
+		const int32 width = static_cast<int32>(m_terrain->GetWidth());
+		const int32 height = static_cast<int32>(m_terrain->GetHeight());
+		const int32 minPageX = std::max(0, static_cast<int32>(std::floor(std::min(minX, maxX) / terrain::constants::PageSize)) + width / 2);
+		const int32 maxPageX = std::min(width - 1, static_cast<int32>(std::floor(std::max(minX, maxX) / terrain::constants::PageSize)) + width / 2);
+		const int32 minPageZ = std::max(0, static_cast<int32>(std::floor(std::min(minZ, maxZ) / terrain::constants::PageSize)) + height / 2);
+		const int32 maxPageZ = std::min(height - 1, static_cast<int32>(std::floor(std::max(minZ, maxZ) / terrain::constants::PageSize)) + height / 2);
+
+		std::vector<PagePosition> pages;
+		std::ostringstream failed;
+		bool allReady = true;
+		for (int32 pz = minPageZ; pz <= maxPageZ; ++pz)
+		{
+			for (int32 px = minPageX; px <= maxPageX; ++px)
+			{
+				terrain::Page *page = m_terrain->GetPage(static_cast<uint32>(px), static_cast<uint32>(pz));
+				if (!page)
+				{
+					failed << " " << px << "x" << pz << " (missing)";
+					allReady = false;
+					continue;
+				}
+
+				// Synchronous prepare (no-op if prepared; also clears a stale unload request). Prepare
+				// also returns without preparing while another preparation of the page is in flight,
+				// so the result is checked rather than trusted.
+				page->Prepare();
+				if (!page->IsPrepared())
+				{
+					WLOG("Terrain page " << px << "x" << pz << " could not be prepared");
+					failed << " " << px << "x" << pz << " (not prepared)";
+					allReady = false;
+					continue;
+				}
+
+				// Page::Load creates one tile per call; finish it now instead of over many frames.
+				if (!page->IsLoaded())
+				{
+					constexpr uint32 maxLoadSteps = terrain::constants::TilesPerPage * terrain::constants::TilesPerPage + 2;
+					for (uint32 step = 0; step < maxLoadSteps && !page->IsLoaded(); ++step)
+					{
+						page->Load();
+					}
+
+					if (!page->IsLoaded())
+					{
+						WLOG("Terrain page " << px << "x" << pz << " could not be loaded");
+						failed << " " << px << "x" << pz << " (not loaded)";
+						allReady = false;
+						continue;
+					}
+
+					RegisterPageFoliage(static_cast<uint32>(px), static_cast<uint32>(pz));
+				}
+
+				pages.emplace_back(static_cast<uint32>(px), static_cast<uint32>(pz));
+			}
+		}
+
+		// Entities and authored foliage of pages streaming has not loaded yet; streaming takes them
+		// over when the pages become available.
+		ForceLoadPages(pages);
+
+		if (!allReady)
+		{
+			error = "Terrain pages not ready:" + failed.str();
+			return false;
+		}
+
+		return true;
 	}
 
 	PropKitPtr WorldEditorInstance::ResolveKit(const String &kitPath) const

@@ -14,6 +14,7 @@ namespace mmo
 	class SpellCastContext;
 	class GameObjectS;
 	class GameUnitS;
+	class GameCreatureS;
 
 	/// Width of a ConeEnemy effect whose miscvalueb leaves it unset, in degrees.
 	constexpr float DefaultConeDegrees = 90.0f;
@@ -43,6 +44,10 @@ namespace mmo
 		bool ResolvePartyOrNearbyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool ResolveAreaEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool ResolveConeEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
+		/// @return The caster's summoned persistent pet if it is alive, else nullptr.
+		GameCreatureS* FindLivingPersistentPet() const;
+		/// Resolves effect target Pet: the caster's living, summoned persistent pet.
+		bool ResolvePetTarget(std::vector<GameObjectS*>& targets) const;
 		bool ResolveSecondaryEnemyTargets(const proto::SpellEffect& effect, std::vector<GameObjectS*>& targets) const;
 		bool CollectEnemyUnitsInRadius(const proto::SpellEffect& effect, float centerX, float centerZ, std::vector<GameObjectS*>& targets) const;
 		bool CanAddUnitTarget(const std::vector<GameObjectS*>& targets, const GameUnitS& unit) const;

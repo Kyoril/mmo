@@ -27,9 +27,10 @@ Design rules that are easy to undo by accident:
   itself. The talent tree's tooltip leaves the spell rank out (it shows the talent's points).
 * Descriptions use literal numbers for modifiers: the tooltip formatter prints $s raw, so a
   negative cast time modifier would read "-400".
-* Old rank spells that a talent no longer uses are neutered (effects removed). Characters who
-  learned them keep the spell, so it must not keep working; the server resets talents whose
-  saved rank no longer exists.
+* Old rank spells that a talent no longer uses are neutered: effects removed, and hidden passive
+  without cost, cooldown or visualization. The server resets talents whose saved rank no longer
+  exists and does not restore Talent spells from the saved spell list (SetKnownSpells), so a
+  character loses them at load; the neutered data is the second line of defence.
 """
 
 import argparse
@@ -51,19 +52,36 @@ OUT = ROOT / "generated/talent_trees"
 ICONS = "Interface/Icons/Spells/"
 
 # --- Enum values (src/shared/game/spell.h, aura.h, spell_target_map.h) -------------------------
-APPLY_AURA, SCHOOL_DAMAGE, HEAL, APPLY_AREA_AURA = 6, 2, 10, 49
+APPLY_AURA, SCHOOL_DAMAGE, HEAL, APPLY_AREA_AURA, SUMMON = 6, 2, 10, 49, 25
+SUMMON_PET = 43
+PET_LEVEL_CLASS = 2     # pet_level_source (src/shared/game/pet_defines.h): the caster's class level
+ENERGIZE, WEAPON_PERCENT_DAMAGE = 27, 28
 MOD_STAT_PCT, ADD_FLAT, ADD_PCT, PROC_TRIGGER = 31, 18, 19, 12
+MOD_ATTACK_SPEED, MOD_DECREASE_SPEED, MOD_FEAR = 3, 15, 28
 PERIODIC_DAMAGE, MOD_ROOT, MOD_STUN, MOD_CRIT_TAKEN = 13, 25, 27, 40
+MOD_CASTING_SPEED_PCT = 42
+MOD_HEALING_TAKEN_PCT = 43
+MOD_PET_STATS_PCT, PET_PASSIVE = 44, 45
+PET_STAT_DAMAGE, PET_STAT_HEALTH = 0, 1
 DMG_DONE_PCT, DMG_TAKEN_PCT, MOD_DODGE, MOD_POWER_REGEN_PCT, MOD_RESIST_PCT = 23, 24, 36, 39, 30
 OP_DAMAGE, OP_DURATION, OP_RANGE, OP_CRIT, OP_ALL_EFFECTS = 0, 1, 4, 6, 7
 OP_CAST, OP_COOLDOWN, OP_COST, OP_CRIT_DAMAGE, OP_PERIODIC = 9, 10, 11, 12, 18
 STA, STR, AGI, INT, SPI = 0, 1, 2, 3, 4
 POWER_MANA, POWER_RAGE, POWER_ENERGY = 0, 1, 2
 KILL, DONE_MELEE_SPELL, DONE_MAGIC_NEG, DONE_PERIODIC = 0x2, 0x10, 0x10000, 0x40000
-EX_CRIT = 0x2
-T_CASTER, T_ENEMY, T_SOURCE_AREA_ENEMY, T_CASTER_AREA_PARTY, T_INSTIGATOR = 0, 5, 9, 13, 18
+TAKEN_MELEE_AUTO, DONE_NONE_POS, DONE_NONE_NEG = 0x8, 0x400, 0x1000
+TAKEN_MELEE_AUTO_ATTACK, DONE_SPELL_NONE_NEG = TAKEN_MELEE_AUTO, DONE_NONE_NEG
+EX_CRIT, EX_DODGE = 0x2, 0x20         # proc_ex_flags (game_unit_s.h), not spell_proc_flags_ex
+T_CASTER, T_PET, T_ENEMY, T_SOURCE_AREA_ENEMY, T_CASTER_AREA_PARTY, T_INSTIGATOR = 0, 4, 5, 9, 13, 18
 SCHOOL_PHYSICAL, SCHOOL_HOLY, SCHOOL_FIRE, SCHOOL_FROST, SCHOOL_SHADOW, SCHOOL_ARCANE = 0, 1, 2, 4, 5, 6
-MECHANIC_STUN, MECHANIC_ROOT = 10, 11
+MECHANIC_STUN, MECHANIC_ROOT = 10, 11       # MECHANIC_ROOT is Freeze (frost roots)
+MECHANIC_FEAR, MECHANIC_ROOTED, MECHANIC_SNARE = 5, 6, 9
+# The acolyte's damage spells: Corrupting Touch, Shadowbolt, Drain Essence, Wasting Plague, Rot Field.
+ACOLYTE_DAMAGE_MASK = 0x2 | 0x10 | 0x80 | 0x200 | 0x800
+
+# Single attribute bits (spell_attributes / spell_attributes_b in src/shared/game/spell.h).
+ATTR_PASSIVE = 0x40
+ATTR_B_HIDDEN_AURA = 0x2
 
 # Attribute words, copied from working spells of the same kind.
 PASSIVE_ATTRS = [0x80000050, 134]      # talent passives (Burning Soul)
@@ -72,6 +90,8 @@ BUFF_ATTRS = [0x18, 128]               # proc buffs on the caster (Void Resurgen
 SELF_ACTIVE_ATTRS = [16, 132]          # self-cast cooldowns (Last Stand)
 AOE_ACTIVE_ATTRS = [67108880, 4]       # instant AoE around the caster (Arcane Pulse)
 HEAL_ACTIVE_ATTRS = [16, 0]            # cast-time heals (Healing Light)
+ENERGIZE_ATTRS = [144, 128]            # triggered energy gains (Quick Cut Energy Restoration)
+STRIKE_ATTRS = [16, 0]                 # weapon strikes (Quick Cut)
 
 DE, EN, FR, RU = 1, 2, 3, 4
 
@@ -139,6 +159,11 @@ def aura(aura_type, points=0, misc=0, target=T_CASTER):
 def proc(trigger_spell, target=T_INSTIGATOR):
     return {"type": APPLY_AURA, "aura": PROC_TRIGGER, "triggerspell": trigger_spell,
             "targeta": T_CASTER, "targetb": target}
+
+
+def pet_passive(pet_spell):
+    """Owner aura that makes the persistent pet carry ``pet_spell`` (a self-targeted passive)."""
+    return {"type": APPLY_AURA, "aura": PET_PASSIVE, "triggerspell": pet_spell, "targeta": T_CASTER}
 
 
 class Spell:
@@ -838,125 +863,174 @@ CLERIC = {
 ACOLYTE = {
     "class_id": 3, "tab_id": 2, "classmask": 4, "icon": "S_Class_Acolyte.htex",
     "paths": [
-        ("TALENT_PATH_SHADOW", ("Umbra", "Umbra", "Pénombre", "Полутьма"), 0xFFB57AFF, {
-            "A1": talent(160,
-                passive(1300, ("Vertiefte Dunkelheit", "Deepening Dark", "Ténèbres profondes", "Сгущающаяся тьма"),
-                        ("Erhöht den Schaden deiner Schattenzauber um $s0%.", "Increases the damage of your Shadow spells by $s0%.",
-                         "Augmente de $s0% les dégâts de vos sorts d'Ombre.", "Увеличивает урон ваших заклинаний тьмы на $s0%."),
-                        "T_Icon_Shadow_40.htex", SCHOOL_SHADOW, [mod(OP_DAMAGE, 0x1, 5, pct=True)], rank=1, baseid=1300),
-                passive(1301, ("Vertiefte Dunkelheit", "Deepening Dark", "Ténèbres profondes", "Сгущающаяся тьма"),
-                        ("Erhöht den Schaden deiner Schattenzauber um $s0%.", "Increases the damage of your Shadow spells by $s0%.",
-                         "Augmente de $s0% les dégâts de vos sorts d'Ombre.", "Увеличивает урон ваших заклинаний тьмы на $s0%."),
-                        "T_Icon_Shadow_40.htex", SCHOOL_SHADOW, [mod(OP_DAMAGE, 0x1, 10, pct=True)], rank=2, baseid=1300)),
-            "A2": talent(161, passive(1302,
-                ("Geflüsterter Blitz", "Whispered Bolt", "Trait murmuré", "Шёпот стрелы"),
-                ("Verringert die Zauberzeit deines Schattenblitzes um 0,5 Sek.",
-                 "Reduces the cast time of your Shadowbolt by 0.5 sec.",
-                 "Réduit de 0,5 s le temps d'incantation de votre Trait de l'ombre.",
-                 "Сокращает время произнесения «Стрелы тьмы» на 0,5 сек."),
-                "T_Icon_Shadow_78.htex", SCHOOL_SHADOW, [mod(OP_CAST, 0x10, -500)])),
-            "A3": talent(162, passive(1303,
-                ("Dunkle Einsicht", "Dark Insight", "Sombre clairvoyance", "Тёмное прозрение"),
-                ("Erhöht die kritische Trefferchance deiner Schattenzauber um $s0%.",
-                 "Increases the critical strike chance of your Shadow spells by $s0%.",
-                 "Augmente de $s0% les chances de coup critique de vos sorts d'Ombre.",
-                 "Увеличивает шанс критического удара ваших заклинаний тьмы на $s0%."),
-                "T_Icon_Shadow_33.htex", SCHOOL_SHADOW, [mod(OP_CRIT, 0x1, 6)])),
-            "B1": ph(163, placeholder(1304,
-                ("Auflösung", "Unraveling", "Délitement", "Распад сути"),
-                ("Deine Schattenblitze machen das Ziel verwundbar: +3% erlittener Schattenschaden pro Stapel, bis zu 5-mal.",
-                 "Your Shadowbolts make the target vulnerable: +3% shadow damage taken per stack, up to 5 stacks.",
-                 "Vos Traits de l'ombre rendent la cible vulnérable : +3% de dégâts d'Ombre subis par cumul, jusqu'à 5 fois.",
-                 "Ваши «Стрелы тьмы» делают цель уязвимой: +3% получаемого урона от тьмы за заряд, до 5 зарядов."),
-                "T_Icon_Shadow_64.htex", SCHOOL_SHADOW)),
-            "M": talent(164, passive(1305,
-                ("Zwielicht", "Gloaming", "Brune", "Сумрак"),
-                ("Die Schadenseffekte deiner Verderbenden Berührung haben eine Chance von 10%, deinen nächsten Schattenblitz innerhalb von 10 Sek. sofort wirkbar zu machen.",
-                 "The damage ticks of your Corrupting Touch have a 10% chance to make your next Shadowbolt within 10 sec instant.",
-                 "Les dégâts périodiques de votre Toucher corrupteur ont 10% de chances de rendre instantané votre prochain Trait de l'ombre dans les 10 s.",
-                 "Периодический урон «Порчи» с вероятностью 10% делает следующую «Стрелу тьмы» в течение 10 сек. мгновенной."),
-                "T_Icon_Shadow_85.htex", SCHOOL_SHADOW, [proc(1306, T_CASTER)],
+        # Summoner replaced Umbra (2026-11-02). Characters save talents as (talent id, rank index),
+        # so the Summoner nodes take fresh ids (240-248) and Umbra's ids (160-167, 2) leave the data:
+        # an unknown saved talent id makes GamePlayerS::InitializeTalents call ResetTalents, which
+        # refunds every point. Reusing Umbra's ids would load Umbra ranks as Summoner talents.
+        # Umbra's rank spells are neutered (RETIRED_RANK_SPELLS). 240+ stays clear of other
+        # branches' new talents (scout rework uses 213-214).
+        ("TALENT_PATH_SUMMONER", ("Beschwörer", "Summoner", "Invocateur", "Призыватель"), 0xFFB57AFF, {
+            "A1": talent(240,
+                passive(1340, ("Dunkles Band", "Dark Bond", "Lien obscur", "Тёмная связь"),
+                        ("Erhöht den Schaden Eures Dämmerlings um $s0% und seine Gesundheit um $s1%.",
+                         "Increases your Duskling's damage by $s0% and its health by $s1%.",
+                         "Augmente de $s0% les dégâts de votre crépusculin et de $s1% sa santé.",
+                         "Увеличивает урон вашего сумрачного бесёнка на $s0% и его здоровье на $s1%."),
+                        "Acolyte_DarkBond.htex", SCHOOL_SHADOW,
+                        [aura(MOD_PET_STATS_PCT, 15, PET_STAT_DAMAGE), aura(MOD_PET_STATS_PCT, 10, PET_STAT_HEALTH)],
+                        rank=1, baseid=1340),
+                passive(1341, ("Dunkles Band", "Dark Bond", "Lien obscur", "Тёмная связь"),
+                        ("Erhöht den Schaden Eures Dämmerlings um $s0% und seine Gesundheit um $s1%.",
+                         "Increases your Duskling's damage by $s0% and its health by $s1%.",
+                         "Augmente de $s0% les dégâts de votre crépusculin et de $s1% sa santé.",
+                         "Увеличивает урон вашего сумрачного бесёнка на $s0% и его здоровье на $s1%."),
+                        "Acolyte_DarkBond.htex", SCHOOL_SHADOW,
+                        [aura(MOD_PET_STATS_PCT, 30, PET_STAT_DAMAGE), aura(MOD_PET_STATS_PCT, 20, PET_STAT_HEALTH)],
+                        rank=2, baseid=1340)),
+            "A2": talent(241, passive(1342,
+                ("Schwarmkunde", "Swarm Lore", "Science de l'essaim", "Знание роя"),
+                ("„Düsterlinge rufen“ ruft einen Düsterling mehr herbei, und die so gerufenen Düsterlinge bleiben 5 Sek. länger.",
+                 "Call Gloomlings calls one more Gloomling, and the Gloomlings it calls stay 5 sec longer.",
+                 "Appel des ombrelins appelle un ombrelin de plus, et les ombrelins ainsi appelés restent 5 s de plus.",
+                 "«Зов мрачных бесёнков» призывает на одного бесёнка больше, и призванные им бесёнки остаются на 5 сек. дольше."),
+                "Acolyte_SwarmLore.htex", SCHOOL_SHADOW,
+                [mod(OP_ALL_EFFECTS, 0x400, 1), mod(OP_DURATION, 0x400, 5000)])),
+            "A3": talent(242, passive(1343,
+                ("Schattensympathie", "Shadow Sympathy", "Sympathie des ombres", "Теневое родство"),
+                ("Euer Dämmerling erleidet 20% weniger Schaden.", "Your Duskling takes 20% less damage.",
+                 "Votre crépusculin subit 20% de dégâts en moins.", "Ваш сумрачный бесёнок получает на 20% меньше урона."),
+                "Acolyte_ShadowSympathy.htex", SCHOOL_SHADOW, [pet_passive(1344)]),
+                extra=[passive(1344,
+                    ("Schattensympathie", "Shadow Sympathy", "Sympathie des ombres", "Теневое родство"),
+                    ("", "", "", ""), "Acolyte_ShadowSympathy.htex", SCHOOL_SHADOW,
+                    [aura(DMG_TAKEN_PCT, -20)])]),
+            "B1": talent(243, passive(1346,
+                ("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
+                ("Die Schadenseffekte Eurer Verderblichen Berührung haben eine Chance von 10%, 8 Sek. lang einen Düsterling an Eure Seite zu rufen.",
+                 "The damage ticks of your Corrupting Touch have a 10% chance to call a Gloomling to your side for 8 sec.",
+                 "Les dégâts périodiques de votre Toucher corrupteur ont 10% de chances d'appeler un ombrelin à vos côtés pendant 8 s.",
+                 "Периодический урон «Порчи» с вероятностью 10% призывает вам на помощь мрачного бесёнка на 8 сек."),
+                "Acolyte_GloomTether.htex", SCHOOL_SHADOW, [proc(1347)],
                 procflags=DONE_PERIODIC, procchance=10, procfamily=0x2),
-                extra=[Spell(1306, {
+                extra=[Spell(1347, {
+                    # No range type: the proc casts it at the Corrupting Touch victim, wherever that is.
+                    "attributes": [0x10, 128], "spellSchool": SCHOOL_SHADOW, "duration": 8000,
+                    "icon": ICONS + "Acolyte_GloomTether.htex",
+                    "visualization_id": 150,  # Acolyte - Gloom Tether
+                    "effects": [{"type": SUMMON_PET, "basepoints": 1, "targeta": T_ENEMY, "radius": 2.0, "summonunit": 123,
+                                 "pet_max_count": 3, "pet_level_source": PET_LEVEL_CLASS}],
+                    **text_fields(("Düstere Fessel", "Gloom Tether", "Attache lugubre", "Мрачная привязь"),
+                                  ("Ruft $D lang einen Düsterling herbei.", "Calls a Gloomling for $D.",
+                                   "Appelle un ombrelin pendant $D.", "Призывает мрачного бесёнка на $D."))})]),
+            "M": talent(244, Spell(1345, {
+                "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "positive": 1,
+                "icon": ICONS + "Acolyte_EmpowerDuskling.htex", "duration": 12000, "cooldown": "60000", "cost": 30,
+                "visualization_id": 149,  # Acolyte - Empower Duskling
+                "effects": [aura(DMG_DONE_PCT, 30, target=T_PET), aura(MOD_ATTACK_SPEED, 30, target=T_PET)],
+                **text_fields(("Dämmerling stärken", "Empower Duskling", "Renforcer le crépusculin", "Усиление бесёнка"),
+                              ("Erfüllt Euren Dämmerling $D lang mit Dunkelheit: Er verursacht 30% mehr Schaden und greift 30% schneller an.",
+                               "Fills your Duskling with darkness for $D: it deals 30% more damage and attacks 30% faster.",
+                               "Emplit votre crépusculin de ténèbres pendant $D : il inflige 30% de dégâts en plus et attaque 30% plus vite.",
+                               "Наполняет вашего сумрачного бесёнка тьмой на $D: он наносит на 30% больше урона и атакует на 30% быстрее."),
+                              ("Schaden um 30% erhöht, Angriffstempo um 30% erhöht.",
+                               "Damage increased by 30%, attack speed increased by 30%.",
+                               "Dégâts augmentés de 30%, vitesse d'attaque augmentée de 30%.",
+                               "Урон увеличен на 30%, скорость атаки увеличена на 30%."))})),
+            # A proc heal cannot see the damage that triggered it, so Shared Night heals a fixed,
+            # level-scaled amount close to half a Drain Essence tick.
+            "B2": talent(245, passive(1348,
+                ("Geteilte Nacht", "Shared Night", "Nuit partagée", "Общая ночь"),
+                ("Jeder Schadenseffekt Eures Essenzentzugs heilt außerdem Euren Dämmerling um $1349s0.",
+                 "Every damage tick of your Drain Essence also heals your Duskling for $1349s0.",
+                 "Chaque dégât de votre Drain d'essence soigne aussi votre crépusculin de $1349s0 points de vie.",
+                 "Каждый тик урона «Похищения сущности» также исцеляет вашего сумрачного бесёнка на $1349s0 ед. здоровья."),
+                "Acolyte_SharedNight.htex", SCHOOL_SHADOW, [proc(1349, T_CASTER)],
+                procflags=DONE_MAGIC_NEG, procchance=100, procfamily=0x80),
+                extra=[Spell(1349, {
                     "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
-                    "duration": 10000, "icon": ICONS + "T_Icon_Shadow_85.htex",
-                    "visualization_id": 136,  # Acolyte - Gloaming Trance
-                    "effects": [mod(OP_CAST, 0x10, -100, pct=True)],
-                    "procflags": DONE_MAGIC_NEG, "procchance": 100, "proccharges": 1, "procfamily": 0x10,
-                    **text_fields(("Zwielichttrance", "Gloaming Trance", "Transe de la brune", "Сумеречный транс"),
-                                  ("", "", "", ""),
-                                  ("Dein nächster Schattenblitz ist sofort wirkbar.", "Your next Shadowbolt is instant.",
-                                   "Votre prochain Trait de l'ombre est instantané.", "Следующая «Стрела тьмы» мгновенна."))})]),
-            "B2": talent(2, patch(82,
-                ("Abgründige Reichweite", "Abyssal Reach", "Portée abyssale", "Бездонный охват"),
-                ("Erhöht die Reichweite deiner Schattenzauber und deiner Furcht um 20%.",
-                 "Increases the range of your Shadow spells and Fear by 20%.",
-                 "Augmente de 20% la portée de vos sorts d'Ombre et de Peur.",
-                 "Увеличивает дальность ваших заклинаний тьмы и «Страха» на 20%."),
-                [mod(OP_RANGE, 0x5, 20, pct=True)])),
-            "C1": ph(165, placeholder(1307,
-                ("Reißendes Flüstern", "Rending Whispers", "Murmures déchirants", "Раздирающий шёпот"),
-                ("Greift 3 Sek. lang den Geist des Ziels an, verursacht Schattenschaden und verlangsamt es um 50%.",
-                 "Assaults the target's mind for 3 sec, dealing shadow damage and slowing it by 50%.",
-                 "Assaille l'esprit de la cible pendant 3 s, lui infligeant des dégâts d'Ombre et la ralentissant de 50%.",
-                 "Терзает разум цели 3 сек., нанося урон от тьмы и замедляя её на 50%."),
-                "T_Icon_Shadow_50.htex", SCHOOL_SHADOW)),
-            "C2": ph(166, placeholder(1308,
-                ("Hungriger Schatten", "Hungering Shade", "Ombre affamée", "Голодная тень"),
-                ("Beschwört 15 Sek. lang einen Schattengeist, der dein Ziel angreift. Jeder Treffer stellt Mana wieder her.",
-                 "Summons a shadowfiend that attacks your target for 15 sec. Each hit restores your mana.",
-                 "Invoque un ombrefiel qui attaque votre cible pendant 15 s. Chaque coup vous rend du mana.",
-                 "Призывает исчадие тьмы, атакующее вашу цель 15 сек. Каждый удар восполняет вам ману."),
-                "T_Icon_Shadow_80.htex", SCHOOL_SHADOW)),
-            "CAP": talent(167, Spell(1309, {
-                "attributes": AOE_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "T_Icon_Shadow_58.htex",
-                "cooldown": "12000", "cost": 55, "rangetype": 4, "familyflags": str(0x20),
-                "maxlevel": 10, "baselevel": 0, "spelllevel": 0,
-                "visualization_id": 134,  # Acolyte - Umbral Bloom
-                "effects": [{"type": SCHOOL_DAMAGE, "basepoints": 28, "diesides": 8, "pointsperlevel": 1.2,
-                             "targeta": T_SOURCE_AREA_ENEMY, "radius": 8.0, "powerbonusfactor": 0.3}],
-                **text_fields(("Schattenblüte", "Umbral Bloom", "Floraison ombrale", "Теневое цветение"),
-                              ("Entfesselt eine Welle der Leere und fügt Gegnern in der Nähe $s0 Schattenschaden zu.",
-                               "Unleashes a wave of void energy, dealing $s0 shadow damage to nearby enemies.",
-                               "Libère une vague d'énergie du Vide qui inflige $s0 points de dégâts d'Ombre aux ennemis proches.",
-                               "Высвобождает волну энергии Бездны, нанося $s0 ед. урона от тьмы врагам поблизости."))})),
+                    "icon": ICONS + "Acolyte_SharedNight.htex", "maxlevel": 12, "baselevel": 4, "spelllevel": 4,
+                    "visualization_id": 151,  # Acolyte - Shared Night
+                    "effects": [{"type": HEAL, "basepoints": 5, "diesides": 2, "pointsperlevel": 0.5, "targeta": T_PET}],
+                    **text_fields(("Geteilte Nacht", "Shared Night", "Nuit partagée", "Общая ночь"),
+                                  ("Heilt Euren Dämmerling um $s0.", "Heals your Duskling for $s0.",
+                                   "Rend $s0 points de vie à votre crépusculin.",
+                                   "Восполняет вашему сумрачному бесёнку $s0 ед. здоровья."))})]),
+            "C1": talent(246, passive(1350,
+                ("Dunkle Lehre", "Dark Tutelage", "Tutelle obscure", "Тёмное наставничество"),
+                ("Verringert die Abklingzeit von „Düsterlinge rufen“ um 30 Sek.",
+                 "Reduces the cooldown of Call Gloomlings by 30 sec.",
+                 "Réduit de 30 s le temps de recharge d'Appel des ombrelins.",
+                 "Сокращает время восстановления «Зова мрачных бесёнков» на 30 сек."),
+                "Acolyte_DarkTutelage.htex", SCHOOL_SHADOW, [mod(OP_COOLDOWN, 0x400, -30000)])),
+            # The channel length is the cast time and its aura's ticks come from the duration, so
+            # both grow by one tick interval.
+            "C2": talent(247, passive(1351,
+                ("Seelenheber", "Soul Siphon", "Siphon d'âme", "Высасывание души"),
+                ("Euer Essenzentzug hält 1 Sek. länger an und verursacht einmal mehr Schaden.",
+                 "Your Drain Essence lasts 1 sec longer and deals damage one more time.",
+                 "Votre Drain d'essence dure 1 s de plus et inflige des dégâts une fois de plus.",
+                 "«Похищение сущности» длится на 1 сек. дольше и наносит урон ещё один раз."),
+                "Acolyte_SoulSiphon.htex", SCHOOL_SHADOW, [mod(OP_CAST, 0x80, 1000), mod(OP_DURATION, 0x80, 1000)])),
+            "CAP": talent(248, Spell(1352, {
+                "attributes": [0x10, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_BroodHorror.htex",
+                "duration": 20000, "cooldown": "180000", "cost": 80, "rangetype": 2,
+                "visualization_id": 152,  # Acolyte - Brood Horror
+                "effects": [{"type": SUMMON_PET, "basepoints": 1, "targeta": T_ENEMY, "radius": 3.0, "summonunit": 124,
+                             "pet_level_source": PET_LEVEL_CLASS}],
+                **text_fields(("Brutschrecken", "Brood Horror", "Horreur de la couvée", "Ужас выводка"),
+                              ("Ruft $D lang einen Brutschrecken aus der Leere herbei. Er greift Euer Ziel an.",
+                               "Calls a Brood Horror out of the void for $D. It attacks your target.",
+                               "Appelle une horreur de la couvée hors du Vide pendant $D. Elle attaque votre cible.",
+                               "Призывает из Бездны ужас выводка на $D. Он атакует вашу цель."))})),
         }),
         ("TALENT_PATH_DECAY", ("Fäule", "Blight", "Flétrissure", "Порча"), 0xFF8CD35E, {
             "A1": talent(3, patch(84,
                 ("Rascher Verfall", "Rapid Decay", "Putréfaction rapide", "Стремительный распад"),
-                ("Deine Verderbende Berührung wird sofort gewirkt.", "Your Corrupting Touch becomes instant.",
+                ("Eure Verderbliche Berührung wird sofort gewirkt.", "Your Corrupting Touch becomes instant.",
                  "Votre Toucher corrupteur devient instantané.", "«Порча» применяется мгновенно."),
                 [mod(OP_CAST, 0x2, -1500)])),
             "A2": talent(4, patch(25,
                 ("Endloser Verfall", "Endless Decay", "Putréfaction sans fin", "Бесконечный тлен"),
-                ("Erhöht die Dauer deiner Verderbenden Berührung um $s0%.",
+                ("Erhöht die Dauer Eurer Verderblichen Berührung um $s0%.",
                  "Increases the duration of your Corrupting Touch by $s0%.",
                  "Augmente de $s0% la durée de votre Toucher corrupteur.",
                  "Увеличивает длительность «Порчи» на $s0%."),
                 [mod(OP_DURATION, 0x2, 33, pct=True)])),
             "A3": talent(168,
                 passive(1310, ("Verdorren", "Withering", "Flétrissure", "Иссушение"),
-                        ("Erhöht den regelmäßigen Schaden deiner Verderbenden Berührung um $s0%.",
+                        ("Erhöht den regelmäßigen Schaden Eurer Verderblichen Berührung um $s0%.",
                          "Increases the periodic damage of your Corrupting Touch by $s0%.",
                          "Augmente de $s0% les dégâts périodiques de votre Toucher corrupteur.",
                          "Увеличивает периодический урон «Порчи» на $s0%."),
                         "T_Icon_Unholy_116.htex", SCHOOL_SHADOW, [mod(OP_PERIODIC, 0x2, 10, pct=True)], rank=1, baseid=1310),
                 passive(1311, ("Verdorren", "Withering", "Flétrissure", "Иссушение"),
-                        ("Erhöht den regelmäßigen Schaden deiner Verderbenden Berührung um $s0%.",
+                        ("Erhöht den regelmäßigen Schaden Eurer Verderblichen Berührung um $s0%.",
                          "Increases the periodic damage of your Corrupting Touch by $s0%.",
                          "Augmente de $s0% les dégâts périodiques de votre Toucher corrupteur.",
                          "Увеличивает периодический урон «Порчи» на $s0%."),
                         "T_Icon_Unholy_116.htex", SCHOOL_SHADOW, [mod(OP_PERIODIC, 0x2, 20, pct=True)], rank=2, baseid=1310)),
-            "B1": ph(169, placeholder(1312,
+            # Rot Field ticks are proc casts, but their damage still fires DoneSpellMagicDmgClassNeg
+            # (DealSchoolDamage never passes isProc), so Creeping Rot and Miasma can key on them.
+            "B1": talent(169, passive(1356,
                 ("Kriechende Fäulnis", "Creeping Rot", "Pourriture rampante", "Ползучая гниль"),
-                ("Deine Verderbende Berührung springt bei jedem Schaden auf einen Gegner in der Nähe über, bis zu 2-mal.",
-                 "Corrupting Touch jumps to a nearby enemy every time it deals damage, up to 2 times.",
-                 "Votre Toucher corrupteur passe à un ennemi proche à chaque fois qu'il inflige des dégâts, jusqu'à 2 fois.",
-                 "«Порча» при каждом нанесении урона перескакивает на ближайшего врага, до 2 раз."),
-                "T_Icon_Unholy_42.htex", SCHOOL_SHADOW)),
+                ("Euer Fäulnisfeld hält 4 Sek. länger an und verlangsamt Gegner darin um 30%.",
+                 "Your Rot Field lasts 4 sec longer and slows enemies inside by 30%.",
+                 "Votre Champ de pourriture dure 4 s de plus et ralentit de 30% les ennemis à l'intérieur.",
+                 "«Поле гнили» действует на 4 сек. дольше и замедляет врагов внутри на 30%."),
+                "Acolyte_CreepingRot.htex", SCHOOL_SHADOW, [mod(OP_DURATION, 0x800, 4000), proc(1357)],
+                procflags=DONE_MAGIC_NEG, procchance=100, procfamily=0x800),
+                extra=[Spell(1357, {
+                    "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 4000,
+                    "mechanic": MECHANIC_SNARE, "icon": ICONS + "Acolyte_CreepingRot.htex",
+                    "visualization_id": 153,  # Acolyte - Creeping Rot
+                    "effects": [aura(MOD_DECREASE_SPEED, -30, target=T_ENEMY)],
+                    **text_fields(("Kriechende Fäulnis", "Creeping Rot", "Pourriture rampante", "Ползучая гниль"),
+                                  ("", "", "", ""),
+                                  ("Bewegungstempo um 30% verringert.", "Movement speed reduced by 30%.",
+                                   "Vitesse de déplacement réduite de 30%.", "Скорость передвижения снижена на 30%."))})]),
             "M": talent(170, passive(1313,
                 ("Saugende Fäulnis", "Leeching Rot", "Pourriture sangsue", "Пиявочная гниль"),
-                ("Jeder Schadenseffekt deiner Verderbenden Berührung heilt dich um einen kleinen Betrag.",
+                ("Jeder Schadenseffekt Eurer Verderblichen Berührung heilt Euch um einen kleinen Betrag.",
                  "Every damage tick of your Corrupting Touch heals you for a small amount.",
                  "Chaque dégât périodique de votre Toucher corrupteur vous soigne d'un petit montant.",
                  "Каждый тик урона «Порчи» немного исцеляет вас."),
@@ -968,82 +1042,123 @@ ACOLYTE = {
                     "visualization_id": 137,  # Acolyte - Leeching Rot
                     "effects": [{"type": HEAL, "basepoints": 2, "pointsperlevel": 0.5, "targeta": T_CASTER}],
                     **text_fields(("Saugende Fäulnis", "Leeching Rot", "Pourriture sangsue", "Пиявочная гниль"),
-                                  ("Heilt dich um $s0.", "Heals you for $s0.", "Vous rend $s0 points de vie.",
+                                  ("Heilt Euch um $s0.", "Heals you for $s0.", "Vous rend $s0 points de vie.",
                                    "Восполняет вам $s0 ед. здоровья."))})]),
             "B2": talent(14, patch(116)),
-            "C1": ph(171, placeholder(1315,
+            "C1": talent(171, passive(1355,
                 ("Miasma", "Miasma", "Miasme", "Миазмы"),
-                ("Setzt am Zielort eine Wolke des Verfalls frei, die alle Gegner darin mit Verderbender Berührung belegt.",
-                 "Releases a cloud of decay at the target location that afflicts all enemies inside with Corrupting Touch.",
-                 "Libère un nuage de putréfaction à l'endroit ciblé qui afflige tous les ennemis à l'intérieur de Toucher corrupteur.",
-                 "Выпускает облако тлена в указанной точке, накладывая «Порчу» на всех врагов внутри."),
-                "T_Icon_Unholy_174.htex", SCHOOL_SHADOW)),
-            "C2": ph(172, placeholder(1316,
+                ("Euer Fäulnisfeld belegt die Gegner, denen es schadet, mit Eurer Verderblichen Berührung.",
+                 "Your Rot Field afflicts the enemies it damages with your Corrupting Touch.",
+                 "Votre Champ de pourriture afflige de votre Toucher corrupteur les ennemis qu'il blesse.",
+                 "«Поле гнили» накладывает «Порчу» на врагов, которым наносит урон."),
+                "Acolyte_Miasma.htex", SCHOOL_SHADOW, [proc(24)],
+                procflags=DONE_MAGIC_NEG, procchance=100, procfamily=0x800)),
+            "C2": talent(172, passive(1358,
                 ("Giftiger Rückschlag", "Venomous Backlash", "Contrecoup venimeux", "Ядовитая отдача"),
-                ("Wird deine Verderbende Berührung gebannt, wird der Bannende zum Schweigen gebracht und erleidet schweren Schattenschaden.",
-                 "When your Corrupting Touch is dispelled, the dispeller is silenced and takes heavy shadow damage.",
-                 "Quand votre Toucher corrupteur est dissipé, le dissipateur est réduit au silence et subit de lourds dégâts d'Ombre.",
-                 "Если «Порчу» рассеивают, рассеявший теряет дар речи и получает сильный урон от тьмы."),
-                "T_Icon_Unholy_99.htex", SCHOOL_SHADOW)),
-            "CAP": talent(5, patch(63)),
+                ("Werdet Ihr im Nahkampf getroffen, besteht eine Chance von 20%, den Angreifer mit Eurer Auszehrenden Seuche zu infizieren.",
+                 "When you are hit in melee, you have a 20% chance to infect the attacker with your Wasting Plague.",
+                 "Quand vous êtes touché en mêlée, vous avez 20% de chances d'infecter l'attaquant de votre Peste dévorante.",
+                 "При получении удара в ближнем бою с вероятностью 20% заражает атакующего «Изнуряющей чумой»."),
+                "Acolyte_VenomousBacklash.htex", SCHOOL_SHADOW, [proc(1334)],
+                procflags=TAKEN_MELEE_AUTO_ATTACK, procchance=20)),
+            "CAP": talent(5, patch(63,
+                ("Pestträger", "Plaguebearer", "Porteur de peste", "Чумоносец"),
+                ("Stirbt ein Gegner, der von Eurer Verderblichen Berührung befallen ist, springt sie auf bis zu 2 Gegner in der Nähe über.",
+                 "When an enemy afflicted by your Corrupting Touch dies, it spreads to up to 2 nearby enemies.",
+                 "Quand un ennemi affligé par votre Toucher corrupteur meurt, celui-ci se propage à 2 ennemis proches au plus.",
+                 "Когда враг под действием вашей «Порчи» погибает, она переходит на 2 ближайших врагов."))),
         }),
         ("TALENT_PATH_DREAD", ("Grauen", "Dread", "Effroi", "Ужас"), 0xFFE0566E, {
             "A1": talent(173, passive(1320,
                 ("Grauenhafte Präsenz", "Dread Presence", "Présence effroyable", "Ужасающее присутствие"),
-                ("Verringert die Zauberzeit von Furcht um 1 Sek.", "Reduces the cast time of Fear by 1 sec.",
+                ("Verringert die Zauberzeit von Angst um 1 Sek.", "Reduces the cast time of Fear by 1 sec.",
                  "Réduit de 1 s le temps d'incantation de Peur.", "Сокращает время произнесения «Страха» на 1 сек."),
                 "T_Icon_Shadow_103.htex", SCHOOL_SHADOW, [mod(OP_CAST, 0x4, -1000)])),
             "A2": talent(174, passive(1321,
                 ("Grabesausdauer", "Grave Endurance", "Endurance sépulcrale", "Могильная стойкость"),
-                ("Erhöht deine Ausdauer um $s0%.", "Increases your Stamina by $s0%.",
+                ("Erhöht Eure Ausdauer um $s0%.", "Increases your Stamina by $s0%.",
                  "Augmente votre Endurance de $s0%.", "Увеличивает вашу выносливость на $s0%."),
                 "T_Icon_Shadow_12.htex", SCHOOL_SHADOW, [aura(MOD_STAT_PCT, 8, STA)])),
             "A3": talent(175, passive(1322,
                 ("Mitternachtszehnt", "Midnight Tithe", "Dîme de minuit", "Полуночная дань"),
-                ("Erhöht deine Manaregeneration um $s0%.", "Increases your mana regeneration by $s0%.",
+                ("Erhöht Eure Manaregeneration um $s0%.", "Increases your mana regeneration by $s0%.",
                  "Augmente votre régénération de mana de $s0%.", "Увеличивает восстановление маны на $s0%."),
                 "T_Icon_Shadow_55.htex", SCHOOL_SHADOW, [aura(MOD_POWER_REGEN_PCT, 25, POWER_MANA)])),
-            "B1": ph(176, placeholder(1323,
-                ("Klage der Verlorenen", "Wail of the Lost", "Plainte des égarés", "Плач потерянных"),
-                ("Stößt ein Geheul aus, das bis zu 5 Gegner in der Nähe 6 Sek. lang in Angst und Schrecken fliehen lässt.",
-                 "Lets out a howl that makes up to 5 nearby enemies flee in terror for 6 sec.",
-                 "Pousse un hurlement qui fait fuir de terreur jusqu'à 5 ennemis proches pendant 6 s.",
-                 "Испускает вой, обращающий в бегство до 5 ближайших врагов на 6 сек."),
-                "T_Icon_Shadow_29.htex", SCHOOL_SHADOW)),
+            "B1": talent(176, Spell(1363, {
+                "attributes": AOE_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_WailOfTheLost.htex",
+                "duration": 3000, "cooldown": "60000", "cost": 50, "maxtargets": 3, "mechanic": MECHANIC_FEAR,
+                "familyflags": str(0x2000),
+                "visualization_id": 156,  # Acolyte - Wail of the Lost
+                "effects": [{"type": APPLY_AURA, "aura": MOD_FEAR, "targeta": T_SOURCE_AREA_ENEMY, "radius": 8.0}],
+                **text_fields(("Klage der Verlorenen", "Wail of the Lost", "Plainte des égarés", "Плач потерянных"),
+                              ("Stößt ein Klagegeheul aus, das bis zu 3 Gegner im Umkreis von 8 Metern $D lang in Angst fliehen lässt.",
+                               "Lets out a wail that makes up to 3 enemies within 8 yards flee in fear for $D.",
+                               "Pousse une plainte qui fait fuir de peur jusqu'à 3 ennemis à moins de 8 mètres pendant $D.",
+                               "Испускает вопль, обращающий в бегство до 3 врагов в радиусе 8 м на $D."),
+                              ("Flieht in Angst.", "Fleeing in fear.", "Fuit de peur.", "В страхе бежит."))})),
             "M": talent(177, passive(1324,
                 ("Seelenrüstung", "Soul Armor", "Armure d'âme", "Доспех души"),
-                ("Erhöht deine Rüstung um $s0%.", "Increases your armor by $s0%.",
+                ("Erhöht Eure Rüstung um $s0%.", "Increases your armor by $s0%.",
                  "Augmente votre armure de $s0%.", "Увеличивает вашу броню на $s0%."),
-                "T_Icon_Shadow_45.htex", SCHOOL_SHADOW, [aura(MOD_RESIST_PCT, 15)])),
-            "B2": ph(178, placeholder(1325,
+                "Acolyte_SoulArmor.htex", SCHOOL_SHADOW, [aura(MOD_RESIST_PCT, 15)])),
+            "B2": talent(178, passive(1361,
                 ("Greifendes Grauen", "Grasping Dread", "Effroi agrippant", "Цепкий ужас"),
-                ("Schleudert eine Schattenspirale, die den Gegner 3 Sek. lang entsetzt und dich um den verursachten Schaden heilt.",
-                 "Hurls a coil of shadow that horrifies the enemy for 3 sec and heals you for the damage dealt.",
-                 "Projette une spirale d'ombre qui horrifie l'ennemi pendant 3 s et vous soigne des dégâts infligés.",
-                 "Бросает виток тьмы, приводящий врага в ужас на 3 сек. и исцеляющий вас на величину урона."),
-                "T_Icon_Shadow_89.htex", SCHOOL_SHADOW)),
-            "C1": ph(179, placeholder(1326,
-                ("Verknotete Zunge", "Tangled Tongue", "Langue nouée", "Заплетающийся язык"),
-                ("Verflucht das Ziel und erhöht 30 Sek. lang seine Zauberzeit um 50%.",
-                 "Curses the target, increasing its casting time by 50% for 30 sec.",
-                 "Maudit la cible et augmente son temps d'incantation de 50% pendant 30 s.",
-                 "Проклинает цель, увеличивая время произнесения её заклинаний на 50% на 30 сек."),
-                "T_Icon_Shadow_100.htex", SCHOOL_SHADOW)),
-            "C2": ph(180, placeholder(1327,
-                ("Gebundener Diener", "Bound Servant", "Serviteur lié", "Связанный слуга"),
-                ("Teilt 20% des Schadens, den du erleidest, mit deinem beschworenen Diener.",
-                 "Shares 20% of the damage you take with your summoned servant.",
-                 "Partage 20% des dégâts que vous subissez avec votre serviteur invoqué.",
-                 "Перенаправляет 20% получаемого урона на вашего призванного слугу."),
-                "T_Icon_Shadow_99.htex", SCHOOL_SHADOW)),
+                ("Euer Fluch des Morasts hält das Ziel außerdem 2 Sek. lang an Ort und Stelle fest.",
+                 "Your Curse of the Mire also roots the target in place for 2 sec.",
+                 "Votre Malédiction du bourbier immobilise aussi la cible sur place pendant 2 s.",
+                 "«Проклятие трясины» также обездвиживает цель на 2 сек."),
+                "Acolyte_GraspingDread.htex", SCHOOL_SHADOW, [proc(1362)],
+                procflags=DONE_SPELL_NONE_NEG, procchance=100, procfamily=0x100),
+                extra=[Spell(1362, {
+                    "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 2000,
+                    "mechanic": MECHANIC_ROOTED, "icon": ICONS + "Acolyte_GraspingDread.htex",
+                    "visualization_id": 155,  # Acolyte - Grasping Dread
+                    "effects": [aura(MOD_ROOT, target=T_ENEMY)],
+                    **text_fields(("Greifendes Grauen", "Grasping Dread", "Effroi agrippant", "Цепкий ужас"),
+                                  ("", "", "", ""),
+                                  ("An Ort und Stelle festgehalten.", "Rooted in place.", "Immobilisé sur place.",
+                                   "Обездвижен."))})]),
+            "C1": talent(179, Spell(1360, {
+                "attributes": [0x4000010, 4], "spellSchool": SCHOOL_SHADOW, "icon": ICONS + "Acolyte_TangledTongue.htex",
+                "duration": 20000, "cost": 35, "rangetype": 5, "facing": 1, "familyflags": str(0x1000),
+                "visualization_id": 154,  # Acolyte - Tangled Tongue
+                "stacking_rule": 5, "stacking_category_id": 3,  # Acolyte Curses: one curse per caster and target
+                "effects": [aura(MOD_CASTING_SPEED_PCT, 30, target=T_ENEMY)],
+                **text_fields(("Verknotete Zunge", "Tangled Tongue", "Langue nouée", "Заплетающийся язык"),
+                              ("Verflucht das Ziel und verlängert $D lang seine Zauberzeiten um 30%. Ihr könnt auf jedem Ziel nur einen Eurer Flüche aufrechterhalten.",
+                               "Curses the target, increasing its cast times by 30% for $D. You can keep only one of your curses on each target.",
+                               "Maudit la cible, augmentant ses temps d'incantation de 30% pendant $D. Vous ne pouvez maintenir qu'une seule de vos malédictions sur chaque cible.",
+                               "Проклинает цель, увеличивая время произнесения её заклинаний на 30% на $D. На каждой цели может действовать только одно ваше проклятие."),
+                              ("Zauberzeit um 30% verlängert.", "Cast time increased by 30%.",
+                               "Temps d'incantation augmenté de 30%.", "Время произнесения заклинаний увеличено на 30%."))})),
+            # No stacking category: the healing debuff stays when another curse replaces Frailty.
+            "C2": talent(180, passive(1364,
+                ("Anhaltendes Grauen", "Lingering Dread", "Effroi persistant", "Затяжной ужас"),
+                ("Euer Fluch der Gebrechlichkeit verringert außerdem 30 Sek. lang die Heilung, die das Ziel erhält, um 20%.",
+                 "Your Curse of Frailty also reduces the healing the target receives by 20% for 30 sec.",
+                 "Votre Malédiction de fragilité réduit aussi de 20% les soins reçus par la cible pendant 30 s.",
+                 "«Проклятие немощи» также снижает получаемое целью исцеление на 20% на 30 сек."),
+                "Acolyte_LingeringDread.htex", SCHOOL_SHADOW, [proc(1365)],
+                procflags=DONE_SPELL_NONE_NEG, procchance=100, procfamily=0x40),
+                extra=[Spell(1365, {
+                    "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_SHADOW, "duration": 30000,
+                    "icon": ICONS + "Acolyte_LingeringDread.htex",
+                    "visualization_id": 157,  # Acolyte - Lingering Dread
+                    "effects": [aura(MOD_HEALING_TAKEN_PCT, -20, target=T_ENEMY)],
+                    **text_fields(("Anhaltendes Grauen", "Lingering Dread", "Effroi persistant", "Затяжной ужас"),
+                                  ("", "", "", ""),
+                                  ("Erhaltene Heilung um 20% verringert.", "Healing received reduced by 20%.",
+                                   "Soins reçus réduits de 20%.", "Получаемое исцеление снижено на 20%."))})]),
             "CAP": talent(181, Spell(1328, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_SHADOW, "positive": 1,
-                "icon": ICONS + "T_Icon_Shadow_118.htex", "duration": 20000, "cooldown": "120000",
+                "icon": ICONS + "Acolyte_EmbraceOfDread.htex", "duration": 20000, "cooldown": "120000",
                 "cost": 40,
                 "visualization_id": 135,  # Acolyte - Embrace of Dread
-                "effects": [mod(OP_DAMAGE, 0x1, 20, pct=True), aura(DMG_TAKEN_PCT, -10)],
+                # The acolyte's damage spells by their own bits (Corrupting Touch, Shadowbolt, Drain
+                # Essence, Wasting Plague, Rot Field): 0x1 would also catch whatever shares it later.
+                "effects": [mod(OP_DAMAGE, ACOLYTE_DAMAGE_MASK, 20, pct=True), aura(DMG_TAKEN_PCT, -10)],
                 **text_fields(("Umarmung des Grauens", "Embrace of Dread", "Étreinte de l'effroi", "Объятия ужаса"),
-                              ("Du wirst $D lang zum Avatar des Grauens: 20% mehr Schattenschaden und 10% weniger erlittener Schaden.",
+                              ("Ihr werdet $D lang zum Avatar des Grauens: 20% mehr Schattenschaden und 10% weniger erlittener Schaden.",
                                "You become an avatar of dread for $D: 20% more shadow damage and 10% less damage taken.",
                                "Vous devenez un avatar de l'effroi pendant $D : 20% de dégâts d'Ombre en plus et 10% de dégâts subis en moins.",
                                "Вы становитесь воплощением ужаса на $D: урон от тьмы +20%, получаемый урон −10%."),
@@ -1055,21 +1170,59 @@ ACOLYTE = {
     ],
 }
 
+def energize(spell_id, points, name, icon):
+    """A triggered Energy gain for the caster (proc result)."""
+    return Spell(spell_id, {
+        "attributes": ENERGIZE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1, "icon": ICONS + icon,
+        "visualization_id": 115,  # Scout - Energy Gain
+        "effects": [{"type": ENERGIZE, "basepoints": points, "miscvaluea": POWER_ENERGY}],
+        **text_fields(name, ("", "", "", ""))})
+
+
 SCOUT = {
     "class_id": 4, "tab_id": 1, "classmask": 8, "icon": "S_Class_Scout.htex",
     "paths": [
+        # Duelist. Twin Slash and Throwing Knife are trained at class level 3-4 (trainer data), so
+        # their talents sit on the second ring, which the fourth class level opens at the earliest.
         ("TALENT_PATH_COMBAT", ("Duellant", "Duelist", "Duelliste", "Дуэлянт"), 0xFFF0B44C, {
-            "A1": talent(190, passive(1400,
-                ("Zwillingszähne", "Twin Fangs", "Crocs jumeaux", "Парные клыки"),
-                ("Erhöht den Schaden von Doppelschnitt um $s0%.", "Increases the damage of Twin Slash by $s0%.",
-                 "Augmente de $s0% les dégâts de Double entaille.", "Увеличивает урон «Двойного рассечения» на $s0%."),
-                "T_Icon_Energy_38.htex", SCHOOL_PHYSICAL, [mod(OP_DAMAGE, 0x10, 15, pct=True)])),
+            "A1": talent(194, passive(1404,
+                ("Zweiter Atem", "Second Wind", "Second souffle", "Второе дыхание"),
+                ("Erhöht Eure Energieregeneration um $s0%.", "Increases your Energy regeneration by $s0%.",
+                 "Augmente votre régénération d'énergie de $s0%.", "Увеличивает восстановление энергии на $s0%."),
+                "T_Icon_Energy_14.htex", SCHOOL_PHYSICAL, [aura(MOD_POWER_REGEN_PCT, 15, POWER_ENERGY)])),
             "A2": talent(191, passive(1401,
                 ("Flinke Hände", "Quick Hands", "Mains agiles", "Ловкие руки"),
                 ("Verringert die Energiekosten von Schneller Schnitt um 8.", "Reduces the Energy cost of Quick Cut by 8.",
                  "Réduit de 8 le coût en énergie d'Entaille rapide.", "Снижает затраты энергии на «Быстрый надрез» на 8."),
                 "T_Icon_Energy_83.htex", SCHOOL_PHYSICAL, [mod(OP_COST, 0x40, -8)])),
-            "A3": talent(192, passive(1402,
+            "A3": talent(195,
+                passive(1405, ("Vitalpunkte", "Vital Points", "Points vitaux", "Уязвимые точки"),
+                        ("Erhöht den kritischen Schadensbonus Eurer Nahkampftechniken um $s0%.",
+                         "Increases the critical strike damage bonus of your melee techniques by $s0%.",
+                         "Augmente de $s0% le bonus aux dégâts critiques de vos techniques de mêlée.",
+                         "Увеличивает бонус к критическому урону ваших приёмов ближнего боя на $s0%."),
+                        "T_Icon_BloodCombat_01.htex", SCHOOL_PHYSICAL, [mod(OP_CRIT_DAMAGE, 0x53, 15, pct=True)],
+                        rank=1, baseid=1405),
+                passive(1406, ("Vitalpunkte", "Vital Points", "Points vitaux", "Уязвимые точки"),
+                        ("Erhöht den kritischen Schadensbonus Eurer Nahkampftechniken um $s0%.",
+                         "Increases the critical strike damage bonus of your melee techniques by $s0%.",
+                         "Augmente de $s0% le bonus aux dégâts critiques de vos techniques de mêlée.",
+                         "Увеличивает бонус к критическому урону ваших приёмов ближнего боя на $s0%."),
+                        "T_Icon_BloodCombat_01.htex", SCHOOL_PHYSICAL, [mod(OP_CRIT_DAMAGE, 0x53, 30, pct=True)],
+                        rank=2, baseid=1405)),
+            "B1": ph(193, placeholder(1403,
+                ("Gegenhieb", "Counterstroke", "Contre-coup", "Встречный удар"),
+                ("Nachdem Ihr ausgewichen seid, schlagt Ihr mit 150% Waffenschaden zurück und entwaffnet den Angreifer 4 Sek. lang.",
+                 "After you dodge, riposte for 150% weapon damage and disarm the attacker for 4 sec.",
+                 "Après une esquive, ripostez pour 150% des dégâts de l'arme et désarmez l'attaquant pendant 4 s.",
+                 "После уклонения наносит ответный удар (150% урона оружием) и обезоруживает атакующего на 4 сек."),
+                "T_Icon_Energy_43.htex", SCHOOL_PHYSICAL)),
+            "M": talent(190, passive(1400,
+                ("Zwillingszähne", "Twin Fangs", "Crocs jumeaux", "Парные клыки"),
+                ("Erhöht den Schaden von Doppelschnitt um $s0%.", "Increases the damage of Twin Slash by $s0%.",
+                 "Augmente de $s0% les dégâts de Double entaille.", "Увеличивает урон «Двойного рассечения» на $s0%."),
+                "T_Icon_Energy_38.htex", SCHOOL_PHYSICAL, [mod(OP_DAMAGE, 0x10, 15, pct=True)])),
+            "B2": talent(192, passive(1402,
                 ("Messerjongleur", "Knife Juggler", "Jongleur de lames", "Жонглёр ножами"),
                 ("Verringert die Abklingzeit von Wurfmesser um 3 Sek. und erhöht seinen Schaden um 20%.",
                  "Reduces the cooldown of Throwing Knife by 3 sec and increases its damage by 20%.",
@@ -1077,43 +1230,16 @@ SCOUT = {
                  "Сокращает время восстановления «Метательного ножа» на 3 сек. и увеличивает его урон на 20%."),
                 "T_Icon_BloodCombat_28.htex", SCHOOL_PHYSICAL,
                 [mod(OP_COOLDOWN, 0x20, -3000), mod(OP_DAMAGE, 0x20, 20, pct=True)])),
-            "B1": ph(193, placeholder(1403,
-                ("Gegenhieb", "Counterstroke", "Contre-coup", "Встречный удар"),
-                ("Nachdem du ausgewichen bist, schlägst du mit 150% Waffenschaden zurück und entwaffnest den Angreifer 4 Sek. lang.",
-                 "After you dodge, riposte for 150% weapon damage and disarm the attacker for 4 sec.",
-                 "Après une esquive, ripostez pour 150% des dégâts de l'arme et désarmez l'attaquant pendant 4 s.",
-                 "После уклонения наносит ответный удар (150% урона оружием) и обезоруживает атакующего на 4 сек."),
-                "T_Icon_Energy_43.htex", SCHOOL_PHYSICAL)),
-            "M": talent(194, passive(1404,
-                ("Zweiter Atem", "Second Wind", "Second souffle", "Второе дыхание"),
-                ("Erhöht deine Energieregeneration um $s0%.", "Increases your Energy regeneration by $s0%.",
-                 "Augmente votre régénération d'énergie de $s0%.", "Увеличивает восстановление энергии на $s0%."),
-                "T_Icon_Energy_14.htex", SCHOOL_PHYSICAL, [aura(MOD_POWER_REGEN_PCT, 15, POWER_ENERGY)])),
-            "B2": talent(195,
-                passive(1405, ("Vitalpunkte", "Vital Points", "Points vitaux", "Уязвимые точки"),
-                        ("Erhöht den kritischen Schadensbonus deiner Nahkampftechniken um $s0%.",
-                         "Increases the critical strike damage bonus of your melee techniques by $s0%.",
-                         "Augmente de $s0% le bonus aux dégâts critiques de vos techniques de mêlée.",
-                         "Увеличивает бонус к критическому урону ваших приёмов ближнего боя на $s0%."),
-                        "T_Icon_BloodCombat_01.htex", SCHOOL_PHYSICAL, [mod(OP_CRIT_DAMAGE, 0x53, 15, pct=True)],
-                        rank=1, baseid=1405),
-                passive(1406, ("Vitalpunkte", "Vital Points", "Points vitaux", "Уязвимые точки"),
-                        ("Erhöht den kritischen Schadensbonus deiner Nahkampftechniken um $s0%.",
-                         "Increases the critical strike damage bonus of your melee techniques by $s0%.",
-                         "Augmente de $s0% le bonus aux dégâts critiques de vos techniques de mêlée.",
-                         "Увеличивает бонус к критическому урону ваших приёмов ближнего боя на $s0%."),
-                        "T_Icon_BloodCombat_01.htex", SCHOOL_PHYSICAL, [mod(OP_CRIT_DAMAGE, 0x53, 30, pct=True)],
-                        rank=2, baseid=1405)),
             "C1": ph(196, placeholder(1407,
                 ("Tanzende Klingen", "Dancing Blades", "Lames dansantes", "Танцующие клинки"),
-                ("15 Sek. lang treffen deine Angriffe zusätzlich einen Gegner in der Nähe.",
+                ("15 Sek. lang treffen Eure Angriffe zusätzlich einen Gegner in der Nähe.",
                  "For 15 sec your strikes also hit a nearby enemy.",
                  "Pendant 15 s, vos coups touchent aussi un ennemi proche.",
                  "В течение 15 сек. ваши удары поражают также ближайшего врага."),
                 "T_Icon_Energy_05.htex", SCHOOL_PHYSICAL)),
             "C2": ph(197, placeholder(1408,
                 ("Flackernder Stahl", "Flickering Steel", "Acier vacillant", "Мерцающая сталь"),
-                ("Teleportiert dich zu bis zu 5 Gegnern im Umkreis von 10 Metern und trifft sie in schneller Folge.",
+                ("Teleportiert Euch zu bis zu 5 Gegnern im Umkreis von 10 Metern und trifft sie in schneller Folge.",
                  "Teleports to and strikes up to 5 enemies within 10 yards in rapid succession.",
                  "Vous téléporte vers jusqu'à 5 ennemis à moins de 10 mètres et les frappe en succession rapide.",
                  "Стремительно перемещается к 5 врагам в радиусе 10 м и поражает их одного за другим."),
@@ -1124,7 +1250,7 @@ SCOUT = {
                 "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 111,  # Scout - Fever Pitch
                 "effects": [aura(MOD_POWER_REGEN_PCT, 100, POWER_ENERGY)],
                 **text_fields(("Fieberrausch", "Fever Pitch", "Fièvre du combat", "Боевая лихорадка"),
-                              ("Verdoppelt $D lang deine Energieregeneration.", "Doubles your Energy regeneration for $D.",
+                              ("Verdoppelt $D lang Eure Energieregeneration.", "Doubles your Energy regeneration for $D.",
                                "Double votre régénération d'énergie pendant $D.", "Удваивает восстановление энергии на $D."),
                               ("Energieregeneration um $s0% erhöht.", "Energy regeneration increased by $s0%.",
                                "Régénération d'énergie augmentée de $s0%.", "Восстановление энергии увеличено на $s0%."))})),
@@ -1132,7 +1258,7 @@ SCOUT = {
         ("TALENT_PATH_ASSASSINATION", ("Hinterhalt", "Ambush", "Embuscade", "Засада"), 0xFF86D65E, {
             "A1": talent(1, patch(81,
                 ("Grausame Effizienz", "Cruel Efficiency", "Efficacité cruelle", "Жестокая сноровка"),
-                ("Verringert die Energiekosten deines Verwundenden Stoßes um 10.",
+                ("Verringert die Energiekosten Eures Verwundenden Stoßes um 10.",
                  "Reduces the Energy cost of your Wounding Strike by 10.",
                  "Réduit de 10 le coût en énergie de votre Frappe vulnérante.",
                  "Снижает затраты энергии на «Ранящий удар» на 10."),
@@ -1166,14 +1292,14 @@ SCOUT = {
                 "T_Icon_BloodCombat_09.htex", SCHOOL_PHYSICAL, [mod(OP_COOLDOWN, 0x100, -10000)])),
             "C1": ph(203, placeholder(1415,
                 ("Giftige Ernte", "Toxic Harvest", "Récolte toxique", "Ядовитая жатва"),
-                ("Verbraucht die Blutung deines Verwundenden Stoßes und verursacht sofort Naturschaden.",
+                ("Verbraucht die Blutung Eures Verwundenden Stoßes und verursacht sofort Naturschaden.",
                  "Consumes your Wounding Strike bleed to deal instant nature damage.",
                  "Consume le saignement de votre Frappe vulnérante pour infliger des dégâts de Nature instantanés.",
                  "Поглощает кровотечение от «Ранящего удара», мгновенно нанося урон от сил природы."),
                 "S_Poison_01.htex", SCHOOL_PHYSICAL)),
             "C2": ph(204, placeholder(1416,
                 ("Blutschwur", "Blood Oath", "Serment de sang", "Кровная клятва"),
-                ("Markiert einen Gegner zum Tode: Du verursachst 20 Sek. lang 20% mehr Schaden an ihm.",
+                ("Markiert einen Gegner zum Tode: Ihr verursacht 20 Sek. lang 20% mehr Schaden an ihm.",
                  "Marks an enemy for death: you deal 20% more damage to it for 20 sec.",
                  "Marque un ennemi pour la mort : vous lui infligez 20% de dégâts supplémentaires pendant 20 s.",
                  "Обрекает врага на смерть: вы наносите ему на 20% больше урона в течение 20 сек."),
@@ -1185,81 +1311,144 @@ SCOUT = {
                 "effects": [mod(OP_CRIT, 0x53, 100)],
                 "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1,
                 **text_fields(("Ruhige Hand", "Steady Hand", "Main sûre", "Твёрдая рука"),
-                              ("Deine nächste Nahkampftechnik innerhalb von $D trifft garantiert kritisch.",
+                              ("Eure nächste Nahkampftechnik innerhalb von $D trifft garantiert kritisch.",
                                "Your next melee technique within $D is a guaranteed critical strike.",
                                "Votre prochaine technique de mêlée dans les $D est un coup critique assuré.",
                                "Ваш следующий приём ближнего боя в течение $D гарантированно наносит критический урон."),
-                              ("Deine nächste Nahkampftechnik trifft kritisch.", "Your next melee technique is a critical strike.",
+                              ("Eure nächste Nahkampftechnik trifft kritisch.", "Your next melee technique is a critical strike.",
                                "Votre prochaine technique de mêlée est un coup critique.",
                                "Следующий приём ближнего боя будет критическим."))})),
         }),
+        # Trickster: make them miss, then punish. Dodges feed Energy, free Quick Cuts and crits; the
+        # capstone turns dodging into hitting back. Needs avoided swings to raise proc events.
         ("TALENT_PATH_SUBTLETY", ("Gaukler", "Trickster", "Filou", "Ловкач"), 0xFFA389FF, {
-            "A1": talent(13, patch(111,
-                ("Leichtfüßig", "Fleet-Footed", "Pied léger", "Быстроногий"),
-                ("Verringert die Abklingzeit deines Sprints um 20 Sek.", "Reduces the cooldown of your Sprint by 20 sec.",
-                 "Réduit de 20 s le temps de recharge de votre Sprint.", "Сокращает время восстановления «Спринта» на 20 сек."),
-                [mod(OP_COOLDOWN, 0x8, -20000)])),
-            "A2": talent(16, patch(162, ("Licht aus", "Lights Out", "Extinction des feux", "Отбой"))),
-            "A3": talent(206, passive(1420,
+            "A1": talent(213, passive(1428,
+                ("Riposte", "Riposte", "Riposte", "Рипост"),
+                ("Nachdem Ihr ausgewichen seid, kostet Euer nächster Schneller Schnitt innerhalb von 8 Sek. keine Energie und verursacht 50% mehr Schaden.",
+                 "After you dodge, your next Quick Cut within 8 sec costs no Energy and deals 50% more damage.",
+                 "Après une esquive, votre prochaine Entaille rapide dans les 8 s ne coûte pas d'énergie et inflige 50% de dégâts supplémentaires.",
+                 "После уклонения ваш следующий «Быстрый надрез» в течение 8 сек. не расходует энергию и наносит на 50% больше урона."),
+                "T_Icon_Energy_60.htex", SCHOOL_PHYSICAL, [proc(1429, T_CASTER)],
+                procflags=TAKEN_MELEE_AUTO, procchance=100, procexflags=EX_DODGE),
+                extra=[Spell(1429, {
+                    "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
+                    "icon": ICONS + "T_Icon_Energy_60.htex", "duration": 8000,
+                    "visualization_id": 113,  # Scout - Riposte
+                    "effects": [mod(OP_COST, 0x40, -100, pct=True), mod(OP_DAMAGE, 0x40, 50, pct=True)],
+                    "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1, "procfamily": 0x40,
+                    **text_fields(("Riposte", "Riposte", "Riposte", "Рипост"), ("", "", "", ""),
+                                  ("Euer nächster Schneller Schnitt kostet keine Energie und verursacht 50% mehr Schaden.",
+                                   "Your next Quick Cut costs no Energy and deals 50% more damage.",
+                                   "Votre prochaine Entaille rapide ne coûte pas d'énergie et inflige 50% de dégâts supplémentaires.",
+                                   "Следующий «Быстрый надрез» не расходует энергию и наносит на 50% больше урона."))})]),
+            "A2": talent(206, passive(1420,
                 ("Aalglatt", "Slippery", "Glissant", "Скользкий"),
-                ("Verringert die Abklingzeit von Ausweichschritt um 8 Sek.", "Reduces the cooldown of Evasive Step by 8 sec.",
-                 "Réduit de 8 s le temps de recharge de Pas évasif.", "Сокращает время восстановления «Шага уклонения» на 8 сек."),
-                "T_Icon_Energy_51.htex", SCHOOL_PHYSICAL, [mod(OP_COOLDOWN, 0x80, -8000)])),
-            "B1": ph(207, placeholder(1421,
-                ("Chamäleon", "Chameleon", "Caméléon", "Хамелеон"),
-                ("Du verschmilzt mit deiner Umgebung: Verstohlenheit verlangsamt dich außerhalb des Kampfes nicht mehr.",
-                 "Blend into your surroundings: stealth no longer slows you while out of combat.",
-                 "Fondez-vous dans le décor : le camouflage ne vous ralentit plus hors combat.",
-                 "Вы сливаетесь с окружением: незаметность больше не замедляет вас вне боя."),
-                "T_Icon_Unholy_131.htex", SCHOOL_PHYSICAL)),
-            "M": talent(208, passive(1422,
+                ("Verringert die Abklingzeit von Ausweichschritt um 8 Sek. Ausweichschritt gewährt Euch 20 Energie.",
+                 "Reduces the cooldown of Evasive Step by 8 sec. Evasive Step grants you 20 Energy.",
+                 "Réduit de 8 s le temps de recharge de Pas évasif. Pas évasif vous rend 20 points d'énergie.",
+                 "Сокращает время восстановления «Шага уклонения» на 8 сек. «Шаг уклонения» восстанавливает 20 ед. энергии."),
+                "T_Icon_Energy_51.htex", SCHOOL_PHYSICAL, [mod(OP_COOLDOWN, 0x80, -8000), proc(1432, T_CASTER)],
+                procflags=DONE_NONE_POS, procchance=100, procfamily=0x80),
+                extra=[energize(1432, 20, ("Aalglatt", "Slippery", "Glissant", "Скользкий"), "T_Icon_Energy_51.htex")]),
+            "A3": talent(208, passive(1422,
                 ("Gewandtheit", "Nimble", "Agilité", "Проворство"),
-                ("Erhöht deine Chance, Nahkampfangriffen auszuweichen, um $s0%.",
+                ("Erhöht Eure Chance, Nahkampfangriffen auszuweichen, um $s0%.",
                  "Increases your chance to dodge melee attacks by $s0%.",
                  "Augmente de $s0% vos chances d'esquiver les attaques en mêlée.",
                  "Повышает вероятность уклониться от атак ближнего боя на $s0%."),
                 "T_Icon_Unholy_71.htex", SCHOOL_PHYSICAL, [aura(MOD_DODGE, 5)])),
-            "B2": ph(209, placeholder(1423,
-                ("Hinter dir", "Behind You", "Derrière toi", "За спиной"),
-                ("Tritt durch die Schatten und erscheint hinter deinem Ziel.", "Step through the shadows to appear behind your target.",
-                 "Passez à travers les ombres pour apparaître derrière votre cible.", "Проходит сквозь тени и появляется за спиной цели."),
-                "T_Icon_Shadow_44.htex", SCHOOL_PHYSICAL)),
+            "B1": talent(207, passive(1421,
+                ("Fieser Trick", "Cheap Shot", "Coup bas", "Подлый приём"),
+                ("Verringert die Energiekosten von Niederschlagen um 15. Euer Niederschlagen lässt das Ziel 6 Sek. lang 15% mehr Schaden erleiden.",
+                 "Reduces the Energy cost of Knockout by 15. Your Knockout makes the target take 15% more damage for 6 sec.",
+                 "Réduit de 15 le coût en énergie d'Assommer. Votre Assommer fait subir 15% de dégâts supplémentaires à la cible pendant 6 s.",
+                 "Снижает затраты энергии на «Нокаут» на 15. Цель вашего «Нокаута» получает на 15% больше урона в течение 6 сек."),
+                "T_Icon_BloodCombat_60.htex", SCHOOL_PHYSICAL, [mod(OP_COST, 0x4, -15), proc(1433)],
+                procflags=DONE_NONE_NEG, procchance=100, procfamily=0x4),
+                extra=[Spell(1433, {
+                    "attributes": DEBUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "duration": 6000,
+                    "icon": ICONS + "T_Icon_BloodCombat_60.htex", "visualization_id": 116,  # Scout - Cheap Shot
+                    "effects": [aura(DMG_TAKEN_PCT, 15, target=T_ENEMY)],
+                    **text_fields(("Fieser Trick", "Cheap Shot", "Coup bas", "Подлый приём"), ("", "", "", ""),
+                                  ("Erlittener Schaden um $s0% erhöht.", "Damage taken increased by $s0%.",
+                                   "Dégâts subis augmentés de $s0%.", "Получаемый урон увеличен на $s0%."))})]),
+            "M": talent(214, passive(1430,
+                ("Opportunist", "Opportunist", "Opportuniste", "Оппортунист"),
+                ("Jedes Mal, wenn Ihr ausweicht, erhaltet Ihr 10 Energie. Höchstens einmal alle 2 Sek.",
+                 "Each time you dodge, you gain 10 Energy. At most once every 2 sec.",
+                 "Chaque esquive vous rend 10 points d'énergie. Au plus une fois toutes les 2 s.",
+                 "Каждое уклонение восстанавливает 10 ед. энергии. Не чаще раза в 2 сек."),
+                "T_Icon_Energy_25.htex", SCHOOL_PHYSICAL, [proc(1431, T_CASTER)],
+                procflags=TAKEN_MELEE_AUTO, procchance=100, procexflags=EX_DODGE, proccooldown=2000),
+                extra=[energize(1431, 10, ("Opportunist", "Opportunist", "Opportuniste", "Оппортунист"), "T_Icon_Energy_25.htex")]),
+            "B2": talent(209, passive(1423,
+                ("Dreh das Messer", "Twist the Knife", "Retourner la lame", "Провернуть клинок"),
+                ("Erhöht den Schaden von Schneller Schnitt um $s0% und verringert seine Abklingzeit um 2 Sek.",
+                 "Increases the damage of Quick Cut by $s0% and reduces its cooldown by 2 sec.",
+                 "Augmente de $s0% les dégâts d'Entaille rapide et réduit son temps de recharge de 2 s.",
+                 "Увеличивает урон «Быстрого надреза» на $s0% и сокращает время его восстановления на 2 сек."),
+                "T_Icon_Shadow_44.htex", SCHOOL_PHYSICAL,
+                [mod(OP_DAMAGE, 0x40, 30, pct=True), mod(OP_COOLDOWN, 0x40, -2000)])),
             "C1": ph(210, placeholder(1424,
                 ("Nicht heute", "Not Today", "Pas aujourd'hui", "Не сегодня"),
-                ("Ein tödlicher Schlag lässt dich stattdessen mit 10% Gesundheit zurück und verringert 3 Sek. lang den erlittenen Schaden um 80%. Einmal alle 90 Sek.",
+                ("Ein tödlicher Schlag lässt Euch stattdessen mit 10% Gesundheit zurück und verringert 3 Sek. lang den erlittenen Schaden um 80%. Einmal alle 90 Sek.",
                  "A killing blow leaves you at 10% health instead and reduces damage taken by 80% for 3 sec. Once every 90 sec.",
                  "Un coup fatal vous laisse à 10% de vie à la place et réduit les dégâts subis de 80% pendant 3 s. Une fois toutes les 90 s.",
                  "Смертельный удар вместо этого оставляет вам 10% здоровья и снижает получаемый урон на 80% на 3 сек. Раз в 90 сек."),
                 "T_Icon_Shadow_87.htex", SCHOOL_PHYSICAL)),
-            "C2": ph(211, placeholder(1425,
-                ("Trickkiste", "Bag of Tricks", "Sac à malices", "Мешок фокусов"),
-                ("Beendet sofort die Abklingzeit von Sprinten, Ausweichschritt und Niederschlagen.",
-                 "Finishes the cooldown of Sprint, Evasive Step and Knockout.",
-                 "Termine le temps de recharge de Sprint, Pas évasif et Assommer.",
-                 "Мгновенно завершает восстановление «Спринта», «Шага уклонения» и «Нокаута»."),
-                "T_Icon_Gold_100.htex", SCHOOL_PHYSICAL)),
+            "C2": talent(211, passive(1425,
+                ("Klingengleiten", "Slip the Blade", "Lame fuyante", "Ускользающий клинок"),
+                ("Nachdem Ihr ausgewichen seid, trifft Eure nächste Nahkampftechnik innerhalb von 6 Sek. garantiert kritisch. Höchstens einmal alle 10 Sek.",
+                 "After you dodge, your next melee technique within 6 sec is a guaranteed critical strike. At most once every 10 sec.",
+                 "Après une esquive, votre prochaine technique de mêlée dans les 6 s est un coup critique assuré. Au plus une fois toutes les 10 s.",
+                 "После уклонения ваш следующий приём ближнего боя в течение 6 сек. гарантированно наносит критический урон. Не чаще раза в 10 сек."),
+                "T_Icon_Energy_62.htex", SCHOOL_PHYSICAL, [proc(1434, T_CASTER)],
+                procflags=TAKEN_MELEE_AUTO, procchance=100, procexflags=EX_DODGE, proccooldown=10000),
+                extra=[Spell(1434, {
+                    "attributes": BUFF_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
+                    "icon": ICONS + "T_Icon_Energy_62.htex", "duration": 6000,
+                    "visualization_id": 114,  # Scout - Slip the Blade
+                    "effects": [mod(OP_CRIT, 0x53, 100)],
+                    "procflags": DONE_MELEE_SPELL, "procchance": 100, "proccharges": 1, "procfamily": 0x53,
+                    **text_fields(("Klingengleiten", "Slip the Blade", "Lame fuyante", "Ускользающий клинок"), ("", "", "", ""),
+                                  ("Eure nächste Nahkampftechnik trifft kritisch.", "Your next melee technique is a critical strike.",
+                                   "Votre prochaine technique de mêlée est un coup critique.",
+                                   "Следующий приём ближнего боя будет критическим."))})]),
             "CAP": talent(212, Spell(1426, {
                 "attributes": SELF_ACTIVE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "positive": 1,
                 "icon": ICONS + "T_Icon_Energy_30.htex", "duration": 10000, "cooldown": "180000",
                 "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 109,  # Scout - Smoke and Mirrors
-                "effects": [aura(MOD_DODGE, 50)],
+                "effects": [aura(MOD_DODGE, 50), proc(1435)],
+                "procflags": TAKEN_MELEE_AUTO, "procchance": 100, "procexflags": EX_DODGE,
                 **text_fields(("Rauch und Spiegel", "Smoke and Mirrors", "Écran de fumée", "Дым и зеркала"),
-                              ("Erhöht $D lang deine Ausweichchance um $s0%.",
-                               "Increases your dodge chance by $s0% for $D.",
-                               "Augmente vos chances d'esquive de $s0% pendant $D.",
-                               "Повышает вероятность уклонения на $s0% на $D."),
-                              ("Ausweichchance um $s0% erhöht.", "Dodge chance increased by $s0%.",
-                               "Chances d'esquive augmentées de $s0%.", "Вероятность уклонения повышена на $s0%."))})),
+                              ("Erhöht $D lang Eure Ausweichchance um $s0%. Jedem Angriff, dem Ihr ausweicht, folgt ein Gegenschlag mit 100% Waffenschaden.",
+                               "Increases your dodge chance by $s0% for $D. Every attack you dodge is answered with a counterstrike for 100% weapon damage.",
+                               "Augmente vos chances d'esquive de $s0% pendant $D. Chaque attaque esquivée est suivie d'une riposte infligeant 100% des dégâts de l'arme.",
+                               "Повышает вероятность уклонения на $s0% на $D. На каждую атаку, от которой вы уклонились, вы отвечаете ударом в 100% урона оружием."),
+                              ("Ausweichchance um $s0% erhöht. Ausgewichene Angriffe werden erwidert.",
+                               "Dodge chance increased by $s0%. Dodged attacks are answered.",
+                               "Chances d'esquive augmentées de $s0%. Les attaques esquivées sont rendues.",
+                               "Вероятность уклонения повышена на $s0%. Отвечает на атаки, от которых уклонился."))}),
+                extra=[Spell(1435, {
+                    "attributes": STRIKE_ATTRS, "spellSchool": SCHOOL_PHYSICAL, "icon": ICONS + "T_Icon_Energy_30.htex",
+                    "powertype": POWER_ENERGY, "cost": 0, "visualization_id": 117,  # Scout - Counterstrike
+                    "effects": [{"type": WEAPON_PERCENT_DAMAGE, "basepoints": 100, "targeta": T_ENEMY}],
+                    **text_fields(("Gegenschlag", "Counterstrike", "Riposte", "Ответный удар"), ("", "", "", ""))})]),
         }),
     ],
 }
+
 
 CLASSES = [MAGE, WARRIOR, CLERIC, ACOLYTE, SCOUT]
 
 # Family flag changes so every modifier above hits exactly the spells it names.
 FAMILY_FLAGS = {
     23: 0x11, 74: 0x11,      # Shadowbolt: own bit 0x10 (Corrupting Touch shares 0x1)
-    73: 0x4, 38: 0x8,        # Fear, Veil of Shadows
+    73: 0x5, 38: 0x8,        # Fear (0x1: Veil of Shadows cost reduction), Veil of Shadows
+    # Veil of Shadows modifies bit 0x1, so every other acolyte shadow spell carries it too.
+    1328: 0x1, 302: 0x1, 1345: 0x1, 1352: 0x1,   # Embrace of Dread, Summon/Empower Duskling, Brood Horror
+    1330: 0x41, 1333: 0x101, 1335: 0x401,        # Curse of Frailty, Curse of the Mire, Call Gloomlings
+    1363: 0x2001, 1360: 0x1001,                  # Wail of the Lost, Tangled Tongue
     168: 0x10, 167: 0x20,    # Twin Slash, Throwing Knife (shared bits with Knockout/Sprint)
     163: 0x40, 166: 0x80,    # Quick Cut, Evasive Step
     169: 0x100,              # Mark Weakness
@@ -1271,6 +1460,10 @@ RETIRED_RANK_SPELLS = {
     27, 64, 80, 83, 86, 87, 88, 89, 90, 91, 92, 96, 97, 102, 103, 107, 108, 109, 110, 114, 115,
     141, 173, 174, 178, 184, 186, 190, 192, 194, 195, 197, 200, 201, 203, 208, 210, 212, 214,
     218, 219, 221, 223, 225, 227,
+    # Acolyte Umbra path (replaced by Summoner, 2026-11-02): its talents, Gloaming Trance (1306,
+    # a proc buff, not a rank) and Abyssal Reach (82), plus the placeholders that real talents replaced.
+    82, 1300, 1301, 1302, 1303, 1304, 1305, 1306, 1307, 1308, 1309,
+    1312, 1315, 1316, 1323, 1325, 1326, 1327,
 }
 
 # Path label keys -> texts (de, en, fr, ru), filled from CLASSES, plus the frame strings.
@@ -1453,6 +1646,15 @@ def build(spells, talents, tabs):
             spell.ClearField("description_loc")
             spell.ClearField("auratext_loc")
             neutered.append(spell_id)
+        # An active retired spell (Umbral Bloom) must not leave a button that spends mana and
+        # does nothing: a hidden passive without cost, cooldown or visualization can not be cast.
+        # The server also drops Talent spells no current talent uses at load (SetKnownSpells).
+        while len(spell.attributes) < 2:
+            spell.attributes.append(0)
+        spell.attributes[0] |= ATTR_PASSIVE
+        spell.attributes[1] |= ATTR_B_HIDDEN_AURA
+        for field in ("cost", "cooldown", "visualization_id"):
+            spell.ClearField(field)
 
     # A single-rank talent spell that higher ranks continue (trainer ranks such as Fireball rank 2,
     # whose baseid points at it) is rank 1 of that chain. Retired rank spells do not count: their

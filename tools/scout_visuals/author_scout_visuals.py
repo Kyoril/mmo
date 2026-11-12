@@ -66,6 +66,10 @@ SOUND_ENTRIES = [
     (250, "Scout - Sprint", ["Sprint.wav"], 0.80, 0.97, 1.03),
     (251, "Scout - Fever Pitch", ["FeverPitch.wav"], 0.90, 0.98, 1.02),
     (252, "Scout - Steady Hand", ["SteadyHand.wav"], 0.85, 0.98, 1.02),
+    # Trickster talents (2026-11-02). The arming cues fire on dodges, every few seconds.
+    (253, "Scout - Riposte", ["Riposte.wav"], 0.65, 0.94, 1.06),
+    (254, "Scout - Slip the Blade", ["SlipTheBlade.wav"], 0.75, 0.96, 1.04),
+    (255, "Scout - Counterstrike", ["Counterstrike.wav"], 0.80, 0.93, 1.07),
 ]
 SND = {name[len("Scout - "):]: sid for sid, name, *_ in SOUND_ENTRIES}
 
@@ -75,6 +79,7 @@ STEEL_LIGHT = {"r": 0.75, "g": 0.86, "b": 1.0}
 STUN_LIGHT = {"r": 1.0, "g": 0.85, "b": 0.35}
 MARK_LIGHT = {"r": 1.0, "g": 0.22, "b": 0.16}
 ENERGY_LIGHT = {"r": 1.0, "g": 0.78, "b": 0.22}
+TRICK_LIGHT = {"r": 0.64, "g": 0.54, "b": 1.0}
 
 # Measured from the Human rigs (.skel MINA chunks): Attack_1H_01 / Attack_1H_02 0.97 s,
 # UnarmedAttack01 0.70 s (male) / 0.83 s (female), CastRelease 0.63 / 0.53 s. Instant melee
@@ -207,6 +212,23 @@ def definitions():
         ("Steady Hand", [1413],
          buff("SteadyHandFocus", "Steady Hand", "SteadyHandAura", bone="hand_r",
               idle_bone="hand_r", flash=light(STEEL_LIGHT, 1.4, 3.5, 0.1, 0.5)), []),
+        # Trickster talents: violet marks what comes from a dodge (scout_trickster.py).
+        ("Riposte", [1429],
+         buff("RiposteReady", "Riposte", "RiposteAura", bone="hand_r", idle_bone="hand_r"), []),
+        ("Slip the Blade", [1434],
+         buff("SlipTheBladeReady", "Slip the Blade", "SlipTheBladeAura", bone="hand_r",
+              idle_bone="hand_r", flash=light(TRICK_LIGHT, 1.4, 3.5, 0.05, 0.4)), []),
+        # Opportunist and Slippery: frequent, so a particle and no sound.
+        ("Energy Gain", [1431, 1432], {CAST: [fx("EnergyGain")]}, []),
+        ("Cheap Shot", [1433], {
+            IMPACT: [fx("CheapShotApply", scope="TARGET", delay=JAB_CONTACT_MS,
+                        tint=pulse(1.0, 0.3, 0.25, 0.35, 350))],
+            AURA_IDLE: [fx("CheapShotAura", scope="TARGET")],
+        }, []),
+        ("Counterstrike", [1435],
+         strike("Attack_1H_02", "Counterstrike", "CounterstrikeImpact",
+                blades=[blade(width=0.32, alpha=0.6)],
+                flash=light(TRICK_LIGHT, 1.4, 3.5)), []),
     ]
 
 
@@ -335,6 +357,8 @@ EXPECTED_SPELLS = {
     161: "Knockout", 163: "Quick Cut", 165: "Wounded", 166: "Evasive Step",
     167: "Throwing Knife", 168: "Twin Slash", 169: "Mark Weakness", 1409: "Fever Pitch",
     1413: "Steady Hand", 1426: "Smoke and Mirrors",
+    1429: "Riposte", 1431: "Opportunist", 1432: "Slippery", 1433: "Cheap Shot",
+    1434: "Slip the Blade", 1435: "Counterstrike",
 }
 
 

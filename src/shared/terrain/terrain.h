@@ -109,6 +109,14 @@ namespace mmo
 			/// @param value The layer value to set (0.0 to 1.0).
 			void SetLayerAt(uint32 x, uint32 z, uint8 layer, float value) const;
 
+			/// @brief Sets all four layer weights of a splat pixel at once, without renormalising.
+			/// @details Mirrors the value into the neighbour pages that share the pixel on a page
+			///          seam, exactly like SetLayerAt. Pages that are not prepared are skipped.
+			/// @param x The global pixel X coordinate.
+			/// @param z The global pixel Z coordinate.
+			/// @param packed The packed weights, one byte per layer (layer 0 in the low byte).
+			void SetLayersAt(uint32 x, uint32 z, uint32 packed) const;
+
 			/// @brief Gets the value of a specific layer at a world position.
 			/// @param x World X coordinate.
 			/// @param z World Z coordinate.
@@ -266,6 +274,19 @@ namespace mmo
 
 			/// @brief Bumps the ocean mask revision. Called by pages when their data changes.
 			void NotifyOceanMaskChanged() { ++m_oceanMaskRevision; }
+
+			/// @brief Gets a counter that changes whenever terrain data is edited: heights, normals,
+			///        vertex colours, splat weights, holes, areas, tile materials, water (mask, type,
+			///        heights, flow, material), a materialised ocean placeholder, the sea level or the
+			///        default material.
+			/// @details The single hook is Page::MarkChanged, which every page data setter calls
+			///          (SetSeaLevel and SetDefaultMaterial bump it directly), so every edit path is
+			///          covered: brushes, region paste and fill, terrain undo, PCG apply/unapply, water
+			///          tools, tile materials. Pages streaming in or out do not change it. Main thread only.
+			[[nodiscard]] uint64 GetDataRevision() const { return m_dataRevision; }
+
+			/// @brief Bumps the data revision. Called by Page::MarkChanged, SetSeaLevel and SetDefaultMaterial.
+			void NotifyDataChanged() { ++m_dataRevision; }
 
 			/// @brief Turns every prepared ocean placeholder page overlapping a world-space rectangle
 			///        into a real, editable page (flat seabed constants::OceanSeabedDepth below the sea
@@ -980,6 +1001,7 @@ namespace mmo
 			float m_seaLevel = constants::DefaultSeaLevel;
 			bool m_oceanRenderedExternally = false;
 			uint64 m_oceanMaskRevision = 1;
+			uint64 m_dataRevision = 1;
 			MaterialPtr m_wireframeMaterial;
 			bool m_occlusionCullingEnabled { true };
 

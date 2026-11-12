@@ -11,7 +11,10 @@
 #include "vector_sink.h"
 #include "base/utilities.h"
 #include "log/default_log_levels.h"
+#include "objects/game_creature_s.h"
 #include "objects/game_player_s.h"
+#include "pets/persistent_pet_spawner.h"
+#include "pets/pet_manager.h"
 #include "objects/game_unit_s.h"
 #include "world/universe.h"
 
@@ -109,6 +112,10 @@ namespace mmo
 			{ AuraType::ModPowerRegenPercent,  [](AuraEffect& self, bool apply){ self.HandleModPowerRegenPercent(apply); } },
 			{ AuraType::ModCritChanceTaken,    [](AuraEffect& self, bool apply){ self.HandleModCritChanceTaken(apply); } },
 			{ AuraType::ModCastingManaRegenPercent, [](AuraEffect& self, bool apply){ self.HandleModCastingManaRegenPercent(apply); } },
+			{ AuraType::ModCastingSpeedPct, [](AuraEffect& self, bool apply){ self.HandleModCastingSpeedPct(apply); } },
+			{ AuraType::ModHealingTakenPct, [](AuraEffect& self, bool apply){ self.HandleModHealingTakenPct(apply); } },
+			{ AuraType::ModPetStatsPct,     [](AuraEffect& self, bool apply){ self.HandleModPetStatsPct(apply); } },
+			{ AuraType::PetPassive,         [](AuraEffect& self, bool apply){ self.HandlePetPassive(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -263,10 +270,8 @@ namespace mmo
 
 	void AuraEffect::HandleModAttackSpeed(bool apply) const
 	{
-		m_container.GetOwner().UpdateModifierValue(unit_mods::AttackSpeed,
-			unit_mod_type::TotalValue,
-			GetBasePoints(),
-			apply);
+		// Base points are a percentage of attack speed: +30 swings 30% faster, -15 slower.
+		m_container.GetOwner().ModifyAttackSpeedPctBonus(static_cast<float>(GetBasePoints()), apply);
 	}
 
 	void AuraEffect::HandleModResistance(const bool apply) const
@@ -343,8 +348,11 @@ namespace mmo
 
 	void AuraEffect::HandleModRoot(bool apply) const
 	{
+		// weak_from_this, not shared_from_this: ~GameUnitS clears its auras, which removes this
+		// effect while the owner is being destroyed, and shared_from_this then aborts (no exceptions).
+		// The same holds for the other crowd control handlers below.
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -373,7 +381,7 @@ namespace mmo
 	void AuraEffect::HandleModStun(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -402,7 +410,7 @@ namespace mmo
 	void AuraEffect::HandleModFear(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -431,7 +439,7 @@ namespace mmo
 	void AuraEffect::HandleModSleep(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -460,7 +468,7 @@ namespace mmo
 	void AuraEffect::HandleModDisorient(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -489,7 +497,7 @@ namespace mmo
 	void AuraEffect::HandleModVisibility(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -508,7 +516,7 @@ namespace mmo
 	void AuraEffect::HandleModStealth(bool apply) const
 	{
 		std::shared_ptr<GameUnitS> owner = std::static_pointer_cast<GameUnitS>(
-			m_container.GetOwner().shared_from_this());
+			m_container.GetOwner().weak_from_this().lock());
 		if (!owner || !owner->GetWorldInstance())
 		{
 			return;
@@ -584,6 +592,66 @@ namespace mmo
 
 		// Not part of RefreshStats(), so refresh the character sheet value here.
 		m_container.GetOwner().UpdateCombatStatFields();
+	}
+
+	void AuraEffect::HandleModCastingSpeedPct(const bool apply) const
+	{
+		// Base points are a percentage added to the owner's cast time multiplier.
+		m_container.GetOwner().ModifyCastingSpeedPctBonus(m_container.GetSpellId(), static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModHealingTakenPct(const bool apply) const
+	{
+		// Base points are a percentage added to the owner's healing taken multiplier.
+		m_container.GetOwner().ModifyHealingTakenPctBonus(m_container.GetSpellId(), static_cast<float>(GetBasePoints()), apply);
+	}
+
+	void AuraEffect::HandleModPetStatsPct(const bool apply) const
+	{
+		// miscvaluea picks the pet stat, base points are a percentage added to its multiplier.
+		GameUnitS& owner = m_container.GetOwner();
+		owner.ModifyPetStatPctBonus(static_cast<uint8>(m_effect.miscvaluea()), static_cast<float>(GetBasePoints()), apply);
+
+		// A summoned pet picks the change up at once; a pet summoned later at its spawn.
+		if (const PetManager* pets = owner.FindPets())
+		{
+			if (GameCreatureS* pet = pets->GetPersistentPet())
+			{
+				RefreshPersistentPetOwnerStats(*pet, owner);
+			}
+		}
+	}
+
+	void AuraEffect::HandlePetPassive(const bool apply) const
+	{
+		const uint32 spellId = m_effect.triggerspell();
+		if (spellId == 0)
+		{
+			return;
+		}
+
+		GameUnitS& owner = m_container.GetOwner();
+		owner.ModifyPetPassiveSpell(spellId, apply);
+
+		const PetManager* pets = owner.FindPets();
+		GameCreatureS* pet = pets ? pets->GetPersistentPet() : nullptr;
+		if (!pet)
+		{
+			return;
+		}
+
+		if (apply)
+		{
+			ApplyPetPassiveSpell(*pet, spellId);
+			return;
+		}
+
+		// Another PetPassive aura of the owner may still grant the same spell.
+		const auto& remaining = owner.GetPetPassiveSpells();
+		if (std::find(remaining.begin(), remaining.end(), spellId) == remaining.end())
+		{
+			RemovePetPassiveSpell(*pet, spellId);
+		}
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const
@@ -692,6 +760,10 @@ namespace mmo
 
 		heal = std::max(heal, 0);
 
+		// Heal() applies the owner's healing taken percentage; the log and procs report the same
+		// scaled amount so they show what lands.
+		const uint32 scaledHeal = m_container.GetOwner().ScaleHealingTaken(static_cast<uint32>(heal));
+
 		// Send event to all subscribers in sight
 		std::vector<char> buffer;
 		io::VectorSink sink(buffer);
@@ -703,7 +775,7 @@ namespace mmo
 			<< io::write_packed_guid(m_container.GetCasterId())
 			<< io::write<uint32>(m_container.GetSpell().id())
 			<< io::write<uint32>(GetType())
-			<< io::write<uint32>(heal);
+			<< io::write<uint32>(scaledHeal);
 		packet.Finish();
 
 		m_container.GetOwner().ForEachSubscriberInSight([&packet, &buffer](TileSubscriber& subscriber)
@@ -724,9 +796,9 @@ namespace mmo
 		// Trigger proc events for periodic healing
 		if (m_container.GetCaster())
 		{
-			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicHeal, &m_container.GetOwner(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
+			m_container.GetCaster()->TriggerProcEvent(spell_proc_flags::DonePeriodicHeal, &m_container.GetOwner(), scaledHeal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
 		}
-		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicHeal, m_container.GetCaster(), heal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
+		m_container.GetOwner().TriggerProcEvent(spell_proc_flags::TakenPeriodicHeal, m_container.GetCaster(), scaledHeal, proc_ex_flags::NormalHit, m_container.GetSpell().spellschool(), false, m_container.GetSpell().familyflags());
 	}
 
 	void AuraEffect::HandlePeriodicEnergize()

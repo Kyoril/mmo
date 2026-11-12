@@ -11,6 +11,7 @@ add_subdirectory(auth_protocol)
 add_subdirectory(game_protocol)
 add_subdirectory(math)
 add_subdirectory(terrain_io)
+add_subdirectory(pcg)
 add_subdirectory(game)
 add_subdirectory(game_common)
 # None of these needs a graphics device -- xml_handler is attribute parsing and a SAX

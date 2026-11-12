@@ -4,6 +4,7 @@
 #include "aabb.h"
 #include "plane.h"
 #include "base/macros.h"
+#include "base/typedefs.h"
 
 #include <utility>
 #include <cstdlib>
@@ -210,6 +211,25 @@ namespace mmo
 			return std::make_pair<bool, float>(t >= 0, static_cast<float>(t));
 		}
 	};
+
+	/// @brief Intersects a ray with the horizontal plane y = planeY.
+	/// @details Used to drag editor handles at a fixed height, so the dragged point follows the
+	///          cursor smoothly instead of jumping to whatever the ray hits first.
+	/// @param ray The ray to intersect.
+	/// @param planeY Height of the plane.
+	/// @param out_hit Receives the intersection point on success.
+	/// @return True if the ray crosses the plane in front of its origin.
+	inline bool IntersectHorizontalPlane(const Ray& ray, const float planeY, Vector3& out_hit)
+	{
+		const auto [hit, t] = ray.Intersects(Plane(Vector3::UnitY, Vector3(0.0f, planeY, 0.0f)));
+		if (!hit || t <= 0.0f)
+		{
+			return false;
+		}
+
+		out_hit = ray.origin + ray.GetDirection() * t;
+		return true;
+	}
 
 
 	/// Enumerates all tiles that a ray crosses.

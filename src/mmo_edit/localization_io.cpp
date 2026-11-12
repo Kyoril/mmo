@@ -200,6 +200,14 @@ namespace mmo
 			ExportField(entries, "zone", e.id(), 0, "name", e.name(), e.name_loc());
 		}
 
+		// Loading screen tips
+		const auto& loadingTips = project.loadingTips.getTemplates();
+		for (int i = 0; i < loadingTips.entry_size(); ++i)
+		{
+			const auto& e = loadingTips.entry(i);
+			ExportField(entries, "loading_tip", e.id(), 0, "text", e.text(), e.text_loc());
+		}
+
 		// Emotes (chat line templates)
 		const auto& emotes = project.emotes.getTemplates();
 		for (int i = 0; i < emotes.entry_size(); ++i)
@@ -413,6 +421,13 @@ namespace mmo
 				if (auto* e = project.zones.getById(id))
 				{
 					if (field == "name") { loc = e->mutable_name_loc(); }
+				}
+			}
+			else if (type == "loading_tip")
+			{
+				if (auto* e = project.loadingTips.getById(id))
+				{
+					if (field == "text") { loc = e->mutable_text_loc(); }
 				}
 			}
 			else if (type == "emote")

@@ -161,6 +161,29 @@ namespace mmo
 			/// ModHealthRegenPercent.
 			ModCastingManaRegenPercent = 41,
 
+			/// Raises (positive) or lowers (negative) the cast time of every spell the owner casts,
+			/// channel length included, but not procs. The aura's base points are a percentage
+			/// (+30 = cast times x1.30, -20 = x0.80). Several auras add their percentages. Spell
+			/// mods only reach the owner's own family-flagged spells, which is why this exists.
+			ModCastingSpeedPct = 42,
+
+			/// Scales every heal the owner receives (direct, periodic, percentage and leech heals)
+			/// by a percentage on top of the flat ModHealingTaken. The aura's base points are a
+			/// percentage (-20 = heals x0.80, +30 = x1.30). Several auras add their percentages;
+			/// the multiplier never drops below 0.
+			ModHealingTakenPct = 43,
+
+			/// Empowers the owner's persistent pet. miscvaluea picks the stat (pet_stat_kind:
+			/// 0 = melee damage, 1 = max health); the aura's base points are a percentage
+			/// (+30 = x1.30). Several auras add their percentages. Applied when the pet spawns and
+			/// re-applied to the summoned pet when the aura comes or goes (health ratio kept).
+			ModPetStatsPct = 44,
+
+			/// While the owner has this aura, the passive spell in the effect's triggerspell is
+			/// cast by the owner's persistent pet on itself: right away if a pet is summoned, and
+			/// on every later summon. Removing the owner aura removes the spell's aura from the pet.
+			PetPassive = 45,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

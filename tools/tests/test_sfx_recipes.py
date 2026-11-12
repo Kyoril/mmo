@@ -19,7 +19,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sfx_gen"))
 
-from recipes import acolyte, cleric, creature_combat, hollow_choir, human, mage, scout, warrior
+from recipes import acolyte, cleric, creature_combat, hollow_choir, human, mage, scout, unit_transitions, warrior
 
 
 class _RecipeChecks:
@@ -117,6 +117,33 @@ class HumanRecipeTests(_RecipeChecks, unittest.TestCase):
                 self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
 
 
+class UnitTransitionRecipeTests(_RecipeChecks, unittest.TestCase):
+    recipe = unit_transitions
+    count = 6
+
+    def test_every_prompt_names_its_layers(self):
+        # Layered by mixing (see human.py): each prompt is one element and excludes the others.
+        for name, spec in unit_transitions.SOUNDS.items():
+            lowered = spec.prompt.lower()
+            for exclusion in ("no voice", "no music"):
+                self.assertIn(exclusion, lowered, f"{name}: must exclude the other elements")
+
+    def test_mixes_reference_generated_layers(self):
+        self.assertEqual(set(unit_transitions.MIXES), {"DemonDissolve", "DemonResolve"})
+        for mix_name, mix in unit_transitions.MIXES.items():
+            self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
+            for entry in mix["layers"]:
+                self.assertIn(entry.sound, unit_transitions.SOUNDS, f"{mix_name}: unknown layer")
+                self.assertTrue(entry.sound.startswith(mix_name + "_"), f"{mix_name}: {entry.sound}")
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
+                self.assertGreaterEqual(entry.offset, 0.0)
+                self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
+
+    def test_nothing_loops(self):
+        for name, spec in unit_transitions.SOUNDS.items():
+            self.assertFalse(spec.loop, name)
+
+
 class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = hollow_choir
     count = 29
@@ -157,7 +184,7 @@ class HollowChoirRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = scout
-    count = 21
+    count = 26
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude the
@@ -176,7 +203,8 @@ class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
             self.assertGreaterEqual(len(mix["layers"]), 2, f"{mix_name}: a mix needs layers")
             for entry in mix["layers"]:
                 self.assertIn(entry.sound, scout.SOUNDS, f"{mix_name}: unknown layer")
-                self.assertTrue(1 <= entry.take <= 3, f"{mix_name}: take {entry.take}")
+                # 3 takes per layer in the first pass, 4 for the Trickster layers.
+                self.assertTrue(1 <= entry.take <= 4, f"{mix_name}: take {entry.take}")
                 self.assertGreaterEqual(entry.offset, 0.0)
                 self.assertLessEqual(entry.gain_db, 0.0, f"{mix_name}: boost before mixing")
 
@@ -190,7 +218,7 @@ class ScoutRecipeTests(_RecipeChecks, unittest.TestCase):
 
 class AcolyteRecipeTests(_RecipeChecks, unittest.TestCase):
     recipe = acolyte
-    count = 16
+    count = 38
 
     def test_every_prompt_names_its_layers(self):
         # Layered by mixing (see human.py): each prompt is one element and must exclude music,

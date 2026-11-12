@@ -72,6 +72,9 @@ namespace mmo
 
 		PacketParseResult OnGuildRoster(Player& player, game::IncomingPacket& packet);
 
+		/// Sends the player the last known positions of its online guild mates in its world instance.
+		PacketParseResult OnGuildMemberPositions(Player& player, game::IncomingPacket& packet);
+
 #if MMO_WITH_DEV_COMMANDS
 		PacketParseResult OnGuildCreate(Player& player, game::IncomingPacket& packet);
 #endif
@@ -95,6 +98,9 @@ namespace mmo
 
 		/// Pending invites by invited character guid.
 		std::map<uint64, PendingInvite> m_pendingInvites;
+
+		/// Time of the last answered member position request, by character guid.
+		std::map<uint64, GameTime> m_lastPositionRequest;
 	};
 
 	/// Sends a guild command result to the player's client.

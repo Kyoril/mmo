@@ -69,6 +69,8 @@ In addition to commands, the system also uses console variables (CVars) that con
 - `gxVSync` - Whether the application will run with vsync enabled (default: 1)
 - `perf` - Toggles whether performance counters are visible (default: 0)
 - `gxRenderScale` - 3D render resolution scale, 0.25 to 1.0 (default: 1.0)
+- `gxUpscaleFilter` - Upscale filter when the world renders below native resolution: 0 = Point, 1 = Bilinear, 2 = Bicubic, 3 = FidelityFX Super Resolution 1.0 (default: 3)
+- `gxUpscaleSharpness` - FSR sharpening in stops, 0 = strongest, each step of 1 halves it, 0 to 2 (default: 0.2)
 - `gxAtmosphereQuality` - Volumetric fog quality 0–4 (default: 3)
 - `gxVolumetricFogRange` - Metres of view depth covered by the volumetric fog, 50–300 (default: 200)
 - `gxAtmosphereDebug` - Fog debug view: 0 = off, 1 = scattered light, 2 = transmittance, 3 = fog density, 4 = lights per fog block (default: 0)

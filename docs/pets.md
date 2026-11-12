@@ -20,6 +20,21 @@ faction template; *owner-aware friendliness* (`src/shared/game/owner_chain.h`) m
 check use the top owner instead. So an undead skeleton raised by a player is friendly to that
 player's allies and hostile to its enemies.
 
+Out of combat every pet follows its owner on a slot of its own (right, left, behind; a swarm spreads
+on an arc behind the owner), so several pets do not stack on one spot.
+
+Assisting differs between the two kinds:
+
+- A **persistent pet** attacks its owner's target, defends its owner against attackers and fights
+  back when attacked itself.
+- A **temporary pet** attacks *only* what its owner attacks (the unit the owner attacked last, by auto
+  attack or a harmful spell) or what it is commanded to attack. It ignores units attacking its owner
+  or itself and goes back to its owner once that target dies. A temporary pet summoned into a running
+  fight goes straight for the owner's target.
+
+A summon that should behave like a pet must use `SummonPet` (43), not `Summon` (25): a `Summon`
+add is no pet: it rolls its level from its unit entry, aggroes on its own and does not follow.
+
 ## Spell effects
 
 New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:
@@ -37,9 +52,22 @@ New `SpellEffect` fields (spells.proto 29-32) used by the pet effects:
 | `SummonPet` | 43 | `summonunit` (or `miscvaluea`), `basepoints` = count (min 1), `radius` (spread), spell `duration` (0 = no limit), the four pet fields | Spawns `count` temporary pets around the caster. The spawn is deferred to the next universe tick. With FailAtCap the whole cast fails at the cap; with ReplaceOldest the oldest pets make room. |
 | `LearnPetSpell` | 44 | `triggerspell` | Teaches the spell to the summoned persistent pet and stores it on the pet (sent as `PetLearnedSpell` + `PetSpells`). |
 | `SummonPersistentPet` | 58 | `miscvaluea` = `PetEntry` id, 0 = the stored pet summoned last | Summons a stored pet. The current persistent pet is dismissed first. A dead summon-style pet comes back at full health; a dead *tamed* pet fails with `FailedPetDead` and needs `RevivePet`. |
-| `GrantPersistentPet` | 59 | `miscvaluea` = `PetEntry` id | Adds a stored pet of that entry if the caster has none yet (`FailedAlreadyHavePet` otherwise, `FailedNoFreePetSlot` when full). Does not summon it: the summon spell is separate. The realm creates the database row asynchronously, so the pet is summonable a moment after the cast. |
+| `GrantPersistentPet` | 59 | `miscvaluea` = `PetEntry` id | Adds a stored pet of that entry to each player the effect targets (an NPC can cast it on a player; the cast check covers a casting player only) if they have none yet (`FailedAlreadyHavePet` otherwise, `FailedNoFreePetSlot` when full). Does not summon it: the summon spell is separate. The realm creates the database row asynchronously, so the pet is summonable a moment after the cast. |
 | `DismissPet` | 60 | - | Dismisses (stores, with health and power) the summoned persistent pet only; temporary pets are not touched. The pet bar's Dismiss command also despawns the temporary pets. |
 | `RevivePet` | 61 | `miscvaluea` = `PetEntry` id (0 = any dead pet), `basepoints` = health % (0 = 100) | Revives a dead stored pet and summons it at that health. |
+
+## Owner auras that empower the persistent pet
+
+Talents and buffs on the *owner* can strengthen its persistent pet (temporary pets are not
+affected):
+
+| Aura | Id | Fields | Behavior |
+|---|---|---|---|
+| `ModPetStatsPct` | 44 | `miscvaluea` = stat (`0` melee damage, `1` max health), `basepoints` = percent | Multiplies the pet's stat on top of the `PetEntry` multipliers (+30 = x1.30; several auras add up). Applied when the pet spawns, and to the summoned pet as soon as the aura comes or goes; the pet keeps its health ratio. |
+| `PetPassive` | 45 | `triggerspell` = a passive spell | The pet casts the spell on itself while the owner has the aura: at once if a pet is summoned, and on every later summon. Removing the owner aura (talent reset, unlearning) removes the spell's aura from the pet. |
+
+A spell effect with target `Pet` (4) hits the caster's summoned, living persistent pet. Without
+one the cast fails with `FailedNoPet` (`FailedPetDead` for a dead pet) before it starts.
 
 Pet cast checks (pet effects fail the cast before it starts, with the `FailedPet*` /
 `FailedTooManyPets` / `FailedNotTamable` / `FailedTargetTooHighLevel` results of
@@ -81,6 +109,14 @@ and unit entry.
 - **Lifetimes.** Logout and map changes store the summoned pet; it comes back with its owner when
   they enter a world again. If the owner dies, the pet is dismissed alive and returns when they are
   resurrected. A persistent pet that dies is stored dead.
+- **Spawn and despawn effects.** A pet added to the world (summoned) plays its display model's
+  `spawn_effect`, and one removed from it (expired, dismissed, owner gone) its `despawn_effect`
+  before it vanishes (model editor, sections "Spawn Effect" / "Despawn Effect"): a clip, a sound
+  and a dissolve parameter (despawn 0 to 1, spawn 1 to 0), optionally on a swapped-in material
+  that inherits the unit's textures. Gloomlings (model 80) and the Brood Horror (model 77)
+  materialize and dissolve with `DemonCreatureDissolve.hmat`. Coming into or leaving sight never
+  plays either, and a unit spawned again under the same guid mid-despawn (a resummoned persistent
+  pet) ends the old effect at once.
 - **Identity.** A persistent pet's guid is derived from its database id, so the same pet comes back
   with the same guid, name and level after a dismiss, a relog or a class round trip.
 - **Commands** (`PetCommand`, the pet bar): Attack (the owner's target), Follow, Stay, strategy
@@ -106,14 +142,29 @@ state with `GetPet`, `GetPetName`, `GetOwner`, `CountUnitsOwnedBy` and friends (
 
 ## Content and tests
 
-- `tools/pets/author_pet_content.py` authors the first pet content and is the reference for the
-  ids: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121, Barrowfield) raising
-  Risen Skeletons (unit 120); the acolyte's Umbral Shade (pet entry 1, unit 122) with Bind Shadow
-  (301, at acolyte trainer 4), Summon Shadow (302), Dismiss Shadow (303), its spells 304-307 and
-  Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind Beast 309, Summon
-  Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf unit 44 tamable). It validates by
-  default and writes the editor data and ClientDB with `--apply`.
-- E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`.
+- The first pet content: Raise Skeletons (spell 300) of Ilsa Mourne <Gravecaller> (unit 121,
+  Barrowfield) raising Risen Skeletons (unit 120); the acolyte's Duskling, a minor demon (pet
+  entry 1, unit 122), with Bind Duskling (301), Summon Duskling (302), Dismiss Duskling (303), its
+  spells 304-307 and Shadow Lore: Murkbind (308, `LearnPetSpell`); and a taming test kit (Bind
+  Beast 309, Summon Companion 310, Rekindle Companion 311, pet entry 2 "Wolf", Young Forest Wolf
+  unit 44 tamable). The duskling and its spells were first called Umbral Shade and
+  Bind / Summon / Dismiss Shadow.
+- How an acolyte gets the duskling: Guard Emrik's quest 72 "Noises in the Cellar" sends them to
+  check on the Oakenshire Inn's cellar (he knows nothing of Malrik), where Malrik Duskwright
+  recognises one of his own; his quest line 75-77 (from level 3) ends in the binding. Turning in
+  77 raises `OnQuestReward` on Malrik, whose trigger (117) casts Bind Duskling on the player. Bind
+  Duskling's effects target the spell's unit target, so `GrantPersistentPet` and `LearnSpell` land
+  on the player; no one learns Bind Duskling itself.
+- The Duskling talks (enUS only, `Locales/Locale_enUS/Voice/Pet/Duskling/`, voice "Feagol Dollum"
+  pitched up with a subtle sub-octave/saturation/reverb chain baked into the files): its own
+  display model 79 "Duskling (pet)" (a copy of demon minion 70, so other demon minions stay silent)
+  carries `CombatSounds` aggro 426, hit 427 (20 %), crit hit 428 (60 %), death 429, at most one
+  line per 6 s. Summon Duskling has its own visualization 140 (cast loop animation, shadow hand
+  channel, `DusklingSummonCircle.hpar`, ritual loop 430; release burst `DusklingSummonBurst.hpar`,
+  sound 431 and the summon line 424); Dismiss Duskling's visualization 139 plays line 425. Hit lines
+  react to melee hits only (`CombatLogClient`), not to spell damage.
+- E2E: `e2e/scenarios/pet_temporary_swarm.lua`, `pet_persistent.lua`, `gm_pet_commands.lua`,
+  `acolyte_shadow_binding.lua`.
 - Unit tests: the `[pets]` tag in `game_server_tests`, `realm_server_tests`, `game_protocol_tests`,
   `game_client_tests` and `client_ui_tests`.
 

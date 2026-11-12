@@ -248,14 +248,19 @@ TEST_CASE("pet opcodes are appended at the end of the opcode lists", "[pets][pro
 	CHECK(client_realm_packet::CheatPetRemove == client_realm_packet::CheatPetAdd + 1);
 	CHECK(client_realm_packet::CheatPetTame == client_realm_packet::CheatPetRemove + 1);
 	CHECK(client_realm_packet::CheatPetMake == client_realm_packet::CheatPetTame + 1);
-	CHECK(client_realm_packet::Count_ == client_realm_packet::CheatPetMake + 1);
+	CHECK(client_realm_packet::GuildMemberPositions == client_realm_packet::CheatPetMake + 1);
 
 	CHECK(realm_client_packet::PetSpells == realm_client_packet::BuyBackList + 1);
 	CHECK(realm_client_packet::PetLearnedSpell == realm_client_packet::PetSpells + 1);
 	CHECK(realm_client_packet::PetXp == realm_client_packet::PetLearnedSpell + 1);
 	CHECK(realm_client_packet::PetNameQueryResult == realm_client_packet::PetXp + 1);
 	CHECK(realm_client_packet::PetResult == realm_client_packet::PetNameQueryResult + 1);
-	CHECK(realm_client_packet::Count_ == realm_client_packet::PetResult + 1);
+	CHECK(realm_client_packet::GuildMemberPositions == realm_client_packet::PetResult + 1);
 
-	CHECK(ProtocolVersion == 0x23);
+	// Later opcodes (version 39: guild member positions) follow the pet opcodes.
+	CHECK(client_realm_packet::Count_ == client_realm_packet::GuildMemberPositions + 1);
+	CHECK(realm_client_packet::Count_ == realm_client_packet::GuildMemberPositions + 1);
+
+	// The pet opcodes arrived with version 35; later bumps must not fail this test.
+	CHECK(ProtocolVersion >= 0x23);
 }

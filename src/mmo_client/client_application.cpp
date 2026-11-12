@@ -22,6 +22,7 @@
 #include "material_shader_resolver.h"
 #include "game_states/login_state.h"
 #include "game_states/world_state.h"
+#include "loading_screen.h"
 #include "log/default_log_levels.h"
 #include "log/log_std_stream.h"
 #include "systems/action_bar.h"
@@ -42,6 +43,7 @@
 #include "systems/bank_client.h"
 #include "systems/mail_client.h"
 #include "ui/minimap.h"
+#include "ui/world_map.h"
 #include "systems/subsystem_client.h"
 #include "systems/bug_report_client.h"
 #include "frame_ui/frame_mgr.h"
@@ -228,6 +230,8 @@ namespace mmo
 			return false;
 		}
 
+		LoadingScreen::SetTips(&context.project->loadingTips.getTemplates());
+
 		context.soundEntryPlayer = std::make_unique<SoundEntryPlayer>(*context.audio, context.project->sounds);
 		CastErrorVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->races);
 		UnitGossipVoice::Get().Initialize(context.soundEntryPlayer.get(), &context.project->models, context.timerQueue.get());
@@ -253,6 +257,7 @@ namespace mmo
 		context.discord = std::make_unique<Discord>();
 		context.discord->Initialize();
 		context.minimap = std::make_unique<Minimap>(512);
+		context.worldMap = std::make_unique<WorldMap>(context.project->zones);
 
 		context.charCreateInfo = std::make_unique<CharCreateInfo>(*context.project, realmConnector);
 		context.charSelect = std::make_unique<CharSelect>(realmConnector, *context.project);
@@ -287,11 +292,12 @@ namespace mmo
 
 		const auto worldState = std::make_shared<WorldState>(gameStateMgr, realmConnector, *context.project, *context.timerQueue, *context.lootClient, *context.vendorClient,
 			*context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.soundEntryPlayer, *context.partyInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.clientCache, *context.discord, *context.gameTime, *context.talentClient,
-			*context.minimap, *context.inventoryClient, *context.tradeClient, *context.channelClient, *context.bankClient, *context.mailClient);
+			*context.minimap, *context.worldMap, *context.inventoryClient, *context.tradeClient, *context.channelClient, *context.bankClient, *context.mailClient);
 		gameStateMgr.AddGameState(worldState);
 
 		context.gameScript = std::make_unique<GameScript>(loginConnector, realmConnector, *context.lootClient, *context.vendorClient, loginState, *context.project, *context.actionBar, *context.spellCast, *context.cooldownManager, *context.trainerClient, *context.questClient, *context.audio, *context.partyInfo, *context.charCreateInfo, *context.charSelect, *context.guildClient, *context.friendClient, *context.gameTime, *context.talentClient, *context.clientCache, *context.tradeClient, *context.channelClient);
 		context.minimap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
+		context.worldMap->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.bankClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.mailClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
 		context.subsystemClient->RegisterScriptFunctions(&context.gameScript->GetLuaState());
@@ -322,7 +328,7 @@ namespace mmo
 	/// @copydoc ClientApplication::InitializeUiAndEnterState
 	bool ClientApplication::InitializeUiAndEnterState(ClientContext& context)
 	{
-		if (!context.uiRuntime->Initialize(*context.gameScript, *context.minimap, g_cursor))
+		if (!context.uiRuntime->Initialize(*context.gameScript, *context.minimap, *context.worldMap, g_cursor))
 		{
 			return false;
 		}
@@ -436,6 +442,7 @@ namespace mmo
 
 		context.gameScript.reset();
 		context.minimap.reset();
+		context.worldMap.reset();
 	}
 
 	/// @copydoc ClientApplication::ShutdownRuntimeServices
@@ -508,6 +515,7 @@ namespace mmo
 		UnitGossipVoice::Get().Initialize(nullptr, nullptr, nullptr);
 		context.soundEntryPlayer.reset();
 
+		LoadingScreen::SetTips(nullptr);
 		context.project.reset();
 		context.uiRuntime.reset();
 

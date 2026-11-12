@@ -427,10 +427,9 @@ TEST_CASE("Flatten extras leave out ambient lights", "[world_model_flatten]")
 	CHECK(extras.lights[0].type == WorldModelLight::LightType::Spot);
 }
 
-TEST_CASE("The pure interior rule is Interior 0x2000 without Exterior 0x8, as IsGlueBakeInteriorGroup", "[world_model_flatten]")
+TEST_CASE("The pure interior rule is Interior 0x2000 without Exterior 0x8", "[world_model_flatten]")
 {
-	// Pinned to the raw values game_common's IsGlueBakeInteriorGroup test uses, so the two rules
-	// (which cannot share code across the libraries) stay the same.
+	// Pinned to the raw flag values, so the rule cannot drift with a renumbered flag.
 	CHECK(WorldModelGroupFlags::Interior == 0x2000);
 	CHECK(WorldModelGroupFlags::Exterior == 0x8);
 	CHECK(IsPureInteriorWorldModelGroup(0x2000));

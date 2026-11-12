@@ -78,6 +78,15 @@ namespace mmo
 			/// Casts that went off (SpellGo) per caster and spell.
 			std::map<std::pair<uint64, uint32>, uint32> spellGos;
 
+			/// Casts with a cast time other units started (SpellStart) per caster, and the cast time
+			/// in milliseconds the server announced for the latest of them.
+			std::map<uint64, uint32> castStarts;
+			std::map<uint64, GameTime> lastCastTimes;
+
+			/// Periodic aura ticks (PeriodicAuraLog) per victim and spell: how many arrived, and the
+			/// amount the latest one dealt, healed or energized.
+			std::map<std::pair<uint64, uint32>, std::pair<uint32, uint32>> periodicTicks;
+
 			/// A second session on the same account, created by LoginElsewhere. Kept alive for the
 			/// rest of the scenario so its connection is not torn down while the first session is
 			/// still being observed.
@@ -282,6 +291,36 @@ namespace mmo
 		void luaClearLastSpellVisual()
 		{
 			g_runtime->session->ClearLastSpellVisual();
+		}
+
+		/// How the unit last appeared at this client: "spawned" (just added to the world, creation block
+		/// flagged object_update_flags::Spawned), "came_into_sight" or "none".
+		std::string luaSpawnReason(const std::string& guid)
+		{
+			switch (g_runtime->session->GetLastSpawnReason(guidFromString(guid)))
+			{
+			case game::spawn_reason::Spawned:
+				return "spawned";
+			case game::spawn_reason::CameIntoSight:
+				return "came_into_sight";
+			default:
+				return "none";
+			}
+		}
+
+		/// Why the server last removed the object from this client: "destroyed" (removed from the
+		/// world, despawn_reason::Destroyed), "out_of_sight" (left our view) or "none".
+		std::string luaDespawnReason(const std::string& guid)
+		{
+			switch (g_runtime->session->GetLastDespawnReason(guidFromString(guid)))
+			{
+			case game::despawn_reason::Destroyed:
+				return "destroyed";
+			case game::despawn_reason::OutOfSight:
+				return "out_of_sight";
+			default:
+				return "none";
+			}
 		}
 
 		/// A voice line has no gameplay side effect either: returns the guid of the unit a
@@ -695,6 +734,41 @@ namespace mmo
 		bool luaIsSpellOnCooldown(const uint32 spellId)
 		{
 			return g_runtime->session->GetContext().IsSpellOnCooldown(spellId);
+		}
+
+		/// Milliseconds left on our own spell's cooldown, as the server's cooldown packets left it
+		/// (0 when the spell is not on cooldown).
+		int32 luaGetSpellCooldownRemaining(const uint32 spellId)
+		{
+			return static_cast<int32>(g_runtime->session->GetContext().GetSpellCooldownRemaining(spellId));
+		}
+
+		/// How many casts with a cast time another unit guid has started (SpellStart packets).
+		int32 luaCastStartCount(const std::string& guid)
+		{
+			const auto it = g_runtime->castStarts.find(guidFromString(guid));
+			return it == g_runtime->castStarts.end() ? 0 : static_cast<int32>(it->second);
+		}
+
+		/// Cast time in milliseconds of the latest cast another unit guid started, -1 if none.
+		int32 luaLastCastTime(const std::string& guid)
+		{
+			const auto it = g_runtime->lastCastTimes.find(guidFromString(guid));
+			return it == g_runtime->lastCastTimes.end() ? -1 : static_cast<int32>(it->second);
+		}
+
+		/// How many ticks of spellId's periodic aura on guid the server reported (PeriodicAuraLog).
+		int32 luaPeriodicTickCount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? 0 : static_cast<int32>(it->second.first);
+		}
+
+		/// Amount the latest tick of spellId's periodic aura on guid dealt or healed, -1 if none.
+		int32 luaLastPeriodicAmount(const std::string& guid, const uint32 spellId)
+		{
+			const auto it = g_runtime->periodicTicks.find({ guidFromString(guid), spellId });
+			return it == g_runtime->periodicTicks.end() ? -1 : static_cast<int32>(it->second.second);
 		}
 
 		/// How many channels the server has announced for guid (ChannelStart packets).
@@ -1900,6 +1974,30 @@ namespace mmo
 			}
 		}
 
+		/// Accepts a quest at the quest giver, the way a player does: the server checks that the giver
+		/// offers it and that the character stands next to it, and raises the giver's OnQuestAccept.
+		void luaAcceptQuestFrom(const std::string& questGiver, const uint32 questId)
+		{
+			g_runtime->session->GetRealm().AcceptQuest(guidFromString(questGiver), questId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("AcceptQuestFrom", { { "quest_giver", questGiver }, { "quest_id", questId } });
+			}
+		}
+
+		/// Turns a completed quest in at its quest ender, the way a player does, so the ender's
+		/// OnQuestReward triggers run (GM.TurnInQuest skips the quest ender).
+		void luaTurnInQuestAt(const std::string& questGiver, const uint32 questId, const uint32 rewardChoice)
+		{
+			const uint64 guid = guidFromString(questGiver);
+			g_runtime->session->GetRealm().QuestGiverCompleteQuest(guid, questId);
+			g_runtime->session->GetRealm().QuestGiverChooseQuestReward(guid, questId, rewardChoice);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("TurnInQuestAt", { { "quest_giver", questGiver }, { "quest_id", questId }, { "reward_choice", rewardChoice } });
+			}
+		}
+
 		void luaGmClearInventory()
 		{
 			g_runtime->session->GetRealm().CheatClearInventory();
@@ -1926,6 +2024,8 @@ namespace mmo
 				luabind::def_lambda("LastSpellVisualEvent", &luaLastSpellVisualEvent),
 				luabind::def_lambda("ClearLastSpellVisual", &luaClearLastSpellVisual),
 				luabind::def_lambda("SoundSource", &luaSoundSource),
+				luabind::def_lambda("DespawnReason", &luaDespawnReason),
+				luabind::def_lambda("SpawnReason", &luaSpawnReason),
 				luabind::def_lambda("SoundCount", &luaSoundCount),
 				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
@@ -1965,6 +2065,11 @@ namespace mmo
 				luabind::def_lambda("ChannelStartCount", &luaChannelStartCount),
 				luabind::def_lambda("SpellGoCount", &luaSpellGoCount),
 				luabind::def_lambda("IsSpellOnCooldown", &luaIsSpellOnCooldown),
+				luabind::def_lambda("GetSpellCooldownRemaining", &luaGetSpellCooldownRemaining),
+				luabind::def_lambda("CastStartCount", &luaCastStartCount),
+				luabind::def_lambda("LastCastTime", &luaLastCastTime),
+				luabind::def_lambda("PeriodicTickCount", &luaPeriodicTickCount),
+				luabind::def_lambda("LastPeriodicAmount", &luaLastPeriodicAmount),
 				luabind::def_lambda("GetName", &luaGetName),
 				luabind::def_lambda("GetPosX", &luaGetPosX),
 				luabind::def_lambda("GetPosY", &luaGetPosY),
@@ -2012,6 +2117,8 @@ namespace mmo
 
 				// Actions
 				luabind::def_lambda("TargetUnit", &luaTargetUnit),
+				luabind::def_lambda("AcceptQuestFrom", &luaAcceptQuestFrom),
+				luabind::def_lambda("TurnInQuestAtImpl", &luaTurnInQuestAt),
 				luabind::def_lambda("FaceUnit", &luaFaceUnit),
 				luabind::def_lambda("CastSpellImpl", &luaCastSpell),
 				luabind::def_lambda("CastSpellOnObject", &luaCastSpellOnObject),
@@ -2093,6 +2200,10 @@ namespace mmo
 				local guid = FindUnitByEntryImpl(entry)
 				if guid == "" then return nil end
 				return guid
+			end
+
+			function TurnInQuestAt(questGiver, questId, rewardChoice)
+				TurnInQuestAtImpl(questGiver, questId, rewardChoice or 0)
 			end
 
 			function CountUnitsByEntry(entry, includeDead)
@@ -2262,6 +2373,24 @@ namespace mmo
 			{
 				++runtime.spellGos[{ caster, spellId }];
 				transcript.Event("spell_go", { { "caster", guidToString(caster) }, { "spell_id", spellId } });
+			}) };
+		const scoped_connection periodicTickRecorder { realm.PeriodicAuraTicked.connect(
+			[&transcript, &runtime](const uint64 victim, const uint64 caster, const uint32 spellId, const uint32 auraType, const uint32 amount)
+			{
+				auto& ticks = runtime.periodicTicks[{ victim, spellId }];
+				++ticks.first;
+				ticks.second = amount;
+				transcript.Event("periodic_tick",
+					{ { "victim", guidToString(victim) }, { "caster", guidToString(caster) }, { "spell_id", spellId },
+					  { "aura_type", auraType }, { "amount", amount } });
+			}) };
+		const scoped_connection unitCastStartedRecorder { realm.UnitCastStarted.connect(
+			[&transcript, &runtime](const uint64 caster, const uint32 spellId, const GameTime castTime)
+			{
+				++runtime.castStarts[caster];
+				runtime.lastCastTimes[caster] = castTime;
+				transcript.Event("cast_start",
+					{ { "caster", guidToString(caster) }, { "spell_id", spellId }, { "cast_time_ms", static_cast<uint32>(castTime) } });
 			}) };
 		const scoped_connection chatRecorder { realm.ChatMessageReceived.connect(
 			[&transcript, &runtime](const BotChatMessage& message)

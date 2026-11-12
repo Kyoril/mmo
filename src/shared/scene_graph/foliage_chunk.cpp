@@ -342,8 +342,15 @@ namespace mmo
 			}
 		}
 
-		// Add to main render queue
-		queue.AddRenderable(*this, Main);
+		// Translucent materials (waterfalls, glass) go to the forward transparent group like an entity's
+		// translucent submeshes: in Main they would be written into the GBuffer as if opaque.
+		uint8 renderQueueGroup = Main;
+		if (const MaterialPtr material = GetMaterial(); material && material->IsTranslucent())
+		{
+			renderQueueGroup += 10;
+		}
+
+		queue.AddRenderable(*this, renderQueueGroup);
 	}
 
 	void FoliageChunk::SetCurrentCamera(Camera& cam)

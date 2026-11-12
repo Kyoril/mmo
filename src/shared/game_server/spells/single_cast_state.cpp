@@ -2,6 +2,7 @@
 
 #include "single_cast_state.h"
 
+#include "game_server/ai/creature_facing.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
 #include "game_server/objects/game_world_object_s.h"
@@ -21,6 +22,33 @@
 
 namespace mmo
 {
+	namespace
+	{
+		/// True if the spell has an effect that raises its own damage or heal proc events.
+		bool DealsDamageOrHealing(const proto::SpellEntry& spell)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				switch (effect.type())
+				{
+				case spell_effects::InstantKill:
+				case spell_effects::SchoolDamage:
+				case spell_effects::EnvironmentalDamage:
+				case spell_effects::HealthLeech:
+				case spell_effects::WeaponDamageNoSchool:
+				case spell_effects::WeaponDamage:
+				case spell_effects::WeaponPercentDamage:
+				case spell_effects::Heal:
+				case spell_effects::HealPct:
+					return true;
+				default:
+					break;
+				}
+			}
+			return false;
+		}
+	}
+
 	SingleCastState::SingleCastState(SpellCast& cast, const proto::SpellEntry& spell, const SpellTargetMap& target, const GameTime castTime, const bool isProc, uint64 itemGuid)
 		: m_cast(cast)
 		, m_spell(spell)
@@ -50,10 +78,8 @@ namespace mmo
 		}
 		else
 		{
-			// Apply cast time modifier using a temporary so we avoid UB from reinterpret_cast on GameTime.
-			int32 castTimeMod = static_cast<int32>(m_castTime);
-			executor.ApplySpellMod<int32>(spell_mod_op::CastTime, spell.id(), castTimeMod);
-			m_castTime = static_cast<GameTime>(std::max(0, castTimeMod));
+			// Spell mods and the ModCastingSpeedPct multiplier.
+			m_castTime = executor.ModifyCastTime(spell.id(), m_castTime);
 		}
 
 		const Vector3& location = executor.GetPosition();
@@ -78,7 +104,8 @@ namespace mmo
 			// which unit or which spell is responsible.
 			auto& executer = m_cast.GetExecuter();
 			ELOG("Spell cast validation failed: spell " << m_spell.id() << " [" << m_spell.name()
-				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid()));
+				<< "] cast by " << executer.GetName() << " " << log_hex_digit(executer.GetGuid())
+				<< ": result " << static_cast<uint32>(m_endCastFailure));
 			// Report the reason validation gave, so the caller can react to it: creature AI walks
 			// towards a victim it lost line of sight to only when told so. Validation paths that
 			// end without naming a reason still report a generic error.
@@ -558,6 +585,13 @@ namespace mmo
 			return false;
 		}
 
+		// A spell aimed at the caster's pet needs a living, summoned persistent pet.
+		if (const SpellCastResult petResult = CheckPetTargetEffects(m_spell, m_cast.GetExecuter()); petResult != spell_cast_result::CastOkay)
+		{
+			SendEndCast(petResult);
+			return false;
+		}
+
 		// A persistent pet summon, grant or revive that is bound to fail must not spend the cast.
 		if (const GamePlayerS* player = m_context.GetPlayerExecutor())
 		{
@@ -588,7 +622,20 @@ namespace mmo
 				return false;
 			}
 
-			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !m_cast.GetExecuter().IsFacingTowards(*unitTarget))
+			// Creatures (NPCs and pets) turn to what they cast at, unless crowd control holds them. This
+			// runs again when the cast finishes, so a target that walked past the caster during the
+			// cast no longer throws the finished cast away. Players have to face their target themselves.
+			GameUnitS& executer = m_cast.GetExecuter();
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0
+				&& unitTarget != &executer
+				&& !executer.IsPlayer()
+				&& !executer.IsFacingTowards(*unitTarget)
+				&& CanTurnToFaceTarget(executer))
+			{
+				executer.SetFacing(executer.GetAngle(*unitTarget));
+			}
+
+			if ((m_spell.facing() & spell_facing_flags::TargetInFront) != 0 && !executer.IsFacingTowards(*unitTarget))
 			{
 				SendEndCast(spell_cast_result::FailedUnitNotInfront);
 				return false;
@@ -1137,11 +1184,30 @@ namespace mmo
 
 		if (strongCaster->IsUnit())
 		{
+			// Damage and heal effects raise their own proc events. Every other spell (a stun, a
+			// self buff) raises the "no damage class" ones here, so talents can react to casting it.
+			// Positive or negative follows the target, not the spell's positive flag, which self
+			// buffs such as Evasive Step do not set.
+			const bool raiseCastProcs = !m_isProc && !(m_spell.attributes(0) & spell_attributes::Passive) && !DealsDamageOrHealing(m_spell);
+			GameUnitS& executer = m_cast.GetExecuter();
+
 			for (const uint64 targetGuid : m_affectedTargetGuids)
 			{
 				if (GameUnitS* targetUnit = m_context.FindUnitByGuid(targetGuid))
 				{
-					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &m_cast.GetExecuter());
+					targetUnit->RaiseTrigger(trigger_event::OnSpellHit, { m_spell.id() }, &executer);
+
+					if (raiseCastProcs)
+					{
+						const bool hostile = targetUnit != &executer && !executer.UnitIsFriendly(*targetUnit);
+						executer.TriggerProcEvent(hostile ? spell_proc_flags::DoneSpellNoneDmgClassNeg : spell_proc_flags::DoneSpellNoneDmgClassPos,
+							targetUnit, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						if (targetUnit != &executer)
+						{
+							targetUnit->TriggerProcEvent(hostile ? spell_proc_flags::TakenSpellNoneDmgClassNeg : spell_proc_flags::TakenSpellNoneDmgClassPos,
+								&executer, 0, proc_ex_flags::NormalHit, m_spell.spellschool(), false, m_spell.familyflags());
+						}
+					}
 				}
 			}
 		}
@@ -1182,6 +1248,7 @@ namespace mmo
 			{se::ApplyAreaAura,          SpellEffects::HandleApplyAura},
 			{se::PersistentAreaAura,     SpellEffects::HandlePersistentAreaAura},
 			{se::SchoolDamage,           SpellEffects::HandleSchoolDamage},
+			{se::HealthLeech,            SpellEffects::HandleHealthLeech},
 			{se::EnvironmentalDamage,    SpellEffects::HandleEnvironmentalDamage},
 			{se::ResetAttributePoints,   SpellEffects::HandleResetAttributePoints},
 			{se::Parry,                  SpellEffects::HandleParry},

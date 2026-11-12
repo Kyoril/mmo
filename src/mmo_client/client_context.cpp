@@ -25,6 +25,7 @@
 #include "systems/trainer_client.h"
 #include "systems/vendor_client.h"
 #include "ui/minimap.h"
+#include "ui/world_map.h"
 #include "base/timer_queue.h"
 #include "shared/audio/audio.h"
 #include "audio_settings.h"

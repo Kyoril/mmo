@@ -14,7 +14,7 @@ namespace mmo
 		FrameManager& frameMgr = FrameManager::Get();
 
 		// Renderers of 3D content: the frame's own imagery still renders, the 3D part is left out.
-		for (const char* rendererName : { "ModelRenderer", "WorldRenderer", "GlueSceneRenderer" })
+		for (const char* rendererName : { "ModelRenderer", "WorldRenderer" })
 		{
 			frameMgr.RegisterFrameRenderer(rendererName, [](const std::string& name)
 				{
@@ -25,6 +25,10 @@ namespace mmo
 		frameMgr.RegisterFrameFactory("Model", [](const std::string& name)
 			{
 				return std::make_shared<PlaceholderModelFrame>("Model", name);
+			});
+		frameMgr.RegisterFrameFactory("CharacterPreview", [](const std::string& name)
+			{
+				return std::make_shared<PlaceholderModelFrame>("CharacterPreview", name);
 			});
 		frameMgr.RegisterFrameFactory("UnitModel", [](const std::string& name)
 			{
@@ -37,6 +41,10 @@ namespace mmo
 		frameMgr.RegisterFrameFactory("Minimap", [](const std::string& name)
 			{
 				return std::make_shared<Frame>("Minimap", name);
+			});
+		frameMgr.RegisterFrameFactory("WorldMap", [](const std::string& name)
+			{
+				return std::make_shared<Frame>("WorldMap", name);
 			});
 		frameMgr.RegisterFrameFactory("World", [](const std::string& name)
 			{

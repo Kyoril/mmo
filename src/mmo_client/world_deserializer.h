@@ -71,6 +71,10 @@ namespace mmo
 		///          waits for a page's trees.
 		bool HasPendingEntityLoads() const { return m_pendingEntityFiles.load() > 0 || m_pendingFoliageFiles.load() > 0 || m_pendingWorldModels > 0; }
 
+		/// @brief Number of entity and foliage files in flight plus world model preparations still
+		///        pending. Zero exactly when HasPendingEntityLoads() is false; used for progress display.
+		size_t GetPendingEntityLoadCount() const { return static_cast<size_t>(m_pendingEntityFiles.load()) + static_cast<size_t>(m_pendingFoliageFiles.load()) + static_cast<size_t>(m_pendingWorldModels); }
+
 		/// @brief Whether content that may pass a bounds test is still on its way: an entity or
 		///        foliage file not handled yet (where its content lands is not known), or a world
 		///        model placement still being prepared whose bounds (child world models included)

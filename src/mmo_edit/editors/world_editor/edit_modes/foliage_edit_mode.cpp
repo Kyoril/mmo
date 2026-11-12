@@ -75,6 +75,11 @@ namespace mmo
 		return static_cast<uint16>((px << 8) | py);
 	}
 
+	uint64 FoliageEditMode::GenerateInstanceId()
+	{
+		return GenerateUniqueId();
+	}
+
 	void FoliageEditMode::OnActivate()
 	{
 		UpdateBrushOverlay();

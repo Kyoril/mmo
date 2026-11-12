@@ -37,6 +37,7 @@
 #include "shared/client_data/proto_client/emotes.pb.h"
 #include "shared/client_data/proto_client/water_profiles.pb.h"
 #include "shared/client_data/proto_client/environment_profiles.pb.h"
+#include "shared/client_data/proto_client/loading_tips.pb.h"
 
 namespace mmo
 {
@@ -71,6 +72,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto_client::Emotes, mmo::proto_client::EmoteEntry> EmoteManager;
 		typedef TemplateManager<mmo::proto_client::WaterProfiles, mmo::proto_client::WaterProfile> WaterProfileManager;
 		typedef TemplateManager<mmo::proto_client::EnvironmentProfiles, mmo::proto_client::EnvironmentProfile> EnvironmentProfileManager;
+		typedef TemplateManager<mmo::proto_client::LoadingTips, mmo::proto_client::LoadingTip> LoadingTipManager;
 
 		/// This class contains contains all the static game data like item templates.
 		class Project final
@@ -128,6 +130,9 @@ namespace mmo
 
 			/// Per-zone lighting and mood profiles (sky, sun/moon, fog, shafts, exposure, bloom).
 			EnvironmentProfileManager environmentProfiles;
+
+			/// Tips shown on the loading screen, one picked at random each time it appears.
+			LoadingTipManager loadingTips;
 
 		private:
 
@@ -200,6 +205,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("emotes", emotes, true));
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
 				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
+				managers.push_back(ManagerEntry("loading_tips", loadingTips, true));
 
 				if (!ClientProjectLoader::load(
 				            directory,
@@ -258,6 +264,7 @@ namespace mmo
 				managers.emplace_back("emotes", "emotes", emotes);
 				managers.emplace_back("water_profiles", "water_profiles", waterProfiles);
 				managers.emplace_back("environment_profiles", "environment_profiles", environmentProfiles);
+				managers.emplace_back("loading_tips", "loading_tips", loadingTips);
 
 				if (!ClientProjectSaver::save(realmDataPath, managers))
 				{

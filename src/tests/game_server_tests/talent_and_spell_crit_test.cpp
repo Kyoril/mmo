@@ -275,6 +275,26 @@ TEST_CASE("A saved talent that became a placeholder resets the talents", "[talen
 	CHECK_FALSE(ctx.player->HasTalent(TalentCtx::PlaceholderTalent));
 }
 
+// A redesign may drop a talent (the acolyte's Umbra path). Its saved id is unknown then, which must
+// reset the talents and hand every point back, not keep them spent on nothing.
+TEST_CASE("A saved talent that no longer exists resets the talents and refunds the points", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	ctx.player->ResetTalents();
+	const uint32 allPoints = ctx.player->Get<uint32>(object_fields::TalentPoints);
+	REQUIRE(allPoints > 0);
+
+	auto loaded = MakePlayer(ctx.project, ctx.timers);
+	constexpr uint32 RemovedTalent = 999;
+	loaded->InitializeTalents({ { TalentCtx::RealTalent, 0 }, { RemovedTalent, 0 } });
+
+	CHECK_FALSE(loaded->HasTalent(TalentCtx::RealTalent));
+	CHECK_FALSE(loaded->HasTalent(RemovedTalent));
+	CHECK_FALSE(loaded->HasSpell(500));
+	CHECK(loaded->Get<uint32>(object_fields::TalentPoints) == allPoints);
+}
+
 // A talent may rank in a spell without the Talent attribute (e.g. an existing class spell reused as a
 // talent). Such a spell must still be owned by the talent system: recorded in the persistent known-spell
 // set, it outlived talent resets and made the client show the talent as learned while the server did not.
@@ -307,4 +327,28 @@ TEST_CASE("A saved known spell that is a talent rank is dropped on load", "[tale
 	ctx.player->SetKnownSpells({ 500 });
 	CHECK_FALSE(ctx.player->HasSpell(500));
 	CHECK_FALSE(ctx.player->GetKnownSpellIds().contains(500));
+}
+
+// A redesign retires talent spells (the acolyte's Umbra path, e.g. Umbral Bloom). A character who
+// learned one must not keep it castable: at load every Talent spell no current talent uses is gone,
+// while the current talent's rank and ordinary spells stay.
+TEST_CASE("A retired talent spell is not known after load", "[talents]")
+{
+	TalentCtx ctx;
+	ctx.Init();
+	constexpr uint32 RetiredSpell = 600;
+	constexpr uint32 OrdinarySpell = 601;
+	AddSpell(ctx.project, RetiredSpell, 0).set_attributes(1, spell_attributes_b::Talent);
+	AddSpell(ctx.project, OrdinarySpell, 0);
+	ctx.project.spells.getById(500)->set_attributes(1, spell_attributes_b::Talent);
+
+	auto loaded = MakePlayer(ctx.project, ctx.timers);
+	loaded->SetKnownSpells({ RetiredSpell, 500, OrdinarySpell });
+	loaded->InitializeTalents({ { TalentCtx::RealTalent, 0 } });
+
+	CHECK_FALSE(loaded->HasSpell(RetiredSpell));
+	CHECK_FALSE(loaded->GetKnownSpellIds().contains(RetiredSpell));
+	CHECK(loaded->HasSpell(500));
+	CHECK(loaded->HasSpell(OrdinarySpell));
+	CHECK(loaded->GetKnownSpellIds().contains(OrdinarySpell));
 }

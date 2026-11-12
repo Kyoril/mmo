@@ -167,7 +167,9 @@ namespace mmo
 
 	void GameUnitC::UpdateSparkEmitter(const bool active)
 	{
-		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid());
+		// Unique per emitter: see the entity name in OnDisplayIdChanged (despawning units overlap).
+		static uint64 s_emitterCounter = 0;
+		const std::string emitterName = "Spark_Unit_" + std::to_string(GetGuid()) + "_" + std::to_string(s_emitterCounter++);
 
 		if (active)
 		{
@@ -292,6 +294,11 @@ namespace mmo
 			{
 				ASSERT(false);
 			}
+
+			// A previous unit of this guid still playing its despawn effect ends now, before this
+			// one builds its scene objects.
+			ObjectMgr::CancelDespawn(GetGuid());
+			m_spawnEffectPending = (updateFlags & object_update_flags::Spawned) != 0;
 
 			OnEntryChanged();
 		}
@@ -504,6 +511,11 @@ namespace mmo
 		UpdateNormalMovement(deltaTime, isDead);
 
 		UpdateAnimation(deltaTime, isDead);
+
+		if (m_transition == TransitionState::Spawning && UpdateTransitionEffect(deltaTime) >= 1.0f)
+		{
+			EndSpawnEffect();
+		}
 
 		// For remote players, the queue handles position updates directly -
 		// UnitMovement::Tick is not needed for them. But we must consume the
@@ -2921,6 +2933,9 @@ namespace mmo
 		const uint32 displayId = Get<uint32>(object_fields::DisplayId);
 		const proto_client::ModelDataEntry *modelEntry = ObjectMgr::GetModelData(displayId);
 
+		// The spawn effect's material swaps hold sub meshes that a mesh change destroys.
+		EndSpawnEffect();
+
 		// Always drop animation clip pointers first so no stale pointer survives a mesh
 		// change, even when there is no valid model entry and we return early.
 		m_animationController->NotifyMeshChanged();
@@ -2963,7 +2978,11 @@ namespace mmo
 		// Update or create entity
 		if (!m_entity)
 		{
-			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()), meshFile);
+			// The name carries a per-process counter besides the guid: a unit playing its despawn
+			// effect still owns its entity when the server spawns the same guid again, and scene
+			// names must be unique.
+			static uint64 s_entityCounter = 0;
+			m_entity = m_scene.CreateEntity(std::to_string(GetGuid()) + "_" + std::to_string(s_entityCounter++), meshFile);
 			m_entity->SetUserObject(this);
 			m_entity->SetQueryFlags(0x00000002);
 			// Units never block movement, whatever collision their model was authored with (a
@@ -3015,6 +3034,9 @@ namespace mmo
 		RefreshMoodAnimation();
 
 		OnScaleChanged();
+
+		// Materials are final now (customization, outfit), so the dissolve instances wrap the right ones.
+		StartPendingSpawnEffect();
 	}
 
 	void GameUnitC::ApplyModelItemDisplays(const proto_client::ModelDataEntry& model)
@@ -3686,6 +3708,14 @@ namespace mmo
 
 	void GameUnitC::AddSpellTint(uint32 spellId, const Vector4& tintColor)
 	{
+		// The despawn effect owns the unit's materials until it is destroyed; a spawn effect ends
+		// early, so the tint instances are built on the unit's own materials.
+		if (m_transition == TransitionState::Despawning)
+		{
+			return;
+		}
+		EndSpawnEffect();
+
 		// Add or update the tint for this spell
 		m_spellTints[spellId] = tintColor;
 		
@@ -3701,6 +3731,12 @@ namespace mmo
 
 	void GameUnitC::RemoveSpellTint(uint32 spellId)
 	{
+		// Restoring the original materials would undo the dissolve mid-effect.
+		if (m_transition == TransitionState::Despawning)
+		{
+			return;
+		}
+
 		// Remove the tint for this spell
 		auto it = m_spellTints.find(spellId);
 		if (it != m_spellTints.end())
@@ -3838,6 +3874,243 @@ namespace mmo
 				state.tintInstance->SetVectorParameter("Tint", blendedTint);
 			}
 		}
+	}
+
+	bool GameUnitC::BeginDespawnEffect()
+	{
+		if (m_transition == TransitionState::Despawning)
+		{
+			return true;
+		}
+
+		const proto_client::ModelDataEntry* model = GetDisplayModel();
+		if (!model || !model->has_despawn_effect() || !m_entity)
+		{
+			return false;
+		}
+
+		// A unit removed while it still materializes dissolves from where it got to.
+		float startValue = 0.0f;
+		if (m_transition == TransitionState::Spawning)
+		{
+			startValue = 1.0f - std::clamp(m_transitionElapsed / m_transitionDuration, 0.0f, 1.0f);
+			EndSpawnEffect();
+		}
+		m_spawnEffectPending = false;
+
+		// No longer an interactive unit: it cannot be picked, shows no name, ring or quest marker,
+		// and stops where it stands.
+		m_entity->SetQueryFlags(0);
+		if (m_nameComponent)
+		{
+			m_nameComponent->SetVisible(false);
+		}
+		if (m_selectionRing)
+		{
+			m_selectionRing->SetVisible(false);
+		}
+		if (m_questGiverEntity)
+		{
+			m_questGiverEntity->SetVisible(false);
+		}
+		UpdateSparkEmitter(false);
+		m_movementInfo.movementFlags = 0;
+		m_movementPath.clear();
+		ConsumeInputVector();
+
+		// Tint instances are dropped: the dissolve instances are built on the materials currently
+		// assigned, and tints are ignored from now on.
+		m_spellTints.clear();
+		m_tintMaterialStates.clear();
+
+		StartTransitionEffect(model->despawn_effect(), false, startValue);
+		return true;
+	}
+
+	bool GameUnitC::UpdateDespawnEffect(const float deltaTime)
+	{
+		if (m_transition != TransitionState::Despawning)
+		{
+			return true;
+		}
+
+		// Keeps the clip (and a corpse's death pose) blending; the unit itself no longer moves.
+		const bool isDead = (GetHealth() <= 0) || GetStandState() == unit_stand_state::Dead;
+		UpdateAnimation(deltaTime, isDead);
+
+		if (UpdateTransitionEffect(deltaTime) >= 1.0f)
+		{
+			if (m_entity)
+			{
+				m_entity->SetVisible(false);
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	void GameUnitC::StartTransitionEffect(const proto_client::UnitTransitionEffect& effect, const bool spawning, const float startValue)
+	{
+		ASSERT(m_entity);
+
+		float clipLength = 0.0f;
+		if (!effect.animation().empty() && m_animationController)
+		{
+			if (AnimationState* state = m_entity->GetAnimationState(effect.animation()))
+			{
+				clipLength = state->GetLength();
+				PlayOneShotAnimation(state);
+			}
+			else
+			{
+				WLOG("Transition animation '" << effect.animation() << "' not found on display " << Get<uint32>(object_fields::DisplayId));
+			}
+		}
+
+		m_transitionDuration = effect.duration() > 0.0f ? effect.duration() : clipLength;
+		if (m_transitionDuration <= 0.0f)
+		{
+			m_transitionDuration = 1.0f;
+		}
+
+		m_transitionParameter = effect.dissolve_parameter();
+		m_transitionMaterials.clear();
+		m_transitionOriginalMaterials.clear();
+
+		MaterialPtr effectMaterial;
+		if (!effect.material().empty())
+		{
+			effectMaterial = MaterialManager::Get().Load(effect.material());
+			if (!effectMaterial)
+			{
+				WLOG("Transition material '" << effect.material() << "' could not be loaded");
+			}
+		}
+
+		const float clampedStart = std::clamp(startValue, 0.0f, 1.0f);
+		const float initialValue = spawning ? 1.0f - clampedStart : clampedStart;
+		for (uint16 i = 0; i < m_entity->GetNumSubEntities(); ++i)
+		{
+			SubEntity* subEntity = m_entity->GetSubEntity(i);
+			if (!subEntity || !subEntity->IsVisible() || !subEntity->GetMaterial())
+			{
+				continue;
+			}
+
+			const MaterialPtr current = subEntity->GetMaterial();
+			const MaterialPtr base = effectMaterial ? effectMaterial : current;
+
+			float value = 0.0f;
+			if (!base->GetScalarParameter(m_transitionParameter, value))
+			{
+				continue;
+			}
+
+			auto instance = std::make_shared<MaterialInstance>(String(m_entity->GetName()) + "_Transition_" + std::to_string(i), base);
+
+			// A swapped-in dissolve material takes over the skin: every parameter it shares by name
+			// with the unit's material keeps the unit's value (textures, tint, scalars).
+			if (effectMaterial && current != effectMaterial)
+			{
+				for (const auto& parameter : current->GetTextureParameters())
+				{
+					String existing;
+					if (instance->GetTextureParameter(parameter.name, existing))
+					{
+						instance->SetTextureParameter(parameter.name, parameter.texture);
+					}
+				}
+
+				for (const auto& parameter : current->GetVectorParameters())
+				{
+					Vector4 existing;
+					if (instance->GetVectorParameter(parameter.name, existing))
+					{
+						instance->SetVectorParameter(parameter.name, parameter.value);
+					}
+				}
+
+				for (const auto& parameter : current->GetScalarParameters())
+				{
+					float existing = 0.0f;
+					if (parameter.name != m_transitionParameter && instance->GetScalarParameter(parameter.name, existing))
+					{
+						instance->SetScalarParameter(parameter.name, parameter.value);
+					}
+				}
+			}
+
+			instance->SetScalarParameter(m_transitionParameter, initialValue);
+			m_transitionOriginalMaterials.emplace_back(subEntity, current);
+			subEntity->SetMaterial(instance);
+			m_transitionMaterials.push_back(std::move(instance));
+		}
+
+		if (effect.sound_id() != 0 && s_soundEntryPlayer)
+		{
+			s_soundEntryPlayer->PlayEntry(effect.sound_id(), GetPosition());
+		}
+
+		m_transitionElapsed = clampedStart * m_transitionDuration;
+		m_transition = spawning ? TransitionState::Spawning : TransitionState::Despawning;
+	}
+
+	float GameUnitC::UpdateTransitionEffect(const float deltaTime)
+	{
+		m_transitionElapsed += deltaTime;
+		const float progress = std::clamp(m_transitionElapsed / m_transitionDuration, 0.0f, 1.0f);
+
+		// A despawn dissolves the unit (0 -> 1), a spawn is the same dissolve played backwards.
+		const float value = m_transition == TransitionState::Spawning ? 1.0f - progress : progress;
+		for (const auto& material : m_transitionMaterials)
+		{
+			material->SetScalarParameter(m_transitionParameter, value);
+		}
+
+		return progress;
+	}
+
+	void GameUnitC::StartPendingSpawnEffect()
+	{
+		if (!m_spawnEffectPending || !m_entity)
+		{
+			return;
+		}
+
+		m_spawnEffectPending = false;
+
+		const proto_client::ModelDataEntry* model = GetDisplayModel();
+		if (!model || !model->has_spawn_effect())
+		{
+			return;
+		}
+
+		// Spell tints would be built on top of the dissolve instances and outlive them; a unit that
+		// is tinted the moment it appears skips the effect.
+		if (!m_spellTints.empty())
+		{
+			return;
+		}
+
+		StartTransitionEffect(model->spawn_effect(), true, 0.0f);
+	}
+
+	void GameUnitC::EndSpawnEffect()
+	{
+		if (m_transition != TransitionState::Spawning)
+		{
+			return;
+		}
+
+		for (const auto& [subEntity, material] : m_transitionOriginalMaterials)
+		{
+			subEntity->SetMaterial(material);
+		}
+
+		m_transitionOriginalMaterials.clear();
+		m_transitionMaterials.clear();
+		m_transition = TransitionState::None;
 	}
 
 	void GameUnitC::SetSpellMod(const uint8 type, const uint8 effectIndex, const uint8 op, const int32 value)

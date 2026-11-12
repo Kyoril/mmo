@@ -13,7 +13,7 @@ namespace mmo
 	class GameUnitC;
 	class ProgressBar;
 
-	/// Displays a unit nameplate (name text + health bar) above a unit's head in the 3D world.
+	/// Displays a unit nameplate (name text, health bar, level) above a unit's head in the 3D world.
 	///
 	/// The visual look (bar textures, font, selection highlight) is defined in
 	/// data/client/Interface/GameUI/Nameplate.xml and copied onto this frame and its
@@ -66,6 +66,10 @@ namespace mmo
 		/// name, interrupted flash, visibility, cvar filter).
 		void UpdateCastBar(GameUnitC& unit);
 
+		/// Refreshes the level text (difficulty coloured) or, for hostile units far above the
+		/// player, the skull shown in its place.
+		void UpdateLevel(GameUnitC& unit);
+
 	private:
 		Camera* m_camera = nullptr;
 		ObjectGuid m_unitGuid = 0;
@@ -82,6 +86,16 @@ namespace mmo
 		/// The cast/channel bar below the health bar - visible only while the unit is
 		/// casting (or briefly flashing "Interrupted" after a failed cast).
 		std::shared_ptr<ProgressBar> m_castBar;
+
+		/// The unit's level, right of the health bar.
+		FramePtr m_levelText;
+		/// Skull shown instead of the level for hostile units far above the player.
+		FramePtr m_levelSkull;
+		/// Level and skull state currently shown, so the text is only rewritten on changes.
+		int32 m_shownLevel = -1;
+		bool m_levelShowsSkull = false;
+		/// Cached level text colour.
+		argb_t m_levelColor = 0;
 
 		/// The spell whose name the cast bar currently displays, so the (truncated)
 		/// caption is only recomputed when the cast changes.

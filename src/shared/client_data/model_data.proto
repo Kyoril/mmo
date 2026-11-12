@@ -41,6 +41,40 @@ message ModelDataEntry {
 	// their (sheathed) bone. Purely client-side visuals. Players ignore it; their look comes
 	// from their equipment.
 	repeated uint32 item_displays = 11;
+
+	// Effect a unit using this display model plays when it is removed from the world (a
+	// temporary pet expiring, a corpse despawning), instead of vanishing at once. Not played
+	// when the unit merely leaves the client's sight. Missing = the unit vanishes at once.
+	optional UnitTransitionEffect despawn_effect = 12;
+
+	// Effect a unit using this display model plays when it is added to the world (summoned,
+	// respawned), e.g. a dissolve played backwards. Not played when the unit merely comes into
+	// the client's sight. Missing = the unit appears at once.
+	optional UnitTransitionEffect spawn_effect = 13;
+}
+
+// A unit's spawn or despawn effect. A despawning unit stays in the scene (no longer targetable)
+// until its effect ends; a spawning unit is a normal unit while its effect plays.
+message UnitTransitionEffect {
+	// Seconds the effect lasts. 0 = the length of `animation`.
+	optional float duration = 1 [default = 0.0];
+
+	// Skeleton clip played once when the effect starts (empty = none). Sounds and other events
+	// belong on the clip as animation notifies (PlaySound notifies play at the unit).
+	optional string animation = 2;
+
+	// Material (.hmat) swapped onto every visible sub mesh while the effect plays (empty = keep
+	// the unit's materials). Parameters of the unit's material with the same name and type
+	// (textures, colours, scalars) are copied over, so one dissolve material serves every skin.
+	optional string material = 3;
+
+	// Scalar material parameter driven over the effect's duration, on every sub mesh whose
+	// (possibly swapped) material exposes it: 0 to 1 for a despawn, 1 to 0 for a spawn. A spawn
+	// effect restores the unit's own materials when it ends.
+	optional string dissolve_parameter = 4 [default = "Dissolve"];
+
+	// SoundEntry id played at the unit when the effect starts. 0 = none.
+	optional uint32 sound_id = 5 [default = 0];
 }
 
 message ModelDatas {

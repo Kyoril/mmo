@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 35 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 36 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -122,6 +122,10 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 39 | 2026-11-08 | World map member positions: `group_update_flags::Zone` (bit 7) becomes `Map` and carries the member's uint32 map id instead of an always-zero uint16 zone, so `PartyMemberStats` lets clients place far-away party members on their own map. Client `GuildMemberPositions` (no payload, handled by the realm, at most one per second) is answered by server `GuildMemberPositions` (uint16 count, then per member uint64 guid, uint8-length name, float x, float z) listing the online guild mates in the sender's world instance |
+| 38 | 2026-11-03 | Creation blocks gain `object_update_flags::Spawned` (0x2) for objects just added to the world (summoned, respawned, entered the instance) rather than come into sight; clients play a unit's spawn effect (`ModelDataEntry.spawn_effect`) only then |
+| 37 | 2026-11-03 | `DestroyObjects` gains a uint8 `despawn_reason` right after the object count: 0 `OutOfSight` (the objects left the client's view and still exist), 1 `Destroyed` (removed from the world instance). Clients play a unit's despawn effect (`ModelDataEntry.despawn_effect`) only for `Destroyed` |
+| 36 | 2026-11-02 | Pet damage numbers: `damage_flags` gains `Pet` (0x10). A unit without its own connection (a pet) forwards its `SpellDamageLog` to its owner with that bit set, so the owner's client shows it in the pet colour and credits it to the pet |
 | 35 | 2026-11-01 | Pets: client `PetCommand` (uint8 pet_command, uint64 target, uint32 param), `PetCastSpell` (uint32 spellId + SpellTargetMap), `PetRename` (uint8-length name), `PetNameQuery` (uint64 guid), all proxied to the world node, and GM `CheatPetAdd`/`CheatPetRemove` (uint32 petEntry), `CheatPetTame`/`CheatPetMake` (no payload; selected creature), proxied with GM level 2; server `PetSpells` (uint64 petGuid, 0 = none, uint32 petEntry, uint8-length name, uint8 levelMode, uint8 strategy, uint8 canRename, uint8 count + uint32 spell ids), `PetLearnedSpell` (uint32), `PetXp` (uint32 xp, uint32 nextLevelXp), `PetNameQueryResult` (uint64 guid, uint8 found, uint8-length name) and `PetResult` (uint8 pet_result). Payloads live in `src/shared/game/pet_packets.h`, now on the fingerprint watch list. `spell_cast_result` gains `FailedTooManyPets` (23) and the pre-cast pet failures `FailedNoPet`, `FailedPetDead`, `FailedPetWrongClass`, `FailedAlreadyHavePet`, `FailedNoFreePetSlot`, `FailedNotTamable`, `FailedTargetTooHighLevel` (24-30). Subsystem id 3 `PETS` (world-owned) joins `SubsystemStatus` |
 | 34 | 2026-11-01 | Guilds become a switchable subsystem: subsystem id 2 `GUILD` (realm-owned) joins `SubsystemStatus`, and `GuildCommandResult` gains result 7 `Disabled`, sent for any guild request and for guild chat while the subsystem is off |
 | 33 | 2026-10-30 | Real-time regeneration: unit fields `HealthRegen` and `PowerRegen` (3 floats: mana, rage, energy; current rates per five seconds) are appended after `ManaRegenCasting`, renumbering every player field after them. The owning client extrapolates health and power with them |

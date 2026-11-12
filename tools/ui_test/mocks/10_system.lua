@@ -120,3 +120,25 @@ end
 function GetMinimapObjectsAt()
 	return {}
 end
+
+-- World map: no baked map in the harness, so the window shows its "no map" text.
+function WorldMapHasMap()
+	return false
+end
+
+function WorldMapGetMapName()
+	return "Development"
+end
+
+function WorldMapGetHoverInfo()
+	return nil
+end
+
+function WorldMapGetPlayerInfo()
+	return nil
+end
+
+function WorldMapCenterOnPlayer() end
+function WorldMapShowWholeMap() end
+function WorldMapZoomIn() end
+function WorldMapZoomOut() end

@@ -73,5 +73,11 @@ namespace mmo
 		virtual bool SupportsScale() const { return true; }
 
 		virtual bool SupportsDuplicate() const { return true; }
+
+		/// Opts into the stricter transform widget contract: the widget hides (and ignores clicks in) a
+		/// transform mode this object does not support, and in local space it follows rotationChanged
+		/// while no drag is active. Off by default, so existing selections keep the old widget behaviour.
+		/// @returns True if the widget should hide unsupported modes for this object.
+		virtual bool HidesUnsupportedTransformModes() const { return false; }
 	};
 }

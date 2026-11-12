@@ -150,6 +150,14 @@ namespace mmo
 		// Clear text buffer before handling a new tag
 		m_text.clear();
 
+		// Inside a frame that could not be created, everything but nested frames (which only
+		// track the depth) is ignored. Otherwise its properties, area and scripts would be
+		// applied to the enclosing frame instead.
+		if (m_skippedFrameDepth > 0 && element != FrameElement)
+		{
+			return;
+		}
+
 		if (m_hasEventsTag)
 		{
 			// We are in an Events tag - try to find the frame event by name.
@@ -333,8 +341,15 @@ namespace mmo
 		}
 	}
 
-	void LayoutXmlLoader::ElementEnd(const std::string & element) 
+	void LayoutXmlLoader::ElementEnd(const std::string & element)
 	{
+		// Elements nested in a skipped frame were never started, see ElementStart.
+		if (m_skippedFrameDepth > 0 && element != FrameElement)
+		{
+			m_text.clear();
+			return;
+		}
+
 		// If we have a valid frame event, assign the xml text as event code
 		if (m_frameEvent != nullptr)
 		{

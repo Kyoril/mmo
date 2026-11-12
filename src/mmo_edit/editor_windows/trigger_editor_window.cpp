@@ -89,7 +89,8 @@ namespace mmo
 		"Instance - On Encounter State Changed",
 		"Player - On Level Up",
 		"Player - On Stand State Changed",
-		"Instance - On Hour Of Day"
+		"Instance - On Hour Of Day",
+		"Unit - On Quest Rewarded"
 	};
 
 	static_assert(std::size(s_eventTypeNames) == trigger_event::Count_, "s_eventTypeNames size mismatch");
@@ -379,6 +380,9 @@ namespace mmo
 			case trigger_event::OnQuestAccept:
 				snprintf(buffer, sizeof(buffer), "Player accepted quest %d", GetEventDataValue(event, 0));
 				return buffer;
+			case trigger_event::OnQuestReward:
+				snprintf(buffer, sizeof(buffer), "Player turned in quest %d", GetEventDataValue(event, 0));
+				return buffer;
 			case trigger_event::OnAllPlayersDead:
 				return "All players in instance are dead (wipe)";
 			case trigger_event::OnPlayerEnterInstance:
@@ -613,6 +617,7 @@ namespace mmo
 				break;
 			}
 			case trigger_event::OnQuestAccept:
+			case trigger_event::OnQuestReward:
 			{
 				DrawEventDataPicker(event, 0, "##QuestId", "Quest", project.quests);
 				break;

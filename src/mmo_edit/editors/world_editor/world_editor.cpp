@@ -4,6 +4,7 @@
 
 #include "stream_sink.h"
 #include "world_editor_instance.h"
+#include "pcg/section_bake_job.h"
 #include "assets/asset_registry.h"
 #include "log/default_log_levels.h"
 #include "imgui/misc/cpp/imgui_stdlib.h"
@@ -87,6 +88,58 @@ namespace mmo
 			m_worldName.clear();
 			m_showWorldNameDialog = true;
 		}
+
+		if (ImGui::MenuItem("New Section..."))
+		{
+			m_sectionName.clear();
+			m_sectionMaterial = DefaultSectionTerrainMaterial;
+			m_sectionError.clear();
+			m_showSectionDialog = true;
+		}
+	}
+
+	void WorldEditor::DrawNewSectionDialog()
+	{
+		if (m_showSectionDialog)
+		{
+			ImGui::OpenPopup("New Section");
+			m_showSectionDialog = false;
+		}
+
+		if (!ImGui::BeginPopupModal("New Section", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			return;
+		}
+
+		ImGui::TextUnformatted("Creates a section world for building a road or path section template.");
+		ImGui::TextDisabled("Stored in %s/<Name>/ (editor only).", SectionWorldFolder);
+
+		ImGui::InputText("Name", &m_sectionName);
+		ImGui::InputText("Terrain material", &m_sectionMaterial);
+
+		if (!m_sectionError.empty())
+		{
+			ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_sectionError.c_str());
+		}
+
+		if (ImGui::Button("Create"))
+		{
+			if (CreateSectionWorld(m_sectionName, m_sectionMaterial, m_sectionError))
+			{
+				const String worldPath = GetSectionWorldPath(m_sectionName);
+				m_host.assetImported(Path(worldPath).parent_path());
+				m_host.OpenAsset(Path(worldPath));
+				ImGui::CloseCurrentPopup();
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
 	}
 
 	void WorldEditor::DrawImpl()
@@ -120,6 +173,8 @@ namespace mmo
 
 			ImGui::EndPopup();
 		}
+
+		DrawNewSectionDialog();
 	}
 
 	void WorldEditor::SetPendingCameraTarget(const Path& asset, const Vector3& worldLocation)

@@ -23,6 +23,12 @@ namespace mmo
 		uint32 powerType = power_type::Mana;
 		uint32 power = 0;
 		uint32 maxPower = 1;
+
+		/// Map and position last reported by the realm (sent while the member is not near us).
+		/// Only meaningful if hasPosition is set; a spawned member's unit has the live position.
+		uint32 mapId = 0;
+		Vector3 position;
+		bool hasPosition = false;
 	};
 
 	class PartyInfo final : public NonCopyable

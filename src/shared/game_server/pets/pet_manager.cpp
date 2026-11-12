@@ -148,6 +148,8 @@ namespace mmo
 
 	void PetManager::OnOwnerAttack(GameUnitS& victim)
 	{
+		m_ownerTarget = std::static_pointer_cast<GameUnitS>(victim.shared_from_this());
+
 		if (m_temporaryPets.empty() && m_persistentPet.expired())
 		{
 			return;
@@ -216,6 +218,17 @@ namespace mmo
 						}
 					});
 			});
+	}
+
+	GameUnitS* PetManager::GetOwnerTarget() const
+	{
+		GameUnitS* target = m_ownerTarget.lock().get();
+		if (!target || !target->IsAlive() || !m_owner.GetWorldInstance() || target->GetWorldInstance() != m_owner.GetWorldInstance())
+		{
+			return nullptr;
+		}
+
+		return target;
 	}
 
 	bool PetManager::HasPet(const GameUnitS& unit) const
@@ -427,6 +440,31 @@ namespace mmo
 			if (pets->CanAddToGroup(group, maxCount, pet_limit_policy::FailAtCap) != pet_result::Ok)
 			{
 				return spell_cast_result::FailedTooManyPets;
+			}
+		}
+
+		return spell_cast_result::CastOkay;
+	}
+
+	SpellCastResult CheckPetTargetEffects(const proto::SpellEntry& spell, const GameUnitS& caster)
+	{
+		for (const auto& effect : spell.effects())
+		{
+			if (effect.targeta() != spell_effect_targets::Pet)
+			{
+				continue;
+			}
+
+			const PetManager* pets = caster.FindPets();
+			const GameCreatureS* pet = pets ? pets->GetPersistentPet() : nullptr;
+			if (!pet)
+			{
+				return spell_cast_result::FailedNoPet;
+			}
+
+			if (!pet->IsAlive())
+			{
+				return spell_cast_result::FailedPetDead;
 			}
 		}
 

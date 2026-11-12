@@ -248,7 +248,7 @@ namespace mmo
 
 		virtual void ApplyMovementInfo(const MovementInfo& info);
 
-		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const;
+		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true, bool spawned = false) const;
 
 		virtual void WriteValueUpdateBlock(io::Writer& writer, bool creation = true) const;
 

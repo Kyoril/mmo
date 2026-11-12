@@ -8,6 +8,7 @@
 
 #include "mesh_editor.h"
 #include "mesh_collision_geometry.h"
+#include "import/fbx_animation_import.h"
 #include "editor_host.h"
 #include "stream_sink.h"
 #include "assets/asset_registry.h"
@@ -1960,125 +1961,12 @@ namespace mmo
 
 	void MeshEditorInstance::ImportAnimationFromFbx(const std::filesystem::path& path, const String& animationName)
 	{
-		Assimp::Importer importer;
-
-		importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
-
-		const aiScene* scene = importer.ReadFile(path.string().c_str(),
-			aiProcess_SortByPType
-		);
-
-		if (!scene)
-		{
-			ELOG("Failed to open FBX file: " << importer.GetErrorString());
-			return;
-		}
-
-		if (!scene->HasAnimations())
-		{
-			ELOG("FBX file has no animation data!");
-			return;
-		}
-
 		SetAnimationState(nullptr);
 
-		DLOG("Scene has " << scene->mNumAnimations << " animations");
-		for (uint32 i = 0; i < scene->mNumAnimations; ++i)
+		// Every take of the file is imported under the entered name, so a single-take file is expected
+		if (ImportFbxAnimations(*m_entity->GetSkeleton(), path, [&animationName](const String&) { return animationName; }) <= 0)
 		{
-			const aiAnimation* anim = scene->mAnimations[i];
-			DLOG("Animation " << i << ": " << anim->mName.C_Str() << " with " << anim->mNumChannels << " channels");
-			DLOG("\tDuration: " << anim->mDuration << " ticks (" << (anim->mDuration / anim->mTicksPerSecond) << " seconds)");
-
-			// Setup an animation evaluator instance
-			m_animEvaluator = std::make_unique<AnimEvaluator>(anim);
-
-			if (m_entity->GetSkeleton()->HasAnimation(m_newAnimationName))
-			{
-				m_entity->GetSkeleton()->RemoveAnimation(m_newAnimationName);
-			}
-
-			m_entity->GetSkeleton()->Reset();
-
-			// Create the animation
-			Animation& animation = m_entity->GetSkeleton()->CreateAnimation(m_newAnimationName, static_cast<float>(anim->mDuration / anim->mTicksPerSecond));
-			animation.SetUseBaseKeyFrame(false, 0.0f, "");
-			animation.SetInterpolationMode(Animation::InterpolationMode::Linear);
-
-			for (uint32 channelIndex = 0; channelIndex < anim->mNumChannels; ++channelIndex)
-			{
-				aiNodeAnim* nodeAnim = anim->mChannels[channelIndex];
-
-				// Try to find the given bone in our skeleton
-				Bone* bone = m_entity->GetSkeleton()->GetBone(nodeAnim->mNodeName.C_Str());
-				if (!bone)
-				{
-					ELOG("Unable to find bone " << nodeAnim->mNodeName.C_Str() << " in skeleton, bone animation will not be applied!");
-					continue;
-				}
-
-				Matrix4 defBonePoseInv;
-				defBonePoseInv.MakeInverseTransform(bone->GetPosition(), bone->GetScale(), bone->GetOrientation());
-
-				const aiMatrix4x4 aiBonePoseInv(
-					defBonePoseInv[0][0], defBonePoseInv[0][1], defBonePoseInv[0][2], defBonePoseInv[0][3],
-					defBonePoseInv[1][0], defBonePoseInv[1][1], defBonePoseInv[1][2], defBonePoseInv[1][3],
-					defBonePoseInv[2][0], defBonePoseInv[2][1], defBonePoseInv[2][2], defBonePoseInv[2][3],
-					defBonePoseInv[3][0], defBonePoseInv[3][1], defBonePoseInv[3][2], defBonePoseInv[3][3]
-				);
-
-				// Create a new node track for the bone
-				const uint16 handle = bone->GetHandle();
-				NodeAnimationTrack* track = animation.HasNodeTrack(handle) ? animation.GetNodeTrack(handle) : animation.CreateNodeTrack(handle, bone);
-
-				// Iterate through each key type and note the time value
-				std::set<double> keyTimes;
-				for (unsigned int j = 0; j < nodeAnim->mNumPositionKeys; j++)
-				{
-					keyTimes.insert(nodeAnim->mPositionKeys[j].mTime / anim->mTicksPerSecond);
-				}
-
-				for (unsigned int j = 0; j < nodeAnim->mNumRotationKeys; j++)
-				{
-					keyTimes.insert(nodeAnim->mRotationKeys[j].mTime / anim->mTicksPerSecond);
-				}
-
-				for (unsigned int j = 0; j < nodeAnim->mNumScalingKeys; j++)
-				{
-					keyTimes.insert(nodeAnim->mScalingKeys[j].mTime / anim->mTicksPerSecond);
-				}
-
-				const auto& boneLocalTransforms = m_animEvaluator->GetTransformations();
-
-				// Now for each key, create a keyframe
-				for (const auto time : keyTimes)
-				{
-					m_animEvaluator->Evaluate(time);
-
-					// Update local bone transform
-					aiVector3D aiTrans, aiScale;
-					aiQuaternion aiRot;
-
-					boneLocalTransforms[channelIndex].Decompose(aiScale, aiRot, aiTrans);
-					Vector3 transCopy(aiTrans.x, aiTrans.y, aiTrans.z);
-					
-					const aiMatrix4x4 pose = aiBonePoseInv * boneLocalTransforms[channelIndex];
-					pose.Decompose(aiScale, aiRot, aiTrans);
-
-					Vector3 trans(aiTrans.x, aiTrans.y, aiTrans.z);
-					Quaternion rot(aiRot.w, aiRot.x, aiRot.y, aiRot.z);
-					Vector3 scale(aiScale.x, aiScale.y, aiScale.z);
-
-					// This line ensures that we set the translation relative to the bind pose instead of relative to the last key frame!
-					trans = transCopy - bone->GetPosition();
-
-					auto keyFramePtr = track->CreateNodeKeyFrame(static_cast<float>(time));
-					keyFramePtr->SetTranslate(trans);
-					keyFramePtr->SetRotation(rot);
-					keyFramePtr->SetScale(scale);
-				}
-			}
-
-			animation.Optimize();
+			return;
 		}
 
 		// Init animation state

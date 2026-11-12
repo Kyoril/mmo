@@ -88,6 +88,36 @@ namespace mmo
 			};
 		}
 
+		/// Why objects appear at a client. Not a field of its own on the wire: Spawned sets
+		/// object_update_flags::Spawned in the objects' creation blocks.
+		namespace spawn_reason
+		{
+			enum Type
+			{
+				/// The objects came into the client's sight (it moved, they moved, they became visible).
+				CameIntoSight = 0,
+
+				/// The objects were just added to the world instance (summoned, respawned, entered it).
+				Spawned = 1,
+			};
+		}
+
+		/// Why the objects of a DestroyObjects packet disappear from the client. Sent once per
+		/// packet, right after the object count.
+		namespace despawn_reason
+		{
+			enum Type
+			{
+				/// The objects left the client's sight (moved away, became invisible) but still exist.
+				/// The client removes them at once.
+				OutOfSight = 0,
+
+				/// The objects were removed from the world instance (expired, dismissed, despawned).
+				/// The client may play a unit's despawn effect before it removes the unit.
+				Destroyed = 1,
+			};
+		}
+
 		constexpr uint32 MAX_FRIENDS = 50;
 
 		/// Version of the game protocol this binary speaks.
@@ -103,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000023;
+		constexpr uint32 ProtocolVersion = 0x00000027;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -530,6 +560,11 @@ namespace mmo
 				/// GAME MASTER. Makes the sender's selected creature the sender's temporary pet without
 				/// a duration. Proxied to the world node. No payload.
 				CheatPetMake, // GAME MASTER
+
+				/// Asks for the positions of the sender's online guild mates in the sender's world
+				/// instance. Handled by the realm, answered with realm_client_packet::GuildMemberPositions.
+				/// Requests closer together than one second are dropped. No payload.
+				GuildMemberPositions,
 
 				/// Counter constant
 				Count_,
@@ -973,6 +1008,11 @@ namespace mmo
 
 				/// A pet action of the receiver failed. Payload (game::PetResultData): uint8 pet_result.
 				PetResult,
+
+				/// Answer to client_realm_packet::GuildMemberPositions: the receiver's online guild mates
+				/// in the receiver's world instance at their last positions reported by the world node.
+				/// Payload: uint16 count, then per member uint64 guid, uint8-length name, float x, float z.
+				GuildMemberPositions,
 
 				/// Counter constant
 				Count_,

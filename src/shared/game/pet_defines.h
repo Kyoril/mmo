@@ -44,6 +44,20 @@ namespace mmo
 		};
 	}
 
+	/// Which persistent pet stat a ModPetStatsPct aura of the owner scales (its miscvaluea).
+	namespace pet_stat_kind
+	{
+		enum Type
+		{
+			/// Melee damage (min and max damage).
+			Damage = 0,
+			/// Max health.
+			Health = 1,
+
+			Count_
+		};
+	}
+
 	/// What happens if a summon would exceed the persistent pet cap.
 	namespace pet_limit_policy
 	{

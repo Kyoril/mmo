@@ -59,6 +59,9 @@ namespace mmo
 
 		const proto::SpellEntry* GetSpell() const override { return &m_spell; }
 
+		/// @returns The cast time in milliseconds after spell mods and casting speed auras.
+		GameTime GetCastTime() const { return m_castTime; }
+
 		/// @returns The result of Activate(): CastOkay unless the cast failed validation.
 		SpellCastResult GetActivationResult() const { return m_activationResult; }
 

@@ -39,7 +39,6 @@ namespace mmo
         /// @param renderCallback Callback to trigger rendering.
         /// @param generateMinimapsCallback Callback to generate minimaps.
         /// @param generateTerrainLodCallback Callback to bake the distant-terrain data of stale pages.
-        /// @param bakeGlueSceneCallback Callback to bake the glue scene (the login/character select backdrop) from this world.
         explicit ViewportPanel(
             DeferredRenderer &deferredRenderer,
             WorldGrid &worldGrid,
@@ -55,8 +54,7 @@ namespace mmo
             ImVec2 &lastContentRectMin,
             std::function<void()> renderCallback,
             std::function<void()> generateMinimapsCallback,
-            std::function<void()> generateTerrainLodCallback,
-            std::function<void()> bakeGlueSceneCallback);
+            std::function<void()> generateTerrainLodCallback);
 
         ~ViewportPanel() override = default;
 
@@ -74,6 +72,11 @@ namespace mmo
             Texture *translateIcon,
             Texture *rotateIcon,
             Texture *scaleIcon);
+
+        /// @brief Sets an overlay drawn over the viewport image every frame, independent of the edit mode
+        ///        (after the edit mode's own overlay). An empty function removes it.
+        /// @param overlay Receives the window draw list, the image's screen position and its size.
+        void SetExtraOverlay(std::function<void(ImDrawList*, const ImVec2&, const ImVec2&)> overlay) { m_extraOverlay = std::move(overlay); }
 
     private:
         void HandleViewportInteractions(const ImVec2 &availableSpace, WorldEditMode *currentEditMode = nullptr);
@@ -98,7 +101,7 @@ namespace mmo
         std::function<void()> m_renderCallback;
         std::function<void()> m_generateMinimapsCallback;
         std::function<void()> m_generateTerrainLodCallback;
-        std::function<void()> m_bakeGlueSceneCallback;
+        std::function<void(ImDrawList*, const ImVec2&, const ImVec2&)> m_extraOverlay;
 
         static Texture *s_translateIcon;
         static Texture *s_rotateIcon;

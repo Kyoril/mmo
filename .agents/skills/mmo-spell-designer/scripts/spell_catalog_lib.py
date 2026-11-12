@@ -115,6 +115,10 @@ AURA_TYPE_NAMES = {
     39: "ModPowerRegenPercent",
     40: "ModCritChanceTaken",
     41: "ModCastingManaRegenPercent",
+    42: "ModCastingSpeedPct",
+    43: "ModHealingTakenPct",
+    44: "ModPetStatsPct",
+    45: "PetPassive",
 }
 
 SPELL_ATTRIBUTE_FLAGS_0 = {

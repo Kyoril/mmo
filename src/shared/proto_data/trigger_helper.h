@@ -127,6 +127,10 @@ namespace mmo
 			/// Data: [<HOUR:1-24>]; When given, only fires at that hour. Midnight is 24, because
 			/// event data treats zero as a wildcard.
 			OnHourOfDay,
+			/// Executed on a quest giver unit after a player turned in a specific quest there. The
+			/// triggering unit is the player, so a CastSpell action can aim a reward at them.
+			/// Data: <QUEST ID>;
+			OnQuestReward,
 
 			Invalid,
 			Count_ = Invalid

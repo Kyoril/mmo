@@ -110,7 +110,7 @@ Any file `artifacts/ui_test/commands/*.cmd` is executed line by line; the result
   checkout (walking up the folders) and warns about it in `status.json`; if that checkout has
   uncommitted frame_ui changes (e.g. new XML features), layouts can render wrong or not at all.
   Build `ui_test` in the checkout whose UI you edit, or pass `--data`.
-- No 3D: model, unit model, minimap, world and glue scene frames are placeholders (`ModelFrame` etc.
+- No 3D: model, unit model, minimap and world frames are placeholders (`ModelFrame` etc.
   keep their Lua methods but draw only their XML imagery). Cooldown sweeps are not drawn.
 - Textures are cached for the app's lifetime; restart it after replacing a `.htex`.
 - Screenshots are taken `--settle` frames (default 10) after a load; fades that take longer (zone

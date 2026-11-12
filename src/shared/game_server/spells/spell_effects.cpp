@@ -124,6 +124,94 @@ namespace mmo
 
 		void HandleDummy(SpellEffectContext& /*ctx*/) {}
 
+		/// Deals the effect's school damage to one unit (immunity, modifiers, crit, block, threat,
+		/// combat log and procs). Shared by SchoolDamage and HealthLeech.
+		/// @returns The damage actually dealt to the target; 0 if it was immune or took nothing.
+		static uint32 DealSchoolDamage(SpellEffectContext& ctx, GameUnitS& unitTarget)
+		{
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+
+			// If the target is immune to this spell's damage school, report the immunity to
+			// clients (so the floating combat text shows "Immune") and skip damage entirely.
+			if (unitTarget.IsImmuneToSchool(spell.spellschool()))
+			{
+				executer.SpellDamageLog(unitTarget.GetGuid(), 0, spell.spellschool(), DamageFlags::Immune, spell);
+				return 0;
+			}
+
+			// TODO: Miss chance and resists.
+			uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
+			executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
+
+			// Add spell power to damage
+			const float spellDamage = executer.GetCalculatedModifierValue(unit_mods::SpellDamage);
+			if (spellDamage > 0.0f && ctx.effect.powerbonusfactor() > 0.0f)
+			{
+				damageAmount += static_cast<uint32>(spellDamage * ctx.effect.powerbonusfactor());
+			}
+
+			// Apply both Damage and SpellDamage mods to the damage amount!
+			damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
+			damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
+
+			// Roll for a critical hit: base chance from the combat settings, the caster's
+			// CritChance modifiers (talents), then the victim's own vulnerability
+			// (ModCritChanceTaken), added last so the caster's percentage modifiers do not
+			// scale it — the same order as the weapon-damage spells below.
+			const auto& combatSettings = executer.GetCombatSettings();
+			float critChance = combatSettings.spell_default_crit_chance();
+			executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
+			critChance += unitTarget.GetCritChanceTakenBonus();
+
+			bool isCrit = false;
+			if (critChance > 0.0f)
+			{
+				std::uniform_real_distribution critDistribution(0.0f, 100.0f);
+				if (critDistribution(randomGenerator) < critChance)
+				{
+					isCrit = true;
+					damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_crit_multiplier()));
+				}
+			}
+
+			// Roll for a block. Only physical damage from the front can be blocked; the helper
+			// returns no block for other schools, so this is a no-op for magical spells.
+			uint32 blockedDamage = 0;
+			const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(spell.spellschool()), damageAmount);
+			if (block.blocked)
+			{
+				blockedDamage = block.blockedAmount;
+				damageAmount -= blockedDamage;
+				unitTarget.OnBlock();
+			}
+
+			damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
+
+			const uint32 dealt = static_cast<uint32>(std::max<int32>(0, unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility)));
+			if (dealt > 0)
+			{
+				float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
+				executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
+				unitTarget.threatened(executer, threat);
+			}
+
+			uint8 damageFlags = DamageFlags::None;
+			if (isCrit) damageFlags |= DamageFlags::Crit;
+			if (block.blocked) damageFlags |= DamageFlags::Block;
+
+			// Log spell damage to client
+			executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
+
+			// Trigger proc events for spell damage. Crits carry CriticalHit so "on critical
+			// strike" procs (procexflags) can fire.
+			const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
+			executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+			unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+
+			return dealt;
+		}
+
 		void HandleSchoolDamage(SpellEffectContext& ctx)
 		{
 			if (ctx.effectTargets.empty())
@@ -144,81 +232,58 @@ namespace mmo
 
 				auto& unitTarget = targetObject->AsUnit();
 
-				// If the target is immune to this spell's damage school, report the immunity to
-				// clients (so the floating combat text shows "Immune") and skip damage entirely.
-				if (unitTarget.IsImmuneToSchool(spell.spellschool()))
+				DealSchoolDamage(ctx, unitTarget);
+			}
+		}
+
+		void HandleHealthLeech(SpellEffectContext& ctx)
+		{
+			if (ctx.effectTargets.empty())
+			{
+				ELOG("Failed to cast spell effect: Unable to resolve effect targets");
+				return;
+			}
+
+			const proto::SpellEntry& spell = ctx.castContext.GetSpell();
+			GameUnitS& executer = ctx.castContext.GetExecutor();
+
+			// multiplevalue is the share of the damage dealt that heals the caster; 0 means unset (1.0).
+			const float ratio = ctx.effect.multiplevalue() > 0.0f ? ctx.effect.multiplevalue() : 1.0f;
+
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (!targetObject->IsUnit())
 				{
-					executer.SpellDamageLog(unitTarget.GetGuid(), 0, spell.spellschool(), DamageFlags::Immune, spell);
 					continue;
 				}
 
-				// TODO: Miss chance and resists.
-				uint32 damageAmount = std::max<int32_t>(0, ctx.basePoints);
-				executer.ApplySpellMod(spell_mod_op::Damage, spell.id(), damageAmount);
-
-				// Add spell power to damage
-				const float spellDamage = executer.GetCalculatedModifierValue(unit_mods::SpellDamage);
-				if (spellDamage > 0.0f && ctx.effect.powerbonusfactor() > 0.0f)
+				const uint32 dealt = DealSchoolDamage(ctx, targetObject->AsUnit());
+				const uint32 healingAmount = static_cast<uint32>(static_cast<float>(dealt) * ratio);
+				if (healingAmount == 0)
 				{
-					damageAmount += static_cast<uint32>(spellDamage * ctx.effect.powerbonusfactor());
+					continue;
 				}
 
-				// Apply both Damage and SpellDamage mods to the damage amount!
-				damageAmount = executer.CalculateModifiedValue(unit_mods::Damage, damageAmount);
-				damageAmount = executer.CalculateModifiedValue(unit_mods::SpellDamage, damageAmount);
-
-				// Roll for a critical hit: base chance from the combat settings, the caster's
-				// CritChance modifiers (talents), then the victim's own vulnerability
-				// (ModCritChanceTaken), added last so the caster's percentage modifiers do not
-				// scale it — the same order as the weapon-damage spells below.
-				const auto& combatSettings = executer.GetCombatSettings();
-				float critChance = combatSettings.spell_default_crit_chance();
-				executer.ApplySpellMod(spell_mod_op::CritChance, spell.id(), critChance);
-				critChance += unitTarget.GetCritChanceTakenBonus();
-
-				bool isCrit = false;
-				if (critChance > 0.0f)
+				const int32 effectiveHealing = executer.Heal(healingAmount, &executer);
+				if (effectiveHealing <= 0)
 				{
-					std::uniform_real_distribution critDistribution(0.0f, 100.0f);
-					if (critDistribution(randomGenerator) < critChance)
+					continue;
+				}
+
+				const uint32 spellId = spell.id();
+				const uint32 healed = static_cast<uint32>(effectiveHealing);
+				ctx.castContext.SendPacketFromCaster(
+					[&executer, spellId, healed](game::OutgoingPacket& out_packet)
 					{
-						isCrit = true;
-						damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * ApplyCritDamageBonus(executer, spell.id(), combatSettings.spell_crit_multiplier()));
-					}
-				}
-
-				// Roll for a block. Only physical damage from the front can be blocked; the helper
-				// returns no block for other schools, so this is a no-op for magical spells.
-				uint32 blockedDamage = 0;
-				const BlockResult block = unitTarget.RollMeleeBlock(executer, static_cast<SpellSchool>(spell.spellschool()), damageAmount);
-				if (block.blocked)
-				{
-					blockedDamage = block.blockedAmount;
-					damageAmount -= blockedDamage;
-					unitTarget.OnBlock();
-				}
-
-				damageAmount = static_cast<uint32>(static_cast<float>(damageAmount) * unitTarget.GetIncomingDamageTakenMultiplier(&executer, static_cast<SpellDmgClass>(spell.dmgclass())));
-
-				if (unitTarget.Damage(damageAmount, spell.spellschool(), &executer, damage_type::MagicalAbility) > 0)
-				{
-					float threat = static_cast<float>(damageAmount) * spell.threat_multiplier();
-					executer.ApplySpellMod(spell_mod_op::Threat, spell.id(), threat);
-					unitTarget.threatened(executer, threat);
-				}
-
-				uint8 damageFlags = DamageFlags::None;
-				if (isCrit) damageFlags |= DamageFlags::Crit;
-				if (block.blocked) damageFlags |= DamageFlags::Block;
-
-				// Log spell damage to client
-				executer.SpellDamageLog(unitTarget.GetGuid(), damageAmount, spell.spellschool(), static_cast<DamageFlags>(damageFlags), spell, blockedDamage);
-
-				// Trigger proc events for spell damage. Crits carry CriticalHit so "on critical
-				// strike" procs (procexflags) can fire.
-				const uint32 procEx = proc_ex_flags::NormalHit | (isCrit ? proc_ex_flags::CriticalHit : 0);
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassNeg, &unitTarget, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassNeg, &executer, damageAmount, procEx, spell.spellschool(), false, spell.familyflags());
+						out_packet.Start(game::realm_client_packet::SpellHealLog);
+						out_packet
+							<< io::write_packed_guid(executer.GetGuid())
+							<< io::write_packed_guid(executer.GetGuid())
+							<< io::write<uint32>(spellId)
+							<< io::write<uint32>(healed)
+							<< io::write<uint8>(0);
+						out_packet.Finish();
+					});
 			}
 		}
 
@@ -384,8 +449,14 @@ namespace mmo
 				position = unitTarget->GetPosition();
 			}
 
+			// The zone lives for the spell duration, which Duration spell mods change like a summon's.
+			// SpellZoneStart carries this modified duration, so the client's visual lasts as long.
+			int32 duration = spell.duration();
+			executer.ApplySpellMod(spell_mod_op::Duration, spell.id(), duration);
+			duration = std::max(duration, 1);
+
 			world->CreateSpellZone(executer, spell.id(), ctx.effect.triggerspell(), position, ctx.effect.radius(),
-				static_cast<GameTime>(spell.duration()), static_cast<GameTime>(std::max(ctx.effect.amplitude(), 0)));
+				static_cast<GameTime>(duration), static_cast<GameTime>(std::max(ctx.effect.amplitude(), 0)));
 		}
 
 		void HandleDrainPower(SpellEffectContext& /*ctx*/) {}
@@ -447,6 +518,9 @@ namespace mmo
 					}
 				}
 
+				// Heal() applies the target's healing taken percentage; combat text and procs report
+				// the same scaled amount so they show what lands.
+				const uint32 scaledHealing = unitTarget.ScaleHealingTaken(healingAmount);
 				const int32 effectiveHealing = unitTarget.Heal(healingAmount, &executer);
 
 				// Healing a unit that is under attack generates threat on its attackers and pulls
@@ -460,19 +534,19 @@ namespace mmo
 				}
 
 				// Trigger proc events for healing
-				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, healingAmount, procFlags, spell.spellschool(), false, spell.familyflags());
-				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &executer, healingAmount, procFlags, spell.spellschool(), false, spell.familyflags());
+				executer.TriggerProcEvent(spell_proc_flags::DoneSpellMagicDmgClassPos, &unitTarget, scaledHealing, procFlags, spell.spellschool(), false, spell.familyflags());
+				unitTarget.TriggerProcEvent(spell_proc_flags::TakenSpellMagicDmgClassPos, &executer, scaledHealing, procFlags, spell.spellschool(), false, spell.familyflags());
 
 				const uint32 spellId = spell.id();
 				ctx.castContext.SendPacketFromCaster(
-					[&unitTarget, &executer, spellId, healingAmount, isCrit](game::OutgoingPacket& out_packet)
+					[&unitTarget, &executer, spellId, scaledHealing, isCrit](game::OutgoingPacket& out_packet)
 					{
 						out_packet.Start(game::realm_client_packet::SpellHealLog);
 						out_packet
 							<< io::write_packed_guid(unitTarget.GetGuid())
 							<< io::write_packed_guid(executer.GetGuid())
 							<< io::write<uint32>(spellId)
-							<< io::write<uint32>(healingAmount)
+							<< io::write<uint32>(scaledHealing)
 							<< io::write<uint8>(isCrit);
 						out_packet.Finish();
 					});
@@ -695,7 +769,14 @@ namespace mmo
 			const std::vector<Vector3> positions = SummonPositions(
 				executer.GetPosition(), executer.GetFacing(), std::max(1, ctx.basePoints),
 				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
-			const int32 duration = ctx.castContext.GetSpell().duration();
+			// The summons live for the spell duration, which Duration spell mods change like an aura's.
+			int32 duration = ctx.castContext.GetSpell().duration();
+			// A negative mod must not turn a timed summon into a permanent one (0 = no despawn).
+			if (duration > 0)
+			{
+				executer.ApplySpellMod(spell_mod_op::Duration, ctx.castContext.GetSpell().id(), duration);
+				duration = std::max(duration, 1);
+			}
 			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
 
 			// The summons join the caster's fight: the caster's victim, or the unit the spell was cast at.
@@ -787,7 +868,14 @@ namespace mmo
 			const std::vector<Vector3> positions = SummonPositions(
 				executer.GetPosition(), executer.GetFacing(), static_cast<int32>(count),
 				ctx.effect.radius() > 0.0f ? ctx.effect.radius() : DefaultSummonDistance);
-			const int32 duration = spell.duration();
+			// Duration spell mods change the pets' lifetime like an aura's (Swarm Lore).
+			int32 duration = spell.duration();
+			if (duration > 0)
+			{
+				// A negative mod must not turn a timed summon into a permanent one (0 = no despawn).
+				executer.ApplySpellMod(spell_mod_op::Duration, spell.id(), duration);
+				duration = std::max(duration, 1);
+			}
 			const uint32 despawnMs = duration > 0 ? static_cast<uint32>(duration) : 0;
 
 			std::weak_ptr<GameUnitS> weakOwner = std::static_pointer_cast<GameUnitS>(executer.shared_from_this());
@@ -893,9 +981,16 @@ namespace mmo
 
 		void HandleGrantPersistentPet(SpellEffectContext& ctx)
 		{
-			if (auto* player = dynamic_cast<GamePlayerS*>(&ctx.castContext.GetExecutor()))
+			// Granted to the effect's player targets, not the caster: a trainer may bind a pet to the
+			// player it casts on. A self-targeted effect still grants to a casting player.
+			const uint32 petEntry = static_cast<uint32>(std::max(0, ctx.effect.miscvaluea()));
+			for (auto* targetObject : ctx.effectTargets)
 			{
-				player->GrantPersistentPet(static_cast<uint32>(std::max(0, ctx.effect.miscvaluea())));
+				if (auto* player = dynamic_cast<GamePlayerS*>(targetObject))
+				{
+					ctx.markAffectedTarget(*player);
+					player->GrantPersistentPet(petEntry);
+				}
 			}
 		}
 
@@ -1764,11 +1859,17 @@ namespace mmo
 					executer.AddPower(power_type::Rage, addRage);
 				}
 
-				// Trigger melee auto-attack proc events
-				if (hit)
+				// Trigger melee auto-attack proc events. Misses, dodges and parries raise them too,
+				// without a hit flag, so "after you dodge" procs can react (see AuraContainer::HandleProc).
+				const bool avoided = outcome == melee_attack_outcome::Miss || outcome == melee_attack_outcome::Dodge || outcome == melee_attack_outcome::Parry;
+				if (hit || avoided)
 				{
 					uint32 procEx = 0;
-					if (hitInfo & hit_info::CriticalHit)
+					if (!hit)
+					{
+						procEx |= outcome == melee_attack_outcome::Miss ? proc_ex_flags::MissHit : 0;
+					}
+					else if (hitInfo & hit_info::CriticalHit)
 					{
 						procEx |= proc_ex_flags::CriticalHit;
 					}

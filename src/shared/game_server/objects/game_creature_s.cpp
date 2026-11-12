@@ -91,6 +91,11 @@ namespace mmo
 		}
 	}
 
+	bool GameCreatureS::CanDie() const
+	{
+		return !m_ai || m_ai->CanControlledDie();
+	}
+
 	void GameCreatureS::Initialize()
 	{
 		GameUnitS::Initialize();
@@ -509,6 +514,8 @@ namespace mmo
 					case trigger_event::OnSpellAuraRemoved:
 					case trigger_event::OnEmote:
 					case trigger_event::OnSpellCast:
+					case trigger_event::OnQuestAccept:
+					case trigger_event::OnQuestReward:
 						if (triggerEvent.data(0) != 0)
 						{
 							if (data.empty() || data[0] != triggerEvent.data(0))
@@ -776,6 +783,12 @@ namespace mmo
 		m_petArmorMultiplier = armor;
 	}
 
+	void GameCreatureS::SetPetOwnerStatMultipliers(const float health, const float damage)
+	{
+		m_petOwnerHealthMultiplier = health;
+		m_petOwnerDamageMultiplier = damage;
+	}
+
 	void GameCreatureS::ApplyPetStats()
 	{
 		const auto scale = [](const uint32 value, const float multiplier)
@@ -783,11 +796,14 @@ namespace mmo
 			return static_cast<uint32>(std::max(0.0f, std::round(static_cast<float>(value) * multiplier)));
 		};
 
-		Set<uint32>(object_fields::MaxHealth, std::max<uint32>(1, scale(Get<uint32>(object_fields::MaxHealth), m_petHealthMultiplier)));
+		const float healthMultiplier = m_petHealthMultiplier * m_petOwnerHealthMultiplier;
+		const float damageMultiplier = m_petDamageMultiplier * m_petOwnerDamageMultiplier;
+
+		Set<uint32>(object_fields::MaxHealth, std::max<uint32>(1, scale(Get<uint32>(object_fields::MaxHealth), healthMultiplier)));
 		Set<uint32>(object_fields::MaxMana, scale(Get<uint32>(object_fields::MaxMana), m_petManaMultiplier));
 		Set<uint32>(object_fields::Armor, scale(Get<uint32>(object_fields::Armor), m_petArmorMultiplier));
-		Set<float>(object_fields::MinDamage, Get<float>(object_fields::MinDamage) * m_petDamageMultiplier);
-		Set<float>(object_fields::MaxDamage, Get<float>(object_fields::MaxDamage) * m_petDamageMultiplier);
+		Set<float>(object_fields::MinDamage, Get<float>(object_fields::MinDamage) * damageMultiplier);
+		Set<float>(object_fields::MaxDamage, Get<float>(object_fields::MaxDamage) * damageMultiplier);
 
 		// Creatures have no health regeneration of their own: they heal by evading. A pet never
 		// evades, so it regenerates like a player out of combat - at its unit class rate, or a share

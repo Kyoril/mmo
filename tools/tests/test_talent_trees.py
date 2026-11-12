@@ -97,6 +97,19 @@ class TalentTreesTest(unittest.TestCase):
                 else:
                     self.assertGreater(len(spell.effects), 0, f"talent spell {spell.name} has no effects")
 
+    def test_retired_rank_spells_can_not_be_cast(self):
+        # A retired active spell (Umbral Bloom) would otherwise keep a button that spends mana and
+        # does nothing; it must be a hidden passive without cost, cooldown or visualization.
+        live_rank_spells = {spell_id for talent in self.talents.entry for spell_id in talent.ranks}
+        for spell_id in sorted(self.att.RETIRED_RANK_SPELLS - live_rank_spells):
+            spell = self.spells_by_id.get(spell_id)
+            if spell is None:
+                continue
+            self.assertEqual(len(spell.effects), 0, spell.name)
+            self.assertTrue(spell.attributes[0] & self.att.ATTR_PASSIVE, f"{spell.id} {spell.name} is not passive")
+            self.assertTrue(spell.attributes[1] & self.att.ATTR_B_HIDDEN_AURA, f"{spell.id} {spell.name} is not hidden")
+            self.assertEqual((spell.cost, spell.cooldown, spell.visualization_id), (0, 0, 0), spell.name)
+
     def test_single_rank_talents_have_rank_zero_unless_higher_ranks_continue_them(self):
         # Higher ranks of a single-rank talent spell are trainer ranks (Fireball rank 2); retired
         # rank spells of older trees keep their baseid but have no effects.

@@ -35,6 +35,20 @@ namespace mmo
 		/// will also be updated.
 		void Draw();
 
+		/// @brief Draws only the vertices in [firstVertex, firstVertex + count), honouring the
+		///        texture batches. Lets a frame draw custom geometry between two parts of its buffer.
+		/// @param firstVertex Index of the first vertex to draw.
+		/// @param count Number of vertices to draw. Clamped to the buffered vertex count.
+		/// @param applyState Sets the UI blend mode and vertex format first. Pass false to draw with
+		///        shaders the caller bound (e.g. a material); each batch's texture still goes to slot 0.
+		void DrawRange(uint32 firstVertex, uint32 count, bool applyState = true);
+
+		/// @brief Gets a buffered vertex.
+		const Vertex& GetVertex(uint32 index) const;
+
+		/// @brief Replaces the colour of a buffered vertex, e.g. to carry custom data into a material.
+		void SetVertexColor(uint32 index, uint32 argb);
+
 		/// Sets the current clipping rectangle for drawing the geometry buffer.
 		void SetClippingRegion(const Rect& region);
 

@@ -23,6 +23,15 @@ namespace mmo
 		bool online = false;
 	};
 
+	/// Last known position of an online guild mate in the player's world instance.
+	struct GuildMemberPosition
+	{
+		uint64 guid = 0;
+		String name{};
+		float x = 0.0f;
+		float z = 0.0f;
+	};
+
 	class GuildClient final : public NonCopyable
 	{
 	public:
@@ -85,6 +94,16 @@ namespace mmo
 
 		const String& GetGuildMOTD() const { return m_guildMotd; }
 
+		/// Asks the realm for the guild mates' positions every few seconds while in a guild.
+		/// Called every frame while in the world.
+		void UpdateMemberPositions();
+
+		/// The online guild mates in the player's world instance, from the last realm answer.
+		const std::vector<GuildMemberPosition>& GetMemberPositions() const { return m_memberPositions; }
+
+	private:
+		PacketParseResult OnGuildMemberPositions(game::IncomingPacket& packet);
+
 	private:
 		PacketParseResult OnGuildQueryResult(game::IncomingPacket& packet);
 
@@ -120,6 +139,9 @@ namespace mmo
 		std::vector<GuildMemberInfo> m_guildMembers;
 		std::vector<String> m_guildRankNames;
 		std::vector<uint32> m_guildRankPermissions;
+
+		std::vector<GuildMemberPosition> m_memberPositions;
+		GameTime m_nextPositionRequest = 0;
 
 		const proto_client::RaceManager& m_races;
 		const proto_client::ClassManager& m_classes;

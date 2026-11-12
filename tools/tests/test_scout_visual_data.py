@@ -80,7 +80,7 @@ class ScoutVisualDataTests(unittest.TestCase):
                     cls.particles.setdefault(proj.trail_particle, True)
 
     def test_scout_visualizations_are_present(self):
-        self.assertEqual(len(self.scout), 13, [v.name for v in self.scout])
+        self.assertEqual(len(self.scout), 18, [v.name for v in self.scout])
 
     def test_every_scout_spell_uses_its_own_visualization(self):
         by_id = {v.id: v for v in self.visuals.entry}

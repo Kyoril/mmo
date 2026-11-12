@@ -149,29 +149,32 @@ namespace mmo
 				auto groupId = m_character->GetGroupId();
 				std::vector<uint64> nearbyMembers;
 
-				// Determine nearby party members
-				instance.GetUnitFinder().FindUnits(Circle(location.x, location.z, 40.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
-					{
-						// Only characters
-						if (!unit.IsPlayer())
+				// Determine nearby party members (they see the character itself and need no report)
+				if (groupId != 0)
+				{
+					instance.GetUnitFinder().FindUnits(Circle(location.x, location.z, 40.0f), [this, groupId, &nearbyMembers](GameUnitS& unit) -> bool
 						{
+							// Only characters
+							if (!unit.IsPlayer())
+							{
+								return true;
+							}
+
+							// Check characters group
+							GamePlayerS* character = static_cast<GamePlayerS*>(&unit);
+							if (character->GetGroupId() == groupId &&
+								character->GetGuid() != GetCharacterGuid())
+							{
+								nearbyMembers.push_back(character->GetGuid());
+							}
+
 							return true;
-						}
+						});
+				}
 
-						// Check characters group
-						GamePlayerS* character = static_cast<GamePlayerS*>(&unit);
-						if (character->GetGroupId() == groupId &&
-							character->GetGuid() != GetCharacterGuid())
-						{
-							nearbyMembers.push_back(character->GetGuid());
-						}
-
-						return true;
-					});
-
-				// Send packet to world node
+				// Send packet to the realm
 				m_connector.SendCharacterGroupUpdate(*m_character, nearbyMembers);
-				m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+				RefreshMemberReports();
 			});
 
 
@@ -323,7 +326,7 @@ namespace mmo
 	void Player::OnItemDestroyed(std::shared_ptr<GameItemS> item, uint16 slot)
 	{
 		const std::vector<GameObjectS*> objects{ item.get() };
-		NotifyObjectsDespawned(objects);
+		NotifyObjectsDespawned(objects, game::despawn_reason::Destroyed);
 	}
 
 	void Player::UpdateCharacterGroup(uint64 groupId, const std::optional<std::pair<LootMethod, uint8>> lootRules)
@@ -390,16 +393,7 @@ namespace mmo
 				});
 		}
 
-		if (groupId != 0)
-		{
-			// Trigger next group member update
-			m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
-		}
-		else
-		{
-			// Stop group member update
-			m_groupUpdate.Cancel();
-		}
+		RefreshMemberReports();
 	}
 
 	void Player::UpdateCharacterGuild(uint64 guildId)
@@ -410,6 +404,21 @@ namespace mmo
 		}
 
 		m_character->Set<uint64>(object_fields::Guild, guildId);
+		RefreshMemberReports();
+	}
+
+	void Player::RefreshMemberReports()
+	{
+		if (!m_character || (m_character->GetGroupId() == 0 && m_character->Get<uint64>(object_fields::Guild) == 0))
+		{
+			m_groupUpdate.Cancel();
+			return;
+		}
+
+		if (!m_groupUpdate.IsRunning())
+		{
+			m_groupUpdate.SetEnd(GetAsyncTimeMs() + constants::OneSecond * 3);
+		}
 	}
 
 	void Player::UpdateCharacterGroupLootMethod(const LootMethod lootMethod, const uint64 lootMasterGuid, const uint8 lootThreshold)
@@ -565,7 +574,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested)
+	void Player::NotifyObjectsSpawned(const std::vector<GameObjectS*>& requested, const game::spawn_reason::Type reason)
 	{
 		// None of these GUIDs may already be known to the client — receiving a second creation
 		// packet for the same GUID crashes the client (duplicate entity name in
@@ -625,7 +634,7 @@ namespace mmo
 			writer << io::write<uint16>(objects.size());
 			for (const auto& object : objects)
 			{
-				object->WriteObjectUpdateBlock(writer);
+				object->WriteObjectUpdateBlock(writer, true, reason == game::spawn_reason::Spawned);
 			}
 
 			SendObjectUpdate(body, true);
@@ -686,7 +695,7 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects)
+	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects, const game::despawn_reason::Type reason)
 	{
 		for (const auto* object : objects)
 		{
@@ -708,10 +717,11 @@ namespace mmo
 		}
 
 		VisibilityTile &tile = m_worldInstance->GetGrid().RequireTile(GetTileIndex());
-		SendPacket([&objects](game::OutgoingPacket& outPacket)
+		SendPacket([&objects, reason](game::OutgoingPacket& outPacket)
 		{
 			outPacket.Start(game::realm_client_packet::DestroyObjects);
 			outPacket << io::write<uint16>(objects.size());
+			outPacket << io::write<uint8>(reason);
 			for (const auto *gameObject : objects)
 			{
 				outPacket << io::write_packed_guid(gameObject->GetGuid());
@@ -794,7 +804,7 @@ namespace mmo
 		{
 			// True invisibility keeps its original despawn semantics.
 			const std::vector<GameObjectS*> objects{ &unit };
-			NotifyObjectsDespawned(objects);
+			NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
 		}
 	}
 
@@ -1727,6 +1737,9 @@ namespace mmo
 			UpdateCharacterGroup(m_characterData.groupId);
 		}
 
+		// Guild mates see the character on their maps even without a group
+		RefreshMemberReports();
+
 		// Send current game time to player
 		SendGameTimeInfo();
 
@@ -1829,6 +1842,7 @@ namespace mmo
 				{
 					outPacket.Start(game::realm_client_packet::DestroyObjects);
 					outPacket << io::write<uint16>(static_cast<uint16>(toDestroy.size()));
+					outPacket << io::write<uint8>(game::despawn_reason::OutOfSight);
 					for (const uint64 guid : toDestroy)
 					{
 						outPacket << io::write_packed_guid(guid);
@@ -4128,6 +4142,26 @@ namespace mmo
 					<< io::write<uint8>(school)
 					<< io::write<uint8>(flags)
 					<< io::write<uint32>(blocked);
+				packet.Finish();
+			});
+	}
+
+	void Player::OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked)
+	{
+		// The Pet flag tells the client the damage is not the player's own; the dealing unit's guid
+		// follows the regular payload only then.
+		const uint8 petFlags = static_cast<uint8>(flags | damage_flags::Pet);
+		SendPacket([sourceGuid, targetGuid, amount, school, petFlags, &spell, blocked](game::OutgoingPacket& packet)
+			{
+				packet.Start(game::realm_client_packet::SpellDamageLog);
+				packet
+					<< io::write_packed_guid(targetGuid)
+					<< io::write<uint32>(spell.id())
+					<< io::write<uint32>(amount)
+					<< io::write<uint8>(school)
+					<< io::write<uint8>(petFlags)
+					<< io::write<uint32>(blocked)
+					<< io::write_packed_guid(sourceGuid);
 				packet.Finish();
 			});
 	}

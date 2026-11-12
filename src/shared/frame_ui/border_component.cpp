@@ -8,6 +8,7 @@
 #include "graphics/texture_mgr.h"
 #include "base/macros.h"
 
+#include <algorithm>
 #include <sstream>
 #include <utility>
 
@@ -114,7 +115,15 @@ namespace mmo
 		const float borderSize = m_borderInset;
 
 		const auto scale = FrameManager::Get().GetUIScale();
-		const auto scaledBorderSize = Size(borderSize * scale.x, borderSize * scale.y);
+		// A nine-sliced fill can start narrower than its two end caps.
+		// Compress those caps until there is enough room for the center.
+		if (size.width <= 0.0f || size.height <= 0.0f)
+		{
+			return;
+		}
+		const Size scaledBorderSize(
+			std::min(borderSize * scale.x, size.width * 0.5f),
+			std::min(borderSize * scale.y, size.height * 0.5f));
 
 		// Calculate final color
 		Color finalColor = m_tint;

@@ -65,6 +65,8 @@ Session (for scenarios that deliberately provoke a disconnect):
 | `ExpectDisconnect()` | Losing the realm connection stops being a failure. Arm it **before** the disconnect can happen |
 | `IsDisconnected() -> bool` | True once the realm connection has been lost |
 | `LastKickReason() -> string` | `"none"` \| `"logged_in_elsewhere"` \| `"banned"` |
+| `AcceptQuestFrom(g, questId)` | Accepts a quest at the quest giver `g` like a player: it must offer the quest and stand within reach |
+| `TurnInQuestAt(g, questId [, rewardChoice])` | Turns a completed quest in at the quest ender `g` like a player, so its `OnQuestReward` triggers run |
 | `AddAttributePoint(attributeId)` | Spends one attribute point on that attribute (the server rejects unaffordable points and undefined attributes) |
 | `LoginElsewhere([timeoutMs]) -> bool` | Opens a second login-server session on the same account and waits for it to authenticate; default 15s |
 | `Reconnect([timeoutMs]) -> bool` | Logs back in and returns to the world over the **same** connectors; default 30s |
@@ -89,6 +91,10 @@ one error, and the swing that lands again reports one recovery),
 several objects of one entry, e.g. the Hollow Choir's seals),
 `GetObjectState(g)` (the object's State field; doors: 0 = closed, 1 = open),
 `GetUnitFlags(g)` (the unit's replicated Flags field),
+`DespawnReason(g)` (why the server last removed `g` from this client: `"destroyed"` = removed from
+the world, `"out_of_sight"` = left our view, `"none"` = never removed),
+`SpawnReason(g)` (how unit `g` last appeared: `"spawned"` = just added to the world,
+`"came_into_sight"`, `"none"`),
 `MeleeSwingCount(g)` (auto-attack swings the server resolved against `g`, hit or miss),
 `OffhandSwingCount(g)` (the off-hand swings among them, flagged `LeftSwing` by the server),
 `IsAutoAttacking()` (own character; set by the broadcast `AttackStart`/`AttackStop`
@@ -102,7 +108,14 @@ come from their speaker),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
-cooldown is not tracked),
+cooldown is not tracked), `GetSpellCooldownRemaining(spellId)` (milliseconds left on that cooldown,
+0 when there is none),
+`CastStartCount(g)` / `LastCastTime(g)` (casts with a cast time another unit started — SpellStart
+packets — and the cast time in ms the server announced for the latest one, `-1` if none: shows
+cast-time modifiers on creatures),
+`PeriodicTickCount(g, spellId)` / `LastPeriodicAmount(g, spellId)` (ticks of `spellId`'s periodic
+aura on `g` the server logged — PeriodicAuraLog — and the amount the latest one dealt or healed,
+`-1` if none: exact tick values, which a health bar blurs with regeneration),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
 `GetSitPoseEmote(g)`, `GetMoodEmote(g)`
 
@@ -172,7 +185,7 @@ cancel it within the scenario, and never pass 0 seconds),
 `GM.CreateGuild(name)` (founds a guild led by the character; it persists, so leave it again
 with `GuildLeave()`, which disbands a guild the character leads),
 `GM.TurnInQuest(questId [, rewardChoice])` (quest must be objective-complete; no
-quest ender needed), `GM.ClearInventory()` (destroys all backpack items, keeps
+quest ender needed, so the ender's `OnQuestReward` triggers do not run), `GM.ClearInventory()` (destroys all backpack items, keeps
 equipment), `GM.DamageTarget(amount)` (deals raw damage to the current target through the
 normal damage path, so `OnHealthDroppedBelow` triggers, threat and death handling
 all run — use it to walk a boss across its phase thresholds instead of depending

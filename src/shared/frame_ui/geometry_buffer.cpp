@@ -4,6 +4,8 @@
 
 #include "base/macros.h"
 
+#include <algorithm>
+
 
 namespace mmo
 {
@@ -47,6 +49,61 @@ namespace mmo
 			// Increase offset
 			pos += batch.second;
 		}
+	}
+
+	void GeometryBuffer::DrawRange(const uint32 firstVertex, const uint32 count, const bool applyState)
+	{
+		const uint32 total = static_cast<uint32>(m_vertices.size());
+		if (count == 0 || firstVertex >= total)
+		{
+			return;
+		}
+
+		auto& gx = GraphicsDevice::Get();
+		if (!m_sync)
+		{
+			SyncHardwareBuffer();
+		}
+
+		if (applyState)
+		{
+			gx.SetBlendMode(BlendMode::Alpha);
+			gx.SetVertexFormat(VertexFormat::PosColorTex1);
+		}
+
+		const uint32 rangeEnd = std::min(total, firstVertex + count);
+		uint32 pos = 0;
+		for (const auto& batch : m_batches)
+		{
+			const uint32 batchEnd = pos + batch.second;
+			const uint32 start = std::max(pos, firstVertex);
+			const uint32 end = std::min(batchEnd, rangeEnd);
+			if (start < end)
+			{
+				gx.BindTexture(batch.first, ShaderType::PixelShader, 0);
+				m_hwBuffer->Set(0);
+				gx.Draw(end - start, start);
+			}
+
+			pos = batchEnd;
+			if (pos >= rangeEnd)
+			{
+				break;
+			}
+		}
+	}
+
+	const GeometryBuffer::Vertex& GeometryBuffer::GetVertex(const uint32 index) const
+	{
+		ASSERT(index < m_vertices.size());
+		return m_vertices[index];
+	}
+
+	void GeometryBuffer::SetVertexColor(const uint32 index, const uint32 argb)
+	{
+		ASSERT(index < m_vertices.size());
+		m_vertices[index].color = argb;
+		m_sync = false;
 	}
 
 	void GeometryBuffer::SetClippingRegion(const Rect & region)

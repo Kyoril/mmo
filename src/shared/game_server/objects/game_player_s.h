@@ -301,7 +301,7 @@ namespace mmo
 
 		/// Sets the loot master GUID.
 		void SetLootMasterGuid(const uint64 guid) noexcept { m_lootMasterGuid = guid; }
-		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
+		void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true, bool spawned = false) const override;
 
 		void RaiseTrigger(trigger_event::Type e, const std::vector<uint32> &data, GameUnitS *triggeringUnit) override;
 
@@ -518,8 +518,8 @@ namespace mmo
 		/// @brief Sources the weapon damage range from the equipped weapon for the given hand.
 		void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const override;
 
-		/// @brief Returns the equipped weapon's swing time for the given hand.
-		uint32 GetAutoAttackTime(WeaponAttack attackType) const override;
+		/// @brief Returns the equipped weapon's swing time for the given hand, before attack speed auras.
+		uint32 GetBaseAutoAttackTime(WeaponAttack attackType) const override;
 
 		float GetUnitMissChance() const override;
 

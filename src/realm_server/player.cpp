@@ -2744,9 +2744,9 @@ namespace mmo
 			packet << io::write<uint16>(m_characterData->level);
 		}
 
-		if (groupUpdateFlags & group_update_flags::Zone)
+		if (groupUpdateFlags & group_update_flags::Map)
 		{
-			packet << io::write<uint16>(0);
+			packet << io::write<uint32>(m_characterData->mapId);
 		}
 
 		if (groupUpdateFlags & group_update_flags::Position)
@@ -4169,12 +4169,8 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
-		if (!m_group)
-		{
-			WLOG("Received group update packet without being in a group!");
-			return PacketParseResult::Pass;
-		}
-
+		// The world node reports every grouped or guilded character periodically. The position is
+		// kept even without a group: guild mates read it for their world maps.
 		m_characterData->hp = health;
 		m_characterData->maxHp = maxHealth;
 		m_characterData->powerType = powerType;
@@ -4198,6 +4194,11 @@ namespace mmo
 		m_characterData->level = level;
 		m_characterData->position = location;
 		m_characterData->mapId = mapId;
+
+		if (!m_group)
+		{
+			return PacketParseResult::Pass;
+		}
 
 		nearbyMembers.push_back(m_characterData->characterId);
 

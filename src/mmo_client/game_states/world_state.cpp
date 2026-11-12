@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <set>
 #include <vector>
 #include <zstr/zstr.hpp>
 #include <zlib.h>
@@ -348,7 +349,7 @@ namespace mmo
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, SoundEntryPlayer &soundEntryPlayer, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
-						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient, MailClient &mailClient)
+						   GameTimeComponent &gameTime, TalentClient &talentClient, Minimap &minimap, WorldMap &worldMap, InventoryClient &inventoryClient, TradeClient &tradeClient, ChannelClient &channelClient, BankClient &bankClient, MailClient &mailClient)
 		: GameState(gameStateManager)
 		, m_realmConnector(realmConnector)
 		, m_audio(audio)
@@ -380,6 +381,7 @@ namespace mmo
 		, m_discord(discord)
 		, m_talentClient(talentClient)
 		, m_minimap(minimap)
+		, m_worldMap(worldMap)
 		, m_inventoryClient(inventoryClient)
 		, m_tradeClient(tradeClient)
 		, m_channelClient(channelClient)
@@ -1304,25 +1306,58 @@ namespace mmo
 
 			m_minimap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
 
-			// Gather visible party member positions for minimap dots
-			std::vector<Minimap::PartyMemberDot> partyPositions;
+			m_worldMap.UpdatePlayerPosition(controlled->GetPosition(), controlled->GetFacing());
+
+			// Party and guild members on this map, for the minimap and the world map. A spawned member's
+			// unit has the live position; members out of sight use the last position the realm reported.
+			std::vector<MapMemberDot> memberDots;
+			std::set<uint64> shownMembers;
 			const uint32 memberCount = m_partyInfo.GetMemberCount();
 			const uint64 selfGuid = controlled->GetGuid();
 			for (uint32 i = 0; i < memberCount; ++i)
 			{
 				const int32 idx = static_cast<int32>(i);
-				const uint64 memberGuid = m_partyInfo.GetMemberGuid(idx);
-				if (memberGuid == selfGuid)
+				const PartyMember* member = m_partyInfo.GetMember(idx);
+				if (!member || member->guid == selfGuid || (member->status & group_member_status::Online) == 0)
 				{
 					continue;
 				}
-				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(memberGuid))
+
+				if (const auto memberUnit = ObjectMgr::Get<GameUnitC>(member->guid))
 				{
-					const auto* member = m_partyInfo.GetMember(idx);
-					partyPositions.push_back({ memberUnit->GetPosition(), member ? member->name : memberUnit->GetName() });
+					memberDots.push_back({ memberUnit->GetPosition(), member->name, false });
+				}
+				else if (member->hasPosition && member->mapId == g_mapId)
+				{
+					memberDots.push_back({ member->position, member->name, false });
+				}
+				else
+				{
+					continue;
+				}
+				shownMembers.insert(member->guid);
+			}
+
+			m_guildClient.UpdateMemberPositions();
+			for (const GuildMemberPosition& mate : m_guildClient.GetMemberPositions())
+			{
+				if (mate.guid == selfGuid || shownMembers.contains(mate.guid))
+				{
+					continue;
+				}
+
+				if (const auto mateUnit = ObjectMgr::Get<GameUnitC>(mate.guid))
+				{
+					memberDots.push_back({ mateUnit->GetPosition(), mate.name, true });
+				}
+				else
+				{
+					memberDots.push_back({ Vector3(mate.x, 0.0f, mate.z), mate.name, true });
 				}
 			}
-			m_minimap.UpdatePartyPositions(std::move(partyPositions));
+
+			m_minimap.UpdateMemberDots(memberDots);
+			m_worldMap.UpdateMemberDots(std::move(memberDots));
 
 			// Gather quest giver dots for minimap
 			std::vector<Minimap::QuestGiverDot> questDots;
@@ -1855,9 +1890,9 @@ namespace mmo
 		// Ensure the work queue is always busy
 		m_work = std::make_unique<asio::io_service::work>(m_workQueue);
 
-		// Same for the dispatcher (see GlueScene::m_dispatcherWork): outside of Windows, asio stops an
-		// io_service the first time a poll finds it empty, and a stopped one runs no handlers until it
-		// is reset, which left WaitForWorldLoading spinning on a page whose finalization never ran.
+		// Same for the dispatcher: outside of Windows, asio stops an io_service the first time a poll
+		// finds it empty, and a stopped one runs no handlers until it is reset, which left
+		// WaitForWorldLoading spinning on a page whose finalization never ran.
 		m_dispatcherWork = std::make_unique<asio::io_service::work>(m_dispatcher);
 
 		// Setup background loading thread
@@ -2623,8 +2658,18 @@ namespace mmo
 		// Ensure terrain is properly reloaded
 		PagePosition worldSize(64, 64);
 		const auto pagePos = PagePosition(static_cast<uint32>(GetTerrainPageIndex(position.x)), static_cast<uint32>(GetTerrainPageIndex(position.z)));
+
+		// Everything up to here (connecting, receiving the player) counts as the first 10 %, the
+		// terrain pages as the next 50 % and the entities placed on them as the rest.
+		LoadingScreen::SetProgress(0.1f);
+		LoadingScreen::Present(true);
+
+		size_t pageCount = 0;
+		ForEachPageInSquare(worldSize, pagePos, 1, [&pageCount](const PagePosition&) { ++pageCount; });
+		size_t pagesLoaded = 0;
+
 		ForEachPageInSquare(
-			worldSize, pagePos, 1, [this](const PagePosition &page)
+			worldSize, pagePos, 1, [this, pageCount, &pagesLoaded](const PagePosition &page)
 			{
 				if (m_worldInstance->GetTerrain())
 				{
@@ -2656,6 +2701,7 @@ namespace mmo
 							// An async preparation is in flight: pump the dispatcher so its queued
 							// FinalizePrepare can run, and give the worker thread time to finish.
 							m_dispatcher.poll_one();
+							LoadingScreen::Present();
 							std::this_thread::yield();
 						}
 
@@ -2666,7 +2712,11 @@ namespace mmo
 					}
 				}
 				
-				m_worldInstance->LoadPageEntities(page.x(), page.y()); });
+				m_worldInstance->LoadPageEntities(page.x(), page.y());
+
+				++pagesLoaded;
+				LoadingScreen::SetProgress(0.1f + 0.5f * static_cast<float>(pagesLoaded) / static_cast<float>(pageCount));
+				LoadingScreen::Present(); });
 
 		// Entity files are read on the work queue (here and on the background loader) and world models
 		// are then prepared over several dispatcher steps. Units placed on a building floor snap to the
@@ -2675,6 +2725,7 @@ namespace mmo
 		size_t dispatched = 0;
 		size_t jobsDone = 0;
 		const auto waitStart = std::chrono::steady_clock::now();
+		size_t peakPending = 0;
 		while (true)
 		{
 			bool progressed = false;
@@ -2688,6 +2739,16 @@ namespace mmo
 				jobsDone++;
 				progressed = true;
 			}
+
+			// The total is not known up front (entity files spawn world model preparations), so
+			// progress is measured against the most work seen pending at once.
+			const size_t pending = m_worldInstance->GetPendingEntityLoadCount();
+			peakPending = std::max(peakPending, pending);
+			if (peakPending > 0)
+			{
+				LoadingScreen::SetProgress(0.6f + 0.35f * (1.0f - static_cast<float>(pending) / static_cast<float>(peakPending)));
+			}
+			LoadingScreen::Present();
 
 			// Checked on every pass: a step that keeps re-posting itself would otherwise hold the loading screen forever
 			if (std::chrono::steady_clock::now() - waitStart > std::chrono::seconds(60))
@@ -2711,6 +2772,9 @@ namespace mmo
 		}
 
 		m_foliage->RebuildAll();
+
+		LoadingScreen::SetProgress(1.0f);
+		LoadingScreen::Present(true);
 
 		m_dispatcher.post([this, jobsDone, dispatched]()
 			{
@@ -3054,7 +3118,8 @@ namespace mmo
 	PacketParseResult WorldState::OnDestroyObjects(game::IncomingPacket &packet)
 	{
 		uint16 objectCount = 0;
-		if (!(packet >> io::read<uint16>(objectCount)))
+		uint8 reason = game::despawn_reason::OutOfSight;
+		if (!(packet >> io::read<uint16>(objectCount) >> io::read<uint8>(reason)))
 		{
 			return PacketParseResult::Disconnect;
 		}
@@ -3099,7 +3164,16 @@ namespace mmo
 			// A caster that despawns or leaves view mid-channel never sends ChannelUpdate(0) to us.
 			SpellVisualizationService::Get().EndChannel(id);
 
-			ObjectMgr::RemoveObject(id);
+			// Units destroyed in the world may play their model's despawn effect first; units that
+			// only left our sight vanish at once.
+			if (reason == game::despawn_reason::Destroyed)
+			{
+				ObjectMgr::DespawnObject(id);
+			}
+			else
+			{
+				ObjectMgr::RemoveObject(id);
+			}
 
 			// Trigger UI event after the object has been removed from ObjectMgr
 			if (shouldTriggerItemEvent)
@@ -5017,6 +5091,7 @@ namespace mmo
 
 		// Minimap!
 		m_minimap.NotifyWorldChanged(map->directory());
+		m_worldMap.NotifyWorldChanged(map->directory(), map->name());
 
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
@@ -5568,7 +5643,9 @@ namespace mmo
 		}
 
 		const float brightness = m_renderSettings.GetExposure();
-		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness);
+		const float defaultBrightness = m_skyComponent ? DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()) : DefaultDayBrightness;
+
+		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness * defaultBrightness);
 
 		// Selected fresh every frame (and pushed even when empty) so a map without any fog
 		// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last

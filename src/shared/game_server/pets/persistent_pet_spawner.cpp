@@ -11,9 +11,12 @@
 #include "game_server/pets/pet_manager.h"
 #include "game_server/spells/spell_effects.h"
 #include "game_server/world/world_instance.h"
+#include "game/spell_target_map.h"
+#include "log/default_log_levels.h"
 #include "shared/proto_data/project.h"
 
 #include <algorithm>
+#include <cmath>
 #include <random>
 
 namespace mmo
@@ -154,6 +157,7 @@ namespace mmo
 		}
 
 		pet->SetPetStatMultipliers(entry.health_multiplier(), entry.mana_multiplier(), entry.damage_multiplier(), entry.armor_multiplier());
+		pet->SetPetOwnerStatMultipliers(owner.GetPetStatMultiplier(pet_stat_kind::Health), owner.GetPetStatMultiplier(pet_stat_kind::Damage));
 
 		// SetLevel refreshes the stats (with the multipliers) and fills health and power up.
 		const uint32 level = ResolvePersistentPetLevel(owner, data, entry);
@@ -182,6 +186,14 @@ namespace mmo
 		}
 
 		ApplyPersistentPetSpells(*pet, entry, GetKnownPetSpells(entry, data, level));
+
+		// The owner's PetPassive auras put their passive spells on every pet it summons.
+		const std::vector<uint32> passiveSpells = owner.GetPetPassiveSpells();
+		for (const uint32 spellId : passiveSpells)
+		{
+			ApplyPetPassiveSpell(*pet, spellId);
+		}
+
 		return pet;
 	}
 
@@ -199,6 +211,49 @@ namespace mmo
 		{
 			ai->SetPetSpells(BuildPetCombatSpells(entry, spells));
 		}
+	}
+
+	void RefreshPersistentPetOwnerStats(GameCreatureS& pet, const GameUnitS& owner)
+	{
+		const uint32 oldMaxHealth = pet.GetMaxHealth();
+		const uint32 oldHealth = pet.GetHealth();
+
+		pet.SetPetOwnerStatMultipliers(owner.GetPetStatMultiplier(pet_stat_kind::Health), owner.GetPetStatMultiplier(pet_stat_kind::Damage));
+		pet.RefreshStats();
+
+		// A dead pet stays dead; a living one keeps its share of health.
+		if (!pet.IsAlive() || oldMaxHealth == 0)
+		{
+			return;
+		}
+
+		const uint32 newMaxHealth = pet.GetMaxHealth();
+		const uint32 health = static_cast<uint32>(std::round(static_cast<double>(oldHealth) * newMaxHealth / oldMaxHealth));
+		pet.Set<uint32>(object_fields::Health, std::clamp<uint32>(health, 1, newMaxHealth));
+	}
+
+	void ApplyPetPassiveSpell(GameCreatureS& pet, const uint32 spellId)
+	{
+		const proto::SpellEntry* spell = pet.GetProject().spells.getById(spellId);
+		if (!spell)
+		{
+			WLOG("PetPassive references unknown spell " << spellId);
+			return;
+		}
+
+		if (pet.HasAuraSpellFromCaster(spellId, pet.GetGuid()))
+		{
+			return;
+		}
+
+		SpellTargetMap targetMap;
+		targetMap.SetTargetMap(spell_cast_target_flags::Self);
+		pet.CastSpell(targetMap, *spell, 0, true, 0, true);
+	}
+
+	void RemovePetPassiveSpell(GameCreatureS& pet, const uint32 spellId)
+	{
+		pet.RemoveAllAurasFromCaster(pet.GetGuid(), spellId);
 	}
 
 	void StorePersistentPetState(const GameCreatureS& pet, const proto::PetEntry& entry, PersistentPetData& data)

@@ -21,7 +21,7 @@ loop option and fetched with ``fetch.py --loop`` so the seam is crossfaded, not 
 
 Raw takes are named ``<SoundKey>_take<n>.wav``; render every final with::
 
-    py tools/sfx_gen/recipes/acolyte.py --render generated/acolyte_visuals/sfx/layers
+    py tools/sfx_gen/recipes/acolyte.py --render generated/acolyte_kit/sfx/layers
 """
 
 import argparse
@@ -152,12 +152,91 @@ SOUNDS = {
         "that spirals closer and is swallowed with a soft low gulp. Only the inward rush: no "
         "words, no music. " + _GAME,
         duration=1.6, target_dbfs=-3.0),
+
+    # --- Kit overhaul (docs/superpowers/specs/2026-11-02-acolyte-kit-overhaul-design.md) -------
+    "Drain_Channel_Loop": SoundSpec(
+        "Life being siphoned from a victim into a warlock: a continuous low sickly sucking "
+        "drone, a slow pulsing wet draw like a draining current with a faint dark hum. "
+        + _LOOP + " No voice, no music. " + _GAME,
+        duration=4.0, target_dbfs=-9.0, loop=True),
+    "Sickly_Exhale": SoundSpec(
+        "A curse of weakness sapping a body: a long sickly rattling exhale, a weak wheezing "
+        "breath leaving a frail chest, airy and tired, fading to nothing. Only the breath: no "
+        "words, no whispers, no music. " + _GAME,
+        duration=1.8, target_dbfs=-3.0),
+    "Tar_Squelch": SoundSpec(
+        "A curse of mire clinging to a body: a thick heavy tar squelch, a slow sticky wet suck "
+        "and glop like boots pulled from black mud. Only the squelch: no creak, no voice, no "
+        "music. " + _GAME,
+        duration=1.4, target_dbfs=-3.0),
+    "Rope_Creak": SoundSpec(
+        "A cursed rope tightening: a long creaking groan of old twisted rope pulled taut, "
+        "straining fibres ending in a tight hold. Only the rope: no squelch, no voice, no "
+        "music. " + _GAME,
+        duration=1.6, target_dbfs=-3.0),
+    "Spore_Burst": SoundSpec(
+        "A plague cloud erupting: a wet coughing burst of spores, a damp puffing pop of rotten "
+        "fungus and spray, gross and organic. Only the burst: no hiss, no voice, no music. "
+        + _GAME,
+        duration=1.2, target_dbfs=-3.0),
+    "Gloomling_Chitter": SoundSpec(
+        "Small shadow creatures chittering: a quick scurrying chatter of tiny insectile clicks "
+        "and squeaks, eager and skittering, a handful of little creatures. Only the chittering: "
+        "no words, no roar, no music. " + _GAME,
+        duration=1.6, target_dbfs=-3.0),
+    "Portal_Whoosh": SoundSpec(
+        "A small dark portal opening: a swirling vacuum whoosh that pulls in and pops open, "
+        "swirling shadow air with a soft low thrum. Only the portal whoosh: no creatures, no "
+        "voice, no music. " + _GAME,
+        duration=1.4, target_dbfs=-3.0),
+    "Acid_Splash": SoundSpec(
+        "A pool of acid splashing down onto the ground: a big wet sizzling splash of corrosive "
+        "liquid, slapping and spattering, fast decay. Only the splash: no bubbling, no voice, "
+        "no music. " + _GAME,
+        duration=1.2, target_dbfs=-3.0),
+    "Bubbling_Burst": SoundSpec(
+        "A pool of rot bubbling: thick gurgling bubbling of toxic sludge, large bubbles rising "
+        "and popping, wet and low. Only the bubbling: no splash, no voice, no music. " + _GAME,
+        duration=2.0, target_dbfs=-3.0),
+    "Reversed_Whisper": SoundSpec(
+        "A garbled cursed tongue: reversed backwards wordless whispering, unintelligible hushed "
+        "voices played in reverse, twisting and knotting into themselves. Only the reversed "
+        "whispers: no words, no music, no impact. " + _GAME,
+        duration=1.8, target_dbfs=-3.0),
+    "Knot_Tighten": SoundSpec(
+        "A knot of shadow pulling tight around a throat: a short leathery creak and a hard "
+        "cinching tug, cord snapping taut with a dull thud. Only the tightening: no voice, no "
+        "whisper, no music. " + _GAME,
+        duration=1.0, target_dbfs=-3.0),
+    "Beast_Growl": SoundSpec(
+        "A small shadow beast empowered: a low rumbling animal growl growing deeper and "
+        "angrier, throaty and snarling. Only the growl: no words, no whoosh, no music. " + _GAME,
+        duration=1.6, target_dbfs=-3.0),
+    "Monster_Roar": SoundSpec(
+        "A huge horror erupting from a portal: a deep monstrous roar of an enormous beast, "
+        "guttural and rumbling with a long resonating tail. Only the roar: no words, no portal, "
+        "no music. " + _GAME,
+        duration=2.4, target_dbfs=-3.0),
+    "Portal_Rip": SoundSpec(
+        "A dark portal ripping open: a tearing violent rip of space, a cloth-like tearing "
+        "crack with a deep suction rush behind it. Only the rip: no roar, no voice, no music. "
+        + _GAME,
+        duration=1.6, target_dbfs=-3.0),
 }
+
+# The raw takes of the layers above were not kept, so the kit overhaul regenerates the shared
+# elements under a ``Kit_`` name (same prompt, same caster) instead of reusing take numbers
+# that no longer match any file.
+_SHARED_ELEMENTS = ("Void_Whoosh", "Sub_Drop", "Whispers", "Dark_Chime", "Dread_Bell",
+                    "Acid_Hiss", "Ghost_Wail", "Reverse_Swell")
+for _name in _SHARED_ELEMENTS:
+    SOUNDS["Kit_" + _name] = SOUNDS[_name]
 
 # Loops are single generations; ``SINGLES`` maps the final file to (layer, take, target_dbfs).
 SINGLES = {
     "ShadowChannelLoop": ("Shadow_Channel_Loop", 1, -9.0),
     "BlightChannelLoop": ("Blight_Channel_Loop", 1, -9.0),
+    "DrainChannelLoop": ("Drain_Channel_Loop", 4, -9.0),
 }
 
 # One-shot finals assembled from the layers above. Shadowbolt's impact is two mixes of
@@ -253,6 +332,91 @@ MIXES = {
         "layers": [
             MixLayer("Soul_Draw", take=1, offset=0.0, gain_db=0.0),
             MixLayer("Dark_Chime", take=3, offset=0.3, gain_db=-8.0),
+        ],
+    },
+
+    # --- Kit overhaul -------------------------------------------------------------------------
+    # Takes chosen on measurements (peak position, length, low-band share, centroid), 3 takes per
+    # layer for most (the 4th generation hit the connector's concurrency limit): Knot_Tighten
+    # 1/2, Portal_Rip 2/3 and Reversed_Whisper 1/3 peak past 60% of the clip and were rejected
+    # (Reversed_Whisper 2 is the front-loaded one); Kit_Reverse_Swell peaks at the end by design.
+    # Kit_Sub_Drop 3 hits at the onset (impacts), 1 swells (long roars), 2 sits between (wail).
+    "CurseFrailty": {
+        "target_dbfs": -4.0,
+        "layers": [
+            MixLayer("Sickly_Exhale", take=2, offset=0.0, gain_db=0.0),
+            MixLayer("Kit_Dread_Bell", take=1, offset=0.1, gain_db=-4.0, length=1.8),
+            MixLayer("Kit_Whispers", take=1, offset=0.2, gain_db=-9.0, length=1.4),
+        ],
+    },
+    "CurseMire": {
+        "target_dbfs": -3.5,
+        "layers": [
+            MixLayer("Tar_Squelch", take=1, offset=0.0, gain_db=0.0),
+            MixLayer("Kit_Sub_Drop", take=3, offset=0.0, gain_db=-6.0, length=1.0),
+            MixLayer("Rope_Creak", take=2, offset=0.25, gain_db=-5.0),
+        ],
+    },
+    "WastingPlague": {
+        "target_dbfs": -3.5,
+        "layers": [
+            MixLayer("Spore_Burst", take=3, offset=0.0, gain_db=0.0),
+            MixLayer("Kit_Acid_Hiss", take=1, offset=0.08, gain_db=-5.0),
+            MixLayer("Kit_Dark_Chime", take=3, offset=0.3, gain_db=-9.0),
+        ],
+    },
+    "CallGloomlings": {
+        "target_dbfs": -4.0,
+        "layers": [
+            MixLayer("Portal_Whoosh", take=1, offset=0.0, gain_db=-2.0, length=1.2),
+            MixLayer("Gloomling_Chitter", take=3, offset=0.2, gain_db=0.0),
+            MixLayer("Kit_Void_Whoosh", take=2, offset=0.0, gain_db=-8.0),
+        ],
+    },
+    "RotFieldCast": {
+        "target_dbfs": -3.5,
+        "layers": [
+            MixLayer("Acid_Splash", take=1, offset=0.0, gain_db=0.0),
+            MixLayer("Bubbling_Burst", take=2, offset=0.1, gain_db=-4.0),
+            MixLayer("Kit_Sub_Drop", take=2, offset=0.0, gain_db=-7.0, length=1.0),
+        ],
+    },
+    "TangledTongue": {
+        "target_dbfs": -4.0,
+        "layers": [
+            MixLayer("Reversed_Whisper", take=2, offset=0.0, gain_db=0.0),
+            MixLayer("Knot_Tighten", take=3, offset=0.15, gain_db=-2.0),
+            MixLayer("Kit_Dark_Chime", take=2, offset=0.2, gain_db=-10.0),
+        ],
+    },
+    "WailOfTheLost": {
+        "target_dbfs": -3.0,
+        "layers": [
+            MixLayer("Kit_Ghost_Wail", take=4, offset=0.0, gain_db=0.0),
+            MixLayer("Kit_Sub_Drop", take=2, offset=0.0, gain_db=-4.0),
+            MixLayer("Kit_Void_Whoosh", take=3, offset=0.0, gain_db=-8.0),
+        ],
+    },
+    "EmpowerDuskling": {
+        "target_dbfs": -4.0,
+        "layers": [
+            MixLayer("Kit_Reverse_Swell", take=2, offset=0.0, gain_db=-6.0, length=0.9),
+            MixLayer("Beast_Growl", take=1, offset=0.35, gain_db=0.0),
+        ],
+    },
+    "BroodHorror": {
+        "target_dbfs": -3.0,
+        "layers": [
+            MixLayer("Monster_Roar", take=2, offset=0.1, gain_db=0.0),
+            MixLayer("Portal_Rip", take=1, offset=0.0, gain_db=-3.0),
+            MixLayer("Kit_Sub_Drop", take=1, offset=0.0, gain_db=-3.0),
+        ],
+    },
+    "GloomTether": {
+        "target_dbfs": -5.0,
+        "layers": [
+            MixLayer("Gloomling_Chitter", take=2, offset=0.0, gain_db=0.0, length=0.6),
+            MixLayer("Kit_Void_Whoosh", take=1, offset=0.05, gain_db=-7.0, length=0.5),
         ],
     },
 }
