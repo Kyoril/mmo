@@ -246,6 +246,7 @@ Every placed control can be moved, rotated and scaled as a whole with the editor
   a whole, do the same with a road and a forest area, cut a gate with an exclusion area. A screenshot of the
   built field goes back to the author.
 - Fast gate (`/gate`) green before `/ship`.
+- Authoring note with the capture and the author's checklist: [docs/pcg-fields.md](../../pcg-fields.md).
 
 ## Left to the builder
 
