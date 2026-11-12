@@ -33,10 +33,12 @@ namespace mmo::pcg::graph
 	/// @param yawRadians Rotation about +Y, in radians.
 	void RotateControl(ControlInstance& inst, float yawRadians);
 
-	/// @brief Scales a whole control along world x and z.
-	/// @details Spline shapes scale the point offsets from the pivot and the tangent handles by the factors;
-	///          transform shapes scale their half extents x/z. Each factor is clamped to
-	///          [MinControlScaleFactor, MaxControlScaleFactor]; a non-finite factor counts as 1.
-	///          Point ids, nextPointId, point heights and widths never change.
+	/// @brief Scales a whole control: spline shapes along world x and z, transform shapes along their local axes.
+	/// @details Spline shapes (loops and open splines) scale the point offsets from the pivot and the tangent
+	///          handles by the factors along world x and z; transform shapes (volume, point, rectangle) scale
+	///          their local half extents x/z. A half extent that is above 0 before scaling is clamped to at least
+	///          MinRectangleHalfExtent afterwards; a zero half extent (a point's unused extents) stays 0. Each
+	///          factor is clamped to [MinControlScaleFactor, MaxControlScaleFactor]; a non-finite factor counts
+	///          as 1. Point ids, nextPointId, point heights and widths never change.
 	void ScaleControl(ControlInstance& inst, float scaleX, float scaleZ);
 }

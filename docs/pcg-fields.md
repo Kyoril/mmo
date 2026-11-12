@@ -32,7 +32,9 @@ Bush density is set in the section's prop rules.
 ## Placing and shaping a field
 
 1. In the Procedural mode, pick **New Control** and then `Field`. The field is placed at the viewport
-   centre as a 20 m x 20 m rectangle.
+   centre as a 20 m x 20 m rectangle. **New Control** needs an active biome: `FalwynForest` must be
+   selected in the **Biome** combo (the first biome found is selected automatically). With no biome
+   active the button is disabled.
 2. Drag the handle in the middle of a side to move that side. The opposite side stays where it is.
    Drag a corner to move both of its sides. A side can not be dragged closer than 1 m to the one
    opposite it.
@@ -55,6 +57,9 @@ A section never places props where an exclusion lies. To open the fence:
   stay exactly where they were, so a gate never shifts the rest of the fence.
 - **Road:** a road crossing the fence opens it over the road's `clearance` on either side, with no extra
   control.
+- **River or lake:** rivers and lakes are tagged `exclusion` too. A river crossing the fence opens it
+  over its `clearance` on either side (10 m each side by default), and a lake opens the fence where it
+  overlaps it. Rivers and lakes do not remove road or valley wall props.
 
 A gate only removes props. The soil and the section's own paint are not cut. A field never cuts its own
 fence or a neighbouring field's fence, even though fields are tagged `exclusion`.
@@ -72,8 +77,9 @@ Three limits come with that:
    the field, it now shows soil. The build warns about each tile where that happens. Keep that grass
    layer away from the tiles around a field, or move the field.
 2. **One material per tile.** If two fields want different materials on one tile (a Plowed field and a
-   Sprouts field side by side), the field stacked later in the graph wins. The other one paints no soil
-   on that tile, and the build warns about it.
+   Sprouts field side by side), the field created later (the one with the higher control id) wins. Both
+   fields come out of the same Paint Splat node, so their order is the order of the items, not of the
+   graph. The other one paints no soil on that tile, and the build warns about it.
 3. **Two graph instances sharing a tile.** If fields of two different graph instances touch the same
    tile, deleting one of them puts the old material back on that tile under the other field too. Rebuild
    the other instance afterwards.

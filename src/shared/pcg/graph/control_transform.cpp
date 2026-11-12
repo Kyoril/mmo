@@ -2,6 +2,8 @@
 
 #include "control_transform.h"
 
+#include "rectangle_shape.h"
+
 #include "math/quaternion.h"
 #include "math/radian.h"
 
@@ -27,6 +29,18 @@ namespace mmo::pcg::graph
 			}
 
 			return std::clamp(factor, MinControlScaleFactor, MaxControlScaleFactor);
+		}
+
+		/// A half extent scaled by factor and kept at MinRectangleHalfExtent or more. A half extent that is not above 0
+		/// (a point's unused extents) is returned unchanged.
+		float ScaleHalfExtent(const float halfExtent, const float factor)
+		{
+			if (!(halfExtent > 0.0f))
+			{
+				return halfExtent;
+			}
+
+			return std::max(halfExtent * factor, MinRectangleHalfExtent);
 		}
 
 		/// Turns an x/z offset by the yaw whose cosine and sine are given (Quaternion(yaw, +Y) convention:
@@ -126,8 +140,8 @@ namespace mmo::pcg::graph
 
 		if (!IsSplineShape(inst))
 		{
-			inst.halfExtents.x *= sx;
-			inst.halfExtents.z *= sz;
+			inst.halfExtents.x = ScaleHalfExtent(inst.halfExtents.x, sx);
+			inst.halfExtents.z = ScaleHalfExtent(inst.halfExtents.z, sz);
 			return;
 		}
 

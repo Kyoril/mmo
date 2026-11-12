@@ -223,14 +223,15 @@ namespace mmo::pcg::graph
 		///        terrain_channel::All; the others stay at their defaults, and the ops only they need are skipped: a
 		///        splat-only or water-only call runs no Noise, Raise or Carve and lays no section heights, a
 		///        heights-only call does no texture lookups. With terrain_channel::Material, `material` is the material
-	///        ResolveTileMaterials resolved for the tile containing (x, z) (empty for other tiles, or before it was
-	///        called), wherever (x, z) lies; setMaterial is never set.
+		///        ResolveTileMaterials resolved for the tile containing (x, z) (empty for other tiles, or before it was
+		///        called), wherever (x, z) lies; setMaterial is never set.
 		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
 			TerrainEvaluateNotes* notes = nullptr, terrain_channel::Type channels = terrain_channel::All) const;
 
 		/// @brief Decides the tile materials of the Paint ops with `tileMaterial`: every tile of
-		///        pcg::TileRangeOverlapping(layout, area) (the tiles Apply over `area` names materials on) gets the material of the last stacked such op whose painted region (the area polygon,
-		///        or the spline grown by its width; ops with weight 0 paint nothing) intersects the tile rectangle and the
+		///        pcg::TileRangeOverlapping(layout, area) (the tiles Apply over `area` names materials on) gets the
+		///        material of the last stacked such op whose painted region (the area polygon, or the spline grown by
+		///        its width; ops with weight 0 paint nothing) intersects the tile rectangle and the
 		///        region. Intersection is geometric (an edge crosses the tile, a vertex lies in it, or the tile centre is
 		///        inside), not a tile-centre sample; merely touching a tile border does not count. A tile that two such
 		///        ops ask different materials for is reported by DescribeNotes. Replaces the result of an earlier call.

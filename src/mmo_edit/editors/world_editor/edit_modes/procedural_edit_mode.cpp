@@ -3937,11 +3937,15 @@ namespace mmo
 				return;
 			}
 
-			// A click on the pivot marker of the selected loop or spline selects it as a whole for the gizmo. A point
-			// under the cursor wins, so single points are picked exactly as before.
+			// A click on the pivot marker of the selected loop or spline selects it as a whole for the gizmo. A tangent
+			// handle or a point under the cursor wins (in the order the spline editor tests them), so handles and
+			// single points are picked exactly as before.
 			int32 hitControl = -1;
 			int32 hitPoint = -1;
-			if (HitTestShapePivot(io.MousePos.x, io.MousePos.y) && !m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, hitControl, hitPoint))
+			SplineEditController::TangentHandle hitHandle = SplineEditController::TangentHandle::None;
+			if (HitTestShapePivot(io.MousePos.x, io.MousePos.y) &&
+				!m_splineEditor.HitTestTangentHandle(io.MousePos.x, io.MousePos.y, splines, hitHandle) &&
+				!m_splineEditor.HitTestPoint(io.MousePos.x, io.MousePos.y, splines, hitControl, hitPoint))
 			{
 				SelectShapeInEditor(GetSelectedShape());
 				return;

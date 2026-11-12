@@ -1603,10 +1603,11 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-transform-control")
 			{
 				// mmo_edit --pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]
-				// Moves, rotates (around up, about the control's pivot) and scales (along world x/z, about the pivot) a
-				// placed control of any shape as a whole, in that order, like the whole-control gizmo. Loops and splines
-				// change their points (ids, widths and heights stay), volumes, rectangles and points their position,
-				// rotation and half extents. Saves the world (0 = success); an unknown id or a bad value saves nothing (1).
+				// Moves, rotates (around up, about the control's pivot) and scales a placed control of any shape as a
+				// whole, in that order, like the whole-control gizmo. Loops and splines change their points (ids, widths
+				// and heights stay) and scale along world x/z about the pivot; volumes, rectangles and points change their
+				// position, rotation and half extents, and --scale scales their local half extents x/z (a non-zero half
+				// extent stays at 0.5 m or more). Saves the world (0 = success); an unknown id or a bad value saves nothing (1).
 				mmo::RedirectUnattendedLog("pcg_transform_control");
 
 				const char* usage = "--pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]";

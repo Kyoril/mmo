@@ -3,6 +3,7 @@
 #include "catch.hpp"
 
 #include "pcg/graph/control_transform.h"
+#include "pcg/graph/rectangle_shape.h"
 
 #include "math/quaternion.h"
 #include "math/radian.h"
@@ -197,6 +198,26 @@ TEST_CASE("scale factors are clamped and non-finite ones ignored", "[graph_contr
 		ControlInstance inst = MakeSquareLoop(SplineInterpolation::Linear);
 		ScaleControl(inst, 1000.0f, 1.0f);
 		CHECK(inst.spline.points[1].x - 5.0f == Approx(500.0f));
+	}
+
+	SECTION("transform half extents stay at the minimum half extent")
+	{
+		ControlInstance rectangle;
+		rectangle.halfExtents = Vector3(10.0f, 3.0f, 10.0f);
+		ScaleControl(rectangle, 0.01f, 0.01f);
+		CHECK(rectangle.halfExtents.x == MinRectangleHalfExtent);
+		CHECK(rectangle.halfExtents.z == MinRectangleHalfExtent);
+		CHECK(rectangle.halfExtents.y == 3.0f);
+	}
+
+	SECTION("a point control's zero half extents stay zero")
+	{
+		ControlInstance point;
+		point.halfExtents = Vector3(0.0f, 0.0f, 0.0f);
+		ScaleControl(point, 0.01f, 50.0f);
+		CHECK(point.halfExtents.x == 0.0f);
+		CHECK(point.halfExtents.y == 0.0f);
+		CHECK(point.halfExtents.z == 0.0f);
 	}
 }
 

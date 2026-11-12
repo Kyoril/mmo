@@ -189,12 +189,14 @@ other setting; empty = today's behaviour):
 - A tile that already has the requested material is not touched.
 
 **Existing section nodes.** Because exclusion is a general rule, the road and the valley wall section nodes of
-`FalwynValley.hpcgg` get `Exclude` wired as well, each with a self-filter: the road node receives the
-`exclusion` controls without those tagged `road` or `field` (a road is tagged `exclusion` itself and its
-clearance is wider than its section, so unfiltered it would strip its own props; two crossing roads do not cut
-each other in this step). The valley wall receives the `exclusion` controls without `field`. The waterfall
-stamp is left alone. This changes what existing Falwyn content builds only where an Exclusion area overlaps a
-road or wall, which is the intended effect.
+`FalwynValley.hpcgg` get `Exclude` wired as well, each from its own filtered Get Controls node: the road node
+receives the `exclusion` controls without those tagged `road`, `field` or `water` (a road is tagged `exclusion`
+itself and its clearance is wider than its section, so unfiltered it would strip its own props; two crossing
+roads do not cut each other in this step). The valley wall receives the `exclusion` controls without those
+tagged `field` or `water`. Rivers (`exclusion`, `river`, `water`) and lakes (`exclusion`, `water`) are tagged
+`exclusion` too, so they open a field's fence where their clearance reaches it, but they do not affect road or
+wall props. The waterfall stamp is left alone. This changes what existing Falwyn content builds only where an
+Exclusion area overlaps a road or wall, which is the intended effect.
 
 **`Editor/Pcg/Sections/FieldEdge.hsec`** (next to `TestRoad.hsec`) — a section authored in a section world with the floor side towards the field:
 a fence run, bushes on the outside, and a paint transition. It should have an `InnerCorner` variant so the fence
