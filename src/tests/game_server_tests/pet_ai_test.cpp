@@ -185,6 +185,20 @@ namespace
 			return pet;
 		}
 
+		/// Spawns a pet that is no temporary pet (pet group 0), the way a persistent pet is set up.
+		std::shared_ptr<GameCreatureS> SpawnPersistentPet(GameUnitS& owner, const Vector3& position = Vector3(2.0f, 0.0f, 0.0f))
+		{
+			auto pet = world->CreateTemporaryCreature(*petEntry, position, 0.0f, 0.0f);
+			pet->SetGrantsKillRewards(false);
+			pet->SetSummonOwner(std::static_pointer_cast<GameUnitS>(owner.shared_from_this()));
+			pet->SetOwnerGuid(owner.GetGuid());
+			pet->SetPetGroup(0);
+			world->AddGameObject(*pet);
+			owner.GetPets().SetPersistentPet(pet.get());
+			pet->GetAI()->EnterPetMode(owner);
+			return pet;
+		}
+
 		uint32 CountPetCreaturesInWorld() const
 		{
 			uint32 count = 0;
@@ -370,16 +384,111 @@ TEST_CASE_METHOD(PetAIFixture, "owner attacking a creature makes the pet attack 
 	CHECK(InCombatState(*pet));
 }
 
-TEST_CASE_METHOD(PetAIFixture, "a creature attacking the owner is attacked by the pet", "[pets][ai]")
+TEST_CASE_METHOD(PetAIFixture, "a creature attacking the owner is attacked by the persistent pet", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPersistentPet(*owner);
+	const auto monster = SpawnMonster();
+	RunFor(std::chrono::milliseconds(50));
+	REQUIRE_FALSE(pet->GetAI()->IsPetOwnerTargetOnly());
+
+	monster->GetAI()->EnterCombat(*owner);
+
+	CHECK(RunUntil([&] { return pet->GetVictim() == monster.get(); }, OneAIUpdate));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet ignores a creature attacking its owner", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPet(*owner);
+	const auto monster = SpawnMonster();
+	RunFor(std::chrono::milliseconds(50));
+	REQUIRE(pet->GetAI()->IsPetOwnerTargetOnly());
+
+	monster->GetAI()->EnterCombat(*owner);
+	RunFor(OneAIUpdate * 2);
+
+	CHECK(pet->GetVictim() == nullptr);
+	CHECK(InPetState(*pet));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet does not fight back a creature attacking it", "[pets][ai]")
 {
 	const auto owner = SpawnPlayer();
 	const auto pet = SpawnPet(*owner);
 	const auto monster = SpawnMonster();
 	RunFor(std::chrono::milliseconds(50));
 
-	monster->GetAI()->EnterCombat(*owner);
+	monster->GetAI()->EnterCombat(*pet);
+	RunFor(OneAIUpdate * 2);
 
-	CHECK(RunUntil([&] { return pet->GetVictim() == monster.get(); }, OneAIUpdate));
+	CHECK(pet->GetVictim() == nullptr);
+	CHECK(InPetState(*pet));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet sticks to its owner's target while others attack it", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPet(*owner);
+	const auto target = SpawnMonster();
+	const auto other = SpawnMonster(Vector3(-35.0f, 0.0f, 0.0f));
+	RunFor(std::chrono::milliseconds(50));
+
+	owner->StartAttack(target);
+	REQUIRE(RunUntil([&] { return pet->GetVictim() == target.get(); }, OneAIUpdate));
+
+	other->GetAI()->EnterCombat(*pet);
+	other->GetAI()->EnterCombat(*owner);
+	RunFor(OneAIUpdate * 2);
+
+	CHECK(pet->GetVictim() == target.get());
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet switches to its owner's new target", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPet(*owner);
+	const auto first = SpawnMonster();
+	const auto second = SpawnMonster(Vector3(-35.0f, 0.0f, 0.0f));
+	RunFor(std::chrono::milliseconds(50));
+
+	owner->StartAttack(first);
+	REQUIRE(RunUntil([&] { return pet->GetVictim() == first.get(); }, OneAIUpdate));
+
+	owner->StartAttack(second);
+	CHECK(RunUntil([&] { return pet->GetVictim() == second.get(); }, OneAIUpdate));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet summoned into a fight attacks its owner's target", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto monster = SpawnMonster();
+	RunFor(std::chrono::milliseconds(50));
+
+	// The owner attacks before it has any pet.
+	owner->StartAttack(monster);
+	const auto pet = SpawnPet(*owner);
+
+	CHECK(RunUntil([&] { return pet->GetVictim() == monster.get(); }, OneAIUpdate * 2));
+}
+
+TEST_CASE_METHOD(PetAIFixture, "a temporary pet returns to its owner when the owner's target dies", "[pets][ai]")
+{
+	const auto owner = SpawnPlayer();
+	const auto pet = SpawnPet(*owner);
+	const auto target = SpawnMonster();
+	const auto other = SpawnMonster(Vector3(-35.0f, 0.0f, 0.0f));
+	RunFor(std::chrono::milliseconds(50));
+
+	owner->StartAttack(target);
+	REQUIRE(RunUntil([&] { return pet->GetVictim() == target.get(); }, OneAIUpdate));
+	other->GetAI()->EnterCombat(*pet);
+	RunFor(std::chrono::milliseconds(50));
+
+	target->Kill(owner.get());
+
+	CHECK(RunUntil([&] { return InPetState(*pet); }, OneAIUpdate * 3));
+	CHECK(pet->GetVictim() == nullptr);
 }
 
 TEST_CASE_METHOD(PetAIFixture, "assist never pulls", "[pets][ai]")

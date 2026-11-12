@@ -66,6 +66,7 @@
 #include "shared/proto_data/surface_types.pb.h"
 #include "shared/proto_data/water_profiles.pb.h"
 #include "shared/proto_data/environment_profiles.pb.h"
+#include "shared/proto_data/loading_tips.pb.h"
 
 namespace mmo
 {
@@ -125,6 +126,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::SurfaceTypes, mmo::proto::SurfaceType> SurfaceTypeManager;
 		typedef TemplateManager<mmo::proto::WaterProfiles, mmo::proto::WaterProfile> WaterProfileManager;
 		typedef TemplateManager<mmo::proto::EnvironmentProfiles, mmo::proto::EnvironmentProfile> EnvironmentProfileManager;
+		typedef TemplateManager<mmo::proto::LoadingTips, mmo::proto::LoadingTip> LoadingTipManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -227,6 +229,9 @@ namespace mmo
 			/// Per-zone lighting and mood profiles. Authored here and consumed by the client and
 			/// the world editor viewport.
 			EnvironmentProfileManager environmentProfiles;
+
+			/// Tips shown on the client's loading screen. Authored here, consumed by the client only.
+			LoadingTipManager loadingTips;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -363,6 +368,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("surface_types", surfaceTypes, true));
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
 				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
+				managers.push_back(ManagerEntry("loading_tips", loadingTips, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -455,6 +461,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("surface_types", "surface_types", surfaceTypes));
 				managers.push_back(ManagerEntry("water_profiles", "water_profiles", waterProfiles));
 				managers.push_back(ManagerEntry("environment_profiles", "environment_profiles", environmentProfiles));
+				managers.push_back(ManagerEntry("loading_tips", "loading_tips", loadingTips));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

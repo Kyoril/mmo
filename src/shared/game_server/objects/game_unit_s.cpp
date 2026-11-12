@@ -15,6 +15,7 @@
 #include "game/chat_type.h"
 #include "game/spell_negativity.h"
 
+#include <cmath>
 #include <map>
 #include <memory>
 #include "game/id_mask.h"
@@ -136,9 +137,9 @@ namespace mmo
 		m_despawnCountdown.SetEnd(GetAsyncTimeMs() + despawnDelay);
 	}
 
-	void GameUnitS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
+	void GameUnitS::WriteObjectUpdateBlock(io::Writer &writer, bool creation, bool spawned) const
 	{
-		GameObjectS::WriteObjectUpdateBlock(writer, creation);
+		GameObjectS::WriteObjectUpdateBlock(writer, creation, spawned);
 
 		// Speeds — if there is a pending forced speed change (ack not yet received),
 		// write the pending target speed so the object update does not overwrite the
@@ -902,13 +903,16 @@ namespace mmo
 		// it must not report a start either: creature AI would wait for an end that never comes.
 		if (r == spell_cast_result::CastOkay && !isProc)
 		{
-			// A harmful spell cast at an enemy is an attack: assisting pets join in. Others (a tame,
-			// a dispel or an inspect cast at an enemy) are not, or pets would attack a tame target.
-			if (m_pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
+			// A harmful spell cast at something attackable (neutral included) is an attack: assisting
+			// pets join in. Others (a tame, a dispel or an inspect cast at an enemy) are not, or pets
+			// would attack a tame target. A player's target is remembered even before it has pets, so
+			// pets it summons into the fight know what to attack.
+			PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get();
+			if (pets && target.HasUnitTarget() && m_worldInstance && IsHarmfulSpell(spell))
 			{
-				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && victim != this && UnitIsEnemy(*victim))
+				if (GameUnitS* victim = m_worldInstance->FindByGuid<GameUnitS>(target.GetUnitTarget()); victim && UnitCanAttack(*victim))
 				{
-					m_pets->OnOwnerAttack(*victim);
+					pets->OnOwnerAttack(*victim);
 				}
 			}
 
@@ -1025,6 +1029,12 @@ namespace mmo
 			health -= damage;
 		}
 
+		// A unit that can not die takes the hit but is refilled instead of reaching zero health.
+		if (health < 1 && !CanDie())
+		{
+			health = std::max<uint32>(1, GetMaxHealth());
+		}
+
 		Set<uint32>(object_fields::Health, health);
 		OnDamageTaken(instigator, damage);
 		takenDamage(instigator, school, damageType);
@@ -1072,6 +1082,10 @@ namespace mmo
 		// Raise unit trigger
 		RaiseTrigger(trigger_event::OnHealed, instigator);
 
+		// Every spell heal (direct, periodic, percentage, leech) flows through here, so the
+		// healing taken percentage is applied once, in this single place.
+		amount = ScaleHealingTaken(amount);
+
 		const uint32 maxHealth = Get<uint32>(object_fields::MaxHealth);
 		if (health >= maxHealth)
 		{
@@ -1086,6 +1100,11 @@ namespace mmo
 		Set<uint32>(object_fields::Health, health + amount);
 		healedAmount(instigator, amount);
 		return static_cast<int32>(amount);
+	}
+
+	uint32 GameUnitS::ScaleHealingTaken(const uint32 amount) const
+	{
+		return static_cast<uint32>(std::floor(static_cast<float>(amount) * GetHealingTakenMultiplier()));
 	}
 
 	void GameUnitS::GenerateHealingThreat(GameUnitS& healer, uint32 effectiveHealing)
@@ -1125,12 +1144,22 @@ namespace mmo
 	void GameUnitS::SpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags,
 								   const proto::SpellEntry &spell, uint32 blocked)
 	{
-		if (!m_netUnitWatcher)
+		if (m_netUnitWatcher)
 		{
+			m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
 			return;
 		}
 
-		m_netUnitWatcher->OnSpellDamageLog(targetGuid, amount, school, flags, spell, blocked);
+		// Pets and summons have no connection of their own: whoever owns them (through any number of
+		// owners, e.g. a pet's summon) sees the numbers.
+		if (GetOwnerGuid() != 0)
+		{
+			const GameUnitS& owner = GetTopOwner();
+			if (&owner != this && owner.m_netUnitWatcher)
+			{
+				owner.m_netUnitWatcher->OnOwnedUnitSpellDamageLog(GetGuid(), targetGuid, amount, school, flags, spell, blocked);
+			}
+		}
 	}
 
 	void GameUnitS::SendAttackerStateUpdate(uint64 victimGuid, uint32 hitInfo, uint32 victimState,
@@ -1170,6 +1199,12 @@ namespace mmo
 
 	void GameUnitS::Kill(GameUnitS *killer)
 	{
+		if (!CanDie())
+		{
+			Set<uint32>(object_fields::Health, std::max<uint32>(1, GetMaxHealth()));
+			return;
+		}
+
 		Set<uint32>(object_fields::Health, 0);
 		OnKilled(killer);
 	}
@@ -1372,6 +1407,21 @@ namespace mmo
 			{
 				++it;
 			}
+		}
+	}
+
+	void GameUnitS::ModifyPetPassiveSpell(const uint32 spellId, const bool apply)
+	{
+		if (apply)
+		{
+			m_petPassiveSpells.push_back(spellId);
+			return;
+		}
+
+		const auto it = std::find(m_petPassiveSpells.begin(), m_petPassiveSpells.end(), spellId);
+		if (it != m_petPassiveSpells.end())
+		{
+			m_petPassiveSpells.erase(it);
 		}
 	}
 
@@ -1735,7 +1785,7 @@ namespace mmo
 		const GameTime now = GetAsyncTimeMs();
 
 		// Reduce attack time to parry_haste_min_swing_ms if it's higher
-		const uint32 swingTime = Get<uint32>(object_fields::BaseAttackTime);
+		const uint32 swingTime = GetAutoAttackTime(weapon_attack::BaseAttack);
 
 		// This is the ideal time (we want to trigger the next attack swing in parry_haste_min_swing_ms from now on)
 		const uint32 idealLastMainHand = now - swingTime + settings.parry_haste_min_swing_ms();
@@ -3080,9 +3130,9 @@ namespace mmo
 		}
 
 		SetTarget(victim ? victim->GetGuid() : 0);
-		if (victim->GetGuid() == GetGuid() || UnitIsFriendly(*victim))
+		if (!UnitCanAttack(*victim))
 		{
-			// Unit is not an enemy, so we won't attack
+			// Unit is ourselves or friendly, so we won't attack
 			StopAttack();
 			return;
 		}
@@ -3109,10 +3159,10 @@ namespace mmo
 		// Trigger next attack swing
 		TriggerNextAutoAttack();
 
-		// Assisting pets join the attack
-		if (m_pets)
+		// Assisting pets join the attack. A player's target is remembered even before it has pets.
+		if (PetManager* pets = IsPlayer() ? &GetPets() : m_pets.get())
 		{
-			m_pets->OnOwnerAttack(*victim);
+			pets->OnOwnerAttack(*victim);
 		}
 	}
 
@@ -3650,6 +3700,11 @@ namespace mmo
 		}
 
 		return FactionIsFriendly(topOwner, otherTopOwner);
+	}
+
+	bool GameUnitS::UnitCanAttack(const GameUnitS &other) const
+	{
+		return other.GetGuid() != GetGuid() && !UnitIsFriendly(other);
 	}
 
 	bool GameUnitS::FactionIsEnemy(const GameUnitS &unit, const GameUnitS &other)
@@ -4238,11 +4293,37 @@ namespace mmo
 		outMax = Get<float>(object_fields::MaxDamage);
 	}
 
-	uint32 GameUnitS::GetAutoAttackTime(WeaponAttack /*attackType*/) const
+	uint32 GameUnitS::GetBaseAutoAttackTime(WeaponAttack /*attackType*/) const
 	{
 		// Base units swing both hands on the same speed. Players override this to use the
 		// off-hand weapon's own delay.
-		return Get<uint32>(object_fields::BaseAttackTime);
+		return m_baseAttackTime;
+	}
+
+	uint32 GameUnitS::GetAutoAttackTime(const WeaponAttack attackType) const
+	{
+		// Shortest swing time attack speed auras can reach, so a stack of haste never makes a unit
+		// swing on every tick (a base time below it is left alone).
+		constexpr uint32 minAttackTime = 100;
+
+		const uint32 baseTime = GetBaseAutoAttackTime(attackType);
+		const uint32 scaled = static_cast<uint32>(std::lround(static_cast<double>(baseTime) / static_cast<double>(GetAttackSpeedMultiplier())));
+		return std::max(scaled, std::min(baseTime, minAttackTime));
+	}
+
+	void GameUnitS::SetBaseAttackTime(const uint32 attackTime)
+	{
+		m_baseAttackTime = attackTime;
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
+	}
+
+	void GameUnitS::ModifyAttackSpeedPctBonus(const float amount, const bool apply)
+	{
+		m_attackSpeedPctBonus += apply ? amount : -amount;
+
+		// Only the field the client displays changes: the swing already scheduled keeps its time,
+		// and TriggerNextAutoAttack picks the new interval up for the next one.
+		Set<uint32>(object_fields::BaseAttackTime, GetAutoAttackTime(weapon_attack::BaseAttack));
 	}
 
 	bool GameUnitS::ShouldDualWield() const
@@ -4669,16 +4750,22 @@ namespace mmo
 			}
 		}
 
-		// Trigger proc events
-		if (hit)
+		// Trigger proc events. Misses, dodges and parries raise them too, without a hit flag, so
+		// "after you dodge" procs can react (see AuraContainer::HandleProc).
+		const bool avoided = outcome == MeleeAttackOutcome::Miss || outcome == MeleeAttackOutcome::Dodge || outcome == MeleeAttackOutcome::Parry;
+		if (hit || avoided)
 		{
 			// Attacker procs (done)
 			uint32 procEx = 0;
-			if (hitInfo & hit_info::CriticalHit)
+			if (!hit)
+			{
+				procEx |= outcome == MeleeAttackOutcome::Miss ? proc_ex_flags::MissHit : 0;
+			}
+			else if (hitInfo & hit_info::CriticalHit)
 			{
 				procEx |= proc_ex_flags::CriticalHit;
 			}
-			else if (hit)
+			else
 			{
 				procEx |= proc_ex_flags::NormalHit;
 			}

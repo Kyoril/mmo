@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "game_server/spells/aura_container.h"
+#include "game_server/objects/aura_pct_bonus.h"
 #include "game_server/persistent_aura.h"
 #include "game/attribute.h"
 #include "game/auto_attack.h"
@@ -22,6 +23,7 @@
 #include "game/damage_school.h"
 #include "game/movement_ability.h"
 #include "game/spell.h"
+#include "game/pet_defines.h"
 #include "proto_data/trigger_helper.h"
 #include "shared/proto_data/triggers.pb.h"
 
@@ -316,6 +318,11 @@ namespace mmo
 
 		virtual void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry &spell, uint32 blocked = 0) = 0;
 
+		/// Spell damage dealt by a unit this one owns (a pet, a summoned swarm). Such units have no
+		/// connection of their own, so their owner is told. Does nothing unless overridden.
+		/// @param sourceGuid The owned unit that dealt the damage.
+		virtual void OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked) {}
+
 		virtual void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) = 0;
 
 		/// @brief Called when environmental damage is dealt to a unit.
@@ -601,10 +608,14 @@ namespace mmo
 		/// @param despawnDelay Time in milliseconds after which the unit will be despawned.
 		void TriggerDespawnTimer(GameTime despawnDelay);
 
+		/// Gets the time at which the despawn timer set by TriggerDespawnTimer fires.
+		/// @returns The despawn time in milliseconds (GetAsyncTimeMs clock), or 0 if no despawn timer runs.
+		[[nodiscard]] GameTime GetDespawnTimerEnd() const { return m_despawnCountdown.IsRunning() ? m_despawnCountdown.GetEnd() : 0; }
+
 		/// Writes object update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
 		/// @param creation Whether this is an update for object creation.
-		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true) const override;
+		virtual void WriteObjectUpdateBlock(io::Writer &writer, bool creation = true, bool spawned = false) const override;
 
 		/// Writes value update information to the provided writer for network transmission.
 		/// @param writer The writer to write the update information to.
@@ -928,9 +939,14 @@ namespace mmo
 		/// @param type The type of environmental damage.
 		void EnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type);
 
-		/// Kills the unit.
+		/// Kills the unit. A unit that can not die (see CanDie) is refilled to full health instead.
 		/// @param killer The unit that killed this unit.
 		void Kill(GameUnitS *killer);
+
+		/// Whether this unit may die right now. A unit that can not die (a training dummy in combat)
+		/// is refilled to full health by lethal damage instead of being killed, so nothing reacts to
+		/// a death: casts aimed at it, death and kill procs, kill credit.
+		[[nodiscard]] virtual bool CanDie() const { return true; }
 
 		/// Gets the current health of the unit.
 		/// @returns The current health as a uint32.
@@ -1147,6 +1163,50 @@ namespace mmo
 
 			return T(diff);
 		}
+
+		/// Gets the cast time multiplier from ModCastingSpeedPct auras: 1.0 by default, additive
+		///	across auras, never below 0. The same spell's slow from several casters counts once.
+		[[nodiscard]] float GetCastingSpeedMultiplier() const { return std::max(0.0f, 1.0f + m_castingSpeedPctBonus.GetTotal() * 0.01f); }
+
+		/// Applies the CastTime spell mods and the casting speed multiplier to a base cast time.
+		/// @param spellId The spell being cast, to match spell mods.
+		/// @param baseCastTime The unmodified cast time in milliseconds.
+		/// @returns The cast time in milliseconds, never negative.
+		[[nodiscard]] GameTime ModifyCastTime(const uint32 spellId, const GameTime baseCastTime) const
+		{
+			int32 castTimeMod = static_cast<int32>(baseCastTime);
+			ApplySpellMod<int32>(spell_mod_op::CastTime, spellId, castTimeMod);
+			const float scaled = static_cast<float>(std::max(0, castTimeMod)) * GetCastingSpeedMultiplier();
+			return static_cast<GameTime>(std::max(0.0f, roundf(scaled)));
+		}
+
+		/// Gets the healing taken multiplier from ModHealingTakenPct auras: 1.0 by default,
+		///	additive across auras, never below 0. The same spell's reduction from several casters
+		///	counts once.
+		[[nodiscard]] float GetHealingTakenMultiplier() const { return std::max(0.0f, 1.0f + m_healingTakenPctBonus.GetTotal() * 0.01f); }
+
+		/// Scales a heal by the healing taken multiplier, rounded exactly as Heal() applies it. Combat
+		///	text and heal procs report this amount, so they match what lands (before over-heal).
+		///	@param amount The heal before the healing taken percentage.
+		///	@returns The heal after the healing taken percentage.
+		[[nodiscard]] uint32 ScaleHealingTaken(uint32 amount) const;
+
+		/// Gets the multiplier this unit's ModPetStatsPct auras give one stat of its persistent pet:
+		///	1.0 by default, additive across auras, never below 0.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds return 1.0.
+		[[nodiscard]] float GetPetStatMultiplier(const uint8 kind) const
+		{
+			if (kind >= pet_stat_kind::Count_)
+			{
+				return 1.0f;
+			}
+
+			return std::max(0.0f, 1.0f + m_petStatPctBonus[kind] * 0.01f);
+		}
+
+		/// Gets the passive spells PetPassive auras of this unit put on its persistent pet, one
+		///	entry per aura (a spell granted by two auras is listed twice).
+		[[nodiscard]] const std::vector<uint32>& GetPetPassiveSpells() const { return m_petPassiveSpells; }
 
 		/// How far a "say" chat message carries.
 		static constexpr float SayRange = 25.0f;
@@ -1484,6 +1544,40 @@ public:
 		///	@param apply true to add the bonus, false to remove it again.
 		void ModifyCastingManaRegenPercentBonus(float amount, bool apply) { SettleRegeneration(); m_castingManaRegenPctBonus += apply ? amount : -amount; }
 
+		/// Adds or removes percentage points to the cast time multiplier, driven by the
+		///	ModCastingSpeedPct aura. Slows of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
+		///	@param amount The bonus in percentage points (30.0f = casts take 30% longer).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyCastingSpeedPctBonus(uint32 spellId, float amount, bool apply) { m_castingSpeedPctBonus.Modify(spellId, amount, apply); }
+
+		/// Adds or removes percentage points to the healing taken multiplier, driven by the
+		///	ModHealingTakenPct aura. Reductions of the same spell do not stack (see AuraPctBonus).
+		///	@param spellId The spell of the aura.
+		///	@param amount The bonus in percentage points (-20.0f = heals received are 20% weaker).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyHealingTakenPctBonus(uint32 spellId, float amount, bool apply) { m_healingTakenPctBonus.Modify(spellId, amount, apply); }
+
+		/// Adds or removes percentage points to one stat multiplier of this unit's persistent pet,
+		///	driven by the ModPetStatsPct aura. Does not touch a summoned pet; see
+		///	RefreshPersistentPetOwnerStats.
+		///	@param kind The pet stat (pet_stat_kind). Unknown kinds are ignored.
+		///	@param amount The bonus in percentage points (30.0f = +30%).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyPetStatPctBonus(const uint8 kind, const float amount, const bool apply)
+		{
+			if (kind < pet_stat_kind::Count_)
+			{
+				m_petStatPctBonus[kind] += apply ? amount : -amount;
+			}
+		}
+
+		/// Registers or unregisters a passive spell a PetPassive aura puts on the persistent pet.
+		///	Does not touch a summoned pet.
+		///	@param spellId The passive spell.
+		///	@param apply true to add one registration, false to remove one.
+		void ModifyPetPassiveSpell(uint32 spellId, bool apply);
+
 		/// Gets the accumulated bonus in percentage points to any attacker's chance to
 		///	critically hit this unit.
 		[[nodiscard]] float GetCritChanceTakenBonus() const { return m_critChanceTakenBonus; }
@@ -1583,10 +1677,31 @@ public:
 		/// @param outMax Receives the maximum weapon damage.
 		virtual void GetAutoAttackDamageRange(WeaponAttack attackType, float& outMin, float& outMax) const;
 
-		/// Gets the swing time (in milliseconds) for the given weapon hand.
-		/// Base implementation returns the BaseAttackTime object field for every hand.
+		/// Gets the swing time (in milliseconds) for the given weapon hand: the hand's base swing
+		///	time divided by the attack speed multiplier (ModAttackSpeed auras).
 		/// @param attackType Which weapon hand to source the swing time from.
-		virtual uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+		uint32 GetAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Gets the swing time (in milliseconds) of the given weapon hand before attack speed
+		///	auras. Base implementation returns the main-hand base swing time for every hand.
+		/// @param attackType Which weapon hand to source the swing time from.
+		virtual uint32 GetBaseAutoAttackTime(WeaponAttack attackType) const;
+
+		/// Sets the unmodified main-hand swing time and refreshes the BaseAttackTime field, which
+		///	carries the effective (attack speed modified) main-hand swing time to the client.
+		/// @param attackTime The swing time in milliseconds.
+		void SetBaseAttackTime(uint32 attackTime);
+
+		/// Gets the attack speed multiplier from ModAttackSpeed auras: 1.0 by default, additive
+		///	across auras (+30 and -15 make 1.15), never below 0.1. Swing times are divided by it.
+		[[nodiscard]] float GetAttackSpeedMultiplier() const { return std::max(0.1f, 1.0f + m_attackSpeedPctBonus * 0.01f); }
+
+		/// Adds or removes percentage points to the attack speed multiplier, driven by the
+		///	ModAttackSpeed aura. The swing already scheduled keeps its time; the next one uses the
+		///	new interval.
+		///	@param amount The bonus in percentage points (30.0f = swings 30% faster).
+		///	@param apply true to add the bonus, false to remove it again.
+		void ModifyAttackSpeedPctBonus(float amount, bool apply);
 
 		/// Gets the combat settings containing configurable combat formula parameters.
 		/// Uses the project's combat settings if available, otherwise returns defaults.
@@ -1704,6 +1819,14 @@ public:
 		/// @param other The other unit to check.
 		/// @returns true if the other unit is friendly, false otherwise.
 		bool UnitIsFriendly(const GameUnitS &other) const;
+
+		/// Checks if this unit may attack another one when told to: anything that is not itself and
+		/// not friendly, neutral units included. Not an enemy check: creatures pick fights on their own
+		/// only with enemies (UnitIsEnemy), but a player's attack, and a pet acting for its owner,
+		/// may hit a neutral rat as well.
+		/// @param other The other unit to check.
+		/// @returns true if the other unit may be attacked.
+		bool UnitCanAttack(const GameUnitS &other) const;
 
 		/// Maximum number of owner links followed when resolving the top owner of a unit.
 		static constexpr uint32 MaxOwnerChainDepth = 4;
@@ -2116,6 +2239,25 @@ public:
 		/// Accumulated percentage points added to the casting mana regeneration share
 		///	(ModCastingManaRegenPercent).
 		float m_castingManaRegenPctBonus = 0.0f;
+
+		/// Percentage points added to the cast time multiplier (ModCastingSpeedPct); positive is harmful.
+		AuraPctBonus m_castingSpeedPctBonus{ 1.0f };
+
+		/// Accumulated percentage points added to the attack speed multiplier (ModAttackSpeed).
+		float m_attackSpeedPctBonus = 0.0f;
+
+		/// Unmodified main-hand swing time in milliseconds. The BaseAttackTime field carries the
+		///	attack speed modified value.
+		uint32 m_baseAttackTime = 2000;
+
+		/// Percentage points added to the healing taken multiplier (ModHealingTakenPct); negative is harmful.
+		AuraPctBonus m_healingTakenPctBonus{ -1.0f };
+
+		/// Accumulated percentage points per pet stat (pet_stat_kind) from ModPetStatsPct auras.
+		std::array<float, pet_stat_kind::Count_> m_petStatPctBonus{};
+
+		/// Passive spells PetPassive auras put on the persistent pet, one entry per aura.
+		std::vector<uint32> m_petPassiveSpells;
 
 
 		std::map<uint8, float> m_baseSpeeds;

@@ -43,21 +43,20 @@ namespace mmo
 
 	Ray Camera::GetCameraToViewportRay(float viewportX, float viewportY, float maxDistance) const
 	{
-		const Matrix4 inverseVP = (GetProjectionMatrix() * GetViewMatrix()).Inverse();
-
 		const float nx = (2.0f * viewportX) - 1.0f;
 		const float ny = 1.0f - (2.0f * viewportY);
 
-		const Vector3 nearPoint(nx, ny, -1.f);
-		const Vector3 midPoint(nx, ny, 0.0f);
+		// Unproject in camera space and only then move into the world. The two points lie within
+		// the near distance of the eye (millimetres for the editor camera); unprojected straight
+		// into world space they are rounded at the magnitude of the camera position, thousands of
+		// units out, and their difference turns into a direction that is off by many degrees.
+		const Matrix4 inverseProjection = GetProjectionMatrix().Inverse();
+		const Vector3 nearPoint = inverseProjection * Vector3(nx, ny, -1.0f);
+		const Vector3 midPoint = inverseProjection * Vector3(nx, ny, 0.0f);
 
-		// Get ray origin and ray target on near plane in world space
-
-		const Vector3 rayOrigin = inverseVP * nearPoint;
-		const Vector3 rayTarget = inverseVP * midPoint;
-
-		Vector3 rayDirection = rayTarget - rayOrigin;
-		rayDirection.Normalize();
+		const Matrix4 inverseView = GetViewMatrix().InverseAffine();
+		const Vector3 rayOrigin = inverseView.TransformAffine(nearPoint);
+		const Vector3 rayDirection = inverseView.TransformDirectionAffine(midPoint - nearPoint).NormalizedCopy();
 
 		return Ray(rayOrigin, rayDirection, maxDistance);
 	}

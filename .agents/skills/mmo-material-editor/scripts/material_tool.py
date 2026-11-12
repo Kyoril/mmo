@@ -692,7 +692,7 @@ def parse_material(path: Path, source_path: Path | None) -> tuple[dict, list[dic
             if source_path is None:
                 result["graph"] = {"error": "Pass --source-root to decode the graph node catalog"}
             else:
-                catalog = build_node_catalog(source_path / "src/mmo_edit/editors/material_editor/material_node.h")
+                catalog = build_node_catalog(resolve_source_header(source_path))
                 try:
                     result["graph"] = parse_graph(
                         payload,
@@ -785,7 +785,7 @@ def print_summary(document: dict) -> None:
 
 
 def resolve_source_header(source_root: Path) -> Path:
-    header = source_root / "src/mmo_edit/editors/material_editor/material_node.h"
+    header = source_root / "src/shared/material_graph/material_node.h"
     if not header.exists():
         raise FormatError(f"Could not find live node registry source at {header}")
     return header

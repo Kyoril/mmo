@@ -644,7 +644,7 @@ namespace mmo
 				continue; // Skip subscribers that cannot see this unit
 			}
 
-			subscriber->NotifyObjectsSpawned(objects);
+			subscriber->NotifyObjectsSpawned(objects, game::spawn_reason::Spawned);
 		}
 	});
 
@@ -796,7 +796,7 @@ namespace mmo
 									continue;
 								}
 
-								subscriber->NotifyObjectsDespawned(objects);
+								subscriber->NotifyObjectsDespawned(objects, game::despawn_reason::Destroyed);
 							}
 						});
 				}
@@ -1242,7 +1242,7 @@ namespace mmo
 							continue;
 						}
 
-						subscriber->NotifyObjectsDespawned(objects);
+						subscriber->NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
 					}
 				});
 
@@ -1280,7 +1280,7 @@ namespace mmo
 							continue;
 						}
 
-						subscriber->NotifyObjectsSpawned(objects);
+						subscriber->NotifyObjectsSpawned(objects, game::spawn_reason::CameIntoSight);
 					}
 				});
 

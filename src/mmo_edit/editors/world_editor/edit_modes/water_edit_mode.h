@@ -9,9 +9,14 @@
 #include "scene_graph/scene_node.h"
 #include "terrain/constants.h"
 #include "terrain_io/water_flow.h"
+#include "math/path_spline.h"
+#include "../spline_edit_controller.h"
 #include "math/matrix4.h"
 
 #include <imgui.h>
+
+#include <functional>
+#include <vector>
 
 namespace mmo
 {
@@ -89,12 +94,26 @@ namespace mmo
 		/// @param fileName Asset path of the .hflow file.
 		void SaveFlowPaths(const String& fileName);
 
+		/// Supplies the river paths of the world's graph instances (ProceduralEditMode::CollectGeneratedFlowPaths).
+		using GeneratedFlowPathsProvider = std::function<std::vector<terrain_io::water_flow::FlowPath>()>;
+
+		/// Sets where the generated river paths come from. They take part in every flow apply and are shown
+		/// read-only in the overlay; they are never written to the .hflow file.
+		void SetGeneratedFlowPathsProvider(GeneratedFlowPathsProvider provider);
+
+		/// The hand-drawn river paths and flow settings that are on the terrain pages now: a pending (deferred)
+		/// apply is carried out first, so these equal the rivers and settings currently edited, saved or not.
+		/// A graph instance rebuild combines them with the generated paths.
+		/// @param paths Receives the usable hand paths (two points or more), in river order.
+		/// @param settings Receives the flow settings.
+		void GetAppliedHandFlow(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings);
+
 	private:
 		/// A river the flow brush edits: a name for the list and its path in downstream order.
 		struct River
 		{
 			String name;
-			terrain_io::water_flow::FlowPath path;
+			PathSpline path;
 		};
 
 		void UpdateBrushOverlay();
@@ -116,22 +135,27 @@ namespace mmo
 
 		void DeleteSelectedFlowPoint();
 
-		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectFlowPaths() const;
+		/// The usable paths (two points or more) of the hand-drawn rivers, in river order.
+		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectHandFlowPaths() const;
+
+		/// The river paths of the world's graph instances as they are now (empty without a provider).
+		[[nodiscard]] std::vector<terrain_io::water_flow::FlowPath> CollectGeneratedFlowPaths() const;
+
+		/// Pointers to the river splines, in river order, for the spline editor.
+		[[nodiscard]] std::vector<PathSpline*> GetRiverSplines();
 
 		[[nodiscard]] bool ProjectToScreen(const Vector3& worldPosition, ImVec2& screenPosition) const;
 
 		/// Height to draw a flow path point at: the water surface, else the ground.
 		[[nodiscard]] float GetFlowPointHeight(float x, float z) const;
 
-		/// Finds the path point under the mouse cursor.
-		[[nodiscard]] bool HitTestFlowPoint(int32& riverIndex, int32& pointIndex) const;
-
-		/// Finds the path segment under the mouse cursor (its first point).
-		[[nodiscard]] bool HitTestFlowSegment(int32& riverIndex, int32& pointIndex) const;
 
 	private:
 		terrain::Terrain& m_terrain;
 		Camera& m_camera;
+
+		/// Shared viewport editing of the river paths (selection, dragging, inserting, deleting).
+		SplineEditController m_splineEditor;
 
 		WaterBrushMode m_brushMode = WaterBrushMode::Paint;
 
@@ -166,15 +190,12 @@ namespace mmo
 		std::vector<River> m_rivers;
 		terrain_io::water_flow::FlowSettings m_flowSettings;
 
-		/// Paths and settings of the last apply: pages they reached and the current paths do not
-		/// lose their flow on the next apply.
+		/// Hand-drawn paths and settings of the last apply: pages they reached and the current paths do not
+		/// lose their flow on the next apply. Only the hand-drawn part is kept: graph instance rebuilds change
+		/// the generated paths behind this mode's back, so each apply takes them fresh from the provider for
+		/// both the current and the previous set.
 		std::vector<terrain_io::water_flow::FlowPath> m_appliedFlowPaths;
 		terrain_io::water_flow::FlowSettings m_appliedFlowSettings;
-
-		int32 m_selectedRiver = -1;
-		int32 m_selectedPoint = -1;
-		bool  m_flowDragging = false;
-		bool  m_flowDragMoved = false;
 
 		/// Half width given to the first point of a new river.
 		float m_newRiverHalfWidth = 12.0f;
@@ -185,6 +206,9 @@ namespace mmo
 		float m_flowApplyCountdown = -1.0f;
 		bool  m_flowFileDirty = false;
 		String m_flowStatus;
+
+		/// Source of the graph instances' river paths.
+		GeneratedFlowPathsProvider m_generatedFlowPaths;
 
 		// Viewport state of the last overlay draw, used to pick path points with the mouse.
 		Matrix4 m_overlayViewProj = Matrix4::Identity;

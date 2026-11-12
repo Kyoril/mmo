@@ -9,6 +9,7 @@
 #include "base/signal.h"
 
 #include "deferred_shading/deferred_renderer.h"
+#include "deferred_shading/upscale_pass.h"
 
 
 namespace mmo
@@ -49,6 +50,10 @@ namespace mmo
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 
+		/// Brings the deferred output from the internal render resolution up to the frame size
+		/// with the filter chosen in gxUpscaleFilter.
+		std::unique_ptr<UpscalePass> m_upscalePass;
+
 		/// The texture the frame's quad currently shows. The deferred renderer's final target is
 		/// not one fixed texture: it is the underwater post-process output while the camera is
 		/// submerged, and that target is created on the first dive and released after surfacing.
@@ -57,7 +62,8 @@ namespace mmo
 		TexturePtr m_displayedTexture;
 
 		/// Internal (pre-upscale) render resolution the deferred renderer is currently sized to.
-		/// Driven by the gxRenderScale console variable; the result is upscaled to the frame size.
+		/// Driven by the gxRenderScale console variable and the dynamic resolution of FramePacing;
+		/// the result is upscaled to the frame size by m_upscalePass.
 		uint16 m_internalWidth = 0;
 		uint16 m_internalHeight = 0;
 	};

@@ -89,6 +89,7 @@ target_link_libraries(mmo_edit
 	sql_wrapper
 	mysql_wrapper
 	terrain
+	pcg
 	game
 	game_common
 	deferred_shading)

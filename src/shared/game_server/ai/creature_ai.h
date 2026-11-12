@@ -74,6 +74,10 @@ namespace mmo
 		/// Gets a reference of the controlled units home.
 		[[nodiscard]] const Home& GetHome() const;
 
+		/// Whether the controlled creature may die: false while a combat script forbids it
+		/// (e.g. a training dummy in combat).
+		[[nodiscard]] bool CanControlledDie() const;
+
 		/// Sets a new home position
 		/// @param home The new home position of the controlled unit.
 		void SetHome(Home home);
@@ -179,6 +183,15 @@ namespace mmo
 		///         something new happens (the owner attacks or is attacked, the pet is hit, or a command).
 		[[nodiscard]] bool IsPetRecalled() const { return m_petRecalled; }
 
+		/// @return Whether the pet only ever fights what its owner attacks (or what it is commanded
+		///         to): it neither defends its owner nor itself. Temporary pets work this way.
+		[[nodiscard]] bool IsPetOwnerTargetOnly() const { return m_petOwnerTargetOnly; }
+
+		/// @return What the owner fights, for a pet that only fights its owner's target: the unit the
+		///         owner attacked last, else the owner's auto attack victim, if the pet can attack and
+		///         see it. nullptr if there is none or the AI is not in pet mode.
+		[[nodiscard]] GameUnitS* FindPetOwnerTarget() const;
+
 		/// Executes a command of the pet's owner. Dismiss is handled by the PetManager.
 		/// @param command The command.
 		/// @param targetGuid The target of an Attack command, otherwise ignored.
@@ -191,11 +204,12 @@ namespace mmo
 		void OnOwnerAttack(GameUnitS& victim);
 
 		/// Called when a unit starts attacking the owner. An assisting pet that is not fighting yet
-		/// defends its owner.
+		/// defends its owner, unless it only fights its owner's target.
 		/// @param attacker The unit attacking the owner.
 		void OnOwnerAttacked(GameUnitS& attacker);
 
-		/// Called when a unit attacks or threatens the pet itself. An assisting pet defends itself.
+		/// Called when a unit attacks or threatens the pet itself. An assisting pet defends itself,
+		/// unless it only fights its owner's target.
 		/// @param attacker The unit attacking the pet.
 		void OnPetAttacked(GameUnitS& attacker);
 
@@ -264,6 +278,7 @@ namespace mmo
 		Vector3 m_petStayPosition;
 		uint64 m_petCommandedTarget = 0;
 		bool m_petRecalled = false;
+		bool m_petOwnerTargetOnly = false;
 		float m_petNaturalRunBaseSpeed = 0.0f;
 		std::vector<proto::UnitSpellEntry> m_petSpells;
 

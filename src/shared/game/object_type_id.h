@@ -111,7 +111,12 @@ namespace mmo
 		{
 			None = 0,
 
-			HasMovementInfo = 1 << 0
+			HasMovementInfo = 1 << 0,
+
+			/// Creation blocks only: the object was just added to the world (summoned, respawned,
+			/// entered the instance) rather than coming into the client's sight. The client may play
+			/// a unit's spawn effect.
+			Spawned = 1 << 1,
 		};
 	}
 

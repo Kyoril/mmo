@@ -229,7 +229,7 @@ namespace mmo
 					continue;
 
 				// Load the ui file
-				LoadUIFile((p / line).generic_string());
+				LoadUIFile((p / line).lexically_normal().generic_string());
 			}
 		}
 
@@ -426,6 +426,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<Frame>("Frame")
 					.def("SetText", &Frame::SetText)
+					.def("SetTruncatedText", &Frame::SetTruncatedText)
 					.def("GetText", &Frame::GetText)
 					.def("Show", &Frame::Show)
 					.def("Hide", &Frame::Hide)
@@ -440,6 +441,7 @@ namespace mmo
 					.def("IsVisible", &Frame::Lua_IsVisible)
 					.def("RemoveAllChildren", &Frame::RemoveAllChildren)
 					.def("Clone", &Frame::Clone)
+					.def("CopyVisuals", &Frame::CopyVisuals)
 					.def("AddChild", &Frame::AddChild)
 					.def("GetChildCount", &Frame::GetChildCount)
 					.def("GetChild", &Frame::GetChild)
@@ -534,6 +536,7 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<ProgressBar, Frame>("ProgressBar")
 					.def("SetProgress", &ProgressBar::SetProgress)
+					.def("SetProgressInstant", &ProgressBar::SetProgressInstant)
 					.def("GetProgress", &ProgressBar::GetProgress)
 			),
 

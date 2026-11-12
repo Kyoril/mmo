@@ -469,8 +469,9 @@ namespace mmo
 
 		// Find the unit with the highest threat. A pet goes by its strategy first (commanded
 		// target, the owner's victim) and only falls back to threat.
+		// A pet that only fights its owner's target never falls back to threat.
 		GameUnitS* newVictim = GetAI().IsPetMode() ? SelectPetVictim() : nullptr;
-		if (!newVictim)
+		if (!newVictim && !GetAI().IsPetOwnerTargetOnly())
 		{
 			newVictim = GetTopThreatener();
 		}
@@ -1197,11 +1198,12 @@ namespace mmo
 			// This serves as confirmation that casting actually started
 			if (spell.casttime() > 0)
 			{
+				const GameTime modifiedCastTime = GetControlled().ModifyCastTime(spell.id(), spell.casttime());
 				m_isCasting = true;
 				m_lastSpellCastTime = GetAsyncTimeMs();
 
 				// Update timeout with the actual spell's cast time
-				m_castingTimeoutEnd = m_lastSpellCastTime + spell.casttime() + 1000; // 1 second buffer
+				m_castingTimeoutEnd = m_lastSpellCastTime + modifiedCastTime + 1000; // 1 second buffer
 
 				// Ensure movement is stopped (safety check)
 				auto& controlled = GetControlled();
@@ -1547,6 +1549,7 @@ namespace mmo
 
 		const auto* spellEntry = spell.spell;
 		const uint32_t castTime = spellEntry->casttime();
+		const GameTime modifiedCastTime = controlled.ModifyCastTime(spellEntry->id(), castTime);
 		const uint32_t cooldown = spellEntry->cooldown();
 
 		// Stop movement BEFORE calling CastSpell so the CreatureMove(stop) packet
@@ -1590,7 +1593,7 @@ namespace mmo
 			{
 				const auto currentTime = GetAsyncTimeMs();
 				m_lastSpellCastTime = currentTime;
-				m_castingTimeoutEnd = currentTime + castTime + 1000;
+				m_castingTimeoutEnd = currentTime + modifiedCastTime + 1000;
 				controlled.StopAttack();
 			}
 
@@ -2065,7 +2068,7 @@ namespace mmo
 
 		const auto usable = [&controlled](GameUnitS* unit)
 		{
-			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitIsEnemy(*unit) && unit->CanBeSeenBy(controlled);
+			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(controlled);
 		};
 
 		GameUnitS* preferred = nullptr;
@@ -2086,7 +2089,8 @@ namespace mmo
 		{
 			if (const auto owner = ai.GetPetOwner())
 			{
-				if (GameUnitS* ownerVictim = owner->GetVictim(); usable(ownerVictim) && ai.IsWithinPetStayReach(*ownerVictim))
+				GameUnitS* ownerVictim = ai.IsPetOwnerTargetOnly() ? ai.FindPetOwnerTarget() : owner->GetVictim();
+				if (usable(ownerVictim) && ai.IsWithinPetStayReach(*ownerVictim))
 				{
 					preferred = ownerVictim;
 				}
@@ -2142,6 +2146,17 @@ namespace mmo
 				{
 					return true;
 				}
+			}
+		}
+
+		// A pet that only fights its owner's target is done once the owner fights nothing it can
+		// take on (no threat fallback).
+		if (ai.IsPetOwnerTargetOnly() && ai.GetPetCommandedTarget() == 0)
+		{
+			const GameUnitS* ownerTarget = ai.FindPetOwnerTarget();
+			if (!ownerTarget || !ai.IsWithinPetStayReach(*ownerTarget))
+			{
+				return true;
 			}
 		}
 

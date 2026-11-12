@@ -41,6 +41,34 @@ namespace mmo
 			victim.displayId = unit.Get<uint32>(object_fields::DisplayId);
 			return victim;
 		}
+
+		/// Damage dealt by units the local player owns (pets, summoned swarms), set apart from the
+		/// player's own numbers.
+		const Color PetDamageColor(1.0f, 0.62f, 0.15f, 1.0f);
+
+		/// Whether the unit belongs to the local player through its owner chain: the persistent pet,
+		/// a temporary swarm, or something one of those summoned. The player itself does not count.
+		bool IsOwnedByActivePlayer(const uint64 guid)
+		{
+			const uint64 playerGuid = ObjectMgr::GetActivePlayerGuid();
+			uint64 current = guid;
+			for (int depth = 0; depth < 4 && current != 0; ++depth)
+			{
+				const auto unit = ObjectMgr::Get<GameUnitC>(current);
+				if (!unit)
+				{
+					return false;
+				}
+
+				current = unit->Get<uint64>(object_fields::Owner);
+				if (current != 0 && current == playerGuid)
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
 	}
 
 	CombatLogClient::CombatLogClient(RealmConnector &connector, const proto_client::Project &project, CombatSoundPlayer &combatSoundPlayer)
@@ -106,6 +134,16 @@ namespace mmo
 			return PacketParseResult::Disconnect;
 		}
 
+		// The server forwards the damage of units the player owns with the Pet flag and the dealing
+		// unit's guid; it has its own colour.
+		const bool byPet = (flags & damage_flags::Pet) != 0;
+		uint64 sourceGuid = ObjectMgr::GetActivePlayerGuid();
+		if (byPet && !(packet >> io::read_packed_guid(sourceGuid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+		const Color damageColor = byPet ? PetDamageColor : Color(1.0f, 1.0f, 0.0f, 1.0f);
+
 		// Find unit
 		std::shared_ptr<GameObjectC> target = ObjectMgr::Get<GameObjectC>(targetGuid);
 		if (target)
@@ -127,24 +165,25 @@ namespace mmo
 				const String blockedText = std::to_string(amount) + " (" + std::to_string(blocked) + " " +
 					Localize(FrameManager::Get().GetLocalization(), "COMBAT_BLOCKED_SUFFIX") + ")";
 				const bool isCritical = (flags & damage_flags::Crit) != 0;
-				m_listener->AddWorldTextFrame(target->GetPosition(), blockedText, Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
+				m_listener->AddWorldTextFrame(target->GetPosition(), blockedText, damageColor, isCritical ? 4.0f : 2.0f,
 					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 			else
 			{
 				const bool isCritical = (flags & damage_flags::Crit) != 0;
-				m_listener->AddWorldTextFrame(target->GetPosition(), std::to_string(amount), Color(1.0f, 1.0f, 0.0f, 1.0f), isCritical ? 4.0f : 2.0f,
+				m_listener->AddWorldTextFrame(target->GetPosition(), std::to_string(amount), damageColor, isCritical ? 4.0f : 2.0f,
 					isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
 			}
 		}
 
 		if (amount > 0)
 		{
-			if (const auto player = ObjectMgr::GetActivePlayer())
+			// Pet damage is the pet's, not the player's: the damage meter lists it on its own row.
+			if (const auto source = ObjectMgr::Get<GameUnitC>(sourceGuid))
 			{
 				FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
-					ObjectMgr::GetActivePlayerGuid(),
-					player->GetName(),
+					sourceGuid,
+					source->GetName(),
 					targetGuid,
 					target ? target->GetName() : String(),
 					amount,
@@ -152,7 +191,11 @@ namespace mmo
 			}
 		}
 
-		m_listener->TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
+		// Only the player's own hits shake the camera.
+		if (!byPet)
+		{
+			m_listener->TriggerCombatCameraShake(targetGuid, ObjectMgr::GetActivePlayerGuid(), amount, (flags & damage_flags::Crit) != 0);
+		}
 
 		return PacketParseResult::Pass;
 	}
@@ -295,8 +338,10 @@ namespace mmo
 		// attacker's SwingHit animation notify so numbers appear when the weapon visually connects.
 		// If the attacker has no current attack animation (or no SwingHit notify), the callback
 		// fires immediately as a fallback.
+		const bool attackerIsPet = IsOwnedByActivePlayer(attackerGuid);
 		const bool isActivePlayerInvolved = ObjectMgr::GetActivePlayerGuid() == attackerGuid
-			|| ObjectMgr::GetActivePlayerGuid() == attackedGuid;
+			|| ObjectMgr::GetActivePlayerGuid() == attackedGuid
+			|| attackerIsPet;
 
 		if (attacked && isActivePlayerInvolved)
 		{
@@ -341,13 +386,13 @@ namespace mmo
 			const bool isCritical = (hitInfo & hit_info::CriticalHit) != 0;
 			const bool attackerIsPlayer = ObjectMgr::GetActivePlayerGuid() == attackerGuid;
 			const Vector3 targetPos = attacked->GetPosition();
-			const Color textColor = attackerIsPlayer ? Color::White : Color(1.0f, 0.0f, 0.0f);
+			const Color textColor = attackerIsPlayer ? Color::White : (attackerIsPet ? PetDamageColor : Color(1.0f, 0.0f, 0.0f));
 
 			auto displayCallback = [this, targetPos, damageText, isCritical, textColor,
 				attackerGuid, attackedGuid, totalDamage,
 				attackerName = attacker ? attacker->GetName() : String(),
 				attackedName = attacked->GetName(),
-				attackerIsPlayer]()
+				attackerIsPlayer, attackerIsPet]()
 			{
 				m_listener->AddWorldTextFrame(targetPos, damageText, textColor,
 					isCritical ? 4.0f : 2.0f, isCritical ? WorldTextAnimation::Critical : WorldTextAnimation::Normal);
@@ -355,7 +400,7 @@ namespace mmo
 				// Sync the camera shake with the moment the swing visually connects.
 				m_listener->TriggerCombatCameraShake(attackedGuid, attackerGuid, totalDamage, isCritical);
 
-				if (totalDamage > 0 && attackerIsPlayer)
+				if (totalDamage > 0 && (attackerIsPlayer || attackerIsPet))
 				{
 					FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
 						attackerGuid,
@@ -379,9 +424,9 @@ namespace mmo
 				displayCallback();
 			}
 		}
-		else if (totalDamage > 0 && ObjectMgr::GetActivePlayerGuid() == attackerGuid && attacker)
+		else if (totalDamage > 0 && (ObjectMgr::GetActivePlayerGuid() == attackerGuid || attackerIsPet) && attacker)
 		{
-			// Attacker is the local player but the attacked unit isn't in the client's range —
+			// Attacker is the local player (or its pet) but the attacked unit isn't in the client's range —
 			// still fire the Lua event (no world text since there's no position to attach to).
 			FrameManager::Get().TriggerLuaEvent("DAMAGE_DONE",
 				attackerGuid,

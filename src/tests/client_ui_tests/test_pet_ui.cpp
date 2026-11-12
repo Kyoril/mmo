@@ -82,6 +82,8 @@ namespace
 		function Frame:GetText() return self.text; end
 		function Frame:SetProperty(name, value) self.props[name] = value; end
 		function Frame:SetProgress(progress) self.progress = progress; end
+		function Frame:SetProgressInstant(progress) self.progress = progress; end
+		function Frame:GetProgress() return self.progress or 0; end
 		function Frame:SetChecked(checked) self.checked = checked; end
 		function Frame:Enable() self.enabled = true; end
 		function Frame:Disable() self.enabled = false; end

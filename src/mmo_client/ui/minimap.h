@@ -9,6 +9,7 @@
 #include "frame_ui/geometry_buffer.h"
 #include "base/signal.h"
 #include "base/typedefs.h"
+#include "map_member_dot.h"
 
 #include <functional>
 #include <map>
@@ -87,14 +88,11 @@ namespace mmo
 		///	that the next tile change finds them in memory. Pass nullptr to stop prefetching.
 		void SetPrefetchHandler(std::function<void(const String&)> prefetch);
 
-		struct PartyMemberDot
-		{
-			Vector3 position;
-			std::string name;
-		};
+		using MemberDot = MapMemberDot;
 
-		/// @brief Updates the positions of party members for minimap rendering.
-		void UpdatePartyPositions(std::vector<PartyMemberDot> members);
+		/// @brief Updates the party and guild members shown on the minimap. Members beyond the minimap's
+		///        edge are drawn on the edge, in their direction.
+		void UpdateMemberDots(std::vector<MemberDot> members);
 
 /// @brief Queries which minimap objects are near a given normalized UV coordinate.
 		/// Returns a Lua table: array of {type="party"|"questgiver", name=string}.
@@ -202,9 +200,17 @@ namespace mmo
 		TexturePtr m_playerArrowTexture;
 		GeometryBuffer m_playerGeom;
 
+		/// @brief Where a member dot is drawn: its position, or the minimap edge in its direction.
+		Vector3 GetMemberDisplayPosition(const MemberDot& member) const;
+
 		TexturePtr m_partyMemberTexture;
 		GeometryBuffer m_partyMemberGeom;
-		std::vector<PartyMemberDot> m_partyPositions;
+		GeometryBuffer m_guildMemberGeom;
+		std::vector<MemberDot> m_memberDots;
+
+		/// @brief Radius of the visible minimap circle as a fraction of the covered edge length;
+		///        member dots further out are clamped to it.
+		static constexpr float s_edgeRadiusFactor = 0.42f;
 
 		TexturePtr m_questAvailableTexture;
 		GeometryBuffer m_questAvailableGeom;

@@ -39,6 +39,7 @@ namespace mmo
 	{
 		class EmoteEntry;
 		class ModelDataEntry;
+		class UnitTransitionEffect;
 		class FactionEntry;
 		class FactionTemplateEntry;
 		class SpellEntry;
@@ -644,6 +645,42 @@ namespace mmo
 		/// @brief Cancel the currently playing one-shot animation and refresh movement state
 		void CancelOneShotAnimation();
 
+		/// @brief Starts the despawn effect of the unit's display model (ModelDataEntry::despawn_effect):
+		///        the unit stops moving, can no longer be picked, hides its name and selection ring,
+		///        plays the effect's clip and sound, and dissolves over the effect's duration. The
+		///        caller keeps the unit alive (outside ObjectMgr's object list) until UpdateDespawnEffect
+		///        reports the effect finished.
+		/// @return False if the model has no despawn effect or the unit has no entity yet; the caller
+		///         removes the unit at once then.
+		bool BeginDespawnEffect();
+
+		/// @brief Advances a running despawn effect: animation, dissolve parameter, notifies.
+		/// @return True once the effect has finished and the unit can be destroyed.
+		bool UpdateDespawnEffect(float deltaTime);
+
+		/// @brief Returns true while the unit plays its despawn effect.
+		[[nodiscard]] bool IsDespawning() const { return m_transition == TransitionState::Despawning; }
+
+		/// @brief Returns true while the unit plays its spawn effect.
+		[[nodiscard]] bool IsPlayingSpawnEffect() const { return m_transition == TransitionState::Spawning; }
+
+	private:
+		/// @brief Starts a spawn or despawn effect: clip, sound, and per-sub-mesh material instances
+		///        whose dissolve parameter UpdateTransitionEffect drives.
+		/// @param startValue Dissolve value the effect starts at (0 = solid, 1 = gone).
+		void StartTransitionEffect(const proto_client::UnitTransitionEffect& effect, bool spawning, float startValue);
+
+		/// @brief Advances the running transition effect and returns its dissolve value (0..1).
+		float UpdateTransitionEffect(float deltaTime);
+
+		/// @brief Starts the model's spawn effect if the server announced this unit as just spawned.
+		void StartPendingSpawnEffect();
+
+		/// @brief Ends a running spawn effect at once and gives every sub mesh its own material back.
+		void EndSpawnEffect();
+
+	public:
+
 		/// @brief Returns true if a one-shot animation is currently playing.
 		bool IsPlayingOneShotAnimation() const;
 
@@ -1072,6 +1109,36 @@ namespace mmo
 
 		/// @brief Map of SubEntity -> material state (only populated when tinting is active).
 		std::map<class SubEntity*, SubEntityMaterialState> m_tintMaterialStates;
+
+		/// @brief Which transition effect (ModelDataEntry spawn_effect / despawn_effect) plays.
+		enum class TransitionState : uint8
+		{
+			None,
+			Spawning,
+			Despawning
+		};
+
+		TransitionState m_transition = TransitionState::None;
+
+		/// @brief The server created this unit with object_update_flags::Spawned; its spawn effect
+		///        starts once its model is set up.
+		bool m_spawnEffectPending = false;
+
+		/// @brief Seconds the transition effect has been playing (may start past 0, see StartTransitionEffect).
+		float m_transitionElapsed = 0.0f;
+
+		/// @brief Total seconds the transition effect lasts.
+		float m_transitionDuration = 0.0f;
+
+		/// @brief Name of the scalar material parameter the transition effect drives.
+		String m_transitionParameter;
+
+		/// @brief Per-unit material instances exposing m_transitionParameter.
+		std::vector<std::shared_ptr<class MaterialInstance>> m_transitionMaterials;
+
+		/// @brief The materials the sub meshes had before the transition effect swapped them, restored
+		///        when a spawn effect ends.
+		std::vector<std::pair<class SubEntity*, std::shared_ptr<class MaterialInterface>>> m_transitionOriginalMaterials;
 
 		/// @brief Connections to animation notify signals.
 		scoped_connection_container m_animNotifyConnections;

@@ -301,18 +301,10 @@ namespace mmo
 		{
 			// Immediately remove interactability from world objects gated on this quest
 			RefreshQuestObjectInteractability(questId);
-			// If the quest should perform a spell cast on the players character, we will do so now
-			if (quest->rewardspellcast())
-			{
-				if (const auto* rewardSpell = m_project.spells.getById(quest->rewardspellcast()))
-				{
-					// Prepare the spell cast target map
-					SpellTargetMap targetMap;
-					targetMap.SetTargetMap(spell_cast_target_flags::Self);
-					targetMap.SetUnitTarget(m_character->GetGuid());
-					m_character->CastSpell(targetMap, *rewardSpell, 0, true);
-				}
-			}
+
+			// RewardQuest already cast rewardspellcast on the player. The quest giver may react too,
+			// e.g. cast a reward spell on the player itself.
+			questGiver->RaiseTrigger(trigger_event::OnQuestReward, { questId }, m_character.get());
 
 			// Quality of life: keep the conversation going after a turn-in instead of just closing
 			// the dialog.

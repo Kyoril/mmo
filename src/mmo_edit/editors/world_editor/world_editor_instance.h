@@ -56,6 +56,7 @@
 #include "edit_modes/atlas_edit_mode.h"
 #include "edit_modes/water_edit_mode.h"
 #include "edit_modes/foliage_edit_mode.h"
+#include "edit_modes/procedural_edit_mode.h"
 #include "scene_graph/instanced_foliage.h"
 #include "scene_graph/foliage.h"
 #include "scene_outline_window.h"
@@ -72,7 +73,7 @@
 #include "entity_factory.h"
 #include "minimap_baker.h"
 #include "minimap_grid_view.h"
-#include "glue_bake/glue_bake_placement.h"
+#include "pcg/graph/debug_geometry.h"
 
 namespace mmo
 {
@@ -301,6 +302,10 @@ namespace mmo
 	};
 
 	class SelectedKitProp;
+	class SelectedSplinePoint;
+	class SelectedControlTransform;
+	class SectionPanel;
+	class PcgDebugLayer;
 
 	class SelectableVisitor
 	{
@@ -321,6 +326,12 @@ namespace mmo
 		virtual void Visit(SelectedAreaTrigger &selectable) = 0;
 
 		virtual void Visit(SelectedFogVolume &selectable) = 0;
+
+		/// @brief Visits a control point of an editor spline (e.g. an oasis loop).
+		virtual void Visit(SelectedSplinePoint &selectable) = 0;
+
+		/// @brief Visits the transform of a placed procedural volume or point control.
+		virtual void Visit(SelectedControlTransform &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -344,7 +355,13 @@ namespace mmo
 		bool Save() override;
 
 		/// Asset path of the world's river flow paths (.hflow next to the world file).
-		[[nodiscard]] String GetFlowPathsFileName() const;
+		[[nodiscard]] String GetFlowPathsFileName() const override;
+
+		/// Hand rivers and flow settings of Water mode as they are on the pages (see IWorldEditor::GetHandFlowPaths).
+		bool GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings) override;
+
+		/// @brief Asset path of the folder holding this world's procedural records (.hpcg).
+		[[nodiscard]] String GetPcgFolderName() const;
 
 	private:
 		// UI related methods
@@ -394,6 +411,11 @@ namespace mmo
 
 		void Visit(SelectedFogVolume &selectable) override;
 
+		/// @brief Draws the details of a selected spline point.
+		void Visit(SelectedSplinePoint &selectable) override;
+
+		void Visit(SelectedControlTransform &selectable) override;
+
 	private:
 		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
 		void DrawMixedUnitSpawnEntries(SelectedUnitSpawn &selectable);
@@ -414,6 +436,9 @@ namespace mmo
 
 	public:
 		void ClearSelection() override;
+
+		/// @copydoc IWorldEditor::AddToSelection
+		void AddToSelection(std::unique_ptr<Selectable> selectable) override;
 
 		void RemoveAllUnitSpawns() override;
 
@@ -482,6 +507,39 @@ namespace mmo
 		/// @copydoc IWorldEditor::AddMeshToActiveKit
 		bool AddMeshToActiveKit(const String &meshPath, const Vector3 &worldPosition) override;
 
+		/// @copydoc IWorldEditor::CreatePlacementEntity
+		bool CreatePlacementEntity(const pcg::Placement &placement, uint64 uniqueId) override;
+
+		/// @copydoc IWorldEditor::RemoveMapEntityById
+		bool RemoveMapEntityById(uint64 uniqueId) override;
+
+		/// @copydoc IWorldEditor::HasMapEntity
+		bool HasMapEntity(uint64 uniqueId) const override;
+
+		/// @copydoc IWorldEditor::SetMapEntityInfo
+		void SetMapEntityInfo(uint64 uniqueId, const String &name, const String &category) override;
+
+		/// @copydoc IWorldEditor::SetMapEntityTransform
+		bool SetMapEntityTransform(uint64 uniqueId, const Vector3 &position, const Quaternion &orientation, const Vector3 &scale) override;
+
+		/// @copydoc IWorldEditor::GenerateEntityUniqueId
+		uint64 GenerateEntityUniqueId() override;
+
+		/// @copydoc IWorldEditor::GetInstancedFoliage
+		InstancedFoliage &GetInstancedFoliage() override { return *m_foliage; }
+
+		/// @copydoc IWorldEditor::MarkFoliagePageDirty
+		void MarkFoliagePageDirty(uint16 pageIndex) override;
+
+		/// @copydoc IWorldEditor::GenerateFoliageUniqueId
+		uint64 GenerateFoliageUniqueId() override;
+
+		/// @copydoc IWorldEditor::EnsurePagesLoaded
+		bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String &error) override;
+
+		/// @copydoc IWorldEditor::GetTerrainRevision
+		uint64 GetTerrainRevision() const override;
+
 	public:
 		// In-place furnishing: editing prop kits of placed world models
 
@@ -489,6 +547,10 @@ namespace mmo
 		/// @param uniqueId The unique id of the entity.
 		/// @return The entity, or nullptr if no loaded entity has that id.
 		MapEntity *FindMapEntity(uint64 uniqueId) const;
+
+		/// @brief Unique ids of the selected map entities (meshes and world models), in selection order.
+		/// @param out Cleared, then receives the ids.
+		void GetSelectedMapEntityIds(std::vector<uint64> &out) const;
 
 		/// @brief Gets a prop of a kit as the world editor currently sees it: the unsaved working copy
 		///        if the kit was edited here, otherwise the cached kit.
@@ -663,6 +725,11 @@ namespace mmo
 		/// @return False when any page failed.
 		bool GenerateMinimaps(bool onlyStale = false, const MinimapBaker::Region& region = MinimapBaker::Region{});
 
+		/// @brief Bakes the world map (see WorldMapBaker) into Textures/WorldMap/<world>/ from the zones of
+		///        every page and the minimap tiles. Minimap bakes run it when they finish.
+		/// @return False when the world has no terrain or a file could not be written.
+		bool GenerateWorldMap();
+
 		/// @brief Starts an interactive minimap bake that runs a few pages per frame (see TickMinimapBake),
 		///        so the editor stays responsive and the bake can be cancelled.
 		/// @param onlyStale Skip pages whose tile is newer than their .tile file.
@@ -688,37 +755,138 @@ namespace mmo
 		///        job bakes the world it just opened). Null once that instance is gone.
 		static WorldEditorInstance* GetLastCreated() { return s_lastCreated; }
 
+		/// @brief Every world editor instance that is currently open, in creation order. The constructor
+		///        adds the instance, the destructor removes it. Main thread only; do not hold on to the
+		///        pointers across frames, keep GetInstanceSerial and use FindOpenInstance instead.
+		static const std::vector<WorldEditorInstance*>& GetOpenInstances() { return s_openInstances; }
+
+		/// @brief Finds an open instance by its serial.
+		/// @param serial A value from GetInstanceSerial.
+		/// @return The instance, or null if it has been closed (or the serial is 0).
+		static WorldEditorInstance* FindOpenInstance(uint64 serial);
+
+		/// @brief Gets the serial of this instance: unique per process and never reused, so it stays a
+		///        safe handle after the instance has been closed (FindOpenInstance then returns null).
+		[[nodiscard]] uint64 GetInstanceSerial() const { return m_instanceSerial; }
+
+		/// @brief Rebuilds procedural content (oases, section paths and graph instances) without any UI, for
+		///        unattended runs.
+		/// @param idOrZero Id of the control to rebuild, or 0 for all of them.
+		/// @param error Receives the reason when the call returns false.
+		/// @param background Rebuild a graph instance the way the editor does in the background (worker thread, written
+		///        on an update), and wait for it (see ProceduralEditMode::RebuildInBackgroundAndWait).
+		/// @return True if everything requested was rebuilt.
+		bool RebuildProcedural(uint64 idOrZero, String& error, bool background = false);
+
+		/// @brief Adds an oasis like the "New Oasis" button does, centred on (x, z), and builds it,
+		///        for unattended runs. The world is not saved.
+		/// @param x World X of the centre.
+		/// @param z World Z of the centre.
+		/// @param radius Loop radius.
+		/// @param seed Seed of the oasis.
+		/// @param name Name of the oasis; empty picks the default name.
+		/// @param id Receives the id of the new oasis (also when only the build failed).
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the oasis was added and built.
+		bool CreateProceduralOasis(float x, float z, float radius, uint64 seed, const String& name, uint64& id, String& error);
+
+		/// @brief Adds a section path through the given x/z points (at terrain height) like the "New
+		///        Section Path" button does, and builds it, for unattended runs. The world is not saved.
+		///        Refused before anything is added if the section asset is missing or unreadable.
+		/// @param points World x/z of the control points, in order (at least 2, at least 3 for a loop).
+		/// @param sectionAsset Asset path of the baked section (.hsec).
+		/// @param options Seed, loop flag, height mode, mass, facade variety and settings of the path.
+		/// @param name Name of the path; empty picks the default name.
+		/// @param id Receives the id of the new path (also when only the build failed).
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the path was added and built.
+		bool CreateProceduralSectionPath(const std::vector<std::pair<float, float>>& points, const String& sectionAsset,
+			const NewSectionPathOptions& options, const String& name, uint64& id, String& error);
+
+		/// @brief Adds a placed control of a control type through the given x/z points (at terrain height)
+		///        and sets property overrides, for unattended runs. The world is not saved. Refused before
+		///        anything is added if the type is missing or invalid, the points do not fit its shape, or a
+		///        setting names no property of the type or has an invalid value.
+		/// @param typePath Asset path of the control type (.hctl).
+		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume or
+		///        point exactly one (its centre).
+		/// @param name Name of the control; empty picks the default name.
+		/// @param settings Property overrides as name and value text, applied in order.
+		/// @param id Receives the id of the new control.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the control was added.
+		bool CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
+			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
+
+		/// @brief Adds a graph instance over a closed area through the given x/z points, for unattended runs. Does
+		///        not build it and does not save the world. Refused before anything is added if the area has fewer
+		///        than 3 points, overlaps another graph instance's area, the graph cannot be read, or a parameter
+		///        setting names no parameter of the graph or has an invalid value.
+		/// @param graphPath Asset path of the graph (.hpcgg).
+		/// @param points World x/z of the area points, at least 3.
+		/// @param seed Seed of the instance.
+		/// @param name Name of the instance; empty picks the default name.
+		/// @param settings Parameter overrides as name and value text.
+		/// @param id Receives the id of the new instance.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the instance was added.
+		bool CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, uint64 seed, const String& name,
+			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
+
+		/// @brief Evaluates a graph instance's saved graph without applying it, for unattended runs.
+		/// @param id Id of the graph instance.
+		/// @param out Receives the evaluation.
+		/// @param error Receives the reason when the call returns false.
+		/// @return False if there is no such instance or its graph or context could not be prepared.
+		bool EvaluateProceduralGraphInstance(uint64 id, GraphInstanceEvaluation& out, String& error);
+
+		/// @brief Gets the procedural edit mode of this world (placed controls, control library), or null.
+		[[nodiscard]] ProceduralEditMode* GetProceduralEditMode() const { return m_proceduralEditMode.get(); }
+
+		/// @brief Replaces the debug lines an owner (a PCG graph editor's debug view) draws into this world's
+		///        viewport, creating its layer on first use. Debug layers are never saved.
+		/// @param ownerKey Identifies the owner; each owner has one layer.
+		/// @param lines The lines to draw (empty clears the drawing but keeps the layer).
+		void SetPcgDebugLayer(uint64 ownerKey, std::vector<pcg::graph::DebugLine> lines);
+
+		/// @brief Removes an owner's debug layer and its lines. Does nothing if the owner has none.
+		/// @param ownerKey Identifies the owner.
+		void ClearPcgDebugLayer(uint64 ownerKey);
+
+		/// @brief Deletes a procedural control (oasis, section path, graph instance or placed control) and
+		///        everything it generated like
+		///        the "Delete" button does, for unattended runs. The world is not saved.
+		/// @param id Id of the control.
+		/// @param error Receives the reason when the call returns false.
+		/// @return True if the control was deleted.
+		bool DeleteProceduralControl(uint64 id, String& error);
+
+		/// @brief Number of oases of the world.
+		size_t GetProceduralOasisCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetOasisCount() : 0; }
+
+		/// @brief Number of procedural controls (oases, section paths, placed controls and graph instances) of the world.
+		size_t GetProceduralControlCount() const { return m_proceduralEditMode ? m_proceduralEditMode->GetControlCount() : 0; }
+
 		/// @brief Loads the entities and authored foliage of the given pages unless streaming already
-		///        did, for the glue bake. Pages this loads are tracked like the minimap bake's and
+		///        did, for one-shot jobs. Pages this loads are tracked like the minimap bake's and
 		///        released by ReleaseForcedPages; streaming takes a page over when it arrives.
 		void ForceLoadPages(const std::vector<PagePosition>& pages);
 
 		/// @brief Unloads every page's entities and foliage that ForceLoadPages (or the minimap bake) loaded.
 		void ReleaseForcedPages();
 
-		/// @brief Calls the visitor for every loaded placement (mesh or world model), in world space.
-		void ForEachLoadedPlacement(const std::function<void(const GlueBakePlacement&)>& visitor) const;
+		/// @brief Collects every loaded map entity and authored foliage instance as world-space placements:
+		///        meshes with their material overrides (sorted by slot), world models with their kit paths,
+		///        foliage with its collision flag. The key is the object's unique id; the result is sorted by
+		///        kind, then key, so it does not depend on load order.
+		void CollectWorldPlacements(std::vector<pcg::Placement>& out) const;
 
-		/// @brief Calls the visitor for every authored foliage instance of the given pages that is loaded.
-		void ForEachFoliageInstance(const std::vector<PagePosition>& pages, const std::function<void(const InstancedFoliageInstance&)>& visitor) const;
+		/// @brief Whether this world is a section world (a .hsecdef next to the .hwld, see section_bake_job.h).
+		[[nodiscard]] bool IsSectionWorld() const { return m_sectionPanel != nullptr; }
 
-		/// @brief Prepares (parses, no GPU work) and returns a terrain page, giving read access to its
-		///        heights, layers and water. Null when the world has no terrain, the page is out of
-		///        range or it has no .tile file.
-		/// @remark Meant for one-shot jobs such as the glue bake: preparing a page resets its pending
-		///         unload request (Page::BeginPrepare), and the page stays prepared afterwards, holding
-		///         its CPU data until streaming unloads it.
-		const terrain::Page* GetPreparedTerrainPage(const PagePosition& page);
-
-		/// @brief Renders terrain pages' top-down, unlit colour like the distant-terrain bake does
-		///        (see TerrainLodBaker::RenderPageColor) with one renderer, for one-shot jobs such as the glue bake.
-		/// @param pages The pages.
-		/// @param textureSize Edge length of each image in texels.
-		/// @param options Encoding and water.
-		/// @param out Receives one image per page (textureSize² RGBA8 texels; texel (u, v) maps to page-local
-		///        (x, z)); empty for a page that could not be rendered.
-		/// @return False when there is no terrain or any page could not be rendered.
-		bool RenderTerrainPageColors(const std::vector<PagePosition>& pages, uint32 textureSize, const TerrainLodBaker::ColorOptions& options, std::vector<std::vector<uint8>>& out);
+		/// @brief Whether ForceLoadPages (or the minimap bake) loaded entities or foliage that
+		///        ReleaseForcedPages would unload.
+		[[nodiscard]] bool HasForcedPages() const { return !m_bakeEntityPages.empty() || !m_bakeFoliagePages.empty(); }
 
 		/// @brief The scene the world is shown in, for one-shot editor jobs that render it offscreen.
 		[[nodiscard]] Scene& GetScene() { return m_scene; }
@@ -909,7 +1077,14 @@ namespace mmo
 		std::unique_ptr<FogVolumeEditMode> m_fogVolumeEditMode;
 		std::unique_ptr<AtlasEditMode> m_atlasEditMode;
 		std::unique_ptr<WaterEditMode> m_waterEditMode;
+		std::unique_ptr<ProceduralEditMode> m_proceduralEditMode;
+
+		/// PCG graph debug views drawing into this world, by owner key (see SetPcgDebugLayer). Never saved.
+		std::map<uint64, std::unique_ptr<PcgDebugLayer>> m_pcgDebugLayers;
 		std::unique_ptr<FoliageEditMode> m_foliageEditMode;
+
+		/// Section authoring panel; only set for section worlds.
+		std::unique_ptr<SectionPanel> m_sectionPanel;
 		std::unique_ptr<SkyComponent> m_skyComponent;
 
 		/// Blends environment profiles for the viewport, exactly like the client.
@@ -953,6 +1128,15 @@ namespace mmo
 		uint32 m_worldFileVersion;
 
 		static inline WorldEditorInstance* s_lastCreated = nullptr;
+
+		/// Open instances (see GetOpenInstances).
+		static inline std::vector<WorldEditorInstance*> s_openInstances;
+
+		/// Last serial handed out; serials start at 1.
+		static inline uint64 s_lastInstanceSerial = 0;
+
+		/// This instance's serial (see GetInstanceSerial).
+		uint64 m_instanceSerial = 0;
 
 		std::unique_ptr<DeferredRenderer> m_deferredRenderer;
 

@@ -47,23 +47,10 @@ namespace mmo
 		m_hasPatrolWaypointSaved = false;
 		m_savedPatrolWaypointIndex = 0;
 
+		// A combat script that forbids dying (training dummies) is honoured before the death,
+		// through GameCreatureS::CanDie, so a creature that gets here really died.
 		m_onKilled = m_controlled.killed.connect([this](GameUnitS* killer)
 			{
-				// Check if a combat script prevents death (e.g., training dummies)
-				if (auto* combatState = dynamic_cast<CreatureAICombatState*>(m_state.get()))
-				{
-					if (auto* script = combatState->GetScript())
-					{
-						if (!script->CanDie())
-						{
-							// Restore health and stay in combat
-							m_controlled.Set<uint32>(object_fields::Health, 
-								std::max<uint32>(1, m_controlled.GetMaxHealth()));
-							return;
-						}
-					}
-				}
-
 				auto state = std::make_shared<CreatureAIDeathState>(*this);
 				SetState(std::move(state));
 			});
@@ -135,6 +122,19 @@ namespace mmo
 	const CreatureAI::Home& CreatureAI::GetHome() const
 	{
 		return m_home;
+	}
+
+	bool CreatureAI::CanControlledDie() const
+	{
+		if (const auto* combatState = dynamic_cast<const CreatureAICombatState*>(m_state.get()))
+		{
+			if (const CreatureCombatScript* script = combatState->GetScript())
+			{
+				return script->CanDie();
+			}
+		}
+
+		return true;
 	}
 
 	void CreatureAI::EnterCombat(GameUnitS& victim)
@@ -370,6 +370,9 @@ namespace mmo
 		m_petRecalled = false;
 		m_petNaturalRunBaseSpeed = m_controlled.GetBaseSpeed(movement_type::Run);
 
+		// Temporary pets (a swarm called into a fight) only fight what their owner attacks.
+		m_petOwnerTargetOnly = m_controlled.GetPetGroup() != 0;
+
 		// The pet state does the following; an escort follow target would fight it.
 		m_controlled.ClearFollowedUnit();
 
@@ -396,7 +399,7 @@ namespace mmo
 			{
 				WorldInstance* world = m_controlled.GetWorldInstance();
 				GameUnitS* target = world ? world->FindByGuid<GameUnitS>(targetGuid) : nullptr;
-				if (!target || !target->IsAlive() || !m_controlled.UnitIsEnemy(*target))
+				if (!target || !target->IsAlive() || !m_controlled.UnitCanAttack(*target))
 				{
 					return;
 				}
@@ -482,7 +485,7 @@ namespace mmo
 
 	void CreatureAI::OnOwnerAttacked(GameUnitS& attacker)
 	{
-		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist || m_petOwnerTargetOnly)
 		{
 			return;
 		}
@@ -503,7 +506,7 @@ namespace mmo
 
 	void CreatureAI::OnPetAttacked(GameUnitS& attacker)
 	{
-		if (!m_petMode || m_petStrategy != pet_strategy::Assist)
+		if (!m_petMode || m_petStrategy != pet_strategy::Assist || m_petOwnerTargetOnly)
 		{
 			return;
 		}
@@ -515,9 +518,34 @@ namespace mmo
 		}
 	}
 
+	GameUnitS* CreatureAI::FindPetOwnerTarget() const
+	{
+		const auto owner = m_petOwner.lock();
+		if (!m_petMode || !owner)
+		{
+			return nullptr;
+		}
+
+		const auto usable = [this](GameUnitS* unit)
+		{
+			return unit && unit != &m_controlled && unit->IsAlive() && m_controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(m_controlled);
+		};
+
+		if (const PetManager* pets = owner->FindPets())
+		{
+			if (GameUnitS* target = pets->GetOwnerTarget(); usable(target))
+			{
+				return target;
+			}
+		}
+
+		GameUnitS* victim = owner->GetVictim();
+		return usable(victim) ? victim : nullptr;
+	}
+
 	void CreatureAI::EngagePetTarget(GameUnitS& target)
 	{
-		if (!m_state || !m_controlled.IsAlive() || &target == &m_controlled || !target.IsAlive() || !m_controlled.UnitIsEnemy(target))
+		if (!m_state || !m_controlled.IsAlive() || &target == &m_controlled || !target.IsAlive() || !m_controlled.UnitCanAttack(target))
 		{
 			return;
 		}

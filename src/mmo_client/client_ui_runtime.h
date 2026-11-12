@@ -9,6 +9,7 @@ namespace mmo
 	class Cursor;
 	class GameScript;
 	class Minimap;
+	class WorldMap;
 
 	/// @brief Manages frame-ui lifecycle and related client UI bindings.
 	///
@@ -33,9 +34,10 @@ namespace mmo
 		/// @brief Initializes frame-ui systems and UI Lua bindings.
 		/// @param gameScript Script host used to access the Lua state.
 		/// @param minimap Minimap instance exposed to UI frame factories.
+		/// @param worldMap World map instance exposed to UI frame factories (frame type "WorldMap").
 		/// @param cursor Cursor manager for default cursor setup.
 		/// @return True if initialization succeeded.
-		bool Initialize(GameScript& gameScript, Minimap& minimap, Cursor& cursor);
+		bool Initialize(GameScript& gameScript, Minimap& minimap, WorldMap& worldMap, Cursor& cursor);
 
 		/// @brief Shuts down frame-ui and disconnects all runtime UI bindings.
 		void Shutdown();

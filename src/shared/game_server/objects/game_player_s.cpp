@@ -84,9 +84,9 @@ namespace mmo
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
 	}
 
-	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation) const
+	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation, bool spawned) const
 	{
-		GameUnitS::WriteObjectUpdateBlock(writer, creation);
+		GameUnitS::WriteObjectUpdateBlock(writer, creation, spawned);
 
 		// Apply configuration
 		if (creation)
@@ -1902,7 +1902,7 @@ namespace mmo
 		outMax = baseValue + maxDamage;
 	}
 
-	uint32 GamePlayerS::GetAutoAttackTime(WeaponAttack attackType) const
+	uint32 GamePlayerS::GetBaseAutoAttackTime(WeaponAttack attackType) const
 	{
 		if (attackType == weapon_attack::OffhandAttack)
 		{
@@ -1917,7 +1917,7 @@ namespace mmo
 			}
 		}
 
-		return GameUnitS::GetAutoAttackTime(attackType);
+		return GameUnitS::GetBaseAutoAttackTime(attackType);
 	}
 
 	bool GamePlayerS::HasOffhandWeapon() const
@@ -2594,8 +2594,8 @@ namespace mmo
 			}
 		}
 
-		// Update attack speed value
-		Set<uint32>(object_fields::BaseAttackTime, attackSpeed);
+		// Update attack speed value (the field carries it after attack speed auras)
+		SetBaseAttackTime(attackSpeed);
 
 		float baseValue = 0.0f;
 
@@ -2620,7 +2620,8 @@ namespace mmo
 		Set<float>(object_fields::AttackPower, baseValue);
 
 		// 1 dps per 14 attack power
-		const float attackTime = Get<uint32>(object_fields::BaseAttackTime) / 1000.0f;
+		// Attack power scales with the weapon's own speed, not the attack speed modified one.
+		const float attackTime = static_cast<float>(attackSpeed) / 1000.0f;
 		baseValue = baseValue / 14.0f * attackTime;
 
 		Set<float>(object_fields::MinDamage, baseValue + minDamage);

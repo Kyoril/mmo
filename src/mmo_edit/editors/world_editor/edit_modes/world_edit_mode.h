@@ -8,7 +8,9 @@
 #include "game_common/fog_volume.h"
 #include "scene_graph/manual_render_object.h"
 #include "scene_graph/scene_node.h"
+#include "terrain_io/water_flow.h"
 
+#include <memory>
 #include <vector>
 
 // Forward-declare ImGui types so we don't drag imgui.h into every translation unit.
@@ -27,6 +29,13 @@ namespace mmo
 	class Entity;
 	class Camera;
 	class WorldModelInstance;
+	class InstancedFoliage;
+	class Selectable;
+
+	namespace pcg
+	{
+		struct Placement;
+	}
 
 	namespace proto
 	{
@@ -44,6 +53,10 @@ namespace mmo
 		virtual const std::filesystem::path GetWorldPath() const = 0;
 
 		virtual void ClearSelection() = 0;
+
+		/// @brief Adds an object to the editor selection (the transform widget then acts on it). Does not
+		///        clear the selection first; call ClearSelection() for an exclusive selection.
+		virtual void AddToSelection(std::unique_ptr<Selectable> selectable) = 0;
 
 		virtual void RemoveAllUnitSpawns() = 0;
 
@@ -157,6 +170,86 @@ namespace mmo
 		/// @param worldPosition The drop point in world space.
 		/// @return true if the mesh was added to a kit, in which case no world entity must be created.
 		virtual bool AddMeshToActiveKit(const String& meshPath, const Vector3& worldPosition) { return false; }
+
+		/// @brief Creates the map entity of a generated (PCG) placement, marked modified so the next
+		///        Save() writes it. PlacementKind::WorldModel, and Entity placements whose asset is a
+		///        .hwmo, become a world model with the placement's prop kits applied in order (the
+		///        paths are kept even if a kit fails to load). Other Entity placements become a mesh
+		///        entity with the placement's material overrides applied (overrides for a slot the
+		///        mesh does not have are skipped with a warning). Foliage placements are no map
+		///        entities and are refused.
+		/// @param placement The placement (asset, transform, kits, material overrides).
+		/// @param uniqueId Unique id of the new entity (from GenerateEntityUniqueId).
+		/// @return True if the entity was created.
+		virtual bool CreatePlacementEntity(const pcg::Placement& placement, uint64 uniqueId) = 0;
+
+		/// @brief Removes a loaded map entity (mesh or world model) by its unique id, exactly like
+		///        deleting it by hand: its file is deleted on the next Save() and it leaves the selection.
+		/// @param uniqueId The unique id of the entity.
+		/// @return False if no loaded entity has that id.
+		virtual bool RemoveMapEntityById(uint64 uniqueId) = 0;
+
+		/// @brief Whether a map entity with the given unique id is currently loaded.
+		/// @param uniqueId The unique id of the entity.
+		virtual bool HasMapEntity(uint64 uniqueId) const = 0;
+
+		/// @brief Sets the display name and category of a loaded map entity and marks it modified.
+		/// @param uniqueId The unique id of the entity. Unknown ids are ignored.
+		/// @param name The display name.
+		/// @param category The category.
+		virtual void SetMapEntityInfo(uint64 uniqueId, const String& name, const String& category) = 0;
+
+		/// @brief Moves a loaded map entity to a new world transform and marks it modified, like the
+		///        transform widget does. The unique id (and thus the entity file) is kept.
+		/// @param uniqueId The unique id of the entity.
+		/// @param position World position.
+		/// @param orientation World orientation.
+		/// @param scale World scale.
+		/// @return False if no loaded entity has that id.
+		virtual bool SetMapEntityTransform(uint64 uniqueId, const Vector3& position, const Quaternion& orientation, const Vector3& scale) = 0;
+
+		/// @brief Generates a fresh unique id for a map entity (the source CreateMapEntity uses for 0).
+		virtual uint64 GenerateEntityUniqueId() = 0;
+
+		/// @brief Gets the world's authored instanced foliage (trees, bushes).
+		virtual InstancedFoliage& GetInstancedFoliage() = 0;
+
+		/// @brief Marks a terrain page's authored foliage as changed so the next Save() rewrites
+		///        its .hfol file (forwards to the foliage edit mode, which owns the dirty set).
+		/// @param pageIndex The page index as FoliageEditMode::PageIndexFromPosition computes it.
+		virtual void MarkFoliagePageDirty(uint16 pageIndex) = 0;
+
+		/// @brief Generates a fresh unique id for a foliage instance (the source the foliage brush uses).
+		virtual uint64 GenerateFoliageUniqueId() = 0;
+
+		/// @brief Loads, synchronously, every terrain page intersecting the world rect (prepare +
+		///        load) together with its entities and authored foliage, so content there can be
+		///        edited and found by id. Pages outside the terrain are skipped.
+		/// @param minX Minimum world X.
+		/// @param minZ Minimum world Z.
+		/// @param maxX Maximum world X.
+		/// @param maxZ Maximum world Z.
+		/// @param error Receives the pages that are not ready when the call fails.
+		/// @return True only if every page intersecting the rect (inside the terrain) is prepared and
+		///         loaded afterwards. Callers must not edit the terrain there otherwise.
+		virtual bool EnsurePagesLoaded(float minX, float minZ, float maxX, float maxZ, String& error) = 0;
+
+		/// @brief Gets a counter that changes on every terrain height, splat, hole, water or tile material
+		///        edit (and on sea level changes), whatever the edit path. Pages streaming in or out do not
+		///        change it. Hooked at Page::MarkChanged through terrain::Terrain::GetDataRevision.
+		/// @return The revision, or 0 if the world has no terrain.
+		virtual uint64 GetTerrainRevision() const = 0;
+
+		/// @brief Asset path of the world's hand-drawn river paths (.hflow next to the world file), read with
+		///        ReadFlowPathsFile.
+		[[nodiscard]] virtual String GetFlowPathsFileName() const = 0;
+
+		/// @brief The hand-drawn river paths and flow settings the open editor holds, as they are on the terrain pages
+		///        now (saved or not; a pending deferred flow apply is carried out first).
+		/// @param paths Receives the usable hand paths (two points or more), in river order.
+		/// @param settings Receives the world's flow settings.
+		/// @return False if the editor holds no rivers (no Water mode); the caller then reads GetFlowPathsFileName().
+		virtual bool GetHandFlowPaths(std::vector<terrain_io::water_flow::FlowPath>& paths, terrain_io::water_flow::FlowSettings& settings) = 0;
 	};
 
 	class WorldEditMode : public NonCopyable
@@ -181,6 +274,9 @@ namespace mmo
 		virtual void OnMouseUp(float x, float y) {}
 
 		virtual void OnMouseHold(float deltaSeconds) {}
+
+		/// @brief Called once per frame while the mode is active.
+		virtual void OnUpdate(float deltaSeconds) {}
 
 		/// @brief Called on any frame where OnMouseHold is not called, so a mode that treats a
 		///        held drag as a continuous stroke can tell a pause apart from a fast movement.

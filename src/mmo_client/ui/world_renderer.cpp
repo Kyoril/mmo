@@ -26,12 +26,12 @@ namespace mmo
 		m_camera = m_worldScene.GetCamera("Default");
 
 		m_deferredRenderer = std::make_unique<DeferredRenderer>(GraphicsDevice::Get(), m_worldScene, 1920, 1080);
+		m_upscalePass = std::make_unique<UpscalePass>(GraphicsDevice::Get());
 	}
 
 	void WorldRenderer::Render(optional<Color> colorOverride, optional<Rect> clipper)
 	{
-		// Anything to render here? Any frame can host the world, not just a WorldFrame: the glue
-		// screens render their scene into a plain frame.
+		// Anything to render here? Any frame can host the world, not just a WorldFrame.
 		if (!m_deferredRenderer || !m_frame)
 		{
 			return;
@@ -77,14 +77,38 @@ namespace mmo
 			m_deferredRenderer->Render(m_worldScene, *m_camera);
 		}
 
+		// Bring a frame rendered below native resolution up to the frame size. Bilinear and native
+		// resolution need no pass: the quad below samples the deferred output directly.
+		TexturePtr finalTexture = m_deferredRenderer->GetFinalRenderTarget();
+		{
+			static ConsoleVar* s_upscaleFilterVar = nullptr;
+			static ConsoleVar* s_upscaleSharpnessVar = nullptr;
+			if (!s_upscaleFilterVar)
+			{
+				s_upscaleFilterVar = ConsoleVarMgr::FindConsoleVar("gxUpscaleFilter");
+				s_upscaleSharpnessVar = ConsoleVarMgr::FindConsoleVar("gxUpscaleSharpness");
+			}
+
+			const upscale_filter::Type filter = s_upscaleFilterVar
+				? ClampUpscaleFilter(s_upscaleFilterVar->GetIntValue())
+				: upscale_filter::Fsr;
+			const float sharpness = RcasSharpnessFromStops(s_upscaleSharpnessVar ? s_upscaleSharpnessVar->GetFloatValue() : 0.2f);
+
+			const uint32 outputWidth = static_cast<uint32>(std::max(1.0f, frameRect.GetWidth()));
+			const uint32 outputHeight = static_cast<uint32>(std::max(1.0f, frameRect.GetHeight()));
+
+			PROFILE_SCOPE("Upscale");
+			finalTexture = m_upscalePass->Render(finalTexture, internalWidth, internalHeight,
+				outputWidth, outputHeight, filter, sharpness);
+		}
+
 		// Restore state before drawing the frame's geometry buffer
 		GraphicsDevice::Get().RestoreState();
 
-		// Rebuild the quad after rendering, not before: only now does the deferred renderer know
-		// which texture holds this frame. The geometry buffer stores the texture pointer per batch,
-		// so a changed final target - diving in, surfacing, the post-process output being
-		// recreated - needs a rebuild just like a changed frame rect does.
-		const TexturePtr finalTexture = m_deferredRenderer->GetFinalRenderTarget();
+		// Rebuild the quad after rendering, not before: only now is it known which texture holds
+		// this frame. The geometry buffer stores the texture pointer per batch, so a changed final
+		// target - diving in, surfacing, the post-process output being recreated, the upscaler
+		// switching on or off - needs a rebuild just like a changed frame rect does.
 		if (m_lastFrameRect != frameRect
 			|| m_frame->GetGeometryBuffer().GetBatchCount() == 0
 			|| finalTexture != m_displayedTexture)

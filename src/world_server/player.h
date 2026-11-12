@@ -103,10 +103,10 @@ namespace mmo
 		void NotifyObjectsUpdated(const std::vector<GameObjectS*>& objects) override;
 
 		/// @copydoc TileSubscriber::NotifyObjectsSpawned
-		void NotifyObjectsSpawned(const std::vector<GameObjectS*>& object) override;
+		void NotifyObjectsSpawned(const std::vector<GameObjectS*>& object, game::spawn_reason::Type reason = game::spawn_reason::CameIntoSight) override;
 
 		/// @copydoc TileSubscriber::NotifyObjectsDespawned
-		void NotifyObjectsDespawned(const std::vector<GameObjectS*>& object) override;
+		void NotifyObjectsDespawned(const std::vector<GameObjectS*>& object, game::despawn_reason::Type reason) override;
 
 		/// @copydoc TileSubscriber::SendPacket
 		void SendPacket(game::Protocol::OutgoingPacket& packet, const std::vector<char>& buffer, bool flush = true) override;
@@ -181,6 +181,10 @@ namespace mmo
 
 		/// Sends a guild update to the realm server for this character.
 		void UpdateCharacterGuild(uint64 guildId);
+
+		/// Starts the periodic member report to the realm while the character is in a group or a guild
+		/// and stops it otherwise.
+		void RefreshMemberReports();
 
 		/// Updates the loot method stored on this player's GamePlayerS and synchronized world-side group object.
 		/// @param lootMethod The new loot method.
@@ -1006,6 +1010,8 @@ namespace mmo
 
 		void OnSpellDamageLog(uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked = 0) override;
 
+		void OnOwnedUnitSpellDamageLog(uint64 sourceGuid, uint64 targetGuid, uint32 amount, uint8 school, DamageFlags flags, const proto::SpellEntry& spell, uint32 blocked) override;
+
 		void OnNonSpellDamageLog(uint64 targetGuid, uint32 amount, DamageFlags flags) override;
 
 		void OnEnvironmentalDamageLog(uint64 targetGuid, uint32 amount, EnvironmentalDamageType type) override;
@@ -1150,6 +1156,8 @@ namespace mmo
 		scoped_connection_container m_lootSignals;
 		scoped_connection m_onLootSourceDespawned;
 
+		/// Reports the character's position and stats to the realm every few seconds while it is in a
+		/// group or a guild (party frames, and party and guild dots on world maps and minimaps).
 		Countdown m_groupUpdate;
 
 		ConditionMgr& m_conditionMgr;

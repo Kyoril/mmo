@@ -26,6 +26,14 @@
 #include "null_audio/null_audio.h"
 #endif
 
+#include <cerrno>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <algorithm>
+#include <utility>
+#include <vector>
+
 #include "preview_providers/preview_provider_manager.h"
 #include "preview_providers/texture_preview_provider.h"
 #include "preview_providers/material_preview_provider.h"
@@ -66,6 +74,7 @@
 #include "editor_windows/zone_editor_window.h"
 #include "editor_windows/sound_editor_window.h"
 #include "editor_windows/surface_type_editor_window.h"
+#include "editor_windows/loading_tip_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
 #include "editor_windows/object_display_editor_window.h"
@@ -82,6 +91,7 @@
 
 #include "import/texture_import.h"
 #include "import/fbx_import.h"
+#include "import/fbx_animation_import.h"
 
 #include "locale_asset_utils.h"
 
@@ -92,13 +102,19 @@
 #include "editors/texture_editor/texture_editor.h"
 #include "editors/world_editor/world_editor.h"
 #include "editors/world_editor/world_editor_instance.h"
+#include "editors/world_editor/edit_modes/procedural_edit_mode.h"
+#include "editors/world_editor/pcg/section_bake_job.h"
+#include "editors/world_editor/pcg/graph_instance_builder.h"
+#include "editors/world_editor/pcg/section_path_builder.h"
+#include "editors/world_editor/pcg/text_parsing.h"
+#include "terrain/terrain.h"
 #include "editors/world_model_editor/world_model_editor.h"
 #include "editors/world_model_editor/world_model_editor_instance.h"
 #include "editors/prop_kit_editor/prop_kit_editor.h"
+#include "editors/pcg_graph_editor/pcg_graph_editor.h"
+#include "editors/pcg_control_type_editor/pcg_control_type_editor.h"
 #include "prop_kit_job.h"
 #include "entities_to_world_model_job.h"
-#include "glue_bake/glue_bake_job.h"
-#include "glue_bake/glue_scene_baker.h"
 #include "editors/mesh_editor/mesh_editor_instance.h"
 #include "editors/color_curve_editor/color_curve_editor.h"
 #include "editors/particle_system_editor/particle_system_editor.h"
@@ -188,6 +204,105 @@ namespace mmo
 		{
 			ILOG("Migrated " << fixedCount << " locale-based asset path(s) to their locale-relative form");
 		}
+	}
+
+	/// @brief Prepares an unattended command line job: the log goes to <name>.log (truncated) and, in
+	///        debug builds, failed CRT assertions go to <name>_asserts.log instead of a message box
+	///        nobody can answer. Each job runs alone in its process, so this is called once.
+	/// @param name Base name of the log files, e.g. "pcg_rebuild".
+	void RedirectUnattendedLog(const std::string& name)
+	{
+		static std::ofstream logFile;
+		static std::mutex logMutex;
+		if (logFile.is_open())
+		{
+			return;
+		}
+
+		logFile.open(name + ".log", std::ios::out | std::ios::trunc);
+		g_DefaultLog.signal().connect([](const LogEntry& entry)
+		{
+			std::scoped_lock lock{ logMutex };
+			logFile << entry.message << std::endl;
+		});
+
+#ifdef _DEBUG
+		static HANDLE assertFile = CreateFileA((name + "_asserts.log").c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+		_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ASSERT, assertFile);
+		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+		_CrtSetReportFile(_CRT_ERROR, assertFile);
+#endif
+	}
+
+	/// @brief Opens a world for an unattended job.
+	/// @param mainWindow The editor's main window.
+	/// @param flag The command line flag, for the error message.
+	/// @param worldPath Asset path of the .hwld file.
+	/// @return The world editor instance, or null after logging an error.
+	WorldEditorInstance* OpenWorldForJob(MainWindow& mainWindow, const char* flag, const char* worldPath)
+	{
+		if (!mainWindow.OpenAsset(worldPath) || !WorldEditorInstance::GetLastCreated())
+		{
+			ELOG(flag << ": failed to open " << worldPath);
+			return nullptr;
+		}
+
+		return WorldEditorInstance::GetLastCreated();
+	}
+
+	/// @brief Parses a seed: the whole text is a decimal number without sign (strtoull would wrap a
+	///        leading '-' around instead of refusing it).
+	/// @param text The command line argument.
+	/// @param seed Receives the seed.
+	/// @return True if the text is a valid seed.
+	bool ParseSeed(const char* text, uint64& seed)
+	{
+		if (text == nullptr || *text < '0' || *text > '9')
+		{
+			return false;
+		}
+
+		errno = 0;
+		char* end = nullptr;
+		seed = std::strtoull(text, &end, 10);
+		return end != text && *end == '\0' && errno != ERANGE;
+	}
+
+	/// @brief Parses a point list "x,z;x,z;..." (each number as ParseFloatText reads it).
+	/// @param text The command line argument.
+	/// @param out Receives the points (cleared first).
+	/// @param minCount Fewest points the list must have.
+	/// @return True if every pair is valid and there are at least minCount points.
+	bool ParsePointList(const String& text, std::vector<std::pair<float, float>>& out, const size_t minCount)
+	{
+		out.clear();
+		size_t start = 0;
+		while (start <= text.size())
+		{
+			const size_t end = std::min(text.find(';', start), text.size());
+			const String pair = text.substr(start, end - start);
+			const size_t comma = pair.find(',');
+			float x = 0.0f, z = 0.0f;
+			if (comma == String::npos || !ParseFloatText(pair.substr(0, comma), x) || !ParseFloatText(pair.substr(comma + 1), z))
+			{
+				return false;
+			}
+			out.emplace_back(x, z);
+			start = end + 1;
+		}
+		return out.size() >= minCount;
+	}
+
+	/// @brief Parses an oasis id: the whole text is a non-zero hexadecimal number.
+	/// @param text The command line argument.
+	/// @param id Receives the id.
+	/// @return True if the text is a valid id.
+	bool ParseOasisId(const char* text, uint64& id)
+	{
+		char* end = nullptr;
+		id = std::strtoull(text, &end, 16);
+		return end != text && *end == '\0' && id != 0;
 	}
 }
 
@@ -287,6 +402,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::SurfaceTypeEditorWindow>("Surface Type Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::WaterProfileEditorWindow>("Water Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EnvironmentProfileEditorWindow>("Environment Profile Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::LoadingTipEditorWindow>("Loading Tip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
@@ -330,6 +446,8 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditor(std::make_unique<mmo::WorldEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::WorldModelEditor>(mainWindow, project));
 	mainWindow.AddEditor(std::make_unique<mmo::PropKitEditor>(mainWindow, &previewProviderManager));
+	mainWindow.AddEditor(std::make_unique<mmo::PcgGraphEditor>(mainWindow));
+	mainWindow.AddEditor(std::make_unique<mmo::PcgControlTypeEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ColorCurveEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::ParticleSystemEditor>(mainWindow));
 	mainWindow.AddEditor(std::make_unique<mmo::GlobalShaderParametersEditor>(mainWindow));
@@ -341,7 +459,9 @@ int main(int argc, char* arg[])
 	// Unattended jobs. `--rebuild-material <asset>` recompiles a material's shaders from its stored
 	// graph, then exits. `--bake-terrain-lod Worlds/<n>/<n>.hwld [--force]` opens the world, bakes the
 	// distant-terrain data of every page whose .tile changed since the last bake (every page with
-	// --force), then exits. `--derive-rooms <asset.hwmo> [--derive-rooms ...]` derives the world
+	// --force), then exits. `--bake-worldmap Worlds/<n>/<n>.hwld` bakes the world map (zone grid and
+	// map art pyramid, from the minimap tiles) into Textures/WorldMap/<n>/, then exits; minimap bakes
+	// do this on their own when they finish. `--derive-rooms <asset.hwmo> [--derive-rooms ...]` derives the world
 	// models' room volumes from their floors, fixes mislinked portals, saves them and exits.
 	// `--stairs-to-ramp <asset.hmsh> [--stairs-to-ramp ...]` replaces the steps in the meshes'
 	// collision with a ramp, saves them and exits.
@@ -358,18 +478,6 @@ int main(int argc, char* arg[])
 	// `--apply-prop-kit <job.json>` writes a prop kit asset, assigns kits to world model placements
 	// and/or strips named mesh refs from a world model as the job describes, then exits (see
 	// prop_kit_job.h; log in prop_kit_job.log, exit code 1 on load or write failures).
-	// `--glue-bake-dry-run <GlueScene.json>` opens the glue scene's world, collects what the glue
-	// cameras see and logs the counts to glue_bake_dry_run.log without writing anything (exit code 1
-	// when the definition or world cannot be loaded or nothing visible was found).
-	// `--glue-bake-meshes <GlueScene.json> <outDir>` collects the same and writes the merged chunk
-	// meshes into outDir (asset directory or absolute path), logging the counts to
-	// glue_bake_meshes.log (exit code 1 when loading fails or a file cannot be written).
-	// `--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]` collects the same and writes the
-	// baked terrain into outDir; with compareDir it also renders live vs baked terrain images there
-	// (log in glue_bake_terrain.log, exit code 1 on failure).
-	// `--bake-glue-scene <GlueScene.json>` bakes the glue scene into Interface/GlueUI/GlueBake (merged
-	// meshes, terrain, water and the GlueBake.json manifest), replacing the previous bake's files; the
-	// summary goes to bake_glue_scene.log (exit code 1 on failure, no manifest written then).
 	{
 		int argCount = 0;
 		auto* const args = CommandLineToArgvA(GetCommandLine(), &argCount);
@@ -784,6 +892,82 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--import-fbx-animations")
+			{
+				// mmo_edit --import-fbx-animations <skeleton.skel> <model> [--scale <s>] [--clip <take>=<name>]...
+				// Imports the model's animation takes into the skeleton asset. Without --clip every take keeps its
+				// name; with it, only the listed takes are imported, renamed. A take matches by its full name or by
+				// one of its '|' separated parts ("Minion|Idle01|BaseLayer" matches "Idle01").
+				static std::ofstream importLog("fbx_animation_import.log", std::ios::out | std::ios::trunc);
+				static std::mutex importLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ importLogMutex };
+					importLog << entry.message << std::endl;
+				});
+
+				if (i + 2 >= argCount)
+				{
+					ELOG("--import-fbx-animations needs <skeleton.skel> <model>");
+					PostQuitMessage(1);
+					break;
+				}
+
+				float scale = 1.0f;
+				std::vector<std::pair<std::string, std::string>> clips;
+				bool badArgs = false;
+				for (int j = i + 3; j < argCount; ++j)
+				{
+					const std::string arg = args[j];
+					if (arg == "--scale" && j + 1 < argCount)
+					{
+						scale = std::stof(args[++j]);
+					}
+					else if (arg == "--clip" && j + 1 < argCount && std::string(args[j + 1]).find('=') != std::string::npos)
+					{
+						const std::string clip = args[++j];
+						const size_t separator = clip.find('=');
+						clips.emplace_back(clip.substr(0, separator), clip.substr(separator + 1));
+					}
+					else
+					{
+						ELOG("--import-fbx-animations: unknown or incomplete option " << arg);
+						badArgs = true;
+					}
+				}
+
+				const auto resolveName = [&clips](const std::string& takeName) -> std::string
+				{
+					std::vector<std::string> parts{ takeName };
+					std::stringstream stream(takeName);
+					for (std::string part; std::getline(stream, part, '|');)
+					{
+						parts.push_back(part);
+					}
+
+					if (clips.empty())
+					{
+						ILOG("Found take '" << takeName << "'");
+						return takeName;
+					}
+
+					for (const auto& [source, target] : clips)
+					{
+						if (std::ranges::find(parts, source) != parts.end())
+						{
+							return target;
+						}
+					}
+
+					ILOG("Skipping take '" << takeName << "'");
+					return {};
+				};
+
+				const bool imported = !badArgs && mmo::ImportFbxAnimationsIntoAsset(args[i + 1], args[i + 2], resolveName, scale);
+				PostQuitMessage(imported ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--capture-view")
 			{
 				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
@@ -904,6 +1088,814 @@ int main(int argc, char* arg[])
 				break;
 			}
 
+			if (std::string(args[i]) == "--new-section")
+			{
+				// mmo_edit --new-section <Name> [--material <asset>] [--folder Editor/Pcg/Sections|Editor/Pcg/Biomes/<Biome>/Sections]
+				// Creates a section world like "New Section..." (Editor/Pcg/Sections/<Name>/, or
+				// <folder>/<Name>/ with --folder) and exits (0 = success).
+				mmo::RedirectUnattendedLog("new_section");
+
+				const char* usage = "--new-section <Name> [--material <asset>] [--folder Editor/Pcg/Sections|Editor/Pcg/Biomes/<Biome>/Sections]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				std::string material = mmo::DefaultSectionTerrainMaterial;
+				std::string folder;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if (std::string(args[j]) == "--material" && j + 1 < argCount)
+					{
+						material = args[++j];
+					}
+					else if (std::string(args[j]) == "--folder" && j + 1 < argCount)
+					{
+						folder = args[++j];
+					}
+					else
+					{
+						ELOG("--new-section: unknown or incomplete option " << args[j] << ", usage: " << usage);
+						argumentsValid = false;
+					}
+				}
+
+				bool succeeded = false;
+				if (argumentsValid)
+				{
+					std::string error;
+					if (!mmo::CreateSectionWorld(folder, args[i + 1], material, error))
+					{
+						ELOG("--new-section: " << error);
+					}
+					else
+					{
+						ILOG("--new-section: created " << mmo::GetSectionWorldPath(folder, args[i + 1]));
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-section")
+			{
+				// mmo_edit --bake-section Editor/Pcg/Sections/<Name>/<Name>.hwld
+				// Opens the section world, bakes it into Editor/Pcg/Sections/<Name>.hsec like the Bake
+				// button (without saving the world first) and exits (0 = success).
+				mmo::RedirectUnattendedLog("bake_section");
+
+				if (missingArgs(i, 1, "--bake-section <world.hwld>"))
+				{
+					break;
+				}
+
+				bool succeeded = false;
+				if (!mmo::AssetRegistry::HasFile(args[i + 1]))
+				{
+					ELOG("--bake-section: " << args[i + 1] << " does not exist");
+				}
+				else if (!mmo::IsSectionWorld(args[i + 1]))
+				{
+					ELOG("--bake-section: " << args[i + 1] << " is not a section world (no " << mmo::GetSectionDefinitionPath(args[i + 1]) << ")");
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--bake-section", args[i + 1]))
+				{
+					std::string error;
+					if (!mmo::BakeSectionWorld(*world, error))
+					{
+						ELOG("--bake-section: " << error);
+					}
+					else
+					{
+						ILOG("--bake-section: done");
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-rebuild")
+			{
+				// mmo_edit --pcg-rebuild <world.hwld> [--oasis|--id <id hex>] [--background]
+				// Opens the world, rebuilds one or all procedural controls (oases, section paths and graph
+				// instances; a graph instance uses its saved graph), saves the world and exits (0 = success).
+				// --background rebuilds the graph instance --id names on a worker thread, like the editor.
+				mmo::RedirectUnattendedLog("pcg_rebuild");
+
+				if (missingArgs(i, 1, "--pcg-rebuild <world.hwld> [--oasis|--id <id hex>] [--background]"))
+				{
+					break;
+				}
+
+				uint64 oasisId = 0;
+				bool background = false;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if ((std::string(args[j]) == "--oasis" || std::string(args[j]) == "--id") && j + 1 < argCount)
+					{
+						if (!mmo::ParseOasisId(args[++j], oasisId))
+						{
+							ELOG("--pcg-rebuild: --oasis/--id expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							argumentsValid = false;
+						}
+					}
+					else if (std::string(args[j]) == "--background")
+					{
+						// A graph instance is rebuilt the way the editor does it in the background.
+						background = true;
+					}
+					else
+					{
+						ELOG("--pcg-rebuild: unknown or incomplete option " << args[j]);
+						argumentsValid = false;
+					}
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-rebuild", args[i + 1]))
+				{
+					if (world->GetProceduralControlCount() == 0)
+					{
+						// Nothing to rebuild: leave the world untouched instead of rewriting it.
+						ILOG("--pcg-rebuild: " << args[i + 1] << " has no procedural controls, nothing to do");
+						succeeded = true;
+					}
+					else
+					{
+						std::string error;
+						if (!world->RebuildProcedural(oasisId, error, background))
+						{
+							ELOG("--pcg-rebuild: " << error);
+						}
+						else if (!world->Save())
+						{
+							ELOG("--pcg-rebuild: saving the world failed");
+						}
+						else
+						{
+							ILOG("--pcg-rebuild: done");
+							succeeded = true;
+						}
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-new-oasis")
+			{
+				// mmo_edit --pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]
+				// Adds an oasis like the "New Oasis" button (8 point loop around X Z), builds it, saves
+				// the world and logs the new id (0 = success).
+				mmo::RedirectUnattendedLog("pcg_new_oasis");
+
+				const char* usage = "--pcg-new-oasis <world.hwld> --at X Z [--radius R] [--seed S] [--name N]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				float x = 0.0f, z = 0.0f, radius = 40.0f;
+				uint64 seed = 1;
+				std::string name;
+				bool hasCentre = false;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--at" && j + 2 < argCount)
+					{
+						argumentsValid = mmo::ParseFloatText(args[j + 1], x) && mmo::ParseFloatText(args[j + 2], z);
+						hasCentre = argumentsValid;
+						j += 2;
+					}
+					else if (option == "--radius" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseFloatText(args[++j], radius) && radius > 0.0f;
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseSeed(args[++j], seed);
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-oasis: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && !hasCentre)
+				{
+					ELOG("--pcg-new-oasis: --at X Z is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-oasis", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralOasis(x, z, radius, seed, name, id, error))
+					{
+						// The world is not saved: a failed build leaves no record behind.
+						ELOG("--pcg-new-oasis: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-oasis: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-oasis: created oasis " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-new-path")
+			{
+				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]
+				//          [--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror]
+				//          [--set name=value ...]
+				// Adds a section path through the points (at terrain height), builds it, saves the world and
+				// logs the new id and its layout (0 = success). A missing or unreadable section asset is refused
+				// before anything is added or saved. --closed makes it a section loop (at least three points,
+				// height mode SmoothedGround unless --height-mode says otherwise, floor side inside). --mass turns
+				// the mass layer on, --mirror the facade variety (mirrored copies, 20 % height jitter); --set sets
+				// any path parameter by name (e.g. --set massHeight=70), applied last.
+				mmo::RedirectUnattendedLog("pcg_new_path");
+
+				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed] "
+					"[--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				std::vector<std::pair<float, float>> points;
+				std::string section;
+				std::string name;
+				mmo::NewSectionPathOptions options;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParsePointList(args[++j], points, 2);
+					}
+					else if (option == "--section" && j + 1 < argCount)
+					{
+						section = args[++j];
+						argumentsValid = !section.empty();
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseSeed(args[++j], options.seed);
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else if (option == "--closed")
+					{
+						options.closed = true;
+					}
+					else if (option == "--height-mode" && j + 1 < argCount)
+					{
+						mmo::pcg::SectionPathParams probe;
+						std::string error;
+						argumentsValid = mmo::pcg::SetSectionPathParam(probe, "heightMode", args[++j], error);
+						options.heightMode = probe.heightMode;
+					}
+					else if (option == "--smoothing" && j + 1 < argCount)
+					{
+						float smoothing = 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], smoothing) && smoothing >= 0.0f;
+						options.groundSmoothing = smoothing;
+					}
+					else if (option == "--mass")
+					{
+						options.mass = true;
+					}
+					else if (option == "--mirror")
+					{
+						options.mirror = true;
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked here so a typo is refused before the world is opened.
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						mmo::pcg::SectionPathParams probe;
+						std::string error;
+						argumentsValid = equals != std::string::npos &&
+							mmo::pcg::SetSectionPathParam(probe, setting.substr(0, equals), setting.substr(equals + 1), error);
+						if (argumentsValid)
+						{
+							options.settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+						else if (!error.empty())
+						{
+							ELOG("--pcg-new-path: " << error);
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-path: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || section.empty()))
+				{
+					ELOG("--pcg-new-path: --points (at least two x,z pairs) and --section are required, usage: " << usage);
+					argumentsValid = false;
+				}
+				if (argumentsValid && options.closed && points.size() < 3)
+				{
+					ELOG("--pcg-new-path: --closed needs at least three x,z pairs, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-path", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralSectionPath(points, section, options, name, id, error))
+					{
+						// The world is not saved: a refused or failed run leaves no record behind.
+						ELOG("--pcg-new-path: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-path: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-path: created section " << (options.closed ? "loop " : "path ") << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-new-control")
+			{
+				// mmo_edit --pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]
+				// Places a control of a control type (.hctl): a loop through at least three points, a spline through
+				// at least two, a volume or point at exactly one (heights from the terrain). --set overrides a property
+				// of the type (typed by its definition; colours as r,g,b). Saves the world and logs the new id
+				// (0 = success). A missing or invalid type, points that do not fit its shape or a bad --set are refused
+				// before anything is added or saved.
+				mmo::RedirectUnattendedLog("pcg_new_control");
+
+				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				std::vector<std::pair<float, float>> points;
+				std::string typePath;
+				std::string name;
+				std::vector<std::pair<std::string, std::string>> settings;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParsePointList(args[++j], points, 1);
+					}
+					else if (option == "--type" && j + 1 < argCount)
+					{
+						typePath = args[++j];
+						argumentsValid = !typePath.empty();
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked against the type once the world is open (the type is read there).
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						argumentsValid = equals != std::string::npos && equals > 0;
+						if (argumentsValid)
+						{
+							settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-control: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || typePath.empty()))
+				{
+					ELOG("--pcg-new-control: --type and --points are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-control", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error))
+					{
+						// The world is not saved: a refused run leaves no record behind.
+						ELOG("--pcg-new-control: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-control: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-control: created control " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-new-graph-instance")
+			{
+				// mmo_edit --pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N]
+				//          [--set param=value ...]
+				// Adds a graph instance over the closed area through the points (sharp corners) with the graph, seed
+				// (default and 0: derived from the instance's id)
+				// and parameter overrides (typed by the graph's parameters; --set borderFade=M sets the instance's
+				// terrain border fade in metres instead, default 8). Does not build it (use --pcg-rebuild);
+				// saves the world and logs the new id (0 = success). An area overlapping another graph instance's
+				// area ("overlaps"), an unreadable graph or a bad --set are refused before anything is added or saved.
+				mmo::RedirectUnattendedLog("pcg_new_graph_instance");
+
+				const char* usage = "--pcg-new-graph-instance <world.hwld> --graph <path> --points x,z;x,z;x,z[;...] [--seed S] [--name N] [--set param=value ...]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				std::vector<std::pair<float, float>> points;
+				std::string graphPath;
+				std::string name;
+				// 0: derived from the new instance's id (as the editor's button does); --seed overrides it.
+				uint64 seed = 0;
+				std::vector<std::pair<std::string, std::string>> settings;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--points" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParsePointList(args[++j], points, 3);
+					}
+					else if (option == "--graph" && j + 1 < argCount)
+					{
+						graphPath = args[++j];
+						argumentsValid = !graphPath.empty();
+					}
+					else if (option == "--seed" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseSeed(args[++j], seed);
+					}
+					else if (option == "--name" && j + 1 < argCount)
+					{
+						name = args[++j];
+					}
+					else if (option == "--set" && j + 1 < argCount)
+					{
+						// Checked against the graph's parameters once the world is open.
+						const std::string setting = args[++j];
+						const size_t equals = setting.find('=');
+						argumentsValid = equals != std::string::npos && equals > 0;
+						if (argumentsValid)
+						{
+							settings.emplace_back(setting.substr(0, equals), setting.substr(equals + 1));
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-new-graph-instance: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (points.empty() || graphPath.empty()))
+				{
+					ELOG("--pcg-new-graph-instance: --graph and --points (at least three x,z pairs) are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-new-graph-instance", args[i + 1]))
+				{
+					uint64 id = 0;
+					std::string error;
+					if (!world->CreateProceduralGraphInstance(graphPath, points, seed, name, settings, id, error))
+					{
+						// The world is not saved: a refused run leaves no record behind.
+						ELOG("--pcg-new-graph-instance: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-new-graph-instance: saving the world failed");
+					}
+					else
+					{
+						char idText[32];
+						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
+						ILOG("--pcg-new-graph-instance: created graph instance " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-eval-graph")
+			{
+				// mmo_edit --pcg-eval-graph <world.hwld> --id <id hex> --out <file.json>
+				// Evaluates a graph instance's saved graph without applying it and writes the evaluation dump
+				// (WriteEvalDump, with timing) to the file. Like a rebuild, it evaluates on the base terrain (the instance's
+				// own terrain contribution undone, BaseTerrainSampler). Logs validation issues, node errors, how many spawned
+				// points lie inside the area and how many were clipped, and the terrain height (GetSmoothHeightAt)
+				// under the first three placements next to their evaluated height. Never saves the world. Exit 0 if
+				// the graph validated and no node failed (the dump is written in either case).
+				mmo::RedirectUnattendedLog("pcg_eval_graph");
+
+				const char* usage = "--pcg-eval-graph <world.hwld> --id <id hex> --out <file.json>";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 instanceId = 0;
+				std::string outPath;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--id" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseOasisId(args[++j], instanceId);
+					}
+					else if (option == "--out" && j + 1 < argCount)
+					{
+						outPath = args[++j];
+						argumentsValid = !outPath.empty();
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-eval-graph: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && (instanceId == 0 || outPath.empty()))
+				{
+					ELOG("--pcg-eval-graph: --id and --out are required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-eval-graph", args[i + 1]))
+				{
+					mmo::GraphInstanceEvaluation evaluation;
+					std::string error;
+					if (!world->EvaluateProceduralGraphInstance(instanceId, evaluation, error))
+					{
+						ELOG("--pcg-eval-graph: " << error);
+					}
+					else
+					{
+						const std::string dump = mmo::pcg::graph::WriteEvalDump(evaluation.graph, evaluation.result, true);
+						std::ofstream outFile(outPath, std::ios::out | std::ios::trunc | std::ios::binary);
+						outFile << dump;
+						outFile.close();
+						const bool written = static_cast<bool>(outFile);
+						if (!written)
+						{
+							ELOG("--pcg-eval-graph: could not write " << outPath);
+						}
+
+						for (const std::string& warning : evaluation.warnings)
+						{
+							WLOG("--pcg-eval-graph: warning: " << warning);
+						}
+
+						bool nodeFailed = false;
+						for (const auto& [nodeId, nodeResult] : evaluation.result.nodes)
+						{
+							if (!nodeResult.output.error.empty())
+							{
+								ELOG("--pcg-eval-graph: node " << nodeId << " failed: " << nodeResult.output.error);
+								nodeFailed = true;
+							}
+						}
+
+						if (!evaluation.result.issues.empty())
+						{
+							ELOG("--pcg-eval-graph: validation issues: " << mmo::DescribeGraphIssues(evaluation.graph, evaluation.result.issues));
+						}
+						else
+						{
+							const size_t inside = evaluation.collected.placements.size();
+							ILOG("--pcg-eval-graph: spawned points " << inside + evaluation.collected.clipped << ", inside the area " << inside
+								<< ", clipped " << evaluation.collected.clipped);
+
+							// The evaluated heights next to the terrain's own answer (the sampler must agree with it) and, when
+							// the instance owns terrain heights, the base height the evaluation ran on (its own contribution
+							// undone, as a rebuild sees the terrain).
+							mmo::terrain::Terrain* terrain = world->GetTerrain();
+							const mmo::ProceduralEditMode* mode = world->GetProceduralEditMode();
+							const mmo::pcg::GraphInstanceRecord* record = mode ? mode->FindGraphInstance(instanceId) : nullptr;
+							std::unique_ptr<mmo::EditorTerrainSampler> live;
+							std::unique_ptr<mmo::BaseTerrainSampler> base;
+							if (terrain && record)
+							{
+								live = std::make_unique<mmo::EditorTerrainSampler>(*terrain, nullptr);
+								base = mmo::MakeBaseTerrainSampler(*world, *record, *live);
+							}
+							if (base)
+							{
+								ILOG("--pcg-eval-graph: evaluated on the base terrain (the instance's contribution of "
+									<< record->content.terrain.outer.size() << " outer height(s), " << record->content.terrain.splat.size()
+									<< " splat pixel(s), " << record->content.terrain.waterQuads.size() << " water quad(s) and "
+									<< record->content.terrain.waterHeights.size() << " water height(s) undone)");
+							}
+							for (size_t p = 0; terrain && p < inside && p < 3; ++p)
+							{
+								const mmo::Vector3& position = evaluation.collected.placements[p].position;
+								float baseHeight = 0.0f;
+								const bool hasBase = base && base->Height(position.x, position.z, baseHeight);
+								char line[192];
+								std::snprintf(line, sizeof(line), "height check %zu: x %.3f z %.3f evaluated y %.4f GetSmoothHeightAt %.4f", p,
+									static_cast<double>(position.x), static_cast<double>(position.z), static_cast<double>(position.y),
+									static_cast<double>(terrain->GetSmoothHeightAt(position.x, position.z)));
+								char baseText[48] = "";
+								if (hasBase)
+								{
+									std::snprintf(baseText, sizeof(baseText), " base %.4f", static_cast<double>(baseHeight));
+								}
+								ILOG("--pcg-eval-graph: " << line << baseText);
+							}
+						}
+
+						if (written)
+						{
+							ILOG("--pcg-eval-graph: wrote " << outPath);
+						}
+						succeeded = written && evaluation.result.ok && evaluation.result.issues.empty() && !nodeFailed;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-delete")
+			{
+				// mmo_edit --pcg-delete <world.hwld> --oasis|--id <id hex>
+				// Deletes a procedural control (oasis, section path, graph instance or placed control) and
+				// everything it generated like the "Delete" button, saves the world and exits (0 = success).
+				// Deleting a placed control and creating it again (--pcg-new-control) moves it.
+				mmo::RedirectUnattendedLog("pcg_delete");
+
+				const char* usage = "--pcg-delete <world.hwld> --oasis|--id <id hex>";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 oasisId = 0;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount; ++j)
+				{
+					if ((std::string(args[j]) == "--oasis" || std::string(args[j]) == "--id") && j + 1 < argCount)
+					{
+						if (!mmo::ParseOasisId(args[++j], oasisId))
+						{
+							ELOG("--pcg-delete: --oasis/--id expects a non-zero hexadecimal id, got '" << args[j] << "'");
+							argumentsValid = false;
+						}
+					}
+					else
+					{
+						ELOG("--pcg-delete: unknown or incomplete option " << args[j] << ", usage: " << usage);
+						argumentsValid = false;
+					}
+				}
+
+				if (argumentsValid && oasisId == 0)
+				{
+					ELOG("--pcg-delete: --oasis or --id is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-delete", args[i + 1]))
+				{
+					std::string error;
+					if (!world->DeleteProceduralControl(oasisId, error))
+					{
+						ELOG("--pcg-delete: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-delete: saving the world failed");
+					}
+					else
+					{
+						ILOG("--pcg-delete: done");
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
 			if (std::string(args[i]) == "--bake-terrain-lod")
 			{
 				// Nobody watches an unattended run: keep its log, and let failed debug assertions
@@ -945,6 +1937,34 @@ int main(int argc, char* arg[])
 				else
 				{
 					ELOG("--bake-terrain-lod: failed to open " << args[i + 1]);
+					PostQuitMessage(1);
+				}
+				break;
+			}
+
+			if (std::string(args[i]) == "--bake-worldmap")
+			{
+				static std::ofstream bakeLog("worldmap_bake.log", std::ios::out | std::ios::trunc);
+				static std::mutex bakeLogMutex;
+				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
+				{
+					std::scoped_lock lock{ bakeLogMutex };
+					bakeLog << entry.message << std::endl;
+				});
+
+				if (missingArgs(i, 1, "--bake-worldmap <world>"))
+				{
+					break;
+				}
+
+				// Exit code 1 when the bake failed, for scripted use.
+				if (mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
+				{
+					PostQuitMessage(mmo::WorldEditorInstance::GetLastCreated()->GenerateWorldMap() ? 0 : 1);
+				}
+				else
+				{
+					ELOG("--bake-worldmap: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
 				break;
@@ -1005,116 +2025,6 @@ int main(int argc, char* arg[])
 					ELOG("--bake-minimaps: failed to open " << args[i + 1]);
 					PostQuitMessage(1);
 				}
-				break;
-			}
-
-			if (std::string(args[i]) == "--glue-bake-dry-run")
-			{
-				// Unattended like --bake-terrain-lod: keep the log, route assertions into a file.
-				static std::ofstream bakeLog("glue_bake_dry_run.log", std::ios::out | std::ios::trunc);
-				static std::mutex bakeLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ bakeLogMutex };
-					bakeLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE assertFile = CreateFileA("glue_bake_dry_run_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, assertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, assertFile);
-#endif
-
-				if (missingArgs(i, 1, "--glue-bake-dry-run <GlueScene.json>"))
-				{
-					break;
-				}
-
-				PostQuitMessage(mmo::RunGlueBakeDryRun(mainWindow, args[i + 1]) ? 0 : 1);
-				break;
-			}
-
-			if (std::string(args[i]) == "--glue-bake-meshes")
-			{
-				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
-				static std::ofstream bakeLog("glue_bake_meshes.log", std::ios::out | std::ios::trunc);
-				static std::mutex bakeLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ bakeLogMutex };
-					bakeLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE assertFile = CreateFileA("glue_bake_meshes_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, assertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, assertFile);
-#endif
-
-				if (missingArgs(i, 2, "--glue-bake-meshes <GlueScene.json> <outDir>"))
-				{
-					break;
-				}
-
-				PostQuitMessage(mmo::RunGlueBakeMeshes(mainWindow, args[i + 1], args[i + 2]) ? 0 : 1);
-				break;
-			}
-
-			if (std::string(args[i]) == "--bake-glue-scene")
-			{
-				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
-				static std::ofstream bakeLog("bake_glue_scene.log", std::ios::out | std::ios::trunc);
-				static std::mutex bakeLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ bakeLogMutex };
-					bakeLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE assertFile = CreateFileA("bake_glue_scene_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, assertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, assertFile);
-#endif
-
-				if (missingArgs(i, 1, "--bake-glue-scene <GlueScene.json>"))
-				{
-					break;
-				}
-
-				mmo::String summary;
-				PostQuitMessage(mmo::BakeGlueScene(mainWindow, args[i + 1], summary) ? 0 : 1);
-				break;
-			}
-
-			if (std::string(args[i]) == "--glue-bake-terrain")
-			{
-				// Unattended like --glue-bake-dry-run: keep the log, route assertions into a file.
-				static std::ofstream bakeLog("glue_bake_terrain.log", std::ios::out | std::ios::trunc);
-				static std::mutex bakeLogMutex;
-				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
-				{
-					std::scoped_lock lock{ bakeLogMutex };
-					bakeLog << entry.message << std::endl;
-				});
-#ifdef _DEBUG
-				static HANDLE assertFile = CreateFileA("glue_bake_terrain_asserts.log", GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-				_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ASSERT, assertFile);
-				_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-				_CrtSetReportFile(_CRT_ERROR, assertFile);
-#endif
-
-				if (missingArgs(i, 2, "--glue-bake-terrain <GlueScene.json> <outDir> [<compareDir>]"))
-				{
-					break;
-				}
-
-				const std::string compareDir = i + 3 < argCount && std::string(args[i + 3]).rfind("--", 0) != 0 ? args[i + 3] : "";
-				PostQuitMessage(mmo::RunGlueBakeTerrain(mainWindow, args[i + 1], args[i + 2], compareDir) ? 0 : 1);
 				break;
 			}
 		}

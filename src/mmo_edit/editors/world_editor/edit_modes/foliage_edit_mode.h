@@ -79,6 +79,14 @@ namespace mmo
 		/// @brief Clears the dirty-page set (called after a successful save).
 		void ClearDirtyPages() { m_dirtyPages.clear(); }
 
+		/// @brief Marks a page's foliage as modified by someone other than the brush (e.g. procedural
+		///        generation), so the next save rewrites its .hfol file.
+		/// @param pageIndex The page index as PageIndexFromPosition computes it.
+		void MarkPageDirty(const uint16 pageIndex) { m_dirtyPages.insert(pageIndex); }
+
+		/// @brief Generates a unique id for a new foliage instance (the source the brush uses).
+		static uint64 GenerateInstanceId();
+
 		/// @brief Returns whether there are unsaved foliage changes.
 		[[nodiscard]] bool HasUnsavedChanges() const { return !m_dirtyPages.empty(); }
 

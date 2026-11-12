@@ -1155,6 +1155,90 @@ namespace mmo
 			ImGui::TextDisabled("Played when the unit dies. Always plays.");
 			ImGui::PopID();
 		}
+
+		if (const auto section = ScopedEditorSection("Spawn Effect", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Played when a unit using this model is added to the world (summoned, respawned): "
+				"the dissolve runs backwards. Never played when it merely comes into sight.");
+
+			bool hasEffect = currentEntry.has_spawn_effect();
+			if (ImGui::Checkbox("Has Spawn Effect", &hasEffect))
+			{
+				if (hasEffect)
+				{
+					currentEntry.mutable_spawn_effect();
+				}
+				else
+				{
+					currentEntry.clear_spawn_effect();
+				}
+			}
+
+			if (currentEntry.has_spawn_effect())
+			{
+				DrawTransitionEffect(*currentEntry.mutable_spawn_effect(), m_spawnSoundFilter, "Spawn Sound");
+			}
+		}
+
+		if (const auto section = ScopedEditorSection("Despawn Effect", ImGuiTreeNodeFlags_None))
+		{
+			ImGui::TextDisabled("Played when a unit using this model is removed from the world (a temporary pet expiring, "
+				"a corpse despawning) instead of vanishing at once. Never played when it merely leaves sight.");
+
+			// Like the combat sounds: reads go through the const accessor, so opening the section
+			// never marks the field present; the checkbox adds and removes it.
+			bool hasEffect = currentEntry.has_despawn_effect();
+			if (ImGui::Checkbox("Has Despawn Effect", &hasEffect))
+			{
+				if (hasEffect)
+				{
+					currentEntry.mutable_despawn_effect();
+				}
+				else
+				{
+					currentEntry.clear_despawn_effect();
+				}
+			}
+
+			if (currentEntry.has_despawn_effect())
+			{
+				DrawTransitionEffect(*currentEntry.mutable_despawn_effect(), m_despawnSoundFilter, "Despawn Sound");
+			}
+		}
+	}
+
+	void ModelEditorWindow::DrawTransitionEffect(proto::UnitTransitionEffect& effect, ImGuiTextFilter& soundFilter, const char* soundLabel)
+	{
+		float duration = effect.duration();
+		if (ImGui::InputFloat("Duration (s)", &duration, 0.1f, 0.5f, "%.2f"))
+		{
+			effect.set_duration(std::max(0.0f, duration));
+		}
+		ImGui::TextDisabled("0 = the length of the animation clip.");
+
+		String animation = effect.animation();
+		if (ImGui::InputText("Animation Clip", &animation))
+		{
+			effect.set_animation(animation);
+		}
+		ImGui::TextDisabled("Skeleton clip played once (optional). Put sounds on it as PlaySound notifies.");
+
+		String material = effect.material();
+		if (ImGui::InputText("Material", &material))
+		{
+			effect.set_material(material);
+		}
+		ImGui::TextDisabled("Optional .hmat swapped in while the effect plays; same-named parameters are copied over.");
+
+		String parameter = effect.dissolve_parameter();
+		if (ImGui::InputText("Dissolve Parameter", &parameter))
+		{
+			effect.set_dissolve_parameter(parameter);
+		}
+		ImGui::TextDisabled("Scalar material parameter driven over the duration (despawn 0 to 1, spawn 1 to 0).");
+
+		DrawSoundEntryCombo(m_project.sounds, soundLabel, effect.sound_id(), soundFilter,
+			[&effect](const uint32 id) { effect.set_sound_id(id); });
 	}
 
 	void ModelEditorWindow::OnNewEntry(

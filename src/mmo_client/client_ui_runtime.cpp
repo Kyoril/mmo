@@ -1,4 +1,5 @@
 #include "client_ui_runtime.h"
+#include "char_creation/char_select.h"
 
 #include "cursor.h"
 #include "event_loop.h"
@@ -6,8 +7,11 @@
 #include "log/default_log_levels.h"
 #include "frame_ui/frame_mgr.h"
 #include "ui/cooldown_frame.h"
+#include "ui/material_progress_bar.h"
 #include "ui/minimap.h"
 #include "ui/minimap_frame.h"
+#include "ui/world_map.h"
+#include "ui/world_map_frame.h"
 #include "ui/model_frame.h"
 #include "ui/model_renderer.h"
 #include "ui/unit_model_frame.h"
@@ -31,7 +35,7 @@ namespace mmo
 	}
 
 	/// @copydoc ClientUiRuntime::Initialize
-	bool ClientUiRuntime::Initialize(GameScript& gameScript, Minimap& minimap, Cursor& cursor)
+	bool ClientUiRuntime::Initialize(GameScript& gameScript, Minimap& minimap, WorldMap& worldMap, Cursor& cursor)
 	{
 		if (m_initialized)
 		{
@@ -57,6 +61,7 @@ namespace mmo
 			{
 				return std::make_shared<ModelFrame>(name);
 			});
+		CharSelect::RegisterPreviewFrameFactory();
 		FrameManager::Get().RegisterFrameFactory("UnitModel", [](const std::string& name)
 			{
 				return std::make_shared<UnitModelFrame>(name);
@@ -65,9 +70,20 @@ namespace mmo
 			{
 				return std::make_shared<MinimapFrame>(name, minimap);
 			});
+		FrameManager::Get().RegisterFrameFactory("WorldMap", [&worldMap](const std::string& name)
+			{
+				return std::make_shared<WorldMapFrame>(name, worldMap);
+			});
 		FrameManager::Get().RegisterFrameFactory("Cooldown", [](const std::string& name)
 			{
 				return std::make_shared<CooldownFrame>(name);
+			});
+
+		// Progress bars may draw their fill with a material; without one they render like the base type.
+		FrameManager::Get().UnregisterFrameFactory("ProgressBar");
+		FrameManager::Get().RegisterFrameFactory("ProgressBar", [](const std::string& name)
+			{
+				return std::make_shared<MaterialProgressBar>(name);
 			});
 
 		cursor.LoadCursorTypeFromTexture(CursorType::Pointer, "Interface/Cursor/pointer001.htex");
@@ -144,7 +160,10 @@ namespace mmo
 			luabind::scope(
 				luabind::class_<CooldownFrame, Frame>("CooldownFrame")
 				.def("SetProgress", &CooldownFrame::SetProgress)
-				.def("GetProgress", &CooldownFrame::GetProgress)));
+				.def("GetProgress", &CooldownFrame::GetProgress)),
+
+			luabind::scope(
+				luabind::class_<MaterialProgressBar, ProgressBar>("MaterialProgressBar")));
 
 		m_initialized = true;
 		return true;

@@ -192,7 +192,7 @@ namespace mmo
 		// What the pet may pick on its own. A staying pet only takes on what comes within its reach.
 		const auto usable = [&](const GameUnitS* unit) -> bool
 		{
-			if (!unit || unit == &controlled || !unit->IsAlive() || !controlled.UnitIsEnemy(*unit) || !unit->CanBeSeenBy(controlled))
+			if (!unit || unit == &controlled || !unit->IsAlive() || !controlled.UnitCanAttack(*unit) || !unit->CanBeSeenBy(controlled))
 			{
 				return false;
 			}
@@ -210,32 +210,39 @@ namespace mmo
 		if (commanded != 0)
 		{
 			const GameUnitS* unit = world->FindByGuid<GameUnitS>(commanded);
-			if (!unit || !unit->IsAlive() || !controlled.UnitIsEnemy(*unit))
+			if (!unit || !unit->IsAlive() || !controlled.UnitCanAttack(*unit))
 			{
 				ai.ClearPetCommandedTarget();
 				commanded = 0;
 			}
 		}
 
-		const uint64 ownerVictim = usable(owner.GetVictim()) ? owner.GetVictim()->GetGuid() : 0;
+		// A pet that only fights its owner's target takes what the owner attacked last and leaves
+		// the units attacking its owner or itself alone.
+		const bool ownerTargetOnly = ai.IsPetOwnerTargetOnly();
+		const GameUnitS* ownerTarget = ownerTargetOnly ? ai.FindPetOwnerTarget() : owner.GetVictim();
+		const uint64 ownerVictim = usable(ownerTarget) ? ownerTarget->GetGuid() : 0;
 
 		std::vector<uint64> ownerAttackers;
-		owner.ForEachAttacker([&](const GameUnitS& attacker)
-			{
-				if (usable(&attacker))
-				{
-					ownerAttackers.push_back(attacker.GetGuid());
-				}
-			});
-
 		std::vector<uint64> selfAttackers;
-		controlled.ForEachAttacker([&](const GameUnitS& attacker)
-			{
-				if (usable(&attacker))
+		if (!ownerTargetOnly)
+		{
+			owner.ForEachAttacker([&](const GameUnitS& attacker)
 				{
-					selfAttackers.push_back(attacker.GetGuid());
-				}
-			});
+					if (usable(&attacker))
+					{
+						ownerAttackers.push_back(attacker.GetGuid());
+					}
+				});
+
+			controlled.ForEachAttacker([&](const GameUnitS& attacker)
+				{
+					if (usable(&attacker))
+					{
+						selfAttackers.push_back(attacker.GetGuid());
+					}
+				});
+		}
 
 		const uint64 targetGuid = ChoosePetTarget(commanded, ownerVictim, ownerAttackers, selfAttackers, ai.GetPetStrategy());
 		if (targetGuid == 0)

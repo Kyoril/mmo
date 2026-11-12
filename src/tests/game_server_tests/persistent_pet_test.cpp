@@ -393,6 +393,34 @@ TEST_CASE_METHOD(PersistentPetFixture, "granting a pet stores it once without su
 	CHECK(player->GetStoredPets().size() == 1);
 }
 
+TEST_CASE_METHOD(PersistentPetFixture, "a creature casting a grant spell binds the pet to its player target", "[pets][persistent]")
+{
+	constexpr uint32 BindSpellId = 302;
+	auto* spell = project.spells.add(BindSpellId);
+	spell->set_name("Bind Shadow");
+	spell->add_attributes(0);
+	spell->add_attributes(0);
+	auto* effect = spell->add_effects();
+	effect->set_index(0);
+	effect->set_type(spell_effects::GrantPersistentPet);
+	effect->set_targeta(spell_effect_targets::TargetAny);
+	effect->set_miscvaluea(ScholarPetId);
+
+	const auto player = SpawnPlayer(4);
+	const auto trainer = SpawnCreature(*boarUnit);
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Unit);
+	targetMap.SetUnitTarget(player->GetGuid());
+	REQUIRE(trainer->CastSpell(targetMap, *spell, 0, true) == spell_cast_result::CastOkay);
+
+	CHECK(RunUntil([&] { return !player->GetStoredPets().empty(); }));
+	REQUIRE(player->GetStoredPets().size() == 1);
+	CHECK(player->GetStoredPets().front().petEntry == ScholarPetId);
+	CHECK(player->GetStoredPets().front().classId == MainClassId);
+	CHECK(PersistentPetOf(*trainer) == nullptr);
+}
+
 TEST_CASE_METHOD(PersistentPetFixture, "a dead summoned pet comes back at full health, a dead tamed pet needs a revive", "[pets][persistent]")
 {
 	const auto player = SpawnPlayer(4);

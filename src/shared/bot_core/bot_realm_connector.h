@@ -307,6 +307,10 @@ namespace mmo
 		/// @param spellId The spell that went off.
 		signal<void(uint64, uint32)> SpellWentOff;
 
+		/// A periodic aura ticked (PeriodicAuraLog): victim, caster, spell, aura type and the amount
+		/// the tick dealt, healed or energized.
+		signal<void(uint64, uint64, uint32, uint32, uint32)> PeriodicAuraTicked;
+
 		/// @brief Emitted on ChannelUpdate. A remaining time of 0 is the server's only signal that
 		///		a channel has ended, whether it ran out, was interrupted or never got going.
 		/// @param casterGuid The GUID of the channeling unit.
@@ -399,6 +403,12 @@ namespace mmo
 		/// Sound entry id -> guid of the unit it came from (0 for a sound without a source unit), for
 		/// every PlaySoundById since the last clear.
 		std::map<uint32, uint64> m_heardSounds;
+
+		/// Reason of the last DestroyObjects per object guid (game::despawn_reason), for scenarios.
+		std::map<uint64, uint8> m_despawnReasons;
+
+		/// Reason of the last creation block per unit guid (game::spawn_reason), for scenarios.
+		std::map<uint64, uint8> m_spawnReasons;
 		std::map<uint32, uint32> m_heardSoundCounts;
 
 		// Ground zones by id
@@ -481,6 +491,22 @@ namespace mmo
 		{
 			const auto it = m_heardSounds.find(soundId);
 			return it != m_heardSounds.end() ? it->second : 0;
+		}
+
+		/// The game::spawn_reason of the unit's last creation block (Spawned when the server set
+		/// object_update_flags::Spawned), or -1 if no creation arrived for it.
+		[[nodiscard]] int32 GetLastSpawnReason(const uint64 guid) const
+		{
+			const auto it = m_spawnReasons.find(guid);
+			return it != m_spawnReasons.end() ? static_cast<int32>(it->second) : -1;
+		}
+
+		/// The game::despawn_reason of the last DestroyObjects that removed the object, or -1 if it
+		/// was never destroyed for this client.
+		[[nodiscard]] int32 GetLastDespawnReason(const uint64 guid) const
+		{
+			const auto it = m_despawnReasons.find(guid);
+			return it != m_despawnReasons.end() ? static_cast<int32>(it->second) : -1;
 		}
 
 		/// How often the server told this client to play the sound entry since the last clear.
@@ -1154,6 +1180,9 @@ namespace mmo
 
 		/// @brief Handles the NonSpellDamageLog packet from server.
 		PacketParseResult OnNonSpellDamageLog(game::IncomingPacket& packet);
+
+		/// @brief Handles the PeriodicAuraLog packet from server (raises PeriodicAuraTicked).
+		PacketParseResult OnPeriodicAuraLog(game::IncomingPacket& packet);
 
 		/// @brief Parses a single object update from the packet stream.
 		/// @param packet The packet to read from.

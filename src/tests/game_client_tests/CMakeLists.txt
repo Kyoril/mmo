@@ -17,11 +17,8 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/attack_error_voice_gate.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/world_text_layout.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/object_update_skip.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_roster.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_interaction.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/plaza_nameplate_layout.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/character_roster.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/placement_bounds.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glue_camera_director.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience_scan.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/class_name_localizer.cpp
 	# The bot's unit model is self-contained; pet_friendliness_test checks its reaction rules.
