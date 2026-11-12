@@ -4,6 +4,8 @@
 #include "macros.h"
 #include "clock.h"
 
+#include <vector>
+
 
 namespace mmo
 {
@@ -19,6 +21,8 @@ namespace mmo
 
 	void TimerQueue::AddEvent(const EventCallback& callback, GameTime time)
 	{
+		std::scoped_lock lock{ m_mutex };
+
 		if (m_stopped)
 		{
 			return;
@@ -30,6 +34,8 @@ namespace mmo
 
 	void TimerQueue::Stop()
 	{
+		std::scoped_lock lock{ m_mutex };
+
 		m_stopped = true;
 
 		asio::error_code error;
@@ -51,29 +57,43 @@ namespace mmo
 			return;
 		}
 
-		m_timerTime.reset();
+		// Collected under the lock, run after releasing it: a callback is free to call back into
+		// AddEvent (every self-rescheduling countdown does), which would deadlock on a non-recursive
+		// mutex still held here.
+		std::vector<EventCallback> dueCallbacks;
 
-		const auto now = GetNow();
-		while (!m_queue.empty())
 		{
-			const auto &next = m_queue.top();
+			std::scoped_lock lock{ m_mutex };
 
-			if (now >= next.time)
+			m_timerTime.reset();
+
+			const auto now = GetNow();
+			while (!m_queue.empty())
 			{
-				const auto callback = next.callback;
-				m_queue.pop();
-				callback();
+				const auto &next = m_queue.top();
+
+				if (now >= next.time)
+				{
+					dueCallbacks.push_back(next.callback);
+					m_queue.pop();
+				}
+				else
+				{
+					SetTimer();
+					break;
+				}
 			}
-			else
-			{
-				SetTimer();
-				break;
-			}
+		}
+
+		for (const auto& callback : dueCallbacks)
+		{
+			callback();
 		}
 	}
 
 	void TimerQueue::SetTimer()
 	{
+		// Callers hold m_mutex.
 		const auto nextEventTime = m_queue.top().time;
 
 		// Is the timer active?
