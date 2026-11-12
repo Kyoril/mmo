@@ -861,6 +861,90 @@
       "status": "placeholder",
       "ask": "Name the lake, or say where the western arm should flow on to.",
       "source": "agent"
+    },
+    {
+      "id": "wainbrook_farm",
+      "name": "Wainbrook Farm",
+      "kind": "hub",
+      "center": [
+        -745.0,
+        555.0
+      ],
+      "radius": 75.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "Farm of Odell and Hesper Wainbrook on the Haven Road (quests 80, 82-86). Confirm the name and that the farmhouse at (-724, 545) and the fields west of it belong to it.",
+      "source": "agent"
+    },
+    {
+      "id": "thistledown_farm",
+      "name": "Thistledown Farm",
+      "kind": "hub",
+      "center": [
+        -768.0,
+        712.0
+      ],
+      "radius": 62.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "Widow Annis Thistledown's farm south of Wainbrook (quest 89). Confirm the name and the house at (-758, 690).",
+      "source": "agent"
+    },
+    {
+      "id": "valley_cottage",
+      "name": "River Valley",
+      "kind": "hub",
+      "center": [
+        -600.0,
+        700.0
+      ],
+      "radius": 22.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "Old Tam Carrow the ferryman lives in the cottage at (-603, 700) (quests 87, 88). Should the cottage get a name of its own?",
+      "source": "agent"
+    },
+    {
+      "id": "thornhand_landing",
+      "name": "Thornhand Landing",
+      "kind": "camp",
+      "center": [
+        -484.0,
+        782.0
+      ],
+      "radius": 45.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "Smugglers' landing on the west bank where the river turns for the harbour (quests 87, 88). Confirm the place and its name.",
+      "source": "agent"
+    },
+    {
+      "id": "gate_island",
+      "name": "Gate Island",
+      "kind": "hub",
+      "center": [
+        -683.0,
+        886.0
+      ],
+      "radius": 34.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "The island in the river before Haven's north gate; Harbourmaster Lysa Fairwind keeps her office here (quests 81, 87, 88, 90). Confirm the name.",
+      "source": "agent"
+    },
+    {
+      "id": "haven_road_lamps",
+      "name": "Haven Road",
+      "kind": "landmark",
+      "center": [
+        -655.0,
+        575.0
+      ],
+      "radius": 75.0,
+      "areaId": 8,
+      "status": "placeholder",
+      "ask": "The lamp-lit stretch of the Haven Road between the Crossroads Inn and Wainbrook Farm (quests 80, 81). Only named so that spawns along the road have a place; the road itself is the atlas road haven_road.",
+      "source": "agent"
     }
   ],
   "roads": [

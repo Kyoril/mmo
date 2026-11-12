@@ -1,6 +1,8 @@
 # Ignore the binary and library directory first
 bin/
 lib/
+# The FMOD runtime the macOS client ships (deps/fmod/macos)
+!deps/fmod/macos/lib/
 
 # Also ignore build directories used on windows and unix-platforms
 /win/

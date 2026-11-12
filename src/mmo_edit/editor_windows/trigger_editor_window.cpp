@@ -107,7 +107,7 @@ namespace mmo
 		"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 		"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
 		"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-		"PlaySpellVisual", "PlaySound", "RandomTrigger"
+		"PlaySpellVisual", "PlaySound", "RandomTrigger", "SetFaction", "DeliverFollowers"
 	};
 
 	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
@@ -494,7 +494,14 @@ namespace mmo
 				return DescribeEntryRef(project.spells, GetActionDataValue(action, 0));
 			case trigger_actions::SummonCreature:
 			case trigger_actions::QuestKillCredit:
+			case trigger_actions::DeliverFollowers:
 				return DescribeEntryRef(project.units, GetActionDataValue(action, 0));
+			case trigger_actions::SetFaction:
+				if (GetActionDataValue(action, 0) == 0)
+				{
+					return "back to the entry's own";
+				}
+				return DescribeEntryRef(project.factionTemplates, GetActionDataValue(action, 0));
 			case trigger_actions::QuestEventOrExploration:
 			case trigger_actions::QuestExplorationCredit:
 			case trigger_actions::QuestFailQuest:
@@ -1289,6 +1296,38 @@ namespace mmo
 						"Time between two starts. Every repetition looks for listeners again, so players entering the radius late still hear the rest.");
 					break;
 				}
+				case trigger_actions::SetFaction:
+				{
+					// Data: <FACTION-TEMPLATE-ID>, [<ATTACK-TRIGGERING-UNIT:0/1>]
+					DrawActionDataPicker(action, 0, "##SetFactionTemplate", "Faction template (none = entry's own)", project.factionTemplates);
+					DrawActionDataInt(action, 1, "##SetFactionAttack", "Attack triggering unit (0/1)", 150.0f,
+						"With 1 the creature starts fighting the triggering unit right away, if its new faction is hostile to it. The override ends when the creature resets or respawns.");
+					break;
+				}
+				case trigger_actions::DeliverFollowers:
+				{
+					// Data: <CREATURE-ENTRY>, [<RADIUS>], [<DESPAWN-DELAY-MS>]; Texts: [<EMOTE-TEXT>]
+					DrawActionDataPicker(action, 0, "##DeliverFollowersEntry", "Creature", project.units);
+					DrawActionDataInt(action, 1, "##DeliverFollowersRadius", "Radius (0 = 15)", 150.0f,
+						"Creatures of this entry that follow the target player within this distance are handed in: quest kill credit, stop following, despawn.");
+					DrawActionDataInt(action, 2, "##DeliverFollowersDespawn", "Despawn delay ms (0 = 3000)");
+
+					// Optional emote every handed-in creature performs
+					std::string text = (action.texts_size() > 0) ? action.texts(0) : "";
+					ImGui::SetNextItemWidth(-1);
+					if (ImGui::InputTextWithHint("##DeliverFollowersEmote", "Emote text (optional)", &text))
+					{
+						if (action.texts_size() > 0)
+						{
+							action.set_texts(0, text);
+						}
+						else
+						{
+							action.add_texts(text);
+						}
+					}
+					break;
+				}
 				case trigger_actions::RandomTrigger:
 				{
 					// Data: <TRIGGER-ID>, [<TRIGGER-ID>...]
@@ -1378,6 +1417,7 @@ namespace mmo
 			{ proto::InstanceVariable,    "InstanceVariable",    "Key",        { nullptr, nullptr } },
 			{ proto::LivingCreatureCount, "LivingCreatureCount", "Unit Entry", { nullptr, nullptr } },
 			{ proto::HourOfDay,           "HourOfDay",           nullptr,      { nullptr, nullptr } },
+			{ proto::QuestStatus,         "QuestStatus",         "Quest",      { nullptr, nullptr } },
 		};
 
 		// The guard that keeps this from drifting again: adding a TriggerFunction without listing it

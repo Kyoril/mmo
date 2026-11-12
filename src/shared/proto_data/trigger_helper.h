@@ -225,6 +225,8 @@ namespace mmo
 			/// Summons a new creature into the world instance. The summoned creature is owned by the
 			/// trigger owner so that its death can raise OnSummonedUnitDied on the owner.
 			/// Targets: UNIT (origin, optional - defaults to owner); Data: <CREATURE-ENTRY>, [<X>, <Y>, <Z>], [<DESPAWN-MS>], [<ATTACK-NEAREST:0/1>]; Texts: NONE;
+			/// X, Y and Z all zero mean "at the origin", so a summon at the owner can still give the
+			/// despawn time and the attack flag.
 			SummonCreature = 25,
 
 			/// Forces a creature's threat towards the given target to the top of its threat table (taunt).
@@ -301,6 +303,24 @@ namespace mmo
 			/// probability and condition.
 			/// Targets: NONE; Data: <TRIGGER-ID>, [<TRIGGER-ID>...]; Texts: NONE;
 			RandomTrigger = 39,
+
+			/// Overrides the faction template of a creature, e.g. to turn a talkative toll keeper
+			/// hostile once the player refuses to pay. The override ends on its own when the creature
+			/// resets (evades) or respawns, so a trigger never has to restore it.
+			/// Targets: UNIT (creature); Data: <FACTION-TEMPLATE-ID> (0 = back to the entry's own),
+			/// [<ATTACK-TRIGGERING-UNIT:0/1>]; Texts: NONE;
+			/// With ATTACK-TRIGGERING-UNIT set, the creature starts fighting the triggering unit right
+			/// away if its new faction is hostile to it.
+			SetFaction = 40,
+
+			/// Hands in the creatures that currently follow a player (SetFollowTarget), e.g. strayed
+			/// livestock led back to its pen or rescued prisoners brought to a camp. Every living
+			/// creature of the given entry that follows the target player within the radius grants
+			/// the player a quest kill credit for that entry, stops following and despawns.
+			/// Targets: PLAYER; Data: <CREATURE-ENTRY>, [<RADIUS, default 15>],
+			/// [<DESPAWN-DELAY-MS, default 3000>]; Texts: [<EMOTE-TEXT>];
+			/// The optional text is emoted by every creature that was handed in.
+			DeliverFollowers = 41,
 
 			Invalid,
 			Count_ = Invalid

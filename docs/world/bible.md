@@ -252,10 +252,10 @@ The sketch numbers the stops beyond the West Gate [E]:
 On the map [C]:
 
 - Stops 1, 2 and 4 match what exists: the gate, the painted road and the river crossing.
-- Stops 5–9 fall on the flat, empty land west and south-west of the river, where nothing exists yet.
+- Stops 5–9 were shaped with the green valley (section 3.5) and hold quests since 2026-11-12 (section 3.13).
 - Stop 3 matches no existing camp west of the river. Briarwatch Camp (Thalric's work camp) and Barrowfront Camp (Osric's palisade, on the east bank) are the nearest candidates. [?]
 - Today the quest levels rise from the gate westward: Briarwatch March is 4–7, the Mirewater 7–8 and the Barrowfield 8–10.
-- The valley beyond the river would therefore be the natural ground for the approach to Haven, around levels 9–11. This is a suggestion. [?]
+- The valley beyond the river is the approach to Haven. It was built as a second level 6–10 route beside the Mirewater and the Barrowfield, not as a level 9–11 zone (section 3.13). [C]
 
 The sketch's side view reads, from west to east: Haven, the valley, Oakenshire, the mountain ring. It is labelled "civilized lands ← main road through the valley → wilder, more dangerous areas". [E]
 
@@ -288,6 +288,25 @@ Open [?]:
 - Should Emberreach, across the strait, be its own map?
 - Zone borders, level bands and themes are placeholders.
 
+### 3.13 The Haven Road (quests 78–94, 2026-11-12) — atlas `crossroads_inn`, `haven_road_lamps`, `wainbrook_farm`, `thistledown_farm`, `valley_cottage`, `thornhand_landing`, `gate_island`, `haven_trading_basin`
+
+The level 6–10 route west of the river, from the Old Stone Bridge down the Haven Road into Haven. The quests, their mechanics and the open points are in [docs/haven-road-quests.md](../haven-road-quests.md). The new atlas places are placeholders. [C]
+
+- **The Crossroads Inn** stands just past the Old Stone Bridge, where the Haven Road turns south (q78). [C]
+  - Marta Coldwell keeps it. A waystone stands before it; Waykeeper Tomas Reedley binds souls to it ("Four roads meet at this stone").
+  - **Road-Warden Petra Lowell** of the Haven Watch keeps the road from here: "one sword and forty miles of lamps" (q78). The Haven Watch, not the Oakenshire Watch, answers for the road west of the river.
+  - **The road is lamp-lit** from the inn to Haven. Pip Wickham, nephew of Haven's lamplighter Ned Wickham, is meant to light the posts down to Wainbrook Farm every evening (q80).
+- **The Old Stone Bridge has no toll.** "The King's road has no toll and never had" (q79). A man called Brask took one at its east end "for the King", with two thugs. [C]
+- **Wainbrook Farm** (Odell and Hesper Wainbrook) lies west of the road, a little south of the inn, with corn and turnip fields west of the house. It sends a cask of cider to the Haven inn every week (q82, q86). **Thistledown Farm** (the widow Annis Thistledown; her husband Bram is dead) lies south of it (q89). These are the valley farms that feed Haven (section 12, item 19). [C]
+- **Dusklings in the fields.** Furrow Dusklings roam the Wainbrook fields by night and are gone by day. They did not come by themselves: someone buried **dusk-lures** there — charred wooden tokens with a black thorn burned in — to frighten the farmer into selling the fields by the river (q83–q85). The largest thing they drew was **Harrow, the Field-Haunt**. [C]
+- **Old Tam Carrow**, a ferryman of forty years, lives in the cottage in the River Valley and knows every boat on the river by the sound of its oars (q87). [C]
+- **Thornhand Landing**: smugglers put in on the west bank where the river turns for the harbour, under Bosun Kerrick. They sink marked crates off the bank, to be lifted later. The crates carry the King's seal and were stolen on the Old King's Road (q87, q88; compare q43). [C]
+- **Gate Island** is the rock in the river before Haven's north gate, between the two bridges. Harbourmaster Lysa Fairwind keeps her office there and gets the Watch's weekly road report (q81). [C]
+- **The Haven Trading Basin** is a half-built quay west of the gate bridge, outside the wall, without lamps (q92). [C]
+- **Ambrose Tallow**, chandler, kept a stall in Haven's lower court for eleven years and was the Thorn's purse (section 4). He ran for the Trading Basin when confronted and was brought down there; his ledger went to Watch-Captain Ashby (q90–q92). The game still shows him at his stall for players who have not come that far. [C]
+- **The waystones hum.** Magister Calloran says the summoning stone and every waystone on the road sound one long note, which carries a bound soul home; the stone at the Briarwatch camp sounds a quarter-tone flat because the dead of the Barrowfield are "being sung to" (q93). [C] How soul binding works beyond this is open. [?]
+- **The causeway builders had names.** Chaplain Dawnmere found forty-three of them on tally sticks; Mother Agatha Brightwell reads them at evening bell in Haven's chapel (q94). Haven has a chapel and a bell. [C]
+
 ## 4. Peoples and factions
 
 - **Humans of Falwyn** are the playable people of the opening region. [E] Other playable peoples are open. [?]
@@ -297,6 +316,8 @@ Open [?]:
 - **Forest Bandits** operate in the woods south of Oakenshire. They wear a **red armband marked with a black thorn** (q24), and self-taught **Bandit Mages** ("hedge-wizards with stolen incantations") ride with them (q33). [C] Bandits also ambush travellers on the western approach. [E]
 - **Kingsroad bandits** are "no hedge thieves" but a hardened gang with cutthroats and hexers (q27). They are followed by bannerless **Roadside Marauders** (q42). [C]
 - **Mirewater Poachers** buy plunder from the road bandits and move it through the reeds (q43). [C]
+- **The Thorn** is the ring behind them. The plunder goes from the March through the reeds and down the river to Haven: **Thornhand** smugglers land it above the harbour, and a chandler in Haven's market paid for it all — bridge tolls, harbour clerks, even a buyer for farms nobody wanted to sell. "The red armbands in Oakenshire's woods were only ever the hands. This was the purse." (q92) The black thorn on the Forest Bandits' armband (q24) is its mark. [C] Whether anyone stood above the chandler is open. [?]
+- **The Haven Watch** keeps the Haven Road as well as the town, with a road-warden at the Crossroads Inn (q78). [C]
 - **The Mirewater Expedition** (Maren Duskvale, Surveyor Wick Farrow) charts the old causeways. [C]
 - **Gravespeakers** (Gravebound Cultists) sing the dead awake. Their numbers regrow ("They are not being recruited. They are being made." — q64). [C]
 - **Kobolds** are an established creature group of the region. [E]
@@ -338,9 +359,22 @@ Open [?]:
 | Sevrin Wax, the Coffinwright | Warden of the Hollow Choir | map 1 | 81 | – | [C] |
 | Ossuar, the Bonebinder | Keeper of the North Ossuary | map 1 | 84 | – | [C] |
 | Choirmistress Vell | Voice of the Second Verse | map 1 | 85 | – | [C] |
-| Magister Calloran | Haven binder, at the summoning stone on the upper square | `haven` | 25 | 74 / 73 | [C] |
-| Watch-Captain Corwin Ashby | commands the Haven Watch at the north gate | `haven` | 98 | 73 / – | [C] |
+| Magister Calloran | Haven binder, at the summoning stone on the upper square | `haven` | 25 | 74, 93 / 73, 93 | [C] |
+| Watch-Captain Corwin Ashby | commands the Haven Watch at the north gate | `haven` | 98 | 73, 91, 92 / 90, 91, 92 | [C] |
 | Osric Penhallow | banker of the Haven Exchange | `haven` | 104 | – / 74 | [C] |
+| Road-Warden Petra Lowell | Haven Watch; keeps the Haven Road | `crossroads_inn` | 125 | 79, 81 / 78, 79 | [C] |
+| Marta Coldwell | innkeeper of the Crossroads Inn | `crossroads_inn` | 126 | – | [C] |
+| Waykeeper Tomas Reedley | soul binder at the Crossroads waystone | `crossroads_inn` | 127 | – | [C] |
+| Pip Wickham | lamplighter's apprentice, nephew of Ned Wickham | `crossroads_inn` | 128 | 80 / – | [C] |
+| Tollmaster Brask | took a toll on the Old Stone Bridge | `old_stone_bridge` | 129 | – | [C] |
+| Farmer Odell Wainbrook | farms the fields by the Haven Road | `wainbrook_farm` | 132 | 83, 85 / 80, 83, 84, 85 | [C] |
+| Goodwife Hesper Wainbrook | his wife; keeps the sows and the cider | `wainbrook_farm` | 133 | 82, 86 / 82 | [C] |
+| Widow Annis Thistledown | farms alone since her husband Bram died | `thistledown_farm` | 147 | 89 / 89 | [C] |
+| Old Tam Carrow | ferryman of forty years | `valley_cottage` | 139 | 87, 88 / – | [C] |
+| Bosun Kerrick | leads the Thornhand smugglers at the landing | `thornhand_landing` | 141 | – | [C] |
+| Harbourmaster Lysa Fairwind | Haven Harbour | `gate_island` | 143 | 90 / 81, 87, 88 | [C] |
+| Ambrose Tallow | chandler in Haven's lower court; the Thorn's purse | `haven`, `haven_trading_basin` | 144, 145 | – | [C] |
+| Harrow, the Field-Haunt | what the dusk-lures drew into the Wainbrook fields | `wainbrook_farm` | 136 | – | [C] |
 | Captain Arlen, Brakk the Redhand | draft names without a place | not in data | – | – | [?] |
 
 Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
@@ -364,6 +398,11 @@ Class trainers also stand at the Briarwatch camp and the Barrowfront camp:
 | Mirewater Poacher | Mirewater | 7–8 | Fences for the road bandits | [C] |
 | Risen Laborer / Barrow Skeleton / Gravebound Cultist / Barrow-King Morthas | Barrowfield | 8–10 | The raised dead and those who sing them up | [C] |
 | Hollow Choir (husks, acolytes, bosses) | Map 1 | 11–12 | The crypt beneath the Barrowfield | [C] |
+| Stubble Boar / **Old Rootsnout** | Fields of the valley farms | 7–8 | Root up turnips; Rootsnout "looks at you" (q89) | [C] |
+| Valley Wolf | River Valley, east of the Haven Road | 7–8 | Why the lamplighter's apprentice will not walk the road (q80) | [C] |
+| Furrow Duskling / **Harrow, the Field-Haunt** | Wainbrook fields, by night | 7–8 | Dusklings drawn by buried lures (q83–q85) | [C] |
+| Toll Thug / Thornhand Waylayer, Smuggler, Enforcer / **Bosun Kerrick** / **Ambrose Tallow** | Old Stone Bridge, Haven Road, Thornhand Landing, Trading Basin | 6–10 | The Thorn's people along the river | [C] |
+| Runaway Sow | Wainbrook fields | – | Livestock, not a foe: led home with turnips (q82) | [C] |
 | Kobolds | – | – | Established threat, not in the data | [E][?] |
 
 ## 7. Classes in the fiction
@@ -384,6 +423,8 @@ The source of magic, its institutions and its costs are undefined. [E] Whether "
 - **Letters and dispatches** travel between camps and towns (q3, q25, q41). [E][C]
 - **Crates, carts, wagons, mortar and stakes** show that supply and rebuilding matter on the frontier (q9, q19, q42). [E][C]
 - **The red armband with the black thorn:** the mark of the southern bandits (q24). [C]
+- **The black thorn** alone, burned into wood, marks the Thorn's dusk-lures (q84), and the ring's book is "the Thorn Ledger" (q92). [C]
+- **Lamps and waystones** line the Haven Road: lamp posts lit every evening (q80) and a waystone at each resting place (q93). [C]
 - **Ritual bone fetishes** anchor the gravespeakers' ritual (q51). [C]
 - **Morthas' seal:** "not a mark of dominion, but of its ending" (q53). [C]
 - **Mine carts** exist as concept art; the transport fiction is undefined (section 11). [E]
@@ -517,5 +558,8 @@ Derived from the names already in the game. [C]
     - The sketch shows farmlands and hamlets in the river valley beyond the gate.
 
     Both can be true: the basin farms feed Oakenshire, the valley farms feed Haven.
+21. **The Thorn.** q92 makes the Forest Bandits, the Kingsroad gang's fences and the river smugglers parts of one ring paid from Haven, with the black thorn as its mark. Before, the armband belonged to the southern bandits only (q24). Is that the intended scope, and does anyone stand above the chandler? [?]
+22. **Ambrose Tallow after q92.** The world is shared, so he still stands at his stall and at the basin for other players. Should Haven show that the stall is empty for those who finished the chain (it needs per-player visibility, which the engine does not have)? [?]
+23. **Zones west of the river.** The Crossroads Inn counts as Briarwatch March and the farms have no zone at all. Which zones should the Haven Road, the farms and the harbour belong to? [?]
 20. **The South Ridge quarry and the bandit camp.** The Forest Bandit camp tents stand at the foot of the south ridge, exactly where the sketch draws the quarry buildings. Do the bandits hold the old quarry, or is the quarry a separate, working place? **Resolved 2026-10-01: separate.** Who works it is open.
 21. **The Forward Outpost** (sketch stop 3) matches no existing camp west of the river (section 3.11).

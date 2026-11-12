@@ -46,7 +46,13 @@ TEST_CASE("Compiling bone assignments sorts them by vertex and keeps per-vertex 
 
 	const auto& assignments = subMesh.GetBoneAssignments();
 	REQUIRE(assignments.size() == 4);
-	CHECK(std::is_sorted(assignments.begin(), assignments.end(), [](const auto& a, const auto& b) { return a.first < b.first; }));
+	// Concrete parameter types: with auto, clang parses "a.first <" as a template argument list.
+	using Assignment = std::decay_t<decltype(assignments)>::value_type;
+	const bool sortedByVertex = std::is_sorted(assignments.begin(), assignments.end(), [](const Assignment& a, const Assignment& b)
+	{
+		return a.first < b.first;
+	});
+	CHECK(sortedByVertex);
 	CHECK(assignments[0].second.boneIndex == 3);
 	CHECK(assignments[1].second.boneIndex == 1);
 	CHECK(assignments[2].second.boneIndex == 5);

@@ -52,6 +52,7 @@ enum TriggerFunction {
 	// Hour of the world instance's authoritative time of day on a 24-hour clock, 0 to 23.
 	// FunctionData: NONE. Lets a trigger tell day from night, e.g. a town's day/night routine.
 	HourOfDay = 13;
+	QuestStatus = 14;
 }
 
 enum TriggerConditionType {

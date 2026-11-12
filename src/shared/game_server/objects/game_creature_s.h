@@ -324,6 +324,18 @@ namespace mmo
 		/// @brief Stops following a unit and resumes the configured idle movement.
 		void ClearFollowedUnit();
 
+		/// @brief Replaces the faction template of this creature until it resets or respawns,
+		/// e.g. to turn a friendly npc hostile in a scripted scene.
+		/// @param factionTemplateId Id of the faction template to use.
+		/// @returns false if no such faction template exists (nothing changes then).
+		bool SetFactionTemplateOverride(uint32 factionTemplateId);
+
+		/// @brief Ends a faction template override, returning to the entry's own faction.
+		void ClearFactionTemplateOverride();
+
+		/// @brief Whether the faction template currently differs from the entry's own.
+		[[nodiscard]] bool HasFactionTemplateOverride() const;
+
 		/// @brief Returns the currently followed unit, or nullptr if none (or it despawned).
 		[[nodiscard]] std::shared_ptr<GameUnitS> GetFollowedUnit() const { return m_followTarget.lock(); }
 

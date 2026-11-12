@@ -4,7 +4,7 @@
 #ifdef _WIN32
 #	include "graphics_d3d11/graphics_device_d3d11.h"
 #endif
-#ifdef __APPLE__
+#ifdef MMO_HAS_METAL
 #    include "graphics_metal/graphics_device_metal_factory.h"
 #endif
 
@@ -53,7 +53,7 @@ namespace mmo
 		return *s_currentDevice;
 	}
 
-#ifdef __APPLE__
+#ifdef MMO_HAS_METAL
     GraphicsDevice& GraphicsDevice::CreateMetal(const GraphicsDeviceDesc& desc)
     {
         assert(!s_currentDevice);
