@@ -291,3 +291,41 @@ TEST_CASE("the texture lookup is asked with the op's texture on switched tiles",
 	CHECK_FALSE(t.IsTileMaterialPaint(1.0f, 1.0f));
 	CHECK_FALSE(t.IsTileMaterialPaint(12.0f, 4.0f));
 }
+
+TEST_CASE("a paint area reaching into an edge tile switches it", "[graph_paint_tile_material]")
+{
+	// The rect's tile range comes from TileRangeOverlapping, as the material pass of Apply samples it: tile (1, 0)
+	// overlaps the rect, its centre (12, 4) lies outside it.
+	const WorldRect rect{ 1.0f, 1.0f, 11.0f, 7.5f };
+	PreparedTerrain t;
+	PrepareOk(t, { PaintOp(Diamond(), 4, "Farm.hmi") });
+	t.ResolveTileMaterials(Layout(), rect);
+	REQUIRE(t.GetTileMaterials().size() == 2);
+	CHECK(HasTile(t.GetTileMaterials(), 1, 0, "Farm.hmi"));
+
+	FakeTerrain terrain;
+	TerrainContribution contribution;
+	const ChannelTerrainTargetFunction target = [&t](const float x, const float z, const float base, const terrain_channel::Type channels)
+	{
+		return t.Evaluate(x, z, base, {}, nullptr, channels);
+	};
+	Apply(terrain, rect, target, String(), contribution);
+	CHECK(terrain.GetTileMaterial(0, 0) == "Farm.hmi");
+	CHECK(terrain.GetTileMaterial(1, 0) == "Farm.hmi");
+	CHECK(terrain.GetTileMaterial(1, 1) == "Base");
+	Unapply(terrain, contribution);
+	CHECK(terrain.GetTileMaterial(1, 0) == "Base");
+}
+
+TEST_CASE("a discarded tile material switches no tile", "[graph_paint_tile_material]")
+{
+	PreparedTerrain t;
+	PrepareOk(t, { PaintOp(Square(1.0f, 1.0f, 3.0f), 5, "Plowed.hmi"), PaintOp(Diamond(), 9, "Missing.hmi") });
+	t.ResolveTileMaterials(Layout(), kAllTiles);
+	REQUIRE(t.GetTileMaterials().size() == 2);
+	t.DiscardTileMaterial("Missing.hmi");
+	CHECK(t.GetTileMaterials().empty());
+	CHECK(t.Evaluate(4.0f, 4.0f, 0.0f, {}, nullptr, terrain_channel::Material).material.empty());
+	t.DiscardTileMaterial("Unknown.hmi");
+	CHECK(t.GetTileMaterials().empty());
+}

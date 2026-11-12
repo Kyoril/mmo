@@ -58,23 +58,6 @@ namespace mmo
 			return String(buffer);
 		}
 
-		/// The rect from the first to the last centre of the tiles whose centre lies in `rect`: exactly the tiles the
-		/// material pass of pcg::ComputeTerrainSamples samples over `rect` (inverted if there are none).
-		pcg::WorldRect TileCentreRect(const pcg::GridLayout& layout, const pcg::WorldRect& rect)
-		{
-			const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
-			const double x0 = std::ceil((rect.minX - layout.originX) / tileSize - 0.5);
-			const double x1 = std::floor((rect.maxX - layout.originX) / tileSize - 0.5);
-			const double z0 = std::ceil((rect.minZ - layout.originZ) / tileSize - 0.5);
-			const double z1 = std::floor((rect.maxZ - layout.originZ) / tileSize - 0.5);
-			pcg::WorldRect centres;
-			centres.minX = static_cast<float>(layout.originX + (x0 + 0.5) * tileSize);
-			centres.minZ = static_cast<float>(layout.originZ + (z0 + 0.5) * tileSize);
-			centres.maxX = static_cast<float>(layout.originX + (x1 + 0.5) * tileSize);
-			centres.maxZ = static_cast<float>(layout.originZ + (z1 + 0.5) * tileSize);
-			return centres;
-		}
-
 		/// The splat of a pixel before a build wrote `written`: the recorded base where the build changed it, else the
 		/// terrain's current value. `written.splat` is sorted by (z, x).
 		uint32 SplatBefore(const pcg::ITerrainAccess& terrain, const pcg::TerrainContribution& written, const int32 x, const int32 z)
@@ -803,6 +786,8 @@ namespace mmo
 		std::vector<pcg::graph::TerrainEvaluateNotes> workerNotes;
 		/// Tile materials the last Run switches tiles to whose layer textures are not cached yet.
 		std::set<String> missingTileMaterials;
+		/// Warnings of the last Run about tile materials that could not be loaded.
+		std::vector<String> tileMaterialWarnings;
 
 		/// (Re)makes the layer copies from warmLayers (main thread, while Run is not running).
 		void MakeLayerCopies()
@@ -1082,6 +1067,7 @@ namespace mmo
 		impl.runError.clear();
 		impl.missingSections.clear();
 		impl.missingTileMaterials.clear();
+		impl.tileMaterialWarnings.clear();
 		impl.notes = pcg::graph::TerrainEvaluateNotes{};
 		for (pcg::graph::TerrainEvaluateNotes& notes : impl.workerNotes)
 		{
@@ -1147,13 +1133,12 @@ namespace mmo
 			return;
 		}
 
-		// Tiles a Paint op switches to its tile material are painted against that material's layers. Only tiles whose
-		// centre lies in the area rect are resolved: the material pass below samples no others, so a tile it would
-		// not switch keeps answering with its own layers. The materials are read on the main thread (LoadSectionAssets)
-		// and the job runs again.
-		impl.prepared.ResolveTileMaterials(impl.readAccess->GetLayout(), TileCentreRect(impl.readAccess->GetLayout(), impl.areaRect));
-		const std::vector<pcg::graph::TileMaterialRequest>& tileMaterials = impl.prepared.GetTileMaterials();
-		for (const pcg::graph::TileMaterialRequest& request : tileMaterials)
+		// Tiles a Paint op switches to its tile material are painted against that material's layers. Resolved over the
+		// rect the samples below are computed for, so the resolved tiles are the tiles the material pass names
+		// materials on (pcg::TileRangeOverlapping). The materials are read on the main thread (LoadSectionAssets) and
+		// the job runs again; a material that could not be loaded switches no tile.
+		impl.prepared.ResolveTileMaterials(impl.readAccess->GetLayout(), impl.areaRect);
+		for (const pcg::graph::TileMaterialRequest& request : impl.prepared.GetTileMaterials())
 		{
 			if (!impl.layers->HasMaterialLayers(request.material))
 			{
@@ -1164,6 +1149,20 @@ namespace mmo
 		{
 			return;
 		}
+		std::set<String> unloadable;
+		for (const pcg::graph::TileMaterialRequest& request : impl.prepared.GetTileMaterials())
+		{
+			if (!impl.layers->IsMaterialLoaded(request.material))
+			{
+				unloadable.insert(request.material);
+			}
+		}
+		for (const String& material : unloadable)
+		{
+			impl.prepared.DiscardTileMaterial(material);
+			impl.tileMaterialWarnings.push_back("Tile material '" + material + "' could not be loaded; its tiles were not switched");
+		}
+		const std::vector<pcg::graph::TileMaterialRequest>& tileMaterials = impl.prepared.GetTileMaterials();
 		impl.layers->SetTileMaterialOverrides(tileMaterials);
 		for (const std::unique_ptr<EditorTextureLayers>& copy : impl.workerLayers)
 		{
@@ -1319,6 +1318,7 @@ namespace mmo
 		}
 		report.warnings.insert(report.warnings.end(), warnings.begin(), warnings.end());
 		impl.prepared.DescribeNotes(impl.notes, report.warnings);
+		report.warnings.insert(report.warnings.end(), impl.tileMaterialWarnings.begin(), impl.tileMaterialWarnings.end());
 		if (!report.ok)
 		{
 			report.error = "Rebuild of '" + impl.record.name + "' failed: " + report.error;

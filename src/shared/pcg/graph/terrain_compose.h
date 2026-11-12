@@ -228,16 +228,21 @@ namespace mmo::pcg::graph
 		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
 			TerrainEvaluateNotes* notes = nullptr, terrain_channel::Type channels = terrain_channel::All) const;
 
-		/// @brief Decides the tile materials of the Paint ops with `tileMaterial`: every tile overlapping `area` (with a
-		///        positive overlap) gets the material of the last stacked such op whose painted region (the area polygon,
+		/// @brief Decides the tile materials of the Paint ops with `tileMaterial`: every tile of
+		///        pcg::TileRangeOverlapping(layout, area) (the tiles Apply over `area` names materials on) gets the material of the last stacked such op whose painted region (the area polygon,
 		///        or the spline grown by its width; ops with weight 0 paint nothing) intersects the tile rectangle and the
 		///        region. Intersection is geometric (an edge crosses the tile, a vertex lies in it, or the tile centre is
 		///        inside), not a tile-centre sample; merely touching a tile border does not count. A tile that two such
 		///        ops ask different materials for is reported by DescribeNotes. Replaces the result of an earlier call.
 		///        Must not run concurrently with Evaluate or IsTileMaterialPaint.
 		/// @param layout The terrain grid layout (tile size = vertexSpacing x verticesPerTile).
-		/// @param area The tiles to consider; an inverted rect resolves no tile.
+		/// @param area The tiles to consider (pass the rect Apply writes over); an inverted rect resolves no tile.
 		void ResolveTileMaterials(const GridLayout& layout, const WorldRect& area);
+
+		/// @brief Drops every resolved tile of a material (one the caller cannot load): those tiles keep their own
+		///        material, and the Paint ops paint there as if nothing had been resolved for them. Conflict warnings
+		///        stay. Must not run concurrently with Evaluate or IsTileMaterialPaint.
+		void DiscardTileMaterial(const String& material);
 
 		/// @brief The tiles ResolveTileMaterials switched, sorted by (tileZ, tileX).
 		const std::vector<TileMaterialRequest>& GetTileMaterials() const;

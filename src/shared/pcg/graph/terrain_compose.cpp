@@ -1432,25 +1432,24 @@ namespace mmo::pcg::graph
 		m_tileLayout = layout;
 		m_tileMaterials.clear();
 		m_tileMaterialConflicts.clear();
+		// The tiles the material pass of ComputeTerrainSamples names materials on for this rect.
+		const IntRect tiles = TileRangeOverlapping(layout, area);
 		const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
-		if (!(tileSize > 0.0) || !std::isfinite(tileSize) || !m_region || !(area.minX <= area.maxX) || !(area.minZ <= area.maxZ))
+		if (!m_region || tiles.minX > tiles.maxX || tiles.minZ > tiles.maxZ)
 		{
 			return;
 		}
+		const int32 areaX0 = tiles.minX;
+		const int32 areaX1 = tiles.maxX;
+		const int32 areaZ0 = tiles.minZ;
+		const int32 areaZ1 = tiles.maxZ;
 
-		// Tiles with a positive overlap (a degenerate rect: the tile it lies in).
-		const auto firstTile = [tileSize](const float min, const double origin)
+		// The tile an op bound lies in (clamped by the area range below).
+		const auto firstTile = [tileSize](const float value, const double origin)
 		{
-			return static_cast<int32>(std::floor((static_cast<double>(min) - origin) / tileSize));
+			const double tile = std::floor((static_cast<double>(value) - origin) / tileSize);
+			return static_cast<int32>(std::min(2.0e9, std::max(-2.0e9, tile)));
 		};
-		const auto lastTile = [tileSize, &firstTile](const float min, const float max, const double origin)
-		{
-			return std::max(firstTile(min, origin), static_cast<int32>(std::ceil((static_cast<double>(max) - origin) / tileSize)) - 1);
-		};
-		const int32 areaX0 = firstTile(area.minX, layout.originX);
-		const int32 areaX1 = lastTile(area.minX, area.maxX, layout.originX);
-		const int32 areaZ0 = firstTile(area.minZ, layout.originZ);
-		const int32 areaZ1 = lastTile(area.minZ, area.maxZ, layout.originZ);
 
 		const auto tileRect = [&layout, tileSize](const int32 x, const int32 z)
 		{
@@ -1521,6 +1520,14 @@ namespace mmo::pcg::graph
 				}
 			}
 		}
+	}
+
+	void PreparedTerrain::DiscardTileMaterial(const String& material)
+	{
+		m_tileMaterials.erase(std::remove_if(m_tileMaterials.begin(), m_tileMaterials.end(), [&material](const TileMaterialRequest& r)
+		{
+			return r.material == material;
+		}), m_tileMaterials.end());
 	}
 
 	const std::vector<TileMaterialRequest>& PreparedTerrain::GetTileMaterials() const

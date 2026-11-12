@@ -61,6 +61,9 @@ namespace mmo
 		///        adapter this one was copied from before the copy).
 		[[nodiscard]] bool HasMaterialLayers(const String& material) const;
 
+		/// @brief Whether a cached material could be loaded (false if it is not cached or failed to load).
+		[[nodiscard]] bool IsMaterialLoaded(const String& material) const;
+
 		/// @brief The normalised (pcg::NormalizeTextureKey) texture keys of a material's four layers; null if the
 		///        material is not cached (see LoadMaterialLayers).
 		[[nodiscard]] const std::array<String, 4>* GetNormalizedMaterialLayers(const String& material) const;
@@ -86,6 +89,8 @@ namespace mmo
 		{
 			std::array<String, 4> keys;
 			std::array<String, 4> normalized;
+			/// Materials (m_materials) only: whether the material could be loaded.
+			bool loaded = false;
 		};
 
 		/// The cached textures of a tile (its override material's, if it has one), read on first use.

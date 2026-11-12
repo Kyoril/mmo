@@ -357,10 +357,11 @@ namespace mmo
 	/// @return The report. Warnings: control resolution, parameter merge, node and collection warnings of the run on
 	///         the base terrain, terrain op preparation and section placement warnings, and paint skipped on tiles
 	///         without the texture (Paint ops and section paint, one warning per op). Paint ops with a tileMaterial
-	///         switch the tiles they paint on whose centre lies in the area's bounds (pcg::graph::PreparedTerrain::
-	///         ResolveTileMaterials) and paint against that material's layers; warned: a tile two such ops ask different
-	///         materials for, and a switched tile where a layer slot whose texture the switch changes had weight before
-	///         the build outside the paint of those ops.
+	///         switch every tile they paint on (pcg::graph::PreparedTerrain::ResolveTileMaterials over the area's
+	///         bounds) and paint against that material's layers; warned: a tile two such ops ask different materials
+	///         for, a switched tile where a layer slot whose texture the switch changes had weight before the build
+	///         outside the paint of those ops, and a tile material that could not be loaded (its tiles are not
+	///         switched).
 	GeneratorBuildReport RebuildGraphInstance(IWorldEditor& editor, pcg::GraphInstanceRecord& record,
 		const std::vector<const pcg::GraphInstanceRecord*>& otherInstances, ProceduralEditMode& controls,
 		const std::function<bool(const pcg::WorldRect& areaRect, String& error)>& checkTerrainOverlap = {});

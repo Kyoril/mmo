@@ -154,9 +154,10 @@ namespace mmo
 		const MaterialPtr loaded = material.empty() ? m_terrain.GetDefaultMaterial() : MaterialManager::Get().Load(material);
 		if (!loaded)
 		{
-			WLOG("PCG: terrain material " << material << " could not be loaded; its tiles have no paint layers");
+			WLOG("PCG: terrain material " << material << " could not be loaded");
 			return textures;
 		}
+		textures.loaded = true;
 		for (uint8 layer = 0; layer < 4; ++layer)
 		{
 			textures.keys[layer] = GetTerrainLayerTextureKey(loaded, layer);
@@ -177,6 +178,12 @@ namespace mmo
 	bool EditorTextureLayers::HasMaterialLayers(const String& material) const
 	{
 		return m_materials.count(material) != 0;
+	}
+
+	bool EditorTextureLayers::IsMaterialLoaded(const String& material) const
+	{
+		const auto it = m_materials.find(material);
+		return it != m_materials.end() && it->second.loaded;
 	}
 
 	const std::array<String, 4>* EditorTextureLayers::GetNormalizedMaterialLayers(const String& material) const

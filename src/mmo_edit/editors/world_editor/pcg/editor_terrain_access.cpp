@@ -65,6 +65,8 @@ namespace mmo
 		m_layout.pixelSpacing = terrain::constants::PageSize / static_cast<double>(PixelStepsPerPage);
 		m_layout.quadsPerTile = static_cast<uint32>(VertexStepsPerTile);
 		m_layout.verticesPerTile = static_cast<uint32>(VertexStepsPerTile);
+		m_layout.tilesX = static_cast<uint32>(m_pagesX * TilesPerPage);
+		m_layout.tilesZ = static_cast<uint32>(m_pagesZ * TilesPerPage);
 	}
 
 	terrain::Page* EditorTerrainAccess::GetPreparedPage(const int32 pageX, const int32 pageZ) const

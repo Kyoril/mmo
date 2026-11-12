@@ -588,3 +588,88 @@ TEST_CASE("setMaterial with the call's material still works", "[terrain_contribu
 	CHECK(terrain.GetTileMaterial(1, 1) == "Grass");
 	CHECK(c.materials.size() == 4);
 }
+
+TEST_CASE("TileRangeOverlapping covers every tile a rect overlaps, clamped to the terrain", "[terrain_contribution]")
+{
+	const GridLayout layout = FakeTerrain().GetLayout();
+
+	// Tile (1, 0) overlaps the rect although its centre (12, 4) lies outside it.
+	IntRect r = TileRangeOverlapping(layout, WorldRect{ 1.0f, 1.0f, 11.0f, 7.0f });
+	CHECK(r.minX == 0);
+	CHECK(r.maxX == 1);
+	CHECK(r.minZ == 0);
+	CHECK(r.maxZ == 0);
+
+	// Touching a tile border is no overlap.
+	r = TileRangeOverlapping(layout, WorldRect{ 0.0f, 0.0f, 8.0f, 8.0f });
+	CHECK(r.minX == 0);
+	CHECK(r.maxX == 0);
+	CHECK(r.minZ == 0);
+	CHECK(r.maxZ == 0);
+
+	// A degenerate rect: the tile it lies in.
+	r = TileRangeOverlapping(layout, WorldRect{ 9.0f, 3.0f, 9.0f, 3.0f });
+	CHECK(r.minX == 1);
+	CHECK(r.maxX == 1);
+	CHECK(r.minZ == 0);
+	CHECK(r.maxZ == 0);
+
+	// Clamped to the 2 x 2 tiles of the terrain.
+	r = TileRangeOverlapping(layout, WorldRect{ -5.0f, -5.0f, 30.0f, 30.0f });
+	CHECK(r.minX == 0);
+	CHECK(r.maxX == 1);
+	CHECK(r.minZ == 0);
+	CHECK(r.maxZ == 1);
+
+	// Inverted, or off the terrain: no tile.
+	r = TileRangeOverlapping(layout, WorldRect{ 5.0f, 5.0f, 4.0f, 4.0f });
+	CHECK((r.minX > r.maxX || r.minZ > r.maxZ));
+	r = TileRangeOverlapping(layout, WorldRect{ 20.0f, 20.0f, 30.0f, 30.0f });
+	CHECK((r.minX > r.maxX || r.minZ > r.maxZ));
+}
+
+TEST_CASE("a named material reaches a tile the rect overlaps without its centre", "[terrain_contribution]")
+{
+	FakeTerrain terrain;
+	const FakeTerrain::Data original = terrain.m_data;
+	const TerrainTargetFunction target = [](float, float, float) -> TerrainTarget
+	{
+		TerrainTarget t;
+		t.material = "A.hmi";
+		return t;
+	};
+
+	// The centres of tiles (1, 0), (0, 1) and (1, 1) lie outside the rect; only (1, 0) overlaps it.
+	TerrainContribution c;
+	Apply(terrain, WorldRect{ 1.0f, 1.0f, 11.0f, 7.0f }, target, "", c);
+	CHECK(terrain.GetTileMaterial(0, 0) == "A.hmi");
+	CHECK(terrain.GetTileMaterial(1, 0) == "A.hmi");
+	CHECK(terrain.GetTileMaterial(0, 1) == "Base");
+	CHECK(terrain.GetTileMaterial(1, 1) == "Base");
+	CHECK(c.materials.size() == 2);
+
+	Unapply(terrain, c);
+	CHECK(terrain.m_data == original);
+}
+
+TEST_CASE("setMaterial does not reach a tile the rect overlaps without its centre", "[terrain_contribution]")
+{
+	// The call's material keeps its old reach: only tiles whose centre lies in the rect.
+	FakeTerrain terrain;
+	const TerrainTargetFunction target = [](float, float, float) -> TerrainTarget
+	{
+		TerrainTarget t;
+		t.setMaterial = true;
+		return t;
+	};
+
+	TerrainContribution c;
+	Apply(terrain, WorldRect{ 1.0f, 1.0f, 11.0f, 7.0f }, target, "Grass", c);
+	CHECK(terrain.GetTileMaterial(0, 0) == "Grass");
+	CHECK(terrain.GetTileMaterial(1, 0) == "Base");
+	CHECK(terrain.GetTileMaterial(0, 1) == "Base");
+	CHECK(terrain.GetTileMaterial(1, 1) == "Base");
+	REQUIRE(c.materials.size() == 1);
+	CHECK(c.materials[0].x == 0);
+	CHECK(c.materials[0].z == 0);
+}
