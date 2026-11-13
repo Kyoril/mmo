@@ -302,6 +302,38 @@ namespace mmo
 		return Get()->AsPlayer().GetGuildName().c_str();
 	}
 
+	const char* UnitHandle::GetCastSpellName() const
+	{
+		if (!CheckNonNull())
+		{
+			return nullptr;
+		}
+
+		const UnitCastInfo& cast = Get()->GetCastInfo();
+		return cast.IsActive() ? cast.spell->name().c_str() : nullptr;
+	}
+
+	float UnitHandle::GetCastProgress() const
+	{
+		if (!CheckNonNull())
+		{
+			return 0.0f;
+		}
+
+		const UnitCastInfo& cast = Get()->GetCastInfo();
+		return cast.IsActive() ? cast.GetProgress(GetAsyncTimeMs()) : 0.0f;
+	}
+
+	bool UnitHandle::IsCastInterrupted() const
+	{
+		if (!CheckNonNull())
+		{
+			return false;
+		}
+
+		return Get()->GetCastInfo().IsInterruptFlashActive(GetAsyncTimeMs());
+	}
+
 	int32 UnitHandle::GetPower(const int32 powerType) const
 	{
 		if (!CheckNonNull()) return 0;

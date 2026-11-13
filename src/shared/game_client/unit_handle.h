@@ -149,6 +149,17 @@ namespace mmo
 		 */
 		[[nodiscard]] virtual bool HasProficiency(uint32 proficiency) const;
 
+		/// Gets the name of the spell the unit is casting or channeling right now.
+		/// @return The spell name, or nullptr while the unit casts nothing.
+		[[nodiscard]] const char* GetCastSpellName() const;
+
+		/// Gets the fill fraction of the unit's cast bar: casts fill 0 -> 1, channels drain 1 -> 0.
+		/// @return The fraction in [0, 1], or 0 while the unit casts nothing.
+		[[nodiscard]] float GetCastProgress() const;
+
+		/// Whether the unit's last cast failed so recently that "Interrupted" should still be shown.
+		[[nodiscard]] bool IsCastInterrupted() const;
+
 		[[nodiscard]] bool operator==(const UnitHandle & other) const;
 
 	private:
