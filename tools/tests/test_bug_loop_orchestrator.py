@@ -1036,6 +1036,36 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertIn("branch moved", self.api.notes(BUG_ID)[-1])
 
+	def test_a_moved_branch_becomes_the_candidate_the_next_ship_decision_approves(self):
+		# 2026-11: maintainer sessions reworked b36d1336 and b36cdad7 on their parked branches. Every
+		# ship click approved the stale review diff and was re-parked as "branch moved" for two weeks,
+		# because the re-park kept the old candidate and the old diff.
+		self.park_with_decision("ship", head="head1")
+		moved_diff = "diff --git a/src/fix.cpp b/src/fix.cpp\n+reworked by the maintainer\n"
+		self.worktree.branch_heads[BRANCH] = "head9"
+		self.worktree.diff = moved_diff
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped, [])
+		self.assertIn("branch moved", self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.api.review_diffs[-1], (BUG_ID, moved_diff))
+		with open(os.path.join(self.artifacts, BUG_ID, "decision.json"), encoding="utf-8") as handle:
+			self.assertEqual(json.load(handle)["head"], "head9")
+		self.api.bugs[BUG_ID]["decision"] = self.decision("ship", diff_sha=hashlib.sha256(moved_diff.encode("utf-8")).hexdigest(), decided_at="t2")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head9"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_a_stale_approval_never_ships_the_moved_branch(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.branch_heads[BRANCH] = "head9"
+		self.worktree.diff = "diff --git a/src/fix.cpp b/src/fix.cpp\n+reworked\n"
+		self.loop.poll_once()
+		# The maintainer clicks ship again on a page still showing the old diff.
+		self.api.bugs[BUG_ID]["decision"] = self.decision("ship", decided_at="t2")
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, [])
+		self.assertIn("does not match", self.api.notes(BUG_ID)[-1])
+
 	def test_ship_decision_without_recorded_commit_parks(self):
 		self.park_with_decision("ship", head="head1")
 		os.remove(os.path.join(self.artifacts, BUG_ID, "decision.json"))

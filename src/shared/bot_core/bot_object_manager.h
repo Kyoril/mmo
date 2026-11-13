@@ -206,14 +206,20 @@ namespace mmo
 		// ============================================================
 		// Convenience Queries (relative to self)
 		// ============================================================
+		//
+		// These take the bot's position from the caller rather than reading it from the self
+		// unit: the server never echoes a client its own movement, so the self unit keeps the
+		// position it logged in or last teleported at. Pass BotContext::GetPosition(), or call
+		// the BotContext wrappers, which do.
 
 		/// @brief Gets the nearest hostile unit to the bot.
 		/// 
-		/// Uses the bot's own position and faction to determine hostility.
+		/// Uses the bot's own faction to determine hostility.
 		/// 
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
 		/// @return Pointer to the nearest hostile unit, or nullptr if none.
-		const BotUnit* GetNearestHostile(float maxRange = 100.0f) const;
+		const BotUnit* GetNearestHostile(const Vector3& position, float maxRange = 100.0f) const;
 
 		/// @brief Gets the nearest attackable creature to the bot.
 		/// 
@@ -221,44 +227,54 @@ namespace mmo
 		/// NPC flags like vendors or quest givers). This includes neutral creatures
 		/// like boars that are not actively hostile.
 		/// 
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
+		/// @param exclude Optional predicate; returns true for units to skip.
 		/// @return Pointer to the nearest attackable creature, or nullptr if none.
-		const BotUnit* GetNearestAttackable(float maxRange = 100.0f) const;
+		const BotUnit* GetNearestAttackable(
+			const Vector3& position,
+			float maxRange = 100.0f,
+			const std::function<bool(const BotUnit&)>& exclude = nullptr) const;
 
 		/// @brief Gets the nearest friendly unit to the bot.
 		/// 
-		/// Uses the bot's own position and faction to determine friendliness.
+		/// Uses the bot's own faction to determine friendliness.
 		/// Excludes the bot itself from results.
 		/// 
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
 		/// @return Pointer to the nearest friendly unit, or nullptr if none.
-		const BotUnit* GetNearestFriendly(float maxRange = 100.0f) const;
+		const BotUnit* GetNearestFriendly(const Vector3& position, float maxRange = 100.0f) const;
 
 		/// @brief Gets the nearest friendly player to the bot.
 		/// 
 		/// Excludes the bot itself from results.
 		/// 
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
 		/// @return Pointer to the nearest friendly player, or nullptr if none.
-		const BotUnit* GetNearestFriendlyPlayer(float maxRange = 100.0f) const;
+		const BotUnit* GetNearestFriendlyPlayer(const Vector3& position, float maxRange = 100.0f) const;
 
 		/// @brief Gets all hostile units within range of the bot.
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
 		/// @return Vector of pointers to hostile units.
-		std::vector<const BotUnit*> GetHostilesInRange(float maxRange = 100.0f) const;
+		std::vector<const BotUnit*> GetHostilesInRange(const Vector3& position, float maxRange = 100.0f) const;
 
 		/// @brief Gets all friendly players within range of the bot.
 		/// 
 		/// Excludes the bot itself from results.
 		/// 
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range.
 		/// @return Vector of pointers to friendly players.
-		std::vector<const BotUnit*> GetFriendlyPlayersInRange(float maxRange = 100.0f) const;
+		std::vector<const BotUnit*> GetFriendlyPlayersInRange(const Vector3& position, float maxRange = 100.0f) const;
 
 		/// @brief Gets units that are targeting the bot.
+		/// @param position The bot's live position to measure from.
 		/// @param maxRange Maximum search range (0 = unlimited).
 		/// @return Vector of pointers to units targeting the bot.
-		std::vector<const BotUnit*> GetUnitsTargetingSelf(float maxRange = 0.0f) const;
+		std::vector<const BotUnit*> GetUnitsTargetingSelf(const Vector3& position, float maxRange = 0.0f) const;
 
 		// ============================================================
 		// Item Tracking

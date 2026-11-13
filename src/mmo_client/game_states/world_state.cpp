@@ -5675,7 +5675,9 @@ namespace mmo
 		}
 
 		const float brightness = m_renderSettings.GetExposure();
-		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness);
+		const float defaultBrightness = m_skyComponent ? DefaultEnvironmentBrightness(m_skyComponent->GetNormalizedTimeOfDay()) : DefaultDayBrightness;
+
+		ApplyEnvironmentStateToRenderer(*renderer, m_environment.GetState(), brightness * defaultBrightness);
 
 		// Selected fresh every frame (and pushed even when empty) so a map without any fog
 		// volumes -- or one whose volumes just faded out -- doesn't keep rendering the last
