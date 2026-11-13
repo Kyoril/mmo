@@ -747,6 +747,10 @@ namespace mmo
 		/// between, or action buttons would stay stuck in their pushed state.
 		std::map<int32, String> m_pressedKeyBindings;
 
+		/// Virtual key code of the modifier (Shift, Ctrl) pressed during a pending key capture, or 0.
+		/// It is captured as a key of its own if it is released before any other key is pressed.
+		int32 m_captureModifierKey{0};
+
 		std::vector<std::unique_ptr<WorldTextFrame>> m_worldTextFrames;
 
 		std::vector<std::shared_ptr<ChatBubbleFrame>> m_chatBubbleFrames;
