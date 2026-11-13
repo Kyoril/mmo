@@ -89,6 +89,43 @@ TEST_CASE("GameWorldObjectS - a used quest object is disabled at once and stays 
 	CHECK_FALSE(questObject->IsUsable(*player));
 }
 
+// A road lantern the player is asked to light must light up, not vanish from its post. A quest
+// object whose entry names a used display (data[1]) therefore stays in the world and switches to
+// that display until it resets, instead of despawning.
+TEST_CASE("GameWorldObjectS - a quest object with a used display switches to it instead of vanishing", "[world_object][quest_object]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+
+	constexpr uint32 unlitDisplay = 10;
+	constexpr uint32 litDisplay = 11;
+
+	proto::Project project;
+	auto* entry = MakeObjectEntry(project, game_world_object_type::QuestObject);
+	entry->set_displayid(unlitDisplay);
+	entry->add_data(0);				// data[0]: lock type, none
+	entry->add_data(litDisplay);	// data[1]: display while used
+
+	const auto player = MakePlayer(project, timers);
+
+	auto lantern = std::make_shared<GameWorldObjectS>(project, *entry);
+	lantern->Initialize();
+	REQUIRE(lantern->Get<uint32>(object_fields::ObjectDisplayId) == unlitDisplay);
+	REQUIRE(lantern->IsUsable(*player));
+
+	lantern->Use(*player);
+
+	// Lit, and still standing: only the display changed, and it cannot be used a second time.
+	CHECK(lantern->Get<uint32>(object_fields::ObjectDisplayId) == litDisplay);
+	CHECK((lantern->Get<uint32>(object_fields::ObjectFlags) & world_object_flags::Disabled) != 0);
+	CHECK_FALSE(lantern->IsUsable(*player));
+
+	// The reset puts it back on the post unlit, so the next player can light it again.
+	lantern->ResetAfterUse();
+	CHECK(lantern->Get<uint32>(object_fields::ObjectDisplayId) == unlitDisplay);
+	CHECK(lantern->IsUsable(*player));
+}
+
 TEST_CASE("GameWorldObjectS - other object types stay usable after a use", "[world_object][quest_object]")
 {
 	asio::io_service io;

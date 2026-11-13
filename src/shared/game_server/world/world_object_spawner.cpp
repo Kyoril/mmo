@@ -80,6 +80,10 @@ namespace mmo
 			spawned->SetTriggerIdOverride(m_triggerIdOverride);
 		}
 
+		// A quest object which shows a used display instead of despawning is unavailable for the same
+		// time a despawn and respawn would have taken.
+		spawned->SetUsedResetDelay(m_respawnDelay);
+
 		// Initialization is done: clear the field change marks so the first real field change
 		// after spawn doesn't broadcast the init fields (like the constant ObjectTypeId) as changes
 		spawned->ClearFieldChanges();
