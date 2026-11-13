@@ -318,7 +318,11 @@ namespace mmo
 
 		/// Prefixes a binding key name with the modifier keys currently held, in a fixed
 		/// ALT-CTRL-SHIFT- order, so that bindings can tell CTRL-1 apart from 1.
-		String DecorateWithModifiers(const String& keyName)
+		/// @param keyName Plain name of the pressed key.
+		/// @param keyBindings When given, a modifier that is bound on its own (as in "hold Shift to
+		///        show action bar 2") is a key of its own and does not form combinations: the keys
+		///        pressed while it is held keep their plain names.
+		String DecorateWithModifiers(const String& keyName, const std::map<String, String>* keyBindings = nullptr)
 		{
 			// A modifier pressed on its own must keep its plain name, or it would decorate itself.
 			if (keyName.empty() || IsModifierKeyName(keyName))
@@ -326,16 +330,21 @@ namespace mmo
 				return keyName;
 			}
 
+			const auto formsCombinations = [keyBindings](const char* modifierKeyName)
+			{
+				return keyBindings == nullptr || keyBindings->find(modifierKeyName) == keyBindings->end();
+			};
+
 			String prefix;
 			if (Platform::IsAltKeyDown())
 			{
 				prefix += "ALT-";
 			}
-			if (Platform::IsControlKeyDown())
+			if (Platform::IsControlKeyDown() && formsCombinations("CONTROL"))
 			{
 				prefix += "CTRL-";
 			}
-			if (Platform::IsShiftKeyDown())
+			if (Platform::IsShiftKeyDown() && formsCombinations("SHIFT"))
 			{
 				prefix += "SHIFT-";
 			}
@@ -1110,33 +1119,41 @@ namespace mmo
 	String WorldState::ResolveBindingKeyName(const int32 key) const
 	{
 		const String baseName = MapBindingKeyCode(key);
-		const String decoratedName = DecorateWithModifiers(baseName);
+
+		// While the options frame waits for a key, the whole combination is what the player means.
+		if (m_bindings.IsCapturing())
+		{
+			return DecorateWithModifiers(baseName);
+		}
+
+		const auto& keyBindings = m_bindings.GetAllKeyBindings();
+		const String decoratedName = DecorateWithModifiers(baseName, &keyBindings);
 		if (decoratedName == baseName)
 		{
 			return baseName;
 		}
 
-		// While the options frame waits for a key, the whole combination is what the player means.
-		if (m_bindings.IsCapturing())
-		{
-			return decoratedName;
-		}
-
 		// Combinations nobody bound fall back to the plain key, so that holding a modifier does not
 		// swallow an existing binding (Ctrl + W keeps moving the character forward).
-		const auto& keyBindings = m_bindings.GetAllKeyBindings();
 		return keyBindings.find(decoratedName) != keyBindings.end() ? decoratedName : baseName;
 	}
 
 	bool WorldState::OnKeyDown(const int32 key, bool repeat)
 	{
 		// A pending key capture waits for the key of a combination, not for its modifiers: holding
-		// Ctrl must not end the capture before the player pressed the key they want to bind.
+		// Ctrl must not end the capture before the player pressed the key they want to bind. A
+		// modifier is captured on its own once it is released without another key (OnKeyUp).
 		if (m_bindings.IsCapturing())
 		{
 			const String baseName = MapBindingKeyCode(key);
-			if (baseName.empty() || IsModifierKeyName(baseName))
+			if (baseName.empty())
 			{
+				return true;
+			}
+
+			if (IsModifierKeyName(baseName))
+			{
+				m_captureModifierKey = key;
 				return true;
 			}
 		}
@@ -1153,6 +1170,21 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// A modifier pressed and released while a key capture is still pending is the key the
+		// player wants to bind. The capture takes key down events, so it is handed one.
+		const bool capturedModifier = m_captureModifierKey == key && m_bindings.IsCapturing();
+		if (m_captureModifierKey == key)
+		{
+			m_captureModifierKey = 0;
+		}
+
+		if (capturedModifier)
+		{
+			m_pressedKeyBindings.erase(key);
+			m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Down);
+			return true;
+		}
+
 		String keyName;
 		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
