@@ -29,7 +29,8 @@ namespace mmo
 		{
 			writer
 				<< io::write<uint32>(requiredItem.itemId)
-				<< io::write<uint32>(requiredItem.count);
+				<< io::write<uint32>(requiredItem.count)
+				<< io::write_dynamic_range<uint8>(requiredItem.text);
 		}
 
 		writer << io::write<uint8>(itemInfo.requiredCreatures.size());
@@ -37,7 +38,8 @@ namespace mmo
 		{
 			writer
 				<< io::write<uint32>(requiredCreature.creatureId)
-				<< io::write<uint32>(requiredCreature.count);
+				<< io::write<uint32>(requiredCreature.count)
+				<< io::write_dynamic_range<uint8>(requiredCreature.text);
 		}
 
 		writer << io::write<uint8>(itemInfo.requiredObjects.size());
@@ -45,7 +47,8 @@ namespace mmo
 		{
 			writer
 				<< io::write<uint32>(requiredObject.objectId)
-				<< io::write<uint32>(requiredObject.count);
+				<< io::write<uint32>(requiredObject.count)
+				<< io::write_dynamic_range<uint8>(requiredObject.text);
 		}
 
 		writer << io::write<uint8>(itemInfo.rewardItems.size());
@@ -91,7 +94,8 @@ namespace mmo
 			QuestRequiredItem item;
 			reader
 				>> io::read<uint32>(item.itemId)
-				>> io::read<uint32>(item.count);
+				>> io::read<uint32>(item.count)
+				>> io::read_container<uint8>(item.text);
 			outItemInfo.requiredItems.emplace_back(item);
 		}
 
@@ -101,7 +105,8 @@ namespace mmo
 			QuestRequiredCreature creature;
 			reader
 				>> io::read<uint32>(creature.creatureId)
-				>> io::read<uint32>(creature.count);
+				>> io::read<uint32>(creature.count)
+				>> io::read_container<uint8>(creature.text);
 			outItemInfo.requiredCreatures.emplace_back(creature);
 		}
 
@@ -111,7 +116,8 @@ namespace mmo
 			QuestRequiredObject object;
 			reader
 				>> io::read<uint32>(object.objectId)
-				>> io::read<uint32>(object.count);
+				>> io::read<uint32>(object.count)
+				>> io::read_container<uint8>(object.text);
 			outItemInfo.requiredObjects.emplace_back(object);
 		}
 

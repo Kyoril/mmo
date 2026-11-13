@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 36 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 40 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -122,6 +122,7 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
+| 40 | 2026-11-13 | Quest objective text: every objective in `QuestQueryResult`'s `QuestInfo` payload gains a uint8-length string after its entry id and count, carrying the author's own wording for that objective (`QuestRequirement::text`, localized by the realm). Clients show it instead of the generated "<name> slain" / "<name>" wording in the quest log, the tracker and the progress message |
 | 39 | 2026-11-08 | World map member positions: `group_update_flags::Zone` (bit 7) becomes `Map` and carries the member's uint32 map id instead of an always-zero uint16 zone, so `PartyMemberStats` lets clients place far-away party members on their own map. Client `GuildMemberPositions` (no payload, handled by the realm, at most one per second) is answered by server `GuildMemberPositions` (uint16 count, then per member uint64 guid, uint8-length name, float x, float z) listing the online guild mates in the sender's world instance |
 | 38 | 2026-11-03 | Creation blocks gain `object_update_flags::Spawned` (0x2) for objects just added to the world (summoned, respawned, entered the instance) rather than come into sight; clients play a unit's spawn effect (`ModelDataEntry.spawn_effect`) only then |
 | 37 | 2026-11-03 | `DestroyObjects` gains a uint8 `despawn_reason` right after the object count: 0 `OutOfSight` (the objects left the client's view and still exist), 1 `Destroyed` (removed from the world instance). Clients play a unit's despawn effect (`ModelDataEntry.despawn_effect`) only for `Destroyed` |

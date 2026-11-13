@@ -31,6 +31,49 @@ namespace mmo
 			result["icon"] = emote->icon();
 			return result;
 		}
+
+		/// Returns the author-provided objective text of the objective which refers to the given
+		/// entry id, or an empty string when there is no such objective or it has no custom text.
+		const String& FindObjectiveText(const std::vector<QuestRequiredItem>& objectives, const uint32 entry)
+		{
+			static const String s_noText;
+			for (const auto& objective : objectives)
+			{
+				if (objective.itemId == entry)
+				{
+					return objective.text;
+				}
+			}
+			return s_noText;
+		}
+
+		/// @copydoc FindObjectiveText
+		const String& FindObjectiveText(const std::vector<QuestRequiredCreature>& objectives, const uint32 entry)
+		{
+			static const String s_noText;
+			for (const auto& objective : objectives)
+			{
+				if (objective.creatureId == entry)
+				{
+					return objective.text;
+				}
+			}
+			return s_noText;
+		}
+
+		/// @copydoc FindObjectiveText
+		const String& FindObjectiveText(const std::vector<QuestRequiredObject>& objectives, const uint32 entry)
+		{
+			static const String s_noText;
+			for (const auto& objective : objectives)
+			{
+				if (objective.objectId == entry)
+				{
+					return objective.text;
+				}
+			}
+			return s_noText;
+		}
 	}
 
 	QuestClient::QuestClient(RealmConnector& connector, DBQuestCache& questCache, const proto_client::SpellManager& spells, const proto_client::EmoteManager& emotes, DBItemCache& itemCache, DBCreatureCache& creatureCache, DBObjectCache& objectCache, const Localization& localization)
@@ -477,6 +520,10 @@ namespace mmo
 		const String* itemsGatheredFormat = m_localization.FindStringById("QUEST_ITEMS_NEEDED");
 		const String* complete = m_localization.FindStringById("COMPLETE");
 
+		// Used whenever an objective carries author-provided text instead of a generated wording.
+		const String* objectiveProgressFormat = m_localization.FindStringById("QUEST_OBJECTIVE_PROGRESS");
+		const char* objectiveProgress = objectiveProgressFormat ? objectiveProgressFormat->c_str() : "%s: %d/%d";
+
 		char buffer[512];
 
 		// Check for required creatures
@@ -500,9 +547,14 @@ namespace mmo
 				continue;
 			}
 
-			if (monstersKilledFormat)
+			ASSERT(counter < 4);
+			if (!creature.text.empty())
 			{
-				ASSERT(counter < 4);
+				// The objective is not completed by killing - the author worded it ("Sows returned").
+				snprintf(buffer, 512, objectiveProgress, creature.text.c_str(), questLogEntryIt->counters[counter], creature.count);
+			}
+			else if (monstersKilledFormat)
+			{
 				snprintf(buffer, 512, monstersKilledFormat->c_str(), creatureEntry->name.c_str(), questLogEntryIt->counters[counter], creature.count);
 			}
 			else
@@ -536,9 +588,13 @@ namespace mmo
 				continue;
 			}
 
-			if (objectsUsedFormat)
+			ASSERT(counter < 4);
+			if (!object.text.empty())
 			{
-				ASSERT(counter < 4);
+				snprintf(buffer, 512, objectiveProgress, object.text.c_str(), questLogEntryIt->counters[counter], object.count);
+			}
+			else if (objectsUsedFormat)
+			{
 				snprintf(buffer, 512, objectsUsedFormat->c_str(), objectEntry->name.c_str(), questLogEntryIt->counters[counter], object.count);
 			}
 			else
@@ -568,9 +624,13 @@ namespace mmo
 				continue;
 			}
 
-			if (itemsGatheredFormat)
+			const uint32 itemCount = std::min(item.count, ObjectMgr::GetItemCount(item.itemId));
+			if (!item.text.empty())
 			{
-				const uint32 itemCount = std::min(item.count, ObjectMgr::GetItemCount(item.itemId));
+				snprintf(buffer, 512, objectiveProgress, item.text.c_str(), itemCount, item.count);
+			}
+			else if (itemsGatheredFormat)
+			{
 				snprintf(buffer, 512, itemsGatheredFormat->c_str(), itemEntry->name.c_str(), itemCount, item.count);
 			}
 			else
@@ -1104,8 +1164,11 @@ namespace mmo
 
 			const ItemInfo* item = m_itemCache.Get(entry);
 
+			// An objective the author worded himself keeps that wording in the progress message.
+			const String& objectiveText = FindObjectiveText(quest->requiredItems, entry);
+
 			char buffer[512];
-			snprintf(buffer, 512, format->c_str(), item ? item->name.c_str() : "UNKNOWN", count, maxCount);
+			snprintf(buffer, 512, format->c_str(), objectiveText.empty() ? (item ? item->name.c_str() : "UNKNOWN") : objectiveText.c_str(), count, maxCount);
 			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
 
 			// Item counts come from inventory, not mirrored quest fields, so the quest log
@@ -1129,14 +1192,28 @@ namespace mmo
 
 			// The same packet carries both creature kill credit and world-object use credit;
 			// the credited object's guid tells them apart.
+			// An objective the author worded himself keeps that wording in the progress message,
+			// rendered with the plain "<text>: <have>/<need>" format instead of the generated one.
+			static const String s_objectiveProgressFormat = "%s: %d/%d";
+			const String* objectiveProgressFormat = m_localization.FindStringById("QUEST_OBJECTIVE_PROGRESS");
+			if (!objectiveProgressFormat) objectiveProgressFormat = &s_objectiveProgressFormat;
+
 			if (IsGameObjectGUID(guid))
 			{
 				static const String s_objectUsedFormat = "QUEST_OBJECTS_USED";
 				const String* format = m_localization.FindStringById("QUEST_OBJECTS_USED");
 				if (!format) format = &s_objectUsedFormat;
 
-				const ObjectInfo* object = m_objectCache.Get(entry);
-				snprintf(buffer, 512, format->c_str(), object ? object->name.c_str() : "UNKNOWN", count, maxCount);
+				const String& objectiveText = FindObjectiveText(quest->requiredObjects, entry);
+				if (!objectiveText.empty())
+				{
+					snprintf(buffer, 512, objectiveProgressFormat->c_str(), objectiveText.c_str(), count, maxCount);
+				}
+				else
+				{
+					const ObjectInfo* object = m_objectCache.Get(entry);
+					snprintf(buffer, 512, format->c_str(), object ? object->name.c_str() : "UNKNOWN", count, maxCount);
+				}
 			}
 			else
 			{
@@ -1144,8 +1221,16 @@ namespace mmo
 				const String* format = m_localization.FindStringById("QUEST_MONSTERS_KILLED");
 				if (!format) format = &s_monsterKilledFormat;
 
-				const CreatureInfo* creature = m_creatureCache.Get(entry);
-				snprintf(buffer, 512, format->c_str(), creature ? creature->name.c_str() : "UNKNOWN", count, maxCount);
+				const String& objectiveText = FindObjectiveText(quest->requiredCreatures, entry);
+				if (!objectiveText.empty())
+				{
+					snprintf(buffer, 512, objectiveProgressFormat->c_str(), objectiveText.c_str(), count, maxCount);
+				}
+				else
+				{
+					const CreatureInfo* creature = m_creatureCache.Get(entry);
+					snprintf(buffer, 512, format->c_str(), creature ? creature->name.c_str() : "UNKNOWN", count, maxCount);
+				}
 			}
 
 			FrameManager::Get().TriggerLuaEvent("UI_INFO_MESSAGE", buffer);
