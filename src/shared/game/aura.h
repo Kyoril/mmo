@@ -184,6 +184,15 @@ namespace mmo
 			/// on every later summon. Removing the owner aura removes the spell's aura from the pet.
 			PetPassive = 45,
 
+			/// Marks the unit as claimed: while this aura is on it, a spell with an ApplyAura
+			/// effect aimed at it by anyone else fails with "Invalid target" instead of applying.
+			/// The unit's own casts on itself are not affected. Content uses this to hand a
+			/// creature to exactly one player - a quest item that makes a creature follow its
+			/// user applies it, so a second use (by that player or by another one) cannot take
+			/// the creature over. The aura needs a duration: when its owner never hands the
+			/// creature in, the mark has to expire for the creature to become claimable again.
+			PreventAuraApplication = 46,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

@@ -622,6 +622,18 @@ namespace mmo
 				return false;
 			}
 
+			// A unit someone has claimed (PreventAuraApplication) takes no further auras from
+			// anyone but itself: the cast fails instead of overwriting the claim. A quest item
+			// that makes a creature follow its user marks it this way, so a second use cannot
+			// hand the creature - and the progress it carries - to whoever used the item last.
+			if (unitTarget != &m_cast.GetExecuter()
+				&& SpellHasEffect(m_spell, spell_effects::ApplyAura)
+				&& unitTarget->HasAuraEffect(aura_type::PreventAuraApplication))
+			{
+				SendEndCast(spell_cast_result::FailedBadTargets);
+				return false;
+			}
+
 			// Creatures (NPCs and pets) turn to what they cast at, unless crowd control holds them. This
 			// runs again when the cast finishes, so a target that walked past the caster during the
 			// cast no longer throws the finished cast away. Players have to face their target themselves.

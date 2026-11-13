@@ -117,6 +117,15 @@ Data: `<creature entry>`, `[<radius, default 15>]`, `[<despawn delay ms, default
 optional emote. This is the general "bring N of them back" objective: strayed livestock, rescued
 prisoners, lost children.
 
+**One follower belongs to one player.** The turnip spell's second effect applies a
+`PreventAuraApplication` aura (`src/shared/game/aura.h`) to the sow for five minutes. While it is
+on her, every aura-applying cast anyone else aims at her fails with "Invalid target": a second
+player cannot offer their own turnip and walk off with a sow - and the progress she carries - that
+someone else is already leading. The aura is visible, so her buff frame shows that she is taken
+before anyone wastes a turnip on her. The mark has to expire, because a player who never hands her
+in leaves her claimed; five minutes is long enough to lead her home and short enough that an
+abandoned sow becomes everyone's again.
+
 Three things this quest needed that were not there:
 
 - **The `Dummy` spell effect did nothing at all**, not even tell triggers about the cast. A spell
