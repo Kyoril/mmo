@@ -15,7 +15,8 @@ a second row of buttons on screen.
   - `ACTIONBARPAGE1` / `ACTIONBARPAGE2` switch the page until it is switched again
     (default Shift-1 / Shift-2).
   - `ACTIONBARPAGE2HOLD` shows page 2 while the key is held (unbound by default).
-- A brass diamond with the page number is shown while the main bar is not on page 1.
+- A small plate left of the health rail shows the page number, quiet on page 1 and lit on page 2.
+  It is deliberately not the level diamond of the target frame, so it is not read as a level.
 - The page is not saved; the main bar starts on page 1 after every login.
 - The second bar, when enabled in the options, still shows slots 13-24, and the Ctrl-1 ... Ctrl-=
   bindings of those slots stay.
