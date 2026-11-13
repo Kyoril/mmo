@@ -22,18 +22,28 @@ namespace mmo
 	{
 		uint32 itemId;
 		uint32 count;
+		/// Optional author-provided objective text (QuestRequirement::text), already localized.
+		/// Replaces the generated "<item name>" wording in the quest log and tracker when set.
+		String text;
 	};
 
 	struct QuestRequiredCreature
 	{
 		uint32 creatureId;
 		uint32 count;
+		/// Optional author-provided objective text (QuestRequirement::text), already localized.
+		/// Replaces the generated "<creature name> slain" wording in the quest log and tracker
+		/// when set, for objectives which are not completed by killing the creature.
+		String text;
 	};
 
 	struct QuestRequiredObject
 	{
 		uint32 objectId;
 		uint32 count;
+		/// Optional author-provided objective text (QuestRequirement::text), already localized.
+		/// Replaces the generated "<object name>" wording in the quest log and tracker when set.
+		String text;
 	};
 
 	struct QuestInfo

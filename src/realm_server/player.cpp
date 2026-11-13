@@ -3753,17 +3753,21 @@ namespace mmo
 
 		for (const auto &requirement : questEntry->requirements())
 		{
+			// The author may override the generated objective wording per requirement; an
+			// objective which is not completed by killing needs it (see quests.proto).
+			String objectiveText = GetLocalizedString(requirement.text(), requirement.text_loc(), m_locale);
+
 			if (requirement.itemid() != 0)
 			{
-				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount());
+				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount(), std::move(objectiveText));
 			}
 			else if (requirement.creatureid() != 0)
 			{
-				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount());
+				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount(), std::move(objectiveText));
 			}
 			else if (requirement.objectid() != 0)
 			{
-				quest.requiredObjects.emplace_back(requirement.objectid(), requirement.objectcount());
+				quest.requiredObjects.emplace_back(requirement.objectid(), requirement.objectcount(), std::move(objectiveText));
 			}
 		}
 

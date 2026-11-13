@@ -265,7 +265,8 @@ namespace mmo
 		"ModCastingSpeedPct",
 		"ModHealingTakenPct",
 		"ModPetStatsPct",
-		"PetPassive"
+		"PetPassive",
+		"PreventAuraApplication"
 	};
 
 	static_assert(std::size(s_auraTypeNames) == aura_type::Count_, "Each aura type must have a string representation!");
