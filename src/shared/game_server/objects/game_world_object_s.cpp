@@ -227,6 +227,20 @@ namespace mmo
 			// world right here would destroy it under that effect's hands.
 			Set<uint32>(object_fields::ObjectFlags, Get<uint32>(object_fields::ObjectFlags) | world_object_flags::Disabled);
 
+			// An object with a used display shows the result of the use instead of vanishing: a road
+			// lantern lights up and stays on the post until it burns down again after the reset delay.
+			if (const uint32 usedDisplayId = GetUsedDisplayId(); usedDisplayId != 0)
+			{
+				Set<uint32>(object_fields::ObjectDisplayId, usedDisplayId);
+
+				// Without a scheduled reset it would stay used forever and no one else could use it,
+				// so fall back to the despawn below.
+				if (ArmUsedReset())
+				{
+					return;
+				}
+			}
+
 			if (WorldInstance* world = GetWorldInstance())
 			{
 				std::weak_ptr<GameObjectS> weakThis = shared_from_this();
@@ -306,6 +320,37 @@ namespace mmo
 		m_autoCloseCountdown->SetEnd(GetAsyncTimeMs() + autoCloseMs);
 	}
 
+	bool GameWorldObjectS::ArmUsedReset()
+	{
+		if (m_usedResetDelay == 0 || !m_worldInstance)
+		{
+			return false;
+		}
+
+		if (!m_usedResetCountdown)
+		{
+			m_usedResetCountdown = std::make_unique<Countdown>(m_worldInstance->GetUniverse().GetTimers());
+			m_usedResetEnded = m_usedResetCountdown->ended.connect([this]()
+			{
+				ResetAfterUse();
+			});
+		}
+
+		m_usedResetCountdown->SetEnd(GetAsyncTimeMs() + m_usedResetDelay);
+		return true;
+	}
+
+	void GameWorldObjectS::ResetAfterUse()
+	{
+		if (GetUsedDisplayId() == 0)
+		{
+			return;
+		}
+
+		Set<uint32>(object_fields::ObjectDisplayId, m_entry.displayid());
+		SetEnabled(true);
+	}
+
 	void GameWorldObjectS::OnDespawn()
 	{
 		// The object may be kept alive by outside references after removal from the world —
@@ -315,6 +360,12 @@ namespace mmo
 			m_autoCloseCountdown->Cancel();
 		}
 
+		// Same for a used quest object which was waiting for its reset.
+		if (m_usedResetCountdown)
+		{
+			m_usedResetCountdown->Cancel();
+		}
+
 		GameObjectS::OnDespawn();
 	}
 
@@ -322,6 +373,16 @@ namespace mmo
 	{
 		if (GetType() == GameWorldObjectType::Door && m_entry.data_size() > 1)
 			return static_cast<uint32>(m_entry.data(1));
+		return 0u;
+	}
+
+	uint32 GameWorldObjectS::GetUsedDisplayId() const
+	{
+		if (GetType() == GameWorldObjectType::QuestObject && m_entry.data_size() > 1)
+		{
+			return static_cast<uint32>(m_entry.data(1));
+		}
+
 		return 0u;
 	}
 
