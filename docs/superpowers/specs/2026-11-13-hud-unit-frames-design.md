@@ -42,6 +42,9 @@ cast, and the pet and party frames still wore the older themes' look. This bring
   resource gets no empty bar.
 - The cast bar is anchored above the pet bar while that is shown, otherwise above the top action
   bar, because the pet bar reaches into the centre.
+- The resource, cast and experience bars hang below the health meter as `WayfinderTailMeter`: flat on
+  top, with ends that carry on the meter's lower diagonals, each bar inset by the height above it.
+  The art comes from `tools/ui_theme/wayfinder_art.py` (`MeterTail*`).
 - Pet frame: no portrait; name, level diamond on the health bar as on the target frame, thin
   resource and experience bars.
 - Party frame: no backdrop; per member a name, a health meter with percentage and a thin resource
