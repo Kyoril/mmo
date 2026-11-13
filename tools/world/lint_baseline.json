@@ -3,8 +3,8 @@
   "placement": [
     {
       "map": 0,
-      "key": "grid_pattern|pack:unit:0:44:-:-14:535",
-      "message": "7 x Young Forest Wolf around (2, 538) sit on a regular grid; scatter them irregularly"
+      "key": "grid_pattern|pack:object:0:16:Haven Road - Unlit Road Lantern 01:-615:512",
+      "message": "8 x Haven Road - Unlit Road Lantern 01 around (-649, 575) sit on a regular grid; scatter them irregularly"
     },
     {
       "map": 0,
@@ -43,78 +43,83 @@
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:1:-:168:676",
-      "message": "Silverleaf Sprig at (168, 676): 0.5 m above the ground"
+      "key": "height_delta|object:0:19:Thornhand Landing - Sunken Crate 01:-414:773",
+      "message": "Thornhand Landing - Sunken Crate 01 at (-414, 773): 0.9 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:1:-:320:725",
-      "message": "Silverleaf Sprig at (320, 725): 1.0 m below the ground"
+      "key": "height_delta|object:0:19:Thornhand Landing - Sunken Crate 02:-465:799",
+      "message": "Thornhand Landing - Sunken Crate 02 at (-465, 799): 0.7 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:1:-:375:615",
-      "message": "Silverleaf Sprig at (375, 615): 1.0 m below the ground"
+      "key": "height_delta|object:0:19:Thornhand Landing - Sunken Crate 05:-476:805",
+      "message": "Thornhand Landing - Sunken Crate 05 at (-476, 805): 0.9 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:1:-:379:615",
-      "message": "Silverleaf Sprig at (379, 615): 0.8 m below the ground"
+      "key": "height_delta|object:0:19:Thornhand Landing - Sunken Crate 06:-431:779",
+      "message": "Thornhand Landing - Sunken Crate 06 at (-431, 779): 0.9 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:1:-:384:666",
-      "message": "Silverleaf Sprig at (384, 666): 2.5 m below the ground"
+      "key": "height_delta|unit:0:100:Haven - Hilda Brandt:-706:976",
+      "message": "Haven - Hilda Brandt at (-706, 976): 0.6 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|object:0:7:-:-79:113",
-      "message": "Copper Vein at (-79, 113): 1.8 m below the ground"
+      "key": "height_delta|unit:0:109:Haven - Citizen 02:-699:972",
+      "message": "Haven - Citizen 02 at (-699, 972): 0.6 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:14:-:341:731",
-      "message": "Young Forest Boar at (341, 731): 1.9 m below the ground"
+      "key": "height_delta|unit:0:144:Haven - Ambrose Tallow:-694:978",
+      "message": "Haven - Ambrose Tallow at (-694, 978): 0.7 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:14:-:405:689",
-      "message": "Young Forest Boar at (405, 689): 0.7 m below the ground"
+      "key": "height_delta|unit:0:97:Haven - Keep Guard 01:-696:1058",
+      "message": "Haven - Keep Guard 01 at (-696, 1058): 0.6 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:19:-:366:661",
-      "message": "Forest Boar at (366, 661): 1.5 m below the ground"
+      "key": "height_delta|unit:0:97:Haven - Night Patrol 01:-688:978",
+      "message": "Haven - Night Patrol 01 at (-688, 978): 0.7 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:19:-:396:648",
-      "message": "Forest Boar at (396, 648): 2.5 m below the ground"
+      "key": "height_delta|unit:0:99:Haven - Tobias Wainwright:-713:976",
+      "message": "Haven - Tobias Wainwright at (-713, 976): 0.6 m above the ground"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:19:-:397:676",
-      "message": "Forest Boar at (397, 676): 2.5 m below the ground"
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 01:-414:773",
+      "message": "Thornhand Landing - Sunken Crate 01 at (-414, 773): stands in 5.8 m deep water"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:41:ArmsmasterTheobald:53:-51",
-      "message": "ArmsmasterTheobald at (53, -51): 6.7 m below the ground"
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 02:-465:799",
+      "message": "Thornhand Landing - Sunken Crate 02 at (-465, 799): stands in 5.5 m deep water"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:42:Fighter_01:38:-48",
-      "message": "Fighter_01 at (38, -48): 5.8 m below the ground"
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 03:-425:774",
+      "message": "Thornhand Landing - Sunken Crate 03 at (-425, 774): stands in 2.7 m deep water"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:43:Sergeant Bram Halford:39:-45",
-      "message": "Sergeant Bram Halford at (39, -45): 5.9 m below the ground"
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 04:-409:767",
+      "message": "Thornhand Landing - Sunken Crate 04 at (-409, 767): stands in 4.4 m deep water"
     },
     {
       "map": 0,
-      "key": "height_delta|unit:0:9:-:14:21",
-      "message": "Mariana Silkspun at (14, 21): 3.8 m below the ground"
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 05:-476:805",
+      "message": "Thornhand Landing - Sunken Crate 05 at (-476, 805): stands in 6.0 m deep water"
+    },
+    {
+      "map": 0,
+      "key": "in_water|object:0:19:Thornhand Landing - Sunken Crate 06:-431:779",
+      "message": "Thornhand Landing - Sunken Crate 06 at (-431, 779): stands in 3.8 m deep water"
     },
     {
       "map": 0,
@@ -128,6 +133,11 @@
     },
     {
       "map": 0,
+      "key": "inside_footprint|unit:0:97:Haven - Night Patrol 02:-689:1025",
+      "message": "Haven - Night Patrol 02 at (-689, 1025): inside the footprint of Models/Haven/Haven_Town.hwmo"
+    },
+    {
+      "map": 0,
       "key": "level_band|unit:0:21:-:417:755",
       "message": "Grimtusk, the Ironback at (417, 755) is level 5-5, outside the Forest Boar grounds band 1-4"
     },
@@ -138,8 +148,68 @@
     },
     {
       "map": 0,
+      "key": "level_band|unit:0:44:Briarwatch March - Young Wolf 05:-230:405",
+      "message": "Briarwatch March - Young Wolf 05 at (-230, 405) is level 3-4, outside the Ruined Cottages band 7-7"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:126:Crossroads Inn - Marta Coldwell:-608:437",
+      "message": "Crossroads Inn - Marta Coldwell at (-608, 437) is named for 'Crossroads Inn' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:129:Old Stone Bridge - Tollmaster Brask:-434:362",
+      "message": "Old Stone Bridge - Tollmaster Brask at (-434, 362) is named for 'Old Stone Bridge' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:130:Old Stone Bridge - Toll Thug 01:-428:358",
+      "message": "Old Stone Bridge - Toll Thug 01 at (-428, 358) is named for 'Old Stone Bridge' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:130:Old Stone Bridge - Toll Thug 02:-431:368",
+      "message": "Old Stone Bridge - Toll Thug 02 at (-431, 368) is named for 'Old Stone Bridge' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:131:Haven Road - Thornhand Waylayer 01:-716:672",
+      "message": "Haven Road - Thornhand Waylayer 01 at (-716, 672) is named for 'Haven Road' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:131:Haven Road - Thornhand Waylayer 02:-689:676",
+      "message": "Haven Road - Thornhand Waylayer 02 at (-689, 676) is named for 'Haven Road' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:137:Thistledown Farm - Stubble Boar 02:-649:675",
+      "message": "Thistledown Farm - Stubble Boar 02 at (-649, 675) is named for 'Thistledown Farm' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:137:Wainbrook Farm - Stubble Boar 01:-712:632",
+      "message": "Wainbrook Farm - Stubble Boar 01 at (-712, 632) is named for 'Wainbrook Farm' but stands outside it"
+    },
+    {
+      "map": 0,
+      "key": "outside_poi|unit:0:137:Wainbrook Farm - Stubble Boar 04:-791:632",
+      "message": "Wainbrook Farm - Stubble Boar 04 at (-791, 632) is named for 'Wainbrook Farm' but stands outside it"
+    },
+    {
+      "map": 0,
       "key": "over_hole|object:0:4:-:260:608",
       "message": "Water Barrel at (260, 608): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:126:Crossroads Inn - Marta Coldwell:-608:437",
+      "message": "Crossroads Inn - Marta Coldwell at (-608, 437): stands over a terrain hole; make sure a floor mesh fills it"
+    },
+    {
+      "map": 0,
+      "key": "over_hole|unit:0:13:Oakenshire Inn Cellar - Malrik Duskwright:265:595",
+      "message": "Oakenshire Inn Cellar - Malrik Duskwright at (265, 595): stands over a terrain hole; make sure a floor mesh fills it"
     },
     {
       "map": 0,
@@ -193,13 +263,23 @@
     },
     {
       "map": 0,
-      "key": "steep_slope|object:0:7:-:-79:113",
-      "message": "Copper Vein at (-79, 113): slope 48° exceeds 35°"
+      "key": "steep_slope|object:0:19:Thornhand Landing - Sunken Crate 01:-414:773",
+      "message": "Thornhand Landing - Sunken Crate 01 at (-414, 773): slope 42° exceeds 35°"
     },
     {
       "map": 0,
-      "key": "steep_slope|unit:0:67:Briarwatch - Duskfang Stalker 01:-148:408",
-      "message": "Briarwatch - Duskfang Stalker 01 at (-148, 408): slope 38° exceeds 35°"
+      "key": "steep_slope|object:0:19:Thornhand Landing - Sunken Crate 04:-409:767",
+      "message": "Thornhand Landing - Sunken Crate 04 at (-409, 767): slope 43° exceeds 35°"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|object:0:19:Thornhand Landing - Sunken Crate 06:-431:779",
+      "message": "Thornhand Landing - Sunken Crate 06 at (-431, 779): slope 37° exceeds 35°"
+    },
+    {
+      "map": 0,
+      "key": "steep_slope|object:0:7:-:-79:113",
+      "message": "Copper Vein at (-79, 113): slope 48° exceeds 35°"
     },
     {
       "map": 2,

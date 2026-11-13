@@ -4025,6 +4025,18 @@ namespace mmo
 			});
 	}
 
+	void BotRealmConnector::ExecuteGossipAction(const uint64 npcGuid, const uint32 gossipMenu, const uint32 gossipOption)
+	{
+		sendSinglePacket([npcGuid, gossipMenu, gossipOption](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::GossipAction);
+			packet
+				<< io::write<uint64>(npcGuid)
+				<< io::write<uint32>(gossipMenu)
+				<< io::write<uint32>(gossipOption);
+			packet.Finish();
+			});
+	}
+
 	void BotRealmConnector::InitiateTrade(const uint64 targetGuid)
 	{
 		sendSinglePacket([targetGuid](game::OutgoingPacket& packet) {

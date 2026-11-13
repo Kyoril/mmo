@@ -15,6 +15,7 @@
 #include "game/loot.h"
 #include "game/vendor.h"
 #include "game_server/condition_mgr.h"
+#include "game_server/gossip_menu_graph.h"
 
 namespace mmo
 {
@@ -1312,14 +1313,19 @@ namespace mmo
 		}
 
 		// Check if this npc has the gossip menu and if the gossip menu and the gossip actions are available and usable for the player
-		const proto::GossipMenuEntry* gossipMenu = GetActiveGossipMenuFromNpc(*unit);
-		if (!gossipMenu)
+		const proto::GossipMenuEntry* rootMenu = GetActiveGossipMenuFromNpc(*unit);
+		if (!rootMenu)
 		{
 			ELOG("Player tried to interact with npc which does not offer a gossip menu at all for the player");
 			return;
 		}
 
-		if (gossipMenu->id() != menuId)
+		// The option may sit on a sub page of the dialogue (a menu opened by a GossipMenu option),
+		// so every page the player can reach from the npc's menu is accepted - and no other.
+		const proto::GossipMenuEntry* gossipMenu = FindReachableGossipMenu(*rootMenu, menuId,
+			[this](const uint32 id) { return m_project.gossipMenus.getById(id); },
+			[this](const uint32 conditionId) { return m_conditionMgr.PlayerMeetsCondition(*m_character, conditionId); });
+		if (!gossipMenu)
 		{
 			ELOG("Player tried to interact with npc with wrong gossip menu id");
 			return;

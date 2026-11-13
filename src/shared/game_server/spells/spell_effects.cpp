@@ -122,7 +122,19 @@ namespace mmo
 			}
 		}
 
-		void HandleDummy(SpellEffectContext& /*ctx*/) {}
+		void HandleDummy(SpellEffectContext& ctx)
+		{
+			// A dummy effect does nothing by itself. It only records its targets as hit by the
+			// spell, so that content can react with an OnSpellHit trigger - a quest item used on a
+			// creature. Without this the cast went off and no trigger ever heard of it.
+			for (auto* targetObject : ctx.effectTargets)
+			{
+				if (targetObject != nullptr)
+				{
+					ctx.markAffectedTarget(*targetObject);
+				}
+			}
+		}
 
 		/// Deals the effect's school damage to one unit (immunity, modifiers, crit, block, threat,
 		/// combat log and procs). Shared by SchoolDamage and HealthLeech.
@@ -732,12 +744,16 @@ namespace mmo
 						continue;
 					}
 
-					targetObject->AsObject().Use(*playerCaster);
-
-					// One-time door unlock: if data[1] is set, change the active lock type
+					// Using an object may take it out of the world (a quest object is consumed by its
+					// use), so it is kept alive across the call and asked beforehand what it needs.
+					const std::shared_ptr<GameObjectS> keepAlive = targetObject->shared_from_this();
 					auto* worldObj = static_cast<GameWorldObjectS*>(targetObject);
 					const uint32 postUnlockLockType = worldObj->GetPostUnlockLockType();
-					if (postUnlockLockType != 0)
+
+					worldObj->Use(*playerCaster);
+
+					// One-time door unlock: if data[1] is set, change the active lock type
+					if (postUnlockLockType != 0 && worldObj->GetWorldInstance() != nullptr)
 					{
 						worldObj->Set<uint32>(object_fields::LockEntry, postUnlockLockType);
 					}

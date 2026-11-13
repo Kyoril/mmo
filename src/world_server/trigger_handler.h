@@ -249,6 +249,12 @@ namespace mmo
 		/// Executes one trigger picked at random from the ids in the action's data.
 		void HandleRandomTrigger(const proto::TriggerAction& action, TriggerContext& context);
 
+		/// Overrides (or restores) the faction template of a creature.
+		void HandleSetFaction(const proto::TriggerAction& action, TriggerContext& context);
+
+		/// Hands in the creatures following a player for quest credit and despawns them.
+		void HandleDeliverFollowers(const proto::TriggerAction& action, TriggerContext& context);
+
 		/// Sends a positional sound entry to every player of a world instance within a radius.
 		/// @returns Number of players the sound was sent to.
 		uint32 PlaySoundAtPosition(WorldInstance& world, uint32 sound, const Vector3& position, float radius);

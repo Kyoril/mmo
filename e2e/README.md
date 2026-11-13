@@ -86,6 +86,9 @@ failures report the numeric reason, e.g. `failed:21` = skill too low, `failed:22
 *transitions*, so these count changes, not swings: an attack that stays out of range reports
 one error, and the swing that lands again reports one recovery),
 `FindUnitByEntry(entry) -> g|nil`, `FindUnitByName(name) -> g|nil`,
+`FindNearestUnitByEntry(entry, x, y, z) -> g|nil` (the living creature of that entry closest to a
+position, for places with several of one entry — `FindUnitByEntry` yields whichever the client met
+first),
 `FindObjectByEntry(entry) -> g|nil` (world objects: chests, doors, ...),
 `FindNearestObjectByEntry(entry, x, y, z) -> g|nil` (the one closest to a position, for maps with
 several objects of one entry, e.g. the Hollow Choir's seals),
@@ -134,7 +137,9 @@ persistent pet as the last `PetSpells` described it; temporary pets have no such
 Actions:
 `TargetUnit(g)`, `FaceUnit(g)`, `CastSpell(spellId [, g]) -> bool` (faces the target
 automatically), `CastSpellOnObject(spellId, g) -> bool` (world-object target, e.g.
-the Open spell on a door), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
+the Open spell on a door; chests and quest objects are used the same way, with the generic
+Open spell 39 and its 5 s cast — a chest then has its loot window open, a quest object grants
+its use credit and runs its `OnInteraction` triggers), `CancelCast()`, `StartAttack(g)`, `StopAttack()`,
 `MoveTo(x, y, z [, timeoutMs]) -> bool` (nav-mesh pathing),
 `SendChat(msg [, channel [, target]])` (channel `"say"` (default), `"party"`, `"yell"`, `"emote"`, `"guild"`, `"general"` or `"whisper"`, which needs the target name), `GetWhisperCount()` and `GetLastWhisper()` for whispers received,
 `GetGuildChatCount()` and `GetLastGuildChat()` for guild chat received, `GuildInvite(name)`,
@@ -146,7 +151,14 @@ backpack item; empty slots and unwearable items are rejected harmlessly),
 `EquipBackpackItemTo(packIndex, equipSlot)` (moves backpack slot `packIndex`, 0-based, into an
 equipment slot, e.g. 16 = off hand, which auto-equip never picks for a one-handed weapon),
 `LootUnit(g)` (opens the loot window on a corpse or world object; the character must
-be within loot range), `ReleaseLoot(g)` (closes it),
+be within loot range), `TakeLootItem(slot)` (takes the item in a slot of the open loot window,
+slots count from 0), `ReleaseLoot(g)` (closes it),
+`SelectGossipOption(npc, menuId, optionId)` (picks an option of an npc's gossip menu; the server
+accepts it only on a page the npc offers this character — the root menu or a page reachable from it
+through `GossipMenu` options — and only if the option's condition is met, so a refused option simply
+has no effect),
+`UseItem(itemId [, g]) -> bool` (uses an item from the backpack, optionally on a unit, e.g. a quest
+item whose spell targets a creature; false if the backpack holds no such item),
 `DoEmote(emoteId)` (emote 4 = Sit, a pose emote that toggles: performing it again
 stands the character up), `CyclePose()`,
 `SendAreaTrigger(areaTriggerId)` (reports area-trigger entry — the real client

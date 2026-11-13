@@ -728,6 +728,31 @@ namespace mmo
 		}
 	}
 
+	bool GameCreatureS::SetFactionTemplateOverride(const uint32 factionTemplateId)
+	{
+		if (GetProject().factionTemplates.getById(factionTemplateId) == nullptr)
+		{
+			return false;
+		}
+
+		// GetFactionTemplate() notices the changed field by itself and re-resolves its cache.
+		Set<uint32>(object_fields::FactionTemplate, factionTemplateId);
+		return true;
+	}
+
+	void GameCreatureS::ClearFactionTemplateOverride()
+	{
+		if (m_entry != nullptr && HasFactionTemplateOverride())
+		{
+			Set<uint32>(object_fields::FactionTemplate, m_entry->factiontemplate());
+		}
+	}
+
+	bool GameCreatureS::HasFactionTemplateOverride() const
+	{
+		return m_entry != nullptr && Get<uint32>(object_fields::FactionTemplate) != m_entry->factiontemplate();
+	}
+
 	void GameCreatureS::ClearFollowedUnit()
 	{
 		if (!m_hasFollowTarget)

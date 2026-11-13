@@ -138,6 +138,23 @@ Quest-relevant trigger actions in `src/world_server/trigger_handler.cpp`:
   dies, is interrupted by combat and resumes after reset, and falls back to normal idle movement
   if the followed unit despawns
 - `ClearFollowTarget`: stops following and resumes the creature's configured idle movement
+- `DeliverFollowers`: hands in the creatures of one entry that follow a player (data = entry,
+  optional radius, optional despawn delay; text = optional emote): quest kill credit for the entry
+  per creature, stop following, despawn. The "lead N of them back" objective
+- `SetFaction`: overrides a creature's faction template (data = template id, 0 restores; optional
+  1 = attack the triggering unit). Lasts until the creature resets or respawns
+- `SummonCreature`: explicit coordinates that are all zero mean "at the owner", so a summon at the
+  owner can still give a despawn time and the attack flag
+
+Trigger conditions can ask for the triggering player's quest status with the `QuestStatus`
+function (function data = quest id; 0 rewarded, 1 complete, 2 unavailable, 3 incomplete,
+4 available, -1 without a player). A quest without objectives is complete as soon as it is accepted.
+
+A spell whose effect is `Dummy` does nothing by itself but counts as a hit on its targets, so an
+`OnSpellHit` trigger on a creature reacts to a quest item used on it.
+
+Gossip options of type `Trigger` raise `OnGossipAction` with `[menu id, option id]`. They work on
+sub pages (menus opened by a `GossipMenu` option) as well as on the npc's main menu.
 
 Useful trigger events:
 

@@ -198,7 +198,7 @@ namespace mmo
 		static GraphicsDevice& CreateD3D11(const GraphicsDeviceDesc& desc);
 #endif
         
-#ifdef __APPLE__
+#ifdef MMO_HAS_METAL
         static GraphicsDevice& CreateMetal(const GraphicsDeviceDesc& desc);
 #endif
 

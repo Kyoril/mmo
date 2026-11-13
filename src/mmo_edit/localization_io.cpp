@@ -78,7 +78,8 @@ namespace mmo
 			return actionType == trigger_actions::Say
 				|| actionType == trigger_actions::Yell
 				|| actionType == trigger_actions::Emote
-				|| actionType == trigger_actions::BroadcastMessage;
+				|| actionType == trigger_actions::BroadcastMessage
+				|| actionType == trigger_actions::DeliverFollowers;
 		}
 
 		/// Applies the non-empty translation values from a JSON translations map to a per-locale override array.
