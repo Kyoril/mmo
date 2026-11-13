@@ -118,13 +118,19 @@ optional emote. This is the general "bring N of them back" objective: strayed li
 prisoners, lost children.
 
 **One follower belongs to one player.** The turnip spell's second effect applies a
-`PreventAuraApplication` aura (`src/shared/game/aura.h`) to the sow for five minutes. While it is
+`PreventAuraApplication` aura (`src/shared/game/aura.h`) to the sow for one minute. While it is
 on her, every aura-applying cast anyone else aims at her fails with "Invalid target": a second
 player cannot offer their own turnip and walk off with a sow - and the progress she carries - that
 someone else is already leading. The aura is visible, so her buff frame shows that she is taken
-before anyone wastes a turnip on her. The mark has to expire, because a player who never hands her
-in leaves her claimed; five minutes is long enough to lead her home and short enough that an
-abandoned sow becomes everyone's again.
+before anyone wastes a turnip on her.
+
+The mark has to expire, because a player who never hands her in leaves her claimed. When it does,
+the sow stops following and runs back to her spawn point (`AuraEffect::EndClaimFollow`), so a
+turnip buys a minute of her company and an abandoned sow is found where she belongs instead of
+standing in a field halfway to the farm. Her claim is gone with the mark, so anyone - the same
+player included - can offer her another turnip. A sow caught in a fight when the mark runs out
+only stops following; she resets with the fight, because evading on command would be a free heal
+for whoever started it.
 
 Three things this quest needed that were not there:
 

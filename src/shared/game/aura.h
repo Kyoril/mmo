@@ -191,6 +191,9 @@ namespace mmo
 			/// user applies it, so a second use (by that player or by another one) cannot take
 			/// the creature over. The aura needs a duration: when its owner never hands the
 			/// creature in, the mark has to expire for the creature to become claimable again.
+			/// The claim ends the follow it started: when the mark goes and the creature is
+			/// following the unit that claimed it, it stops and runs back to its spawn point,
+			/// so an abandoned follower is found where it belongs and not halfway across a field.
 			PreventAuraApplication = 46,
 
 			// Add new aura types HERE (append only — never insert above an existing entry).

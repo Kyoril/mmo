@@ -8,6 +8,7 @@
 
 #include "catch.hpp"
 
+#include "game_server/ai/creature_ai.h"
 #include "game_server/condition_mgr.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/trigger_handler.h"
@@ -187,4 +188,35 @@ TEST_CASE_METHOD(ClaimedTargetFixture, "A claimed target still takes spells that
 	REQUIRE(Cast(*farmhand, *sow, *mark) == spell_cast_result::CastOkay);
 
 	CHECK(Cast(*otherFarmhand, *sow, *plain) == spell_cast_result::CastOkay);
+}
+
+TEST_CASE_METHOD(ClaimedTargetFixture, "A follower stops following and goes home when the claim ends", "[spell][claimed_target]")
+{
+	auto farmhand = Spawn(*farmhandEntry, Vector3(0.0f, 0.0f, 0.0f));
+	auto sow = Spawn(*sowEntry, Vector3(2.0f, 0.0f, 0.0f));
+
+	REQUIRE(sow->GetAI() != nullptr);
+	const Vector3 home = sow->GetAI()->GetHome().position;
+
+	REQUIRE(Cast(*farmhand, *sow, *mark) == spell_cast_result::CastOkay);
+
+	// What the quest item's OnSpellHit trigger does in the live game.
+	sow->SetFollowedUnit(std::static_pointer_cast<GameUnitS>(farmhand), 2.5f);
+	REQUIRE(sow->GetFollowedUnit().get() == farmhand.get());
+
+	// Led a good way from her spawn before the claim ends.
+	sow->GetMover().Teleport(Vector3(40.0f, 0.0f, 40.0f), Radian(0.0f));
+
+	// The same removal path a run-out claim takes (AuraContainer::SetApplied(false)); the real
+	// expiry waits out the spell's duration, which a unit test cannot sit through.
+	REQUIRE(sow->RemoveAuraBySpellId(MarkSpell, farmhand->GetGuid()));
+	io.poll();
+
+	CHECK_FALSE(sow->GetFollowedUnit());
+
+	// She heads back to where she was spawned - either already teleported there, because the
+	// test world has no navigation mesh to walk on, or walking towards it.
+	const bool atHome = (sow->GetPosition() - home).GetSquaredLength() < 0.25f;
+	const bool walkingHome = (sow->GetMover().GetTarget() - home).GetSquaredLength() < 0.25f;
+	CHECK((atHome || walkingHome));
 }
