@@ -1260,7 +1260,7 @@ namespace mmo
 	PacketParseResult QuestClient::OnQuestLogFull(game::IncomingPacket& packet)
 	{
 		// Add a UI event to display an error message
-		FrameManager::Get().TriggerLuaEvent("GERR_QUEST_LOG_FULL");
+		FrameManager::Get().TriggerLuaEvent("UI_ERROR_MESSAGE", "QUEST_LOG_FULL");
 
 		return PacketParseResult::Pass;
 	}
