@@ -180,6 +180,18 @@ namespace mmo::pcg::graph
 			}
 
 			h.Spline(item.spline);
+
+			if (!item.exclusions.empty())
+			{
+				// Only when set, so items of graphs that never use exclusions keep their hash.
+				h.U64(item.exclusions.size());
+				for (const ExclusionShape& shape : item.exclusions)
+				{
+					h.U64(shape.area ? 1 : 0);
+					h.F32(shape.radius);
+					h.Spline(shape.spline);
+				}
+			}
 		}
 	}
 

@@ -7,6 +7,7 @@
 #include "graph_data.h"
 #include "terrain_op.h"
 
+#include "pcg/grid_layout.h"
 #include "pcg/placement.h"
 #include "pcg/section_asset.h"
 #include "pcg/terrain_contribution.h"
@@ -48,6 +49,9 @@ namespace mmo::pcg::graph
 		/// @brief Index of the item in its node's Terrain output; distinguishes generated items of one node (their
 		///        fallback point ids mix it in).
 		uint32 itemIndex = 0;
+
+		/// @brief SectionPath: shapes whose positions get no section props (DataItem::exclusions).
+		std::vector<ExclusionShape> exclusions;
 	};
 
 	/// @brief What Evaluate found while evaluating, for the caller to report once after a pass.
@@ -61,6 +65,20 @@ namespace mmo::pcg::graph
 		///        names a texture the lookup found no tile layer for at a sample where the section paints (any layer). That
 		///        layer's paint may have been skipped there (it is not checked whether the layer has weight at the sample).
 		std::set<std::pair<size_t, uint8>> missingSectionLayers;
+	};
+
+	/// @brief The tile material a Paint op with `tileMaterial` asks for on one terrain tile
+	///        (PreparedTerrain::ResolveTileMaterials).
+	struct TileMaterialRequest
+	{
+		/// @brief Global tile index along x (GridLayout: floor((x - originX) / tile size)).
+		int32 tileX = 0;
+
+		/// @brief Global tile index along z.
+		int32 tileZ = 0;
+
+		/// @brief The material the tile is switched to.
+		String material;
 	};
 
 	/// @brief Where a prepared op acts, for debug drawing.
@@ -120,7 +138,9 @@ namespace mmo::pcg::graph
 	/// - Paint (texture = texture key, weight 1, width 4, falloff 2): a closed spline paints inside the area, an open
 	///   one within width of the spline, both fading (smoothstep) from 0 at the edge to full over falloff metres
 	///   inwards; the splat is the layer the lookup gives for the texture at (x, z), at `weight`. Skipped where the
-	///   lookup gives -1 (noted in TerrainEvaluateNotes).
+	///   lookup gives -1 (noted in TerrainEvaluateNotes). With `tileMaterial` (String; absent or empty = none) the op
+	///   also asks for that material on every tile it touches (ResolveTileMaterials); once resolved, it paints nothing
+	///   on a tile that resolved to another material (a later stacked op won it).
 	/// - WaterArea (closed area; level 0, levelOffset 0, margin 4, depth 0, shoreWidth 6, op.asset = water material):
 	///   waterType 1 and waterHeight = level + levelOffset inside the area and up to margin metres outside its edge.
 	///   With depth > 0 the area is also a basin (heights channel only): with d the inward distance from the edge and
@@ -202,18 +222,48 @@ namespace mmo::pcg::graph
 		/// @param channels The channels the caller reads (pcg::terrain_channel flags). Those are filled exactly as with
 		///        terrain_channel::All; the others stay at their defaults, and the ops only they need are skipped: a
 		///        splat-only or water-only call runs no Noise, Raise or Carve and lays no section heights, a
-		///        heights-only call does no texture lookups. Tile materials are never set.
+		///        heights-only call does no texture lookups. With terrain_channel::Material, `material` is the material
+		///        ResolveTileMaterials resolved for the tile containing (x, z) (empty for other tiles, or before it was
+		///        called), wherever (x, z) lies; setMaterial is never set.
 		TerrainTarget Evaluate(float x, float z, float baseHeight, const TextureLayerLookup& layers,
 			TerrainEvaluateNotes* notes = nullptr, terrain_channel::Type channels = terrain_channel::All) const;
 
+		/// @brief Decides the tile materials of the Paint ops with `tileMaterial`: every tile of
+		///        pcg::TileRangeOverlapping(layout, area) (the tiles Apply over `area` names materials on) gets the
+		///        material of the last stacked such op whose painted region (the area polygon, or the spline grown by
+		///        its width; ops with weight 0 paint nothing) intersects the tile rectangle and the
+		///        region. Intersection is geometric (an edge crosses the tile, a vertex lies in it, or the tile centre is
+		///        inside), not a tile-centre sample; merely touching a tile border does not count. A tile that two such
+		///        ops ask different materials for is reported by DescribeNotes. Replaces the result of an earlier call.
+		///        Must not run concurrently with Evaluate or IsTileMaterialPaint.
+		/// @param layout The terrain grid layout (tile size = vertexSpacing x verticesPerTile).
+		/// @param area The tiles to consider (pass the rect Apply writes over); an inverted rect resolves no tile.
+		void ResolveTileMaterials(const GridLayout& layout, const WorldRect& area);
+
+		/// @brief Drops every resolved tile of a material (one the caller cannot load): those tiles keep their own
+		///        material, and the Paint ops paint there as if nothing had been resolved for them. Conflict warnings
+		///        stay. Must not run concurrently with Evaluate or IsTileMaterialPaint.
+		void DiscardTileMaterial(const String& material);
+
+		/// @brief The tiles ResolveTileMaterials switched, sorted by (tileZ, tileX).
+		const std::vector<TileMaterialRequest>& GetTileMaterials() const;
+
+		/// @brief True where a Paint op with `tileMaterial` paints with a weight above 0 (region fade included), the
+		///        texture lookup aside. An op that lost the tile to another material does not count there.
+		bool IsTileMaterialPaint(float x, float z) const;
+
 		/// @brief Appends one warning per noted op: a Paint texture that is not a layer of some tile, or a SectionPath
 		///        op whose painted section layers name textures that are not (the warning names the section asset and
-		///        those textures, whose paint may have been skipped there).
+		///        those textures, whose paint may have been skipped there). Then one warning per tile and losing
+		///        material of ResolveTileMaterials: "Tile (<x>, <z>): '<loser>' and '<winner>' both requested; '<winner>'
+		///        wins".
 		void DescribeNotes(const TerrainEvaluateNotes& notes, std::vector<String>& warnings) const;
 
 		/// @brief Section placements of every SectionPath op, keyed Hash(order, sourceId, section key), kept where the
 		///        region fade is at least 0.5 (no props beside a road that has faded out at the border), sorted by key
-		///        (a duplicate key is dropped with a warning).
+		///        (a duplicate key is dropped with a warning). Props inside an exclusion area of their op, or within
+		///        the radius of one of its exclusion splines, are skipped (same tests as Difference); exclusion shapes
+		///        that are not usable are dropped with a warning in Prepare.
 		/// @param ground Final ground, passed to BuildSectionPlacements.
 		/// @param out Cleared, then receives the placements.
 		/// @param warnings If not null, receives the warnings.
@@ -247,6 +297,15 @@ namespace mmo::pcg::graph
 		/// @brief Adds a warning unless the same text is already recorded.
 		void Warn(const String& message);
 
+		/// @brief Paint op weight at a position before op.weight and the region fade (0 outside its painted region).
+		static float PaintEdgeWeight(const PreparedOp& op, float x, float z);
+
+		/// @brief The resolved material of the tile containing (x, z); null if none was resolved for it.
+		const String* ResolvedTileMaterial(float x, float z) const;
+
+		/// @brief Whether a Paint op with `tileMaterial` gave up the tile at (x, z) to another material.
+		bool LostTile(const PreparedOp& op, float x, float z) const;
+
 	private:
 		std::vector<std::unique_ptr<PreparedOp>> m_ops;
 		std::unique_ptr<PreparedOp> m_region;
@@ -258,5 +317,9 @@ namespace mmo::pcg::graph
 		/// True once m_waterMaterial is a River material.
 		bool m_waterMaterialFromRiver = false;
 		std::vector<String> m_warnings;
+		/// ResolveTileMaterials: the layout, its tiles sorted by (tileZ, tileX) and the conflict warnings.
+		GridLayout m_tileLayout;
+		std::vector<TileMaterialRequest> m_tileMaterials;
+		std::vector<String> m_tileMaterialConflicts;
 	};
 }

@@ -17,6 +17,51 @@ namespace mmo::pcg
 		return a.minX <= b.maxX && b.minX <= a.maxX && a.minZ <= b.maxZ && b.minZ <= a.maxZ;
 	}
 
+	IntRect TileRangeOverlapping(const GridLayout& layout, const WorldRect& rect)
+	{
+		IntRect out{ 0, 0, -1, -1 };
+		const double tileSize = layout.vertexSpacing * static_cast<double>(layout.verticesPerTile);
+		if (!(tileSize > 0.0) || !std::isfinite(tileSize) || !(rect.minX <= rect.maxX) || !(rect.minZ <= rect.maxZ))
+		{
+			return out;
+		}
+
+		// First tile: the one the min edge lies in; last: the one before the tile the max edge starts, unless the rect
+		// has no extent there (then the min tile).
+		const auto range = [tileSize](const float min, const float max, const double origin, const uint32 tiles, int32& lo, int32& hi)
+		{
+			const double first = std::floor((static_cast<double>(min) - origin) / tileSize);
+			const double last = std::max(first, std::ceil((static_cast<double>(max) - origin) / tileSize) - 1.0);
+			double clampedLo = first;
+			double clampedHi = last;
+			if (tiles > 0)
+			{
+				clampedLo = std::max(clampedLo, 0.0);
+				clampedHi = std::min(clampedHi, static_cast<double>(tiles) - 1.0);
+			}
+			if (!(clampedLo <= clampedHi) || std::abs(clampedLo) > 2.0e9 || std::abs(clampedHi) > 2.0e9)
+			{
+				lo = 0;
+				hi = -1;
+				return;
+			}
+			lo = static_cast<int32>(clampedLo);
+			hi = static_cast<int32>(clampedHi);
+		};
+		int32 x0 = 0, x1 = -1, z0 = 0, z1 = -1;
+		range(rect.minX, rect.maxX, layout.originX, layout.tilesX, x0, x1);
+		range(rect.minZ, rect.maxZ, layout.originZ, layout.tilesZ, z0, z1);
+		if (x0 > x1 || z0 > z1)
+		{
+			return out;
+		}
+		out.minX = x0;
+		out.maxX = x1;
+		out.minZ = z0;
+		out.maxZ = z1;
+		return out;
+	}
+
 	bool TerrainContribution::IsEmpty() const
 	{
 		return outer.empty() && inner.empty() && waterHeights.empty() && splat.empty() && waterQuads.empty() && materials.empty();
@@ -392,16 +437,40 @@ namespace mmo::pcg
 			}
 		}
 
-		setRange(out.materials, RangeFor(rect.minX, rect.maxX, l.originX, tileSize, 0.5), RangeFor(rect.minZ, rect.maxZ, l.originZ, tileSize, 0.5));
-		out.materialSamples.resize(out.materials.Count());
+		// Tile materials: the tiles whose centre lies in the rect (where setMaterial applies, as it always has) and the
+		// tiles the rect overlaps (TileRangeOverlapping, where a named material applies too), in one range.
+		const IndexRange centreX = RangeFor(rect.minX, rect.maxX, l.originX, tileSize, 0.5);
+		const IndexRange centreZ = RangeFor(rect.minZ, rect.maxZ, l.originZ, tileSize, 0.5);
+		const bool anyCentre = centreX.lo <= centreX.hi && centreZ.lo <= centreZ.hi;
+		const IntRect overlap = TileRangeOverlapping(l, rect);
+		const bool anyOverlap = overlap.minX <= overlap.maxX && overlap.minZ <= overlap.maxZ;
+		IndexRange tilesX = centreX;
+		IndexRange tilesZ = centreZ;
+		if (anyOverlap)
+		{
+			tilesX = anyCentre ? IndexRange{ std::min(centreX.lo, overlap.minX), std::max(centreX.hi, overlap.maxX) } : IndexRange{ overlap.minX, overlap.maxX };
+			tilesZ = anyCentre ? IndexRange{ std::min(centreZ.lo, overlap.minZ), std::max(centreZ.hi, overlap.maxZ) } : IndexRange{ overlap.minZ, overlap.maxZ };
+		}
+		setRange(out.materials, tilesX, tilesZ);
+		out.materialSamples.assign(out.materials.Count(), 0);
+		out.materialNames.assign(out.materials.Count(), String());
 		for (int32 row = 0; row < out.materials.rows; ++row)
 		{
-			const double wz = l.originZ + (out.materials.z0 + row + 0.5) * tileSize;
+			const int32 z = out.materials.z0 + row;
+			const double wz = l.originZ + (z + 0.5) * tileSize;
 			for (int32 i = 0; i < out.materials.width; ++i)
 			{
-				const double wx = l.originX + (out.materials.x0 + i + 0.5) * tileSize;
+				const int32 x = out.materials.x0 + i;
+				const bool centred = anyCentre && x >= centreX.lo && x <= centreX.hi && z >= centreZ.lo && z <= centreZ.hi;
+				const bool overlapping = anyOverlap && x >= overlap.minX && x <= overlap.maxX && z >= overlap.minZ && z <= overlap.maxZ;
+				if (!centred && !overlapping)
+				{
+					continue;
+				}
+				const double wx = l.originX + (x + 0.5) * tileSize;
 				const TerrainTarget t = first(static_cast<float>(wx), static_cast<float>(wz), 0.0f, terrain_channel::Material);
-				out.materialSamples[out.materials.Index(i, row)] = t.setMaterial ? 1 : 0;
+				out.materialSamples[out.materials.Index(i, row)] = centred && t.setMaterial ? 1 : 0;
+				out.materialNames[out.materials.Index(i, row)] = t.material;
 			}
 		}
 	}
@@ -577,20 +646,24 @@ namespace mmo::pcg
 			const int32 z = samples.materials.z0 + row;
 			for (int32 i = 0; i < samples.materials.width; ++i)
 			{
-				if (!samples.materialSamples[samples.materials.Index(i, row)])
+				const size_t index = samples.materials.Index(i, row);
+				// A named material wins; otherwise the call's material where the target asked for it.
+				const bool named = index < samples.materialNames.size() && !samples.materialNames[index].empty();
+				if (!named && !samples.materialSamples[index])
 				{
 					continue;
 				}
+				const String& tileMaterial = named ? samples.materialNames[index] : material;
 				const int32 x = samples.materials.x0 + i;
 				const double wx = l.originX + (x + 0.5) * tileSize;
 				const double wz = l.originZ + (z + 0.5) * tileSize;
 				const String base = terrain.GetTileMaterial(x, z);
-				if (base == material)
+				if (base == tileMaterial)
 				{
 					continue;
 				}
-				terrain.SetTileMaterial(x, z, material);
-				out.materials.push_back({ x, z, base, material });
+				terrain.SetTileMaterial(x, z, tileMaterial);
+				out.materials.push_back({ x, z, base, tileMaterial });
 				touchWorld(wx, wz);
 			}
 		}

@@ -36,14 +36,15 @@ namespace mmo::pcg
 		std::vector<WorldRect> builtRects;
 	};
 
-	/// Writes the record as binary (magic PCGP, version 4; version 2 appends builtRects, version 3 the closed flag,
-	/// floorInside and groundSmoothing, version 4 the mass layer and facade variety settings). Deterministic: the same
+	/// Writes the record as binary (magic PCGP, version 5; version 2 appends builtRects, version 3 the closed flag,
+	/// floorInside and groundSmoothing, version 4 the mass layer and facade variety settings, version 5 the height mode keepGround). Deterministic: the same
 	/// record produces the same bytes.
 	/// @return False if pointIds is not parallel to spline.points.
 	bool WriteSectionPathRecord(io::Writer& writer, const SectionPathRecord& record);
 
-	/// Reads a record written by WriteSectionPathRecord (versions 1 to 4; version 1 leaves builtRects empty, versions 1
+	/// Reads a record written by WriteSectionPathRecord (versions 1 to 5; version 1 leaves builtRects empty, versions 1
 	/// and 2 read as open paths with the default floorInside and groundSmoothing and refuse height mode SmoothedGround,
+	/// versions 1 to 4 refuse height mode KeepGround,
 	/// versions 1 to 3 read with the mass and the facade variety off). Non-finite mass or facade values, flags other
 	/// than 0/1 and a massPaintLayer outside -1..3 are refused.
 	/// @return False on a bad magic, unsupported version or truncated/corrupt data; out is then unspecified.

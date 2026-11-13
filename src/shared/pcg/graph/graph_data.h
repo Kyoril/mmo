@@ -63,6 +63,20 @@ namespace mmo::pcg::graph
 		Terrain
 	};
 
+	/// @brief A shape that cuts gaps into the props of a section (the Exclude input of the section nodes).
+	struct ExclusionShape
+	{
+		/// @brief The shape: a closed loop for an area, else a spline.
+		PathSpline spline;
+
+		/// @brief True: positions inside the loop are excluded (radius unused). False: positions within radius of the
+		///        spline are excluded.
+		bool area = false;
+
+		/// @brief Spline shapes: the total removal radius (distance setting plus the item's clearance), positive.
+		float radius = 0.0f;
+	};
+
 	/// @brief One item flowing along a graph link.
 	struct DataItem
 	{
@@ -86,6 +100,9 @@ namespace mmo::pcg::graph
 
 		/// @brief Used by Terrain items: what to do to the terrain. Geometry is in spline / points.
 		TerrainOp op;
+
+		/// @brief Used by Terrain items of section ops: shapes whose positions get no section props.
+		std::vector<ExclusionShape> exclusions;
 	};
 
 	/// @brief The ordered list of items on a pin.

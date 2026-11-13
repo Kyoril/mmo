@@ -25,6 +25,11 @@
 //                        StampLengthParam / StampAnchorParam (terrain_op.h) and PreparedTerrain lays the ends out.
 //                        heightMode defaults to followSpline.
 //
+// Exclude (all three, optional): Area and Spline items whose positions get no section props (terrain height and
+// paint are not cut). Read as Difference reads Subtract: every Area is carried; a Spline is carried with radius
+// distance + its clearanceAttribute value, unless that radius is not positive. Every output item carries the
+// shapes as DataItem::exclusions; the terrain stage drops the props inside them.
+//
 // Errors (node errors, found at execute time): an empty section path, or a parameter value that
 // SetSectionPathParam rejects. Whether the asset exists is checked when the terrain is prepared.
 
@@ -194,10 +199,57 @@ namespace mmo::pcg::graph
 				if (name == "heightMode")
 				{
 					setting.defaultValue = String(heightModeDefault);
-					setting.enumValues = { "followSpline", "followGround", "smoothedGround" };
+					setting.enumValues = { "followSpline", "followGround", "smoothedGround", "keepGround" };
 				}
 				def.settings.push_back(std::move(setting));
 			}
+		}
+
+		/// Adds the Exclude input and its settings (read as Difference reads its Subtract input).
+		void AddExcludeInput(NodeTypeDef& def)
+		{
+			def.inputs.push_back(PinDef{ "Exclude", { ItemKind::Area, ItemKind::Spline }, true, false });
+			def.settings.push_back(SettingDef{ "distance", 0.0f, 0.0f, 100.0f, {}, "Exclude: prop removal distance around splines" });
+			def.settings.push_back(SettingDef{ "clearanceAttribute", String("clearance"), 0, 0, {}, "Exclude: spline item attribute added to distance (empty = off)" });
+		}
+
+		/// Reads the Exclude input: every Area, and every Spline whose radius (distance + clearance) is positive.
+		std::vector<ExclusionShape> ReadExclusions(NodeOutput& out, const AttributeSet& settings, const std::map<String, Collection>& inputs)
+		{
+			std::vector<ExclusionShape> shapes;
+			const Collection* exclude = FindInput(inputs, "Exclude");
+			if (exclude == nullptr)
+			{
+				return shapes;
+			}
+			const float distance = SettingFloat(settings, "distance", 0.0f);
+			const String clearanceAttribute = SettingString(settings, "clearanceAttribute", "clearance");
+			for (const DataItem& item : *exclude)
+			{
+				if (item.kind == ItemKind::Area)
+				{
+					ExclusionShape shape;
+					shape.spline = item.spline;
+					shape.area = true;
+					shapes.push_back(std::move(shape));
+				}
+				else if (item.kind == ItemKind::Spline)
+				{
+					const float radius = distance + ItemClearance(out, item, clearanceAttribute);
+					if (radius > 0.0f && std::isfinite(radius))
+					{
+						ExclusionShape shape;
+						shape.spline = item.spline;
+						shape.radius = radius;
+						shapes.push_back(std::move(shape));
+					}
+				}
+				else
+				{
+					WarnOnce(out, "skipped exclude items that are neither areas nor splines");
+				}
+			}
+			return shapes;
 		}
 
 		NodeOutput ExecuteLaySection(const bool loop, const AttributeSet& settings, const std::map<String, Collection>& inputs)
@@ -214,6 +266,7 @@ namespace mmo::pcg::graph
 			const String sectionSetting = SettingString(settings, "section", String());
 			const String sectionAttribute = SettingString(settings, "sectionAttribute", "section");
 			const ItemKind expected = loop ? ItemKind::Area : ItemKind::Spline;
+			const std::vector<ExclusionShape> exclusions = ReadExclusions(out, settings, inputs);
 
 			for (const DataItem& source : *in)
 			{
@@ -268,6 +321,7 @@ namespace mmo::pcg::graph
 				{
 					return out;
 				}
+				item.exclusions = exclusions;
 
 				terrain.push_back(std::move(item));
 			}
@@ -310,6 +364,7 @@ namespace mmo::pcg::graph
 			// a unit length and the terrain stage stretches it (see terrain_compose.cpp, kStampLength).
 			const bool assetLength = length <= 0.0f;
 			const float span = assetLength ? 1.0f : length;
+			const std::vector<ExclusionShape> exclusions = ReadExclusions(out, settings, inputs);
 
 			for (const DataItem& source : *in)
 			{
@@ -363,6 +418,7 @@ namespace mmo::pcg::graph
 						item.op.params[StampLengthParam] = 0.0f;
 						item.op.params[StampAnchorParam] = anchor;
 					}
+					item.exclusions = exclusions;
 					terrain.push_back(std::move(item));
 				}
 			}
@@ -388,6 +444,7 @@ namespace mmo::pcg::graph
 
 			AddSectionParamSettings(def, false, "followSpline");
 			def.settings.push_back(StackOrderSetting());
+			AddExcludeInput(def);
 
 			def.contextDeps = context_dep::None;
 			def.execute = [](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)
@@ -413,6 +470,7 @@ namespace mmo::pcg::graph
 
 			AddSectionParamSettings(def, loop, "smoothedGround");
 			def.settings.push_back(StackOrderSetting());
+			AddExcludeInput(def);
 
 			def.contextDeps = context_dep::None;
 			def.execute = [loop](const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)

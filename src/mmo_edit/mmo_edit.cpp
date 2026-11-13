@@ -1343,7 +1343,7 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-new-path")
 			{
 				// mmo_edit --pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed]
-				//          [--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror]
+				//          [--height-mode followSpline|followGround|smoothedGround|keepGround] [--smoothing W] [--mass] [--mirror]
 				//          [--set name=value ...]
 				// Adds a section path through the points (at terrain height), builds it, saves the world and
 				// logs the new id and its layout (0 = success). A missing or unreadable section asset is refused
@@ -1354,7 +1354,7 @@ int main(int argc, char* arg[])
 				mmo::RedirectUnattendedLog("pcg_new_path");
 
 				const char* usage = "--pcg-new-path <world.hwld> --points x,z;x,z[;...] --section <asset> [--seed S] [--name N] [--closed] "
-					"[--height-mode followSpline|followGround|smoothedGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
+					"[--height-mode followSpline|followGround|smoothedGround|keepGround] [--smoothing W] [--mass] [--mirror] [--set name=value ...]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1484,14 +1484,17 @@ int main(int argc, char* arg[])
 			if (std::string(args[i]) == "--pcg-new-control")
 			{
 				// mmo_edit --pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]
+				//     [--half-extents x,z] [--yaw <deg>]
 				// Places a control of a control type (.hctl): a loop through at least three points, a spline through
-				// at least two, a volume or point at exactly one (heights from the terrain). --set overrides a property
-				// of the type (typed by its definition; colours as r,g,b). Saves the world and logs the new id
-				// (0 = success). A missing or invalid type, points that do not fit its shape or a bad --set are refused
-				// before anything is added or saved.
+				// at least two, a volume, rectangle or point at exactly one (heights from the terrain). --set overrides a
+				// property of the type (typed by its definition; colours as r,g,b). --half-extents (volume, rectangle) and
+				// --yaw (volume, rectangle, point) replace the default size and rotation. Saves the world and logs the new
+				// id (0 = success). A missing or invalid type, points that do not fit its shape, a bad --set or a transform
+				// the shape does not have are refused before anything is added or saved.
 				mmo::RedirectUnattendedLog("pcg_new_control");
 
-				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...]";
+				const char* usage = "--pcg-new-control <world.hwld> --type <typePath> --points x,z[;x,z...] [--name N] [--set prop=value ...] "
+					"[--half-extents x,z] [--yaw <deg>]";
 				if (missingArgs(i, 1, usage))
 				{
 					break;
@@ -1501,6 +1504,7 @@ int main(int argc, char* arg[])
 				std::string typePath;
 				std::string name;
 				std::vector<std::pair<std::string, std::string>> settings;
+				mmo::NewPlacedControlTransform transform;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount && argumentsValid; ++j)
 				{
@@ -1508,6 +1512,25 @@ int main(int argc, char* arg[])
 					if (option == "--points" && j + 1 < argCount)
 					{
 						argumentsValid = mmo::ParsePointList(args[++j], points, 1);
+					}
+					else if (option == "--half-extents" && j + 1 < argCount)
+					{
+						// One "x,z" pair; the shape and the minimum are checked once the type is read.
+						std::vector<std::pair<float, float>> extents;
+						argumentsValid = mmo::ParsePointList(args[++j], extents, 1) && extents.size() == 1;
+						if (argumentsValid)
+						{
+							transform.halfExtents = extents.front();
+						}
+					}
+					else if (option == "--yaw" && j + 1 < argCount)
+					{
+						float yaw = 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], yaw);
+						if (argumentsValid)
+						{
+							transform.yawDegrees = yaw;
+						}
 					}
 					else if (option == "--type" && j + 1 < argCount)
 					{
@@ -1555,7 +1578,7 @@ int main(int argc, char* arg[])
 				{
 					uint64 id = 0;
 					std::string error;
-					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error))
+					if (!world->CreateProceduralControl(typePath, points, name, settings, id, error, transform))
 					{
 						// The world is not saved: a refused run leaves no record behind.
 						ELOG("--pcg-new-control: " << error);
@@ -1569,6 +1592,95 @@ int main(int argc, char* arg[])
 						char idText[32];
 						std::snprintf(idText, sizeof(idText), "%016llx", static_cast<unsigned long long>(id));
 						ILOG("--pcg-new-control: created control " << idText);
+						succeeded = true;
+					}
+				}
+
+				PostQuitMessage(succeeded ? 0 : 1);
+				break;
+			}
+
+			if (std::string(args[i]) == "--pcg-transform-control")
+			{
+				// mmo_edit --pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]
+				// Moves, rotates (around up, about the control's pivot) and scales a placed control of any shape as a
+				// whole, in that order, like the whole-control gizmo. Loops and splines change their points (ids, widths
+				// and heights stay) and scale along world x/z about the pivot; volumes, rectangles and points change their
+				// position, rotation and half extents, and --scale scales their local half extents x/z (a non-zero half
+				// extent stays at 0.5 m or more). Saves the world (0 = success); an unknown id or a bad value saves nothing (1).
+				mmo::RedirectUnattendedLog("pcg_transform_control");
+
+				const char* usage = "--pcg-transform-control <world.hwld> --id <hex> [--move dx,dz] [--rotate <deg>] [--scale sx,sz]";
+				if (missingArgs(i, 1, usage))
+				{
+					break;
+				}
+
+				uint64 controlId = 0;
+				mmo::PlacedControlTransformEdit edit;
+				bool argumentsValid = true;
+				for (int j = i + 2; j < argCount && argumentsValid; ++j)
+				{
+					const std::string option = args[j];
+					if (option == "--id" && j + 1 < argCount)
+					{
+						argumentsValid = mmo::ParseOasisId(args[++j], controlId);
+					}
+					else if ((option == "--move" || option == "--scale") && j + 1 < argCount)
+					{
+						std::vector<std::pair<float, float>> values;
+						argumentsValid = mmo::ParsePointList(args[++j], values, 1) && values.size() == 1;
+						if (argumentsValid)
+						{
+							(option == "--move" ? edit.move : edit.scale) = values.front();
+						}
+					}
+					else if (option == "--rotate" && j + 1 < argCount)
+					{
+						float degrees = 0.0f;
+						argumentsValid = mmo::ParseFloatText(args[++j], degrees);
+						if (argumentsValid)
+						{
+							edit.rotateDegrees = degrees;
+						}
+					}
+					else
+					{
+						argumentsValid = false;
+					}
+
+					if (!argumentsValid)
+					{
+						ELOG("--pcg-transform-control: invalid or incomplete option " << option << ", usage: " << usage);
+					}
+				}
+
+				if (argumentsValid && controlId == 0)
+				{
+					ELOG("--pcg-transform-control: --id is required, usage: " << usage);
+					argumentsValid = false;
+				}
+
+				bool succeeded = false;
+				if (!argumentsValid)
+				{
+					// Already logged.
+				}
+				else if (mmo::WorldEditorInstance* world = mmo::OpenWorldForJob(mainWindow, "--pcg-transform-control", args[i + 1]))
+				{
+					std::string error;
+					if (!world->TransformProceduralControl(controlId, edit, error))
+					{
+						// The world is not saved: a refused run changes nothing.
+						ELOG("--pcg-transform-control: " << error);
+					}
+					else if (!world->Save())
+					{
+						ELOG("--pcg-transform-control: saving the world failed");
+					}
+					else
+					{
+						ILOG("--pcg-transform-control: done");
 						succeeded = true;
 					}
 				}

@@ -26,7 +26,8 @@ namespace mmo::pcg::graph
 			{ "closedLoop", static_cast<int>(ControlShape::ClosedLoop) },
 			{ "openSpline", static_cast<int>(ControlShape::OpenSpline) },
 			{ "volume", static_cast<int>(ControlShape::Volume) },
-			{ "point", static_cast<int>(ControlShape::Point) }
+			{ "point", static_cast<int>(ControlShape::Point) },
+			{ "rectangle", static_cast<int>(ControlShape::Rectangle) }
 		};
 
 		const NameEntry kPropertyTypeNames[] = {
