@@ -87,6 +87,17 @@ namespace mmo
 
 		for (const auto& callback : dueCallbacks)
 		{
+			// Stop() drops queued events rather than running them; one collected above must not
+			// slip through because Stop() ran in between, from an earlier callback of this batch
+			// or from the other io thread.
+			{
+				std::scoped_lock lock{ m_mutex };
+				if (m_stopped)
+				{
+					return;
+				}
+			}
+
 			callback();
 		}
 	}
