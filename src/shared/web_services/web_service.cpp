@@ -20,6 +20,8 @@ namespace mmo
 			{
 				connection->startReceiving();
 				auto client = createClient(std::move(connection));
+
+				std::scoped_lock lock{ m_clientsMutex };
 				m_clients.push_back(std::move(client));
 			});
 			m_server.startAccept();
@@ -33,9 +35,17 @@ namespace mmo
 		{
 			m_server.Stop();
 
-			// Copied first: closing a client calls back into clientDisconnected, which erases from
-			// m_clients and would invalidate an iterator walking it.
-			const Clients clients = m_clients;
+			// Copied out under the lock, then closed without it: close() can complete the
+			// connection's pending read on another io thread and call back into
+			// clientDisconnected, which takes the same mutex to erase from m_clients -- holding
+			// the lock across close() risks that callback blocking on a lock this thread still
+			// holds.
+			Clients clients;
+			{
+				std::scoped_lock lock{ m_clientsMutex };
+				clients = m_clients;
+			}
+
 			for (const auto &client : clients)
 			{
 				if (client)
@@ -44,11 +54,13 @@ namespace mmo
 				}
 			}
 
+			std::scoped_lock lock{ m_clientsMutex };
 			m_clients.clear();
 		}
 
 		void WebService::clientDisconnected(WebClient &client)
 		{
+			std::scoped_lock lock{ m_clientsMutex };
 			for (Clients::iterator i = m_clients.begin(); i != m_clients.end(); ++i)
 			{
 				if (i->get() == &client)
