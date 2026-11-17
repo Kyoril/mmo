@@ -4,6 +4,7 @@
 
 #include "game_server/cc_movement_controller.h"
 #include "game_server/pets/pet_manager.h"
+#include "game_server/chat_text_tokens.h"
 #include "game_server/emote_utils.h"
 #include "game_server/world/each_tile_in_sight.h"
 #include "game_server/world/world_instance.h"
@@ -1953,19 +1954,19 @@ namespace mmo
 		return total;
 	}
 
-	void GameUnitS::ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
+	void GameUnitS::ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText, const String &addresseeName)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message, localizedText);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Say : ChatType::UnitSay, message, localizedText, addresseeName);
 	}
 
-	void GameUnitS::ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
+	void GameUnitS::ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText, const String &addresseeName)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message, localizedText);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Yell : ChatType::UnitYell, message, localizedText, addresseeName);
 	}
 
-	void GameUnitS::ChatEmote(const String& message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
+	void GameUnitS::ChatEmote(const String& message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText, const String &addresseeName)
 	{
-		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message, localizedText);
+		DoLocalChatMessage(IsPlayer() ? ChatType::Emote : ChatType::UnitEmote, message, localizedText, addresseeName);
 	}
 
 	void GameUnitS::TextEmote(const proto::EmoteEntry& emote, const GameUnitS* target)
@@ -2498,7 +2499,7 @@ namespace mmo
 		return true;
 	}
 
-	void GameUnitS::DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText)
+	void GameUnitS::DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText, const String &addresseeName)
 	{
 		auto position = GetPosition();
 		float chatDistance = 0.0f;
@@ -2564,7 +2565,7 @@ namespace mmo
 		std::unique_ptr<ChatPacket> shared;
 		if (!localize)
 		{
-			shared = buildPacket(message);
+			shared = buildPacket(SubstituteChatTextTokens(message, addresseeName));
 		}
 
 		// Lazily built, one packet per distinct recipient locale.
@@ -2587,7 +2588,7 @@ namespace mmo
 					auto& entry = byLocale[locale];
 					if (!entry)
 					{
-						entry = buildPacket(GetLocalizedString(message, *localizedText, locale));
+						entry = buildPacket(SubstituteChatTextTokens(GetLocalizedString(message, *localizedText, locale), addresseeName));
 					}
 					packet = entry.get();
 				}

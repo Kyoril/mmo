@@ -353,8 +353,10 @@ namespace mmo
 			return;
 		}
 
+		// The line is spoken to whoever raised the trigger, so its "$N" token stands for that
+		// player - for every listener alike, not for the one reading it.
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc());
+		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc(), triggeringUnit ? triggeringUnit->GetName() : String());
 
 		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
@@ -386,7 +388,7 @@ namespace mmo
 		}
 
 		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc());
+		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc(), triggeringUnit ? triggeringUnit->GetName() : String());
 
 		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
@@ -417,7 +419,8 @@ namespace mmo
 			return;
 		}
 
-		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc());
+		auto triggeringUnit = context.triggeringUnit.lock();
+		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc(), triggeringUnit ? triggeringUnit->GetName() : String());
 
 		// Optional sound, heard as far as the emote text is
 		if (action.data_size() > 0)

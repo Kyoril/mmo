@@ -1221,17 +1221,21 @@ namespace mmo
 		/// @param message The base (English) message to send.
 		/// @param localizedText Optional per-locale overrides for @p message. When provided, each
 		///        nearby player receives the message resolved for their own client locale.
-		void ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
+		/// @param addresseeName Name of the player the line is addressed to. Replaces the "$N"
+		///        token in the message after it was localized. Empty leaves the token in place.
+		void ChatSay(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr, const String &addresseeName = String());
 
 		/// Sends a chat message of type "yell" from the unit.
 		/// @param message The base (English) message to send.
 		/// @param localizedText Optional per-locale overrides for @p message (see ChatSay).
-		void ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
+		/// @param addresseeName Name substituted for the "$N" token (see ChatSay).
+		void ChatYell(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr, const String &addresseeName = String());
 
 		/// Sends a chat message of type "emote" from the unit.
 		/// @param message The base (English) message to send.
 		/// @param localizedText Optional per-locale overrides for @p message (see ChatSay).
-		void ChatEmote(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
+		/// @param addresseeName Name substituted for the "$N" token (see ChatSay).
+		void ChatEmote(const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr, const String &addresseeName = String());
 
 		/// Broadcasts the chat line of an animated emote ("Bob waves at you.") to nearby players.
 		/// Selects the self/target/no-target template from the emote entry, localizes it per
@@ -1353,7 +1357,8 @@ namespace mmo
 		/// @param localizedText Optional per-locale overrides for @p message. When non-null and
 		///        non-empty, the packet is built per recipient locale; otherwise a single shared
 		///        packet is broadcast to everyone.
-		virtual void DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr);
+		/// @param addresseeName Name substituted for the "$N" token after localization (see ChatSay).
+		virtual void DoLocalChatMessage(ChatType type, const String &message, const google::protobuf::RepeatedPtrField<proto::LocalizedString>* localizedText = nullptr, const String &addresseeName = String());
 
 	protected:
 		/// Sets the current victim of the unit.
