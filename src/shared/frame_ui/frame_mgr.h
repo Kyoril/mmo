@@ -241,6 +241,12 @@ namespace mmo
 		const Localization& GetLocalization() const { return m_localization; }
 
 	private:
+		/// Resolves which frame the cursor rests on right now and delivers the enter / leave
+		/// events if that changed. Called after the cursor moved and once per frame, because the
+		/// ui may replace the frame underneath a resting cursor.
+		void UpdateHoveredFrame();
+
+	private:
 		/// A map of mouse-down frames.
 		std::map<MouseButton, FramePtr> m_mouseDownFrames;
 
@@ -278,6 +284,9 @@ namespace mmo
 		Point m_uiScale { 1.0f, 1.0f };
 
 		Point m_mousePos;
+
+		/// Whether the cursor position above is one the window reported, and not just the default.
+		bool m_mousePosKnown = false;
 
 		TexturePtr m_cursorIconTexture;
 
