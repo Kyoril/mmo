@@ -40,7 +40,7 @@ Rules for agents:
 
 ## 3. Geography
 
-The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, on map 0 (Development World). [C]
+The opening region is **Falwyn Forest** and its neighbour **Briarwatch March**, on map 0 (Alestia; directory `Development`). [C]
 
 - The spawns cover roughly 1 km × 1.4 km (x −650..930, z −480..980).
 - The sculpted terrain covers x −1090..1040, z −530..1600.
