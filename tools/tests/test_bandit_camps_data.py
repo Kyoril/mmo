@@ -41,6 +41,10 @@ CAMPS = {
     "Forest Bandit grounds (-101, 137)": ((-101.0, 137.0), 75.0),
 }
 LINAS_CRATE = 2
+YOUNG_FOREST_BOAR = 14
+# Aggro of a level 4 bandit against a level 1 player (20 m + 1 m per level above, so 23 m) plus 7.5 m of wander
+# on both sides, rounded up.
+STARTER_SAFE_DISTANCE = 45.0
 
 
 class BanditCampsDataTest(unittest.TestCase):
@@ -135,6 +139,20 @@ class BanditCampsDataTest(unittest.TestCase):
             for spawn in near:
                 self.assertEqual(len(spawn.unitentries), 0, f"{spawn.name} guards a crate: keep it a plain Forest Bandit")
                 self.assertEqual(spawn.unitentry, FOREST_BANDIT)
+
+    def test_starter_boars_stay_out_of_bandit_aggro(self):
+        # Quest 1 sends level 1 players to the Young Forest Boars. A boar within reach of a camp turns the
+        # first quest into the first death (a playtest bot died to two bandits joining a boar fight).
+        bandits = [s for s in self.map0.unitspawns
+                   if ({s.unitentry} | {e.unitentry for e in s.unitentries}) & {FOREST_BANDIT, BANDIT_MAGE}]
+        boars = [s for s in self.map0.unitspawns if s.unitentry == YOUNG_FOREST_BOAR]
+        self.assertTrue(boars)
+        for boar in boars:
+            for bandit in bandits:
+                distance = math.hypot(boar.positionx - bandit.positionx, boar.positionz - bandit.positionz)
+                self.assertGreaterEqual(distance, STARTER_SAFE_DISTANCE,
+                                        f"boar at ({boar.positionx:.0f}, {boar.positionz:.0f}) is {distance:.0f} m from "
+                                        f"{bandit.name or 'a bandit'} at ({bandit.positionx:.0f}, {bandit.positionz:.0f})")
 
     def test_client_db_mirrors_editor_spells(self):
         if not (CLIENT_DB / "spells.data").is_file():

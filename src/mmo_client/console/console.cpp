@@ -491,7 +491,7 @@ namespace mmo
 			throw std::runtime_error("Unsupported graphics API value used!");
 		}
 		auto& device = GraphicsDevice::Get();
-		device.GetAutoCreatedWindow()->SetTitle("MMORPG");
+		device.GetAutoCreatedWindow()->SetTitle("Alestia Online");
 		device.SetMaxAnisotropy(static_cast<uint32>(std::max(1, s_gxAnisotropyCVar->GetIntValue())));
 
 		// Load the project-wide global shader parameter registry so every material can reference
