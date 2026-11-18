@@ -12,6 +12,9 @@
 -- density, creature levels, aggro, assist radius) turns this red.
 --
 -- Own character: it must start at level 1 at the race start position.
+--
+-- On demand only (about 5 minutes, so it is kept out of the default suite in e2e/scenarios):
+--   powershell -File tools/e2e/e2e_run.ps1 -Scenario e2e/playtests/first_quests_no_gm.lua
 
 local me = Me()
 local startTime = os.time()
