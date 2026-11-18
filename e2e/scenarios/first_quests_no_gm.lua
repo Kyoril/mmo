@@ -1,6 +1,6 @@
 -- e2e-class: 1
 -- e2e-timeout: 900
--- e2e-own-character: fqn
+-- e2e-own-character: fq
 --
 -- The first minutes of a new warrior, played like a player and with no GM command at all: walk to the
 -- real quest givers, accept at them, fight with auto-attack, rest when hurt, loot, and turn in at the
@@ -22,7 +22,7 @@ local YOUNG_FOREST_BOAR, CELLAR_RAT = 14, 28
 local POS = {
 	haldor = { 289.9, 5.6, 546.2 },
 	harbin = { 265.2, 2.4, 612.7 },
-	boars = { 251.0, 6.0, 664.0 },
+	boars = { 229.0, 7.0, 659.0 },
 	rats = { 266.1, -1.8, 600.0 },
 }
 
@@ -66,18 +66,36 @@ local function turnIn(entry, p, questId)
 	Log("quest " .. questId .. " turned in at " .. elapsed() .. " s, level " .. GetLevel(me))
 end
 
+-- Walks to melee range of g, stopping short of it: standing inside a creature leaves the facing
+-- undefined and every swing fails with wrong_facing.
+local function approach(g, timeoutMs)
+	local dx, dz = GetPosX(me) - GetPosX(g), GetPosZ(me) - GetPosZ(g)
+	local d = math.sqrt(dx * dx + dz * dz)
+	if d < 0.5 then
+		dx, dz, d = 1.0, 0.0, 1.0
+	end
+	local stop = 1.8
+	MoveTo(GetPosX(g) + dx / d * stop, GetPosY(g), GetPosZ(g) + dz / d * stop, timeoutMs)
+	FaceUnit(g)
+end
+
+local skipped = {}
+
 local function fight(g)
 	TargetUnit(g)
-	if GetDistance(me, g) > 3.5 then
-		MoveTo(GetPosX(g), GetPosY(g), GetPosZ(g), 20000)
+	if GetDistance(me, g) > 3.5 or GetDistance(me, g) < 0.8 then
+		approach(g, 20000)
 	end
 	FaceUnit(g)
 	StartAttack(g)
+	local seenErrors = SwingErrorCount()
 	local done = WaitUntil(function()
 		if not IsAlive(me) or not UnitExists(g) or not IsAlive(g) then return true end
-		if GetDistance(me, g) > 4 then
-			MoveTo(GetPosX(g), GetPosY(g), GetPosZ(g), 3000)
-			FaceUnit(g)
+		local d = GetDistance(me, g)
+		local newError = SwingErrorCount() > seenErrors
+		seenErrors = SwingErrorCount()
+		if d > 4 or d < 0.8 or newError then
+			approach(g, 3000)
 			StartAttack(g)
 		end
 		return false
@@ -86,6 +104,8 @@ local function fight(g)
 	Assert(IsAlive(me), "the character should survive the opening fights (died after " .. kills .. " kills, "
 		.. elapsed() .. " s in)")
 	if not done then
+		Log("giving up on " .. g .. " after a stalled fight (" .. LastSwingError() .. ")")
+		skipped[g] = true
 		return false
 	end
 	kills = kills + 1
@@ -102,10 +122,19 @@ local function hunt(entry, count, area, label)
 		attempts = attempts + 1
 		restIfNeeded()
 		local g = FindNearestUnitByEntry(entry, GetPosX(me), GetPosY(me), GetPosZ(me))
+		if g ~= nil and skipped[g] then
+			-- Step away so a different creature is the nearest one next time.
+			walkTo(area, label)
+			Sleep(1500)
+			g = nil
+		end
 		if g == nil or GetDistance(me, g) > 80 then
 			walkTo(area, label)
 			Sleep(1500)
 			g = FindNearestUnitByEntry(entry, area[1], area[2], area[3])
+			if g ~= nil and skipped[g] then
+				g = nil
+			end
 		end
 		if g == nil then
 			Sleep(3000)

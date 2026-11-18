@@ -24,6 +24,10 @@ sys.path.insert(0, str(ROOT / ".agents/skills/mmo-npc-designer/scripts"))
 EDITOR = ROOT / "data/editor/data"
 
 FOREST_BOAR = 19
+YOUNG_FOREST_BOAR = 14
+GRIMTUSK = 21
+YOUNG_CLEAR_OF_FOREST = 30.0
+YOUNG_CLEAR_OF_PATROL = 35.0
 INJURED_GUARD = 22
 HAVEN_CENTRE = (-700.0, 980.0)
 # Aggro of a level 4 boar against a level 3 player is 21 m; a body pull at the edge of one boar's range
@@ -33,6 +37,12 @@ FOREST_BOAR_RESPAWN_MS = 60000
 OPENING_QUESTS_WITH_AREAS = (1, 2, 5, 6, 9, 10, 24, 26)
 GENERIC_GREETING = "Greetings, $N!"
 DE = 1
+
+
+def _segment_distance(p, a, b):
+    vx, vz = b[0] - a[0], b[1] - a[1]
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vz) / max(1e-6, vx * vx + vz * vz)))
+    return math.dist(p, (a[0] + t * vx, a[1] + t * vz))
 
 
 class FirstTenMinutesDataTest(unittest.TestCase):
@@ -70,6 +80,22 @@ class FirstTenMinutesDataTest(unittest.TestCase):
                 self.assertGreaterEqual(distance, FOREST_BOAR_SPACING,
                                         f"boars at ({a.positionx:.0f}, {a.positionz:.0f}) and "
                                         f"({b.positionx:.0f}, {b.positionz:.0f}) are {distance:.1f} m apart")
+
+    def test_young_boar_field_stays_apart_from_stronger_creatures(self):
+        # A playtest bot hunting quest 1's Young Forest Boars died to Forest Boars standing among them
+        # and to Grimtusk (level 5) patrolling through their field.
+        young = self.spawns_of(YOUNG_FOREST_BOAR)
+        forest = self.spawns_of(FOREST_BOAR)
+        grimtusk = self.spawns_of(GRIMTUSK)[0]
+        patrol = [(w.positionx, w.positionz) for w in grimtusk.waypoints] + [(grimtusk.positionx, grimtusk.positionz)]
+        for boar in young:
+            p = (boar.positionx, boar.positionz)
+            nearest_forest = min(math.dist(p, (f.positionx, f.positionz)) for f in forest)
+            self.assertGreaterEqual(nearest_forest, YOUNG_CLEAR_OF_FOREST,
+                                    f"young boar at ({p[0]:.0f}, {p[1]:.0f}) is {nearest_forest:.0f} m from a Forest Boar")
+            for a, b in zip(patrol, patrol[1:] + patrol[:1]):
+                self.assertGreaterEqual(_segment_distance(p, a, b), YOUNG_CLEAR_OF_PATROL,
+                                        f"Grimtusk patrols past the young boar at ({p[0]:.0f}, {p[1]:.0f})")
 
     def test_injured_guards_lie_north_east_of_haven(self):
         guards = self.spawns_of(INJURED_GUARD)
