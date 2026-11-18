@@ -24,6 +24,16 @@ namespace mmo
 			<< io::write<uint32>(itemInfo.requiredClasses)
 			<< io::write<uint32>(itemInfo.flags);
 
+		writer << io::write<uint8>(itemInfo.hasObjectiveArea ? 1 : 0);
+		if (itemInfo.hasObjectiveArea)
+		{
+			writer
+				<< io::write<uint32>(itemInfo.objectiveAreaMapId)
+				<< io::write<float>(itemInfo.objectiveAreaX)
+				<< io::write<float>(itemInfo.objectiveAreaZ)
+				<< io::write<float>(itemInfo.objectiveAreaRadius);
+		}
+
 		writer << io::write<uint8>(itemInfo.requiredItems.size());
 		for (const auto& requiredItem : itemInfo.requiredItems)
 		{
@@ -86,6 +96,18 @@ namespace mmo
 			>> io::read<uint32>(outItemInfo.rewardEmoteId)
 			>> io::read<uint32>(outItemInfo.requiredClasses)
 			>> io::read<uint32>(outItemInfo.flags);
+
+		uint8 hasArea = 0;
+		reader >> io::read<uint8>(hasArea);
+		outItemInfo.hasObjectiveArea = hasArea != 0;
+		if (outItemInfo.hasObjectiveArea)
+		{
+			reader
+				>> io::read<uint32>(outItemInfo.objectiveAreaMapId)
+				>> io::read<float>(outItemInfo.objectiveAreaX)
+				>> io::read<float>(outItemInfo.objectiveAreaZ)
+				>> io::read<float>(outItemInfo.objectiveAreaRadius);
+		}
 
 		uint8 num = 0;
 		reader >> io::read<uint8>(num);

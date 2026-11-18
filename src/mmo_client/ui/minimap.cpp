@@ -54,6 +54,20 @@ namespace mmo
 				Rect(0.0f, 0.0f, 1.0f, 1.0f),
 				1, 1);
 
+			// Quest objective areas: a translucent gold disc of unit radius, scaled to the area in metres
+			// when drawn, and a solid gold dot for areas beyond the edge.
+			m_questAreaGeom.SetActiveTexture(m_partyMemberTexture);
+			GeometryHelper::CreateRect(m_questAreaGeom, Color(1.0f, 0.82f, 0.3f, 0.3f),
+				Rect(-1.0f, -1.0f, 1.0f, 1.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f),
+				1, 1);
+
+			m_questAreaEdgeGeom.SetActiveTexture(m_partyMemberTexture);
+			GeometryHelper::CreateRect(m_questAreaEdgeGeom, Color(1.0f, 0.82f, 0.3f, 0.95f),
+				Rect(-11.0f, -11.0f, 11.0f, 11.0f),
+				Rect(0.0f, 0.0f, 1.0f, 1.0f),
+				1, 1);
+
 			m_guildMemberGeom.SetActiveTexture(m_partyMemberTexture);
 			GeometryHelper::CreateRect(m_guildMemberGeom, Color(0.3f, 0.95f, 0.4f, 1.0f),
 				Rect(-14.0f, -14.0f, 14.0f, 14.0f),
@@ -251,6 +265,31 @@ namespace mmo
 		gx.SetTextureFilter(TextureFilter::Trilinear);
 		m_geometryBuffer.Draw();
 
+		// Quest objective areas sit on the terrain, below every other marker.
+		if (m_partyMemberTexture && !m_questAreas.empty())
+		{
+			const float dotScale = GetMarkerScale();
+			for (const MapQuestArea& area : m_questAreas)
+			{
+				Matrix4 world = Matrix4::Identity;
+				if (IsQuestAreaBeyondEdge(area))
+				{
+					const Vector3 position = GetQuestAreaEdgePosition(area);
+					world = world * Matrix4::GetTrans(Vector3(position.x, position.z, 0.0f));
+					world = world * Matrix4::GetScale(Vector3(dotScale, dotScale, 1.0f));
+					gx.SetTransformMatrix(World, world);
+					m_questAreaEdgeGeom.Draw();
+				}
+				else
+				{
+					world = world * Matrix4::GetTrans(Vector3(area.center.x, area.center.z, 0.0f));
+					world = world * Matrix4::GetScale(Vector3(area.radius, area.radius, 1.0f));
+					gx.SetTransformMatrix(World, world);
+					m_questAreaGeom.Draw();
+				}
+			}
+		}
+
 		if (m_partyMemberTexture && !m_memberDots.empty())
 		{
 			// Guild mates first, so party members (who may also be guild mates) stay on top
@@ -357,6 +396,7 @@ namespace mmo
 		m_loadedTextures.clear();
 		m_memberDots.clear();
 		m_questGiverDots.clear();
+		m_questAreas.clear();
 		m_pings.clear();
 
 		UpdatePlayerPosition(m_playerPosition, m_playerOrientation);
@@ -378,6 +418,27 @@ namespace mmo
 	void Minimap::UpdateQuestGiverDots(std::vector<QuestGiverDot> dots)
 	{
 		m_questGiverDots = std::move(dots);
+	}
+
+	void Minimap::UpdateQuestAreas(std::vector<MapQuestArea> areas)
+	{
+		m_questAreas = std::move(areas);
+	}
+
+	bool Minimap::IsQuestAreaBeyondEdge(const MapQuestArea& area) const
+	{
+		const float dx = area.center.x - m_playerPosition.x;
+		const float dz = area.center.z - m_playerPosition.z;
+		const float edge = GetWorldCoverage() * s_edgeRadiusFactor;
+		return std::sqrt(dx * dx + dz * dz) - area.radius > edge;
+	}
+
+	Vector3 Minimap::GetQuestAreaEdgePosition(const MapQuestArea& area) const
+	{
+		float dx = area.center.x - m_playerPosition.x;
+		float dz = area.center.z - m_playerPosition.z;
+		world_map::ClampToCircle(dx, dz, GetWorldCoverage() * s_edgeRadiusFactor);
+		return Vector3(m_playerPosition.x + dx, 0.0f, m_playerPosition.z + dz);
 	}
 
 	void Minimap::UpdatePings(std::vector<PingDot> pings)
@@ -430,6 +491,21 @@ namespace mmo
 				luabind::object entry = luabind::newtable(L);
 				entry["type"] = std::string("questgiver");
 				entry["name"] = dot.name;
+				result[index++] = entry;
+			}
+		}
+
+		// Quest objective areas: inside the disc, or on the edge marker of an area beyond the edge
+		for (const MapQuestArea& area : m_questAreas)
+		{
+			const bool hit = IsQuestAreaBeyondEdge(area)
+				? distSq(GetQuestAreaEdgePosition(area)) <= hitRadiusSq
+				: distSq(area.center) <= area.radius * area.radius;
+			if (hit)
+			{
+				luabind::object entry = luabind::newtable(L);
+				entry["type"] = std::string("questarea");
+				entry["name"] = area.title;
 				result[index++] = entry;
 			}
 		}

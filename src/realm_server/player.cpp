@@ -3751,6 +3751,17 @@ namespace mmo
 		quest.requiredClasses = questEntry->requiredclasses();
 		quest.flags = questEntry->flags();
 
+		// Objective area for the client's minimap and world map (see quests.proto).
+		if (questEntry->pointx() != 0.0f || questEntry->pointy() != 0.0f)
+		{
+			constexpr float defaultObjectiveAreaRadius = 30.0f;
+			quest.hasObjectiveArea = true;
+			quest.objectiveAreaMapId = questEntry->pointmapid();
+			quest.objectiveAreaX = questEntry->pointx();
+			quest.objectiveAreaZ = questEntry->pointy();
+			quest.objectiveAreaRadius = questEntry->pointopt() != 0 ? static_cast<float>(questEntry->pointopt()) : defaultObjectiveAreaRadius;
+		}
+
 		for (const auto &requirement : questEntry->requirements())
 		{
 			// The author may override the generated objective wording per requirement; an

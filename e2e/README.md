@@ -29,6 +29,16 @@ throwaway databases (`mmo_login_e2e`, `mmo_realm_e2e`), so it coexists with a ru
 dev stack. Servers must be built with `-DMMO_WITH_DEV_COMMANDS=ON` (the documented
 Windows configure line already does this).
 
+### On-demand playtests
+
+`e2e/playtests/` holds slow scenarios that play content the way a player does, with no GM
+commands (e.g. `first_quests_no_gm.lua`, about 5 minutes). The default suite only runs
+`e2e/scenarios/`, so the nightly, `/release` and `/gate full` never pick them up. Run one by path:
+
+```powershell
+powershell -File tools/e2e/e2e_run.ps1 -Scenario e2e/playtests/first_quests_no_gm.lua
+```
+
 ## Writing a scenario
 
 Scenarios are Lua files in `e2e/scenarios/`. Each runs in a fresh client process with a

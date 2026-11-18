@@ -80,6 +80,9 @@ message QuestEntry {
 	optional uint32 srcitemcount = 33 [default = 1];
 	optional uint32 srcspell = 34;
 	optional uint32 rewtitleid = 35;
+	// Objective area shown on the minimap and world map while the quest is active and not complete:
+	// the map id, the area centre in world coordinates (pointx = X, pointy = Z) and its radius in
+	// metres (pointopt, 0 = 30 m). Map 0 is a valid map, so pointx = pointy = 0 means "no area".
 	optional uint32 pointmapid = 36;
 	optional float pointx = 37;
 	optional float pointy = 38;
