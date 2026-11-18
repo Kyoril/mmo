@@ -3,6 +3,7 @@
 #pragma once
 
 #include "map_member_dot.h"
+#include "map_quest_area.h"
 
 #include "base/non_copyable.h"
 #include "base/typedefs.h"
@@ -55,6 +56,9 @@ namespace mmo
 
 		/// @brief Sets the party and guild members to show (members on this map only).
 		void UpdateMemberDots(std::vector<MapMemberDot> members);
+
+		/// @brief Sets the objective areas of the player's active quests (areas on this map only).
+		void UpdateQuestAreas(std::vector<MapQuestArea> areas);
 
 		/// @brief Advances view animations and texture fade-ins.
 		void Update(float elapsedSeconds);
@@ -199,6 +203,11 @@ namespace mmo
 		Vector3 m_playerPosition;
 		Radian m_playerFacing;
 		std::vector<MapMemberDot> m_members;
+		std::vector<MapQuestArea> m_questAreas;
+
+		/// @brief Smallest on-screen radius of a quest area, in pixels before text scaling, so an area stays
+		///        visible on a zoomed-out map.
+		static constexpr float s_minQuestAreaPixels = 9.0f;
 
 		std::map<uint64, CachedTile> m_tiles;
 		std::map<uint64, bool> m_missingTiles;

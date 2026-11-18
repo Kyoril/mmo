@@ -1413,6 +1413,28 @@ namespace mmo
 				questDots.push_back({ unit.GetPosition(), dotType, unit.GetName() });
 			});
 			m_minimap.UpdateQuestGiverDots(std::move(questDots));
+
+			// Objective areas of active quests on this map. A complete quest's way home is the turn-in
+			// marker above its quest giver, so only unfinished ones get an area.
+			std::vector<MapQuestArea> questAreas;
+			for (uint32 i = 0; i < m_questClient.GetNumQuestLogEntries(); ++i)
+			{
+				const QuestLogEntry* entry = m_questClient.GetQuestLogEntry(i);
+				if (!entry || !entry->quest || entry->status != QuestStatus::Incomplete)
+				{
+					continue;
+				}
+
+				const QuestInfo& info = *entry->quest;
+				if (!info.hasObjectiveArea || info.objectiveAreaMapId != g_mapId)
+				{
+					continue;
+				}
+
+				questAreas.push_back({ Vector3(info.objectiveAreaX, 0.0f, info.objectiveAreaZ), info.objectiveAreaRadius, info.title, entry->questId });
+			}
+			m_minimap.UpdateQuestAreas(questAreas);
+			m_worldMap.UpdateQuestAreas(std::move(questAreas));
 		}
 
 		// Tick ping timers and remove expired ones
