@@ -821,9 +821,60 @@ namespace mmo
 
 	void FrameManager::Update(float elapsedSeconds)
 	{
+		// The ui replaces frames underneath a resting cursor (the inventory rebuilds its slot
+		// buttons whenever the equipment changes, for example), so the hovered frame has to be
+		// resolved anew every frame and not only when the cursor moved. Otherwise the destroyed
+		// frame stays hovered: it never gets its leave event, and the frame which took its place
+		// never gets its enter event, leaving e.g. the previous item's tooltip on screen.
+		UpdateHoveredFrame();
+
 		if (m_topFrame)
 		{
 			m_topFrame->Update(elapsedSeconds);
+		}
+	}
+
+	void FrameManager::UpdateHoveredFrame()
+	{
+		// Before the first cursor movement the cursor position is simply unknown, and resolving
+		// hover for the default position would enter whatever sits in the top left corner.
+		if (m_topFrame == nullptr || !m_mousePosKnown)
+		{
+			return;
+		}
+
+		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
+		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
+		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
+		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(m_mousePos, FrameHitTest::Hover);
+		if (hoverFrame == m_hoverFrame)
+		{
+			return;
+		}
+
+		auto prevFrame = m_hoverFrame;
+		m_hoverFrame = std::move(hoverFrame);
+
+		if (prevFrame)
+		{
+			prevFrame->OnMouseLeave();
+		}
+
+		if (m_hoverFrame)
+		{
+			m_hoverFrame->OnMouseEnter();
+		}
+
+		// Invalidate the old hover frame if there was any
+		if (prevFrame)
+		{
+			prevFrame->Invalidate(false);
+		}
+
+		// Invalidate the new hover frame if there is any
+		if (m_hoverFrame)
+		{
+			m_hoverFrame->Invalidate(false);
 		}
 	}
 
@@ -840,6 +891,7 @@ namespace mmo
 
 		const Point delta = position - m_mousePos;
 		m_mousePos = position;
+		m_mousePosKnown = true;
 
 		// Notify every frame that currently has a mouse button held down, even when the cursor has moved
 		// off it. This lets a frame implement click-drag interactions (e.g. canvas panning) with any
@@ -854,11 +906,6 @@ namespace mmo
 
 		// Find the deepest enabled frame for the given point. It receives the mouse moved events.
 		const FramePtr enabledFrame = m_topFrame->GetChildFrameAt(position, false);
-
-		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
-		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
-		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
-		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, FrameHitTest::Hover);
 
 		// Trigger mouse moved events, skipping any frame already notified above as a pressed frame.
 		Frame* frame = enabledFrame.get();
@@ -881,33 +928,7 @@ namespace mmo
 			frame = frame->GetParent();
 		}
 
-		if (hoverFrame != m_hoverFrame)
-		{
-			auto prevFrame = m_hoverFrame;
-			m_hoverFrame = std::move(hoverFrame);
-
-			if (prevFrame)
-			{
-				prevFrame->OnMouseLeave();
-			}
-
-			if (m_hoverFrame)
-			{
-				m_hoverFrame->OnMouseEnter();
-			}
-
-			// Invalidate the old hover frame if there was any
-			if (prevFrame)
-			{
-				prevFrame->Invalidate(false);
-			}
-
-			// Invalidate the new hover frame if there is any
-			if (m_hoverFrame)
-			{
-				m_hoverFrame->Invalidate(false);
-			}
-		}
+		UpdateHoveredFrame();
 	}
 
 	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
