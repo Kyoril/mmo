@@ -322,6 +322,12 @@ namespace mmo
 			/// The optional text is emoted by every creature that was handed in.
 			DeliverFollowers = 41,
 
+			/// Plays a cutscene for a player, e.g. a camera flight through a dungeon when the player
+			/// steps through its entrance. The cutscene has to belong to the map the player is on, and
+			/// it does not start for a player who is dead, in combat or already watching one.
+			/// Targets: PLAYER; Data: <CUTSCENE-ID>; Texts: NONE;
+			PlayCutscene = 42,
+
 			Invalid,
 			Count_ = Invalid
 		};

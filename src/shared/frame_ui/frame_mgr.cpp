@@ -846,7 +846,7 @@ namespace mmo
 		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
 		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
 		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
-		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(m_mousePos, FrameHitTest::Hover);
+		FramePtr hoverFrame = m_uiHidden ? nullptr : m_topFrame->GetChildFrameAt(m_mousePos, FrameHitTest::Hover);
 		if (hoverFrame == m_hoverFrame)
 		{
 			return;
@@ -939,6 +939,12 @@ namespace mmo
 		// arrived (e.g. because the window lost focus) can not swallow a later world click.
 		m_consumedPressButtons &= ~static_cast<int32>(button);
 
+		// A hidden ui cannot be clicked
+		if (m_uiHidden)
+		{
+			return false;
+		}
+
 		if (const auto activeCombo = m_activeComboBox.lock())
 		{
 			// Determine whether the click is inside the ComboBox widget itself or its popup frame.
@@ -1025,6 +1031,11 @@ namespace mmo
 		const bool pressConsumed = (m_consumedPressButtons & static_cast<int32>(button)) != 0;
 		m_consumedPressButtons &= ~static_cast<int32>(button);
 
+		if (m_uiHidden)
+		{
+			return false;
+		}
+
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
@@ -1056,6 +1067,11 @@ namespace mmo
 
 	bool FrameManager::NotifyMouseWheel(const int32 delta)
 	{
+		if (m_uiHidden)
+		{
+			return false;
+		}
+
 		// Route the wheel to an open combo box popup if the cursor is hovering over it.
 		if (const auto activeCombo = m_activeComboBox.lock())
 		{
@@ -1096,7 +1112,7 @@ namespace mmo
 		m_pressedKeys.insert(key);
 
 		// We need an active input capture to handle key down events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1108,7 +1124,7 @@ namespace mmo
 	void FrameManager::NotifyKeyChar(uint16 codepoint)
 	{
 		// We need an active input capture to handle key up events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1122,7 +1138,7 @@ namespace mmo
 		m_pressedKeys.erase(key);
 
 		// We need an active input capture to handle key up events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1163,6 +1179,25 @@ namespace mmo
 		{
 			m_activeComboBox.reset();
 		}
+	}
+
+	void FrameManager::SetUiHidden(const bool hidden)
+	{
+		if (m_uiHidden == hidden)
+		{
+			return;
+		}
+
+		m_uiHidden = hidden;
+
+		if (hidden)
+		{
+			// A text field that was being typed into must not keep swallowing the keyboard
+			SetCaptureWindow(nullptr);
+		}
+
+		// Leaves the hovered frame when hiding, finds the one under the cursor again when showing
+		UpdateHoveredFrame();
 	}
 
 	void FrameManager::SetCaptureWindow(FramePtr capture)
