@@ -1009,6 +1009,11 @@ namespace mmo
 		///	so the spell does not remove the aura it just granted itself.
 		void RemoveAurasByInterrupt(uint32 interruptFlags, uint32 excludeSpellId = 0);
 
+		/// Removes every applied aura that has at least one effect of the given aura type.
+		/// @param type The aura type.
+		/// @return The number of auras removed.
+		uint32 RemoveAurasByType(AuraType type);
+
 		/// Removes the caster's auras that are interrupted by deliberately casting a spell (e.g. Stealth).
 		/// This must be invoked at the moment the spell "goes off" (SpellGo) and before its effects are
 		/// applied, so that any concealment aura (Stealth) is gone before damage lands and the victim
@@ -1899,6 +1904,11 @@ public:
 		/// Called when the unit is killed.
 		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS *killer);
+
+		/// Called by SetInCombat when the combat state is about to change, before the combat flag
+		/// flips and before the EnterCombat interrupt auras are removed.
+		/// @param inCombat The new combat state.
+		virtual void OnCombatStateChanging(bool inCombat) {}
 
 		/// Called when a spell is learned by the unit.
 		/// @param spell The spell entry that was learned.

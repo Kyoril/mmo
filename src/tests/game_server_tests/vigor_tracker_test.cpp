@@ -1,0 +1,253 @@
+// Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
+//
+// Vigor is the traversal resource spent by gliding and dashing. The server keeps it in a
+// VigorTracker that only settles on transitions (glide start/stop, drain changes, combat, landing)
+// and between them predicts when it runs out or regenerates to full.
+
+#include "test_unit_factory.h"
+
+#include "game_server/objects/vigor_tracker.h"
+#include "game_server/spells/aura_container.h"
+#include "game/aura.h"
+#include "game/spell.h"
+#include "game/traversal.h"
+#include "asio/io_service.hpp"
+
+#include "catch.hpp"
+
+using namespace mmo;
+using namespace mmo::test;
+
+namespace
+{
+	/// Adds a spell the player can learn to the project.
+	void AddProjectSpell(proto::Project& project, const uint32 id, const char* name)
+	{
+		auto* spell = project.spells.add(id);
+		spell->set_name(name);
+		spell->add_attributes(0);
+		spell->add_attributes(0);
+	}
+
+	/// The Dash spell as authored in the data: a speed buff that drains 12 Vigor per second and
+	/// breaks on entering combat.
+	proto::SpellEntry MakeDashSpell()
+	{
+		proto::SpellEntry spell = MakeSpell();
+		spell.set_id(traversal_spells::Dash);
+		spell.set_baseid(traversal_spells::Dash);
+		spell.set_name("Dash");
+		spell.set_attributes(0, spell_attributes::DisabledWhileActive | spell_attributes::NotInCombat | spell_attributes::Ability);
+		spell.set_aurainterruptflags(spell_aura_interrupt_flags::EnterCombat);
+
+		auto* speed = spell.add_effects();
+		speed->set_index(0);
+		speed->set_type(spell_effects::ApplyAura);
+		speed->set_aura(aura_type::ModIncreaseSpeed);
+		speed->set_basepoints(35);
+		speed->set_targeta(spell_effect_targets::Caster);
+
+		auto* drain = spell.add_effects();
+		drain->set_index(1);
+		drain->set_type(spell_effects::ApplyAura);
+		drain->set_aura(aura_type::DrainVigor);
+		drain->set_basepoints(12);
+		drain->set_targeta(spell_effect_targets::Caster);
+
+		return spell;
+	}
+}
+
+TEST_CASE("Tracker drains while gliding and reports empty time", "[vigor]")
+{
+	VigorTracker tracker;
+	tracker.Reset(0, 100.0f);
+
+	tracker.SetGrounded(0, false);
+	tracker.SetGliding(0, true, false);
+
+	// The start cost is paid right away.
+	CHECK(tracker.GetCurrent(0) == Approx(95.0f));
+
+	// 95 Vigor at 8 per second.
+	CHECK(tracker.GetEmptyTime(0) == 11875);
+
+	CHECK(tracker.GetCurrent(2000) == Approx(79.0f));
+	CHECK(tracker.GetCurrent(20000) == Approx(0.0f));
+
+	// Changing into an updraft costs nothing extra and halves the drain.
+	tracker.SetGliding(2000, true, true);
+	CHECK(tracker.GetCurrent(2000) == Approx(79.0f));
+	CHECK(tracker.GetCurrent(4000) == Approx(71.0f));
+
+	// Not draining: no empty time.
+	tracker.SetGliding(4000, false, false);
+	CHECK(tracker.GetEmptyTime(4000) == 0);
+}
+
+TEST_CASE("Tracker regen waits for delay and grounded", "[vigor]")
+{
+	VigorTracker tracker;
+	tracker.Reset(0, 100.0f);
+
+	tracker.SetGrounded(0, false);
+	tracker.SetGliding(0, true, false);
+	tracker.SetGliding(1000, false, false);
+	REQUIRE(tracker.GetCurrent(1000) == Approx(87.0f));
+
+	// Still in the air after closing the glider: no regen at all.
+	CHECK(tracker.GetCurrent(5000) == Approx(87.0f));
+	CHECK(tracker.GetFullTime(1000) == 0);
+
+	// Landing right after the glide: the regen delay of one second applies first.
+	tracker.SetGrounded(1000, true);
+	CHECK(tracker.GetCurrent(1500) == Approx(87.0f));
+	CHECK(tracker.GetCurrent(2000) == Approx(87.0f));
+	CHECK(tracker.GetCurrent(2400) == Approx(97.0f));
+	CHECK(tracker.GetCurrent(3000) == Approx(100.0f));
+
+	// 13 missing Vigor at 25 per second after the delay: 1 s + 0.52 s.
+	CHECK(tracker.GetFullTime(1000) == 2520);
+	CHECK(tracker.GetFullTime(3000) == 0);
+}
+
+TEST_CASE("Extra drain from aura stacks with glide", "[vigor]")
+{
+	VigorTracker tracker;
+	tracker.Reset(0, 100.0f);
+
+	tracker.SetGrounded(0, false);
+	tracker.SetGliding(0, true, false);
+	tracker.SetExtraDrain(0, 12.0f);
+
+	// 8 glide + 12 extra.
+	CHECK(tracker.GetCurrent(1000) == Approx(75.0f));
+	CHECK(tracker.GetEmptyTime(0) == 4750);
+
+	// The extra drain alone keeps draining after the glide stops.
+	tracker.SetGliding(1000, false, false);
+	CHECK(tracker.GetCurrent(2000) == Approx(63.0f));
+	CHECK(tracker.GetEmptyTime(2000) == 2000 + 5250);
+
+	tracker.SetExtraDrain(2000, 0.0f);
+	CHECK(tracker.GetEmptyTime(2000) == 0);
+	CHECK(tracker.GetCurrent(2000) == Approx(63.0f));
+}
+
+TEST_CASE("Combat stops regen", "[vigor]")
+{
+	VigorTracker tracker;
+	tracker.Reset(0, 100.0f);
+
+	tracker.SetExtraDrain(0, 50.0f);
+	tracker.SetExtraDrain(1000, 0.0f);
+	REQUIRE(tracker.GetCurrent(1000) == Approx(50.0f));
+
+	tracker.SetInCombat(1000, true);
+	CHECK(tracker.GetCurrent(5000) == Approx(50.0f));
+	CHECK(tracker.GetFullTime(5000) == 0);
+
+	// The delay has long passed when combat ends, so regen starts at once.
+	tracker.SetInCombat(5000, false);
+	CHECK(tracker.GetCurrent(5000) == Approx(50.0f));
+	CHECK(tracker.GetCurrent(6000) == Approx(75.0f));
+}
+
+TEST_CASE("Max vigor is zero without traversal spells", "[vigor]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	AddProjectSpell(project, traversal_spells::Glider, "Glider");
+	AddProjectSpell(project, traversal_spells::Dash, "Dash");
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(0.0f));
+	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Glider));
+
+	player->AddSpell(traversal_spells::Glider);
+	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(100.0f));
+	CHECK(player->Get<float>(object_fields::Vigor) == Approx(100.0f));
+	CHECK(player->CanUseTraversal(traversal_spells::Glider));
+	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Dash));
+
+	// Dash alone also grants Vigor, so unlearning Glider keeps it.
+	player->AddSpell(traversal_spells::Dash);
+	player->RemoveSpell(traversal_spells::Glider);
+	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(100.0f));
+
+	player->RemoveSpell(traversal_spells::Dash);
+	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(0.0f));
+	CHECK(player->Get<float>(object_fields::Vigor) == Approx(0.0f));
+}
+
+TEST_CASE("Entering combat removes Dash", "[vigor]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	AddProjectSpell(project, traversal_spells::Dash, "Dash");
+
+	// Declared before the player: the aura container holds the spell by reference, and the
+	// player's destructor still reads it.
+	const proto::SpellEntry dash = MakeDashSpell();
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	player->AddSpell(traversal_spells::Dash);
+
+	auto aura = std::make_shared<AuraContainer>(*player, player->GetGuid(), dash, 0, 0);
+	for (const auto& effect : dash.effects())
+	{
+		aura->AddAuraEffect(effect, effect.basepoints());
+	}
+	player->ApplyAura(std::move(aura));
+
+	REQUIRE(player->HasAuraSpell(traversal_spells::Dash));
+	CHECK(player->GetVigor().GetExtraDrain() == Approx(12.0f));
+
+	player->SetInCombat(true, false);
+
+	CHECK_FALSE(player->HasAuraSpell(traversal_spells::Dash));
+	CHECK(player->GetVigor().GetExtraDrain() == Approx(0.0f));
+	CHECK(player->GetVigor().IsInCombat());
+}
+
+TEST_CASE("Running out of Vigor removes the drain auras and signals exhaustion", "[vigor]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	AddProjectSpell(project, traversal_spells::Dash, "Dash");
+
+	proto::SpellEntry dash = MakeDashSpell();
+
+	// A fast drain so the test does not wait long: 100 Vigor at 1000 per second.
+	dash.mutable_effects(1)->set_basepoints(1000);
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	player->AddSpell(traversal_spells::Dash);
+
+	int exhaustedCount = 0;
+	scoped_connection onExhausted{ player->GetVigor().exhausted.connect([&exhaustedCount]() { ++exhaustedCount; }) };
+
+	auto aura = std::make_shared<AuraContainer>(*player, player->GetGuid(), dash, 0, 0);
+	for (const auto& effect : dash.effects())
+	{
+		aura->AddAuraEffect(effect, effect.basepoints());
+	}
+	player->ApplyAura(std::move(aura));
+	REQUIRE(player->HasAuraSpell(traversal_spells::Dash));
+
+	const GameTime deadline = GetAsyncTimeMs() + 3000;
+	while (player->HasAuraSpell(traversal_spells::Dash) && GetAsyncTimeMs() < deadline)
+	{
+		io.run_one_for(std::chrono::milliseconds(50));
+	}
+
+	CHECK_FALSE(player->HasAuraSpell(traversal_spells::Dash));
+	CHECK(exhaustedCount == 1);
+	CHECK(player->Get<float>(object_fields::Vigor) == Approx(0.0f));
+}

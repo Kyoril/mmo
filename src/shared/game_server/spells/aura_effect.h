@@ -148,6 +148,9 @@ namespace mmo
 		/// stops following and runs back to its spawn point. Applying the mark does nothing here -
 		/// the cast validation reads it.
 		void HandlePreventAuraApplication(bool apply) const;
+		/// Adds the basepoints (Vigor per second) to the owner's Vigor drain, or takes them away.
+		/// Only players have Vigor; on other units the aura does nothing.
+		void HandleDrainVigor(bool apply) const;
 		/// Stops a creature that follows the unit which claimed it and sends it back to its spawn
 		/// point. Does nothing when the follow belongs to somebody else.
 		void EndClaimFollow() const;

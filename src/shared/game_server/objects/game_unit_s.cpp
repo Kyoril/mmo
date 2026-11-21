@@ -1514,6 +1514,27 @@ namespace mmo
 		}
 	}
 
+	uint32 GameUnitS::RemoveAurasByType(const AuraType type)
+	{
+		// Collected first: removing an aura mutates m_auras.
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
+		for (const auto& aura : m_auras)
+		{
+			if (aura->IsApplied() && aura->HasEffect(type))
+			{
+				aurasToRemove.push_back(aura);
+			}
+		}
+
+		for (const auto& aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
+
+		return static_cast<uint32>(aurasToRemove.size());
+	}
+
 	void GameUnitS::RemoveCastInterruptAuras(const proto::SpellEntry& spell)
 	{
 		// Spells flagged NotBreakCastInterruptAuras (e.g. a Sprint buff) are exempt so they can be
@@ -3234,10 +3255,11 @@ namespace mmo
 
 	void GameUnitS::SetInCombat(bool inCombat, bool pvp)
 	{
-		// Health and rage regenerate differently in combat
+		// Health and rage regenerate differently in combat, and Vigor does not regenerate at all
 		if (inCombat != IsInCombat())
 		{
 			SettleRegeneration();
+			OnCombatStateChanging(inCombat);
 		}
 
 		struct RegenRatesUpdate

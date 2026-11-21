@@ -4852,6 +4852,27 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 					selectable.GetEntry().set_on_enter_trigger(0);
 				}
 			}
+
+			ImGui::Separator();
+
+			// Updraft: lifts gliding players inside the volume (0 = no updraft)
+			float updraftStrength = selectable.GetEntry().updraft_strength();
+			if (ImGui::DragFloat("Updraft Strength", &updraftStrength, 0.1f, 0.0f, 50.0f, "%.1f"))
+			{
+				updraftStrength = std::max(0.0f, updraftStrength);
+				if (updraftStrength > 0.0f)
+				{
+					selectable.GetEntry().set_updraft_strength(updraftStrength);
+				}
+				else
+				{
+					selectable.GetEntry().clear_updraft_strength();
+				}
+			}
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("Upward speed (units per second) for gliding players inside this trigger. 0 = no updraft.");
+			}
 		}
 	}
 

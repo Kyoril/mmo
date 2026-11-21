@@ -9,6 +9,16 @@
 
 namespace mmo
 {
+	/// Spells that unlock the traversal abilities. Knowing one of them grants Vigor.
+	namespace traversal_spells
+	{
+		/// Passive spell: the character can open a glider while falling.
+		constexpr uint32 Glider = 1436;
+
+		/// Toggle spell: faster movement while active, drains Vigor (DrainVigor aura).
+		constexpr uint32 Dash = 1437;
+	}
+
 	/// Tuning values for the traversal abilities (Vigor, Dash, Glider). Shared by client and server.
 	struct TraversalSettings
 	{
