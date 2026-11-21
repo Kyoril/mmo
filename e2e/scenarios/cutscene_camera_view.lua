@@ -8,9 +8,9 @@
 --     path of the cutscene, tile by tile
 --   client CutsceneEnd(skipped) -> the view is taken away, the flag is cleared, CutsceneEnd comes back
 --
--- Cutscene 1 is the human intro: its camera starts above the harbour north of Haven, some 900 m away
--- from Oakenshire where the character stands, and reaches the harbourmaster on the quay within its
--- first shot. So while the cutscene runs, the client must be sent a creature it could never see from
+-- Cutscene 1 is the human intro: its camera starts above Haven, more than a kilometre away from
+-- Oakenshire where the character stands, and passes over the harbourmaster on the quay about a
+-- quarter of a minute in. So while the cutscene runs, the client must be sent a creature it could never see from
 -- where its character is - and must keep everything around the character, which is not despawned
 -- while the camera is away.
 --
@@ -21,7 +21,7 @@ local CUTSCENE = 1
 local IN_CUTSCENE = 0x40
 
 local FARMER_HALDOR = 15      -- stands a few metres from the character in Oakenshire
-local HARBOURMASTER = 143     -- Lysa Fairwind on the Haven quay, under the camera of the first shot
+local HARBOURMASTER = 143     -- Lysa Fairwind on the Haven quay, under the camera's path
 
 local REASON_SKIPPED = 1
 local REASON_CANCELLED = 2
@@ -54,7 +54,7 @@ Assert(FindUnitByEntry(HARBOURMASTER) == nil, "the camera must not travel before
 
 -- 2) The client plays: the camera's surroundings arrive, the character's stay
 CutsceneBegin(CUTSCENE)
-Assert(WaitUntil(function() return FindUnitByEntry(HARBOURMASTER) ~= nil end, 15000, "harbourmaster in camera view"),
+Assert(WaitUntil(function() return FindUnitByEntry(HARBOURMASTER) ~= nil end, 40000, "harbourmaster in camera view"),
 	"the client should be sent the harbourmaster once the camera flies over the Haven quay")
 Assert(FindUnitByEntry(FARMER_HALDOR) ~= nil, "the surroundings of the character must stay spawned while the camera is away")
 Assert(UnitExists(Me()), "the own character must never be despawned by a cutscene")
