@@ -24,6 +24,21 @@ namespace mmo
 {
 	namespace
 	{
+		/// True if the spell has an aura-applying effect of the given aura type.
+		bool AppliesAuraType(const proto::SpellEntry& spell, const AuraType type)
+		{
+			for (const auto& effect : spell.effects())
+			{
+				const bool appliesAura = effect.type() == spell_effects::ApplyAura || effect.type() == spell_effects::ApplyAreaAura;
+				if (appliesAura && effect.aura() == static_cast<uint32>(type))
+				{
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		/// True if the spell has an effect that raises its own damage or heal proc events.
 		bool DealsDamageOrHealing(const proto::SpellEntry& spell)
 		{
@@ -576,6 +591,14 @@ namespace mmo
 		if (HasAttributes(0, spell_attributes::NotInCombat) && m_cast.GetExecuter().IsInCombat())
 		{
 			SendEndCast(spell_cast_result::FailedAffectingCombat);
+			return false;
+		}
+
+		// A spell that drains Vigor (Dash) needs Vigor left. Without this check it could be cast at
+		// 0 and give a speed burst until the exhaustion timer removes it again.
+		if (const GamePlayerS* player = m_context.GetPlayerExecutor(); player && AppliesAuraType(m_spell, aura_type::DrainVigor) && player->GetVigor().IsEmpty(GetAsyncTimeMs()))
+		{
+			SendEndCast(spell_cast_result::FailedNotReady);
 			return false;
 		}
 

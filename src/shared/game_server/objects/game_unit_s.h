@@ -1905,8 +1905,9 @@ public:
 		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS *killer);
 
-		/// Called by SetInCombat when the combat state is about to change, before the combat flag
-		/// flips and before the EnterCombat interrupt auras are removed.
+		/// Called on every real change of the combat state, before the combat flag flips: by
+		/// SetInCombat (also before the EnterCombat interrupt auras are removed) and by OnKilled,
+		/// which clears the flag directly. Every place that changes the InCombat flag must call it.
 		/// @param inCombat The new combat state.
 		virtual void OnCombatStateChanging(bool inCombat) {}
 

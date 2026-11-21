@@ -169,7 +169,10 @@ namespace mmo
 		[[nodiscard]] const VigorTracker& GetVigor() const { return m_vigor; }
 
 		/// @param spellId The traversal spell (traversal_spells::Glider or traversal_spells::Dash).
-		/// @return Whether the character knows the spell and has Vigor to use it with.
+		/// @return Whether the character knows the spell and has a Vigor pool (MaxVigor > 0). Does
+		///	        not look at the current Vigor: a drain spell cast at 0 Vigor is refused by the
+		///	        cast validation, and glide starts are checked against the current value by the
+		///	        glide validation.
 		[[nodiscard]] bool CanUseTraversal(uint32 spellId) const;
 
 		/// Starts or stops gliding (or changes the updraft state of a glide) and replicates the

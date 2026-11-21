@@ -3770,7 +3770,8 @@ namespace mmo
 		// Call parent implementation first
 		GameUnitS::ApplyMovementInfo(info);
 
-		// Vigor only regenerates on the ground. Landing (or leaving it) is a transition.
+		// Vigor only regenerates on the ground. Landing (or leaving it) is a transition. Swimming
+		// counts as grounded on purpose: only falling and gliding stop the regeneration.
 		const bool grounded = (info.movementFlags & (movement_flags::Falling | movement_flags::Gliding)) == 0;
 		if (grounded != m_vigor.IsGrounded())
 		{

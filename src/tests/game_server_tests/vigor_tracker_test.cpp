@@ -11,6 +11,13 @@
 #include "game/aura.h"
 #include "game/spell.h"
 #include "game/traversal.h"
+#include "game/spell_target_map.h"
+#include "game_server/condition_mgr.h"
+#include "game_server/trigger_handler.h"
+#include "game_server/world/universe.h"
+#include "game_server/world/world_instance.h"
+#include "game_server/world/world_instance_manager.h"
+#include "base/id_generator.h"
 #include "asio/io_service.hpp"
 
 #include "catch.hpp"
@@ -20,6 +27,11 @@ using namespace mmo::test;
 
 namespace
 {
+	struct NullTriggerHandler final : ITriggerHandler
+	{
+		void ExecuteTrigger(const proto::TriggerEntry&, TriggerContext, uint32, bool) override {}
+	};
+
 	/// Adds a spell the player can learn to the project.
 	void AddProjectSpell(proto::Project& project, const uint32 id, const char* name)
 	{
@@ -250,4 +262,91 @@ TEST_CASE("Running out of Vigor removes the drain auras and signals exhaustion",
 	CHECK_FALSE(player->HasAuraSpell(traversal_spells::Dash));
 	CHECK(exhaustedCount == 1);
 	CHECK(player->Get<float>(object_fields::Vigor) == Approx(0.0f));
+}
+
+TEST_CASE("Dying in combat lets Vigor regenerate again", "[vigor]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	AddProjectSpell(project, traversal_spells::Dash, "Dash");
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	player->AddSpell(traversal_spells::Dash);
+
+	// Spend some Vigor so that there is something to regenerate.
+	player->ModifyVigorDrain(1000, true);
+	const GameTime drainUntil = GetAsyncTimeMs() + 20;
+	while (GetAsyncTimeMs() < drainUntil)
+	{
+	}
+	player->ModifyVigorDrain(1000, false);
+	REQUIRE(player->GetVigor().GetCurrent(GetAsyncTimeMs()) < 100.0f);
+
+	player->SetInCombat(true, false);
+	REQUIRE(player->GetVigor().IsInCombat());
+	CHECK(player->GetVigor().GetFullTime(GetAsyncTimeMs()) == 0);
+
+	// Death clears the combat flag without SetInCombat.
+	player->Kill(nullptr);
+	CHECK_FALSE(player->IsInCombat());
+	CHECK_FALSE(player->GetVigor().IsInCombat());
+
+	// Regeneration is scheduled again, after the regen delay.
+	const GameTime now = GetAsyncTimeMs();
+	const GameTime fullTime = player->GetVigor().GetFullTime(now);
+	CHECK(fullTime != 0);
+	CHECK(player->GetVigor().GetCurrent(now + 5000) == Approx(100.0f));
+}
+
+TEST_CASE("A Vigor drain spell cannot be cast without Vigor", "[vigor]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	Universe universe{ io, timers };
+	IdGenerator<uint64> objectIds{ 1 };
+	NullTriggerHandler triggerHandler;
+
+	// The project's Dash is the spell being cast, so it lives as long as the player.
+	auto* dash = project.spells.add(traversal_spells::Dash);
+	*dash = MakeDashSpell();
+
+	// Casting needs a world. No map files exist for this directory: no nav mesh, no collision.
+	auto* map = project.maps.add(0);
+	map->set_name("Vigor Test");
+	map->set_directory("Worlds/__vigor_test__/__vigor_test__");
+	ConditionMgr conditionMgr{ project.conditions };
+	WorldInstanceManager manager{ io, universe, project, objectIds, triggerHandler, conditionMgr };
+	WorldInstance& world = manager.CreateInstance(0);
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	player->Set<uint32>(object_fields::Health, 100);
+	player->AddSpell(traversal_spells::Dash);
+	world.AddGameObject(*player);
+	REQUIRE(player->Get<float>(object_fields::Vigor) == Approx(100.0f));
+
+	// Empty the pool with a fast drain that is not an aura, then stop it.
+	player->ModifyVigorDrain(100000, true);
+	const GameTime drainUntil = GetAsyncTimeMs() + 10;
+	while (GetAsyncTimeMs() < drainUntil)
+	{
+	}
+	player->ModifyVigorDrain(100000, false);
+	REQUIRE(player->GetVigor().IsEmpty(GetAsyncTimeMs()));
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Self);
+	CHECK(player->CastSpell(targetMap, *dash, 0) == spell_cast_result::FailedNotReady);
+	CHECK_FALSE(player->HasAuraSpell(traversal_spells::Dash));
+
+	// With Vigor the same cast is not refused for it.
+	player->GetVigor().Reset(GetAsyncTimeMs(), 100.0f);
+	CHECK(player->CastSpell(targetMap, *dash, 0) == spell_cast_result::CastOkay);
+	CHECK(player->HasAuraSpell(traversal_spells::Dash));
+
+	world.RemoveGameObject(*player);
+	io.stop();
 }

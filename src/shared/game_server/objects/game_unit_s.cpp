@@ -3845,6 +3845,13 @@ namespace mmo
 		StopRegeneration();
 
 		Set<uint64>(object_fields::TargetUnit, 0);
+
+		// Dying ends combat without going through SetInCombat, so tell subclasses here: anything
+		// that mirrors the combat state (player Vigor) would otherwise stay "in combat" for good.
+		if (IsInCombat())
+		{
+			OnCombatStateChanging(false);
+		}
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 
 		// Temporary pets die with their owner's life.
