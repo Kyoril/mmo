@@ -176,3 +176,56 @@ TEST_CASE("Glide forward speed", "[traversal]")
 	const Vector3 v = StepGlideVelocity(Vector3(0.0f, -5.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f), 0.0f, s, 0.016f);
 	CHECK(std::sqrt(v.x * v.x + v.z * v.z) == Approx(10.0f));
 }
+
+TEST_CASE("Regen straddling the delay counts only the part after it", "[traversal]")
+{
+	const TraversalSettings s;
+	VigorState v = Full();
+	v.current = 50.0f;
+	v.secondsSinceDrain = 0.5f;
+	AdvanceVigor(v, s, VigorActivity::Idle, 0.0f, false, true, 2.0f);
+	CHECK(v.current == Approx(87.5f));
+}
+
+TEST_CASE("Large idle step after drain regenerates", "[traversal]")
+{
+	const TraversalSettings s;
+	VigorState v = Full();
+	v.current = 50.0f;
+	AdvanceVigor(v, s, VigorActivity::Gliding, 0.0f, false, false, 1.0f);
+	CHECK(v.current == Approx(42.0f));
+	AdvanceVigor(v, s, VigorActivity::Idle, 0.0f, false, true, 10.0f);
+	CHECK(v.current == Approx(100.0f));
+}
+
+TEST_CASE("Non-positive step and zero max leave Vigor sane", "[traversal]")
+{
+	const TraversalSettings s;
+	VigorState v = Full();
+	AdvanceVigor(v, s, VigorActivity::Gliding, 0.0f, false, false, 0.0f);
+	AdvanceVigor(v, s, VigorActivity::Gliding, 0.0f, false, false, -1.0f);
+	AdvanceVigor(v, s, VigorActivity::Gliding, 0.0f, false, false, std::numeric_limits<float>::quiet_NaN());
+	CHECK(v.current == Approx(100.0f));
+
+	v.max = 0.0f;
+	AdvanceVigor(v, s, VigorActivity::Idle, 0.0f, false, true, 1.0f);
+	CHECK(v.current == Approx(0.0f));
+}
+
+TEST_CASE("Combined drain", "[traversal]")
+{
+	const TraversalSettings s;
+	VigorState v = Full();
+	AdvanceVigor(v, s, VigorActivity::Gliding, 12.0f, false, false, 1.0f);
+	CHECK(v.current == Approx(80.0f));
+}
+
+TEST_CASE("Glide horizontal decay without input", "[traversal]")
+{
+	const TraversalSettings s;
+	Vector3 v = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), 0.0f, s, 1.0f);
+	CHECK(std::sqrt(v.x * v.x + v.z * v.z) == Approx(0.0f).margin(1e-4f));
+
+	v = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), 0.0f, s, 0.5f);
+	CHECK(std::sqrt(v.x * v.x + v.z * v.z) == Approx(4.0f));
+}

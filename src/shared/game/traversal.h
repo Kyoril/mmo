@@ -98,9 +98,9 @@ namespace mmo
 		float strength = 0.0f;
 	};
 
-	/// Gets the strongest updraft containing the position, or 0 if there is none.
+	/// Gets the strongest updraft containing the position, or 0 if there is none (strength <= 0 means no updraft).
 	float GetUpdraftStrength(const std::vector<UpdraftVolume>& volumes, const Vector3& position);
 
-	/// Steps the velocity of a gliding character (Y is up).
+	/// Steps the velocity of a gliding character (Y is up). An updraftStrength <= 0 means no updraft.
 	Vector3 StepGlideVelocity(const Vector3& velocity, const Vector3& desiredHorizontalDir, float updraftStrength, const TraversalSettings& settings, float seconds);
 }

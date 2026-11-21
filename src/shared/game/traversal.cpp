@@ -65,6 +65,11 @@ namespace mmo
 
 	void AdvanceVigor(VigorState& state, const TraversalSettings& settings, const VigorActivity activity, const float extraDrainPerSecond, const bool inCombat, const bool grounded, const float seconds)
 	{
+		if (!(seconds > 0.0f))
+		{
+			return;
+		}
+
 		const float drain = GetGlideDrain(settings, activity) + extraDrainPerSecond;
 		if (drain > 0.0f)
 		{
@@ -73,15 +78,18 @@ namespace mmo
 		}
 		else
 		{
-			if (grounded && !inCombat && state.secondsSinceDrain >= settings.regenDelaySeconds)
+			if (grounded && !inCombat)
 			{
-				state.current += settings.regenPerSecond * seconds;
+				// Only the part of the step after the regen delay elapsed regenerates.
+				const float delayLeft = std::max(0.0f, settings.regenDelaySeconds - state.secondsSinceDrain);
+				const float regenSeconds = std::max(0.0f, seconds - delayLeft);
+				state.current += settings.regenPerSecond * regenSeconds;
 			}
 
 			state.secondsSinceDrain += seconds;
 		}
 
-		state.current = std::clamp(state.current, 0.0f, state.max);
+		state.current = state.max > 0.0f ? std::clamp(state.current, 0.0f, state.max) : 0.0f;
 	}
 
 	float SecondsUntilEmpty(const VigorState& state, const TraversalSettings& settings, const VigorActivity activity, const float extraDrainPerSecond)
