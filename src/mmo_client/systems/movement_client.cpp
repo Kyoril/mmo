@@ -38,6 +38,8 @@ namespace mmo
 			game::realm_client_packet::MoveFallLand,
 			game::realm_client_packet::MoveStartSwim,
 			game::realm_client_packet::MoveStopSwim,
+			game::realm_client_packet::MoveStartGlide,
+			game::realm_client_packet::MoveStopGlide,
 			game::realm_client_packet::MoveStartWalk,
 			game::realm_client_packet::MoveStopWalk,
 			game::realm_client_packet::MoveEnded,

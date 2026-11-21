@@ -655,6 +655,8 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartGlide, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStopGlide, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnCreatureMove);
 
 		// Spell/state packets

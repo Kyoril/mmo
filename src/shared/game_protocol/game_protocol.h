@@ -133,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000029;
+		constexpr uint32 ProtocolVersion = 0x0000002A;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -565,6 +565,14 @@ namespace mmo
 				/// instance. Handled by the realm, answered with realm_client_packet::GuildMemberPositions.
 				/// Requests closer together than one second are dropped. No payload.
 				GuildMemberPositions,
+
+				/// Sent by the client when the local player starts gliding (opens the glider while falling).
+				/// This is the only packet permitted to add the Gliding movement flag.
+				MoveStartGlide,
+
+				/// Sent by the client when the local player stops gliding (closes the glider or lands).
+				/// This is the only packet permitted to remove the Gliding movement flag.
+				MoveStopGlide,
 
 				/// Counter constant
 				Count_,
@@ -1013,6 +1021,15 @@ namespace mmo
 				/// in the receiver's world instance at their last positions reported by the world node.
 				/// Payload: uint16 count, then per member uint64 guid, uint8-length name, float x, float z.
 				GuildMemberPositions,
+
+				/// [PROXY] A unit started gliding.
+				MoveStartGlide,
+
+				/// [PROXY] A unit stopped gliding.
+				MoveStopGlide,
+
+				/// Sent to the client when the server ends its gliding (e.g. out of vigor). Payload: uint64 guid.
+				ForceStopGlide,
 
 				/// Counter constant
 				Count_,

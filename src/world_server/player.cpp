@@ -1157,6 +1157,8 @@ namespace mmo
 		case game::client_realm_packet::MoveFallLand:
 		case game::client_realm_packet::MoveStartSwim:
 		case game::client_realm_packet::MoveStopSwim:
+		case game::client_realm_packet::MoveStartGlide:
+		case game::client_realm_packet::MoveStopGlide:
 		case game::client_realm_packet::MoveStartWalk:
 		case game::client_realm_packet::MoveStopWalk:
 		case game::client_realm_packet::MoveEnded:
@@ -2686,6 +2688,8 @@ namespace mmo
 		case game::client_realm_packet::MoveFallLand: opCode = game::realm_client_packet::MoveFallLand; break;
 		case game::client_realm_packet::MoveStartSwim: opCode = game::realm_client_packet::MoveStartSwim; break;
 		case game::client_realm_packet::MoveStopSwim: opCode = game::realm_client_packet::MoveStopSwim; break;
+		case game::client_realm_packet::MoveStartGlide: opCode = game::realm_client_packet::MoveStartGlide; break;
+		case game::client_realm_packet::MoveStopGlide: opCode = game::realm_client_packet::MoveStopGlide; break;
 		case game::client_realm_packet::MoveStartWalk: opCode = game::realm_client_packet::MoveStartWalk; break;
 		case game::client_realm_packet::MoveStopWalk: opCode = game::realm_client_packet::MoveStopWalk; break;
 		case game::client_realm_packet::MoveEnded: opCode = game::realm_client_packet::MoveEnded; break;

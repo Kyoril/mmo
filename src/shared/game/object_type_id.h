@@ -378,8 +378,14 @@ namespace mmo
 			/// @brief 32 bit number of purchased bank bag slots
 			BankBagSlotCount = QuestLogSlot_1 + (sizeof(QuestField) / sizeof(uint32)) * MaxQuestLogSize,
 
+			/// @brief float current vigor, the resource spent by dashing and gliding (one uint32 slot).
+			Vigor,
+
+			/// @brief float maximum vigor (one uint32 slot).
+			MaxVigor,
+
 			// Field count
-			PlayerFieldCount = BankBagSlotCount + 1,
+			PlayerFieldCount = MaxVigor + 1,
 		};
 
 		enum ItemFields

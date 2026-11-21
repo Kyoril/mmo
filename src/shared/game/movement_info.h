@@ -100,13 +100,17 @@ namespace mmo
 			/// @brief The unit is currently flying.
 			Flying = 1 << 20,
 
+			/// @brief The unit is gliding with a glider. Only valid together with Falling, so the
+			///	jump velocity is always serialized while gliding.
+			Gliding = 1 << 22,
+
 
 			/// @brief Combined list of flags which imply that the character's position is changing.
 			Moving =
 				Forward | Backward | StrafeLeft | StrafeRight,
 
 			PositionChanging =
-				Forward | Backward | Ascending | Descending | Falling | StrafeLeft | StrafeRight,
+				Forward | Backward | Ascending | Descending | Falling | StrafeLeft | StrafeRight | Gliding,
 
 			Strafing =
 				StrafeLeft | StrafeRight,
@@ -177,6 +181,8 @@ namespace mmo
 		bool IsFalling() const { return (movementFlags & movement_flags::Falling) != 0; }
 
 		bool IsSwimming() const { return (movementFlags & movement_flags::Swimming) != 0; }
+
+		bool IsGliding() const { return (movementFlags & movement_flags::Gliding) != 0; }
 	};
 
 	inline io::Writer& operator<<(io::Writer& writer, const MovementInfo& info)
