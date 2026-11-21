@@ -2298,6 +2298,10 @@ namespace mmo
 			{
 				unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
 			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor) || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			{
+				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor), fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
+			}
 		}
 
 		// Set position/movement - this should always be present for creation

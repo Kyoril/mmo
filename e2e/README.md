@@ -130,7 +130,12 @@ cast-time modifiers on creatures),
 aura on `g` the server logged — PeriodicAuraLog — and the amount the latest one dealt or healed,
 `-1` if none: exact tick values, which a health bar blurs with regeneration),
 `GetStandState(g)` (0 = Stand, 1 = Sit, 2 = Sleep, 3 = Dead, 4 = Kneel),
-`GetSitPoseEmote(g)`, `GetMoodEmote(g)`
+`GetSitPoseEmote(g)`, `GetMoodEmote(g)`,
+`GetRunSpeed(g)` (run speed in yards per second as the server last set it: creation or a forced
+speed change such as Dash, a slow or `GM.SetSpeed`; `-1` for an unknown unit),
+`GetVigor()` / `GetMaxVigor()` (own character's traversal resource as the server last replicated
+it; the server writes Vigor only on transitions, so a running drain shows once it ends — see
+`traversal_dash.lua`)
 
 Pets (see [docs/pets.md](../docs/pets.md)):
 `GetOwner(g)` (the unit's Owner field: `"0x0"` for none, `""` for an unknown unit),
