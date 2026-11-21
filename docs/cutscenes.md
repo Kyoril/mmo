@@ -19,8 +19,10 @@ A cutscene ends when its timeline is over, when the player skips it, or when the
 
 **The character during a cutscene.** It stays where it is in the world. Other players see a marker
 next to its nameplate and a line in its tooltip. It takes no damage, and creatures neither attack it
-nor keep attacking it. In return it cannot act: casts and attacks are dropped, and walking away ends
-the cutscene. A cutscene does not start for a character that is dead or in combat.
+nor keep attacking it. In return it cannot act: casts, attacks, item use and pet orders are dropped,
+and a character that ends up more than a few metres from where it stood ends the cutscene. A
+cutscene does not start for a character that is dead or in combat, and not within 30 seconds of the
+previous one (the GM command ignores that pause).
 
 **Skipping.** Any key or click shows the hint; Escape while the hint is up skips. The author decides
 per cutscene whether it may be skipped.
@@ -44,7 +46,7 @@ knowing:
   the player would not be told anyway (`TileSubscriber::AcceptsBroadcastFrom`), so no packet reaches
   the client twice.
 
-The server follows the path on its own clock. If the client never reports that it plays (three
+The server follows the path on its own clock. If the client never reports that it plays (two
 minutes), or does not end the cutscene in time (ten seconds past its length), the server ends it.
 
 ## Authoring

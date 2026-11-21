@@ -80,8 +80,8 @@ Assert(WaitUntil(function() return CutsceneStartCount() == starts + 1 end, 5000,
 	"the cutscene should start a second time")
 CutsceneBegin(CUTSCENE)
 
--- Movement that was already on its way when the cutscene was announced is forgiven for a moment
-Sleep(2500)
+-- A few metres are forgiven (a step that was being taken, settling onto the ground); this is more
+Sleep(1000)
 MoveTo(282.0, 5.0, 556.0, 8000)
 Assert(WaitUntil(function() return CutsceneEndCount() == ends + 1 end, 8000, "cancelled by movement"),
 	"moving the character should end the cutscene")

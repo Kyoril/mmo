@@ -97,6 +97,12 @@ namespace mmo
 			return;
 		}
 
+		// A character in a cutscene is protected, so its pet takes no orders either
+		if (IsInCutscene())
+		{
+			return;
+		}
+
 		if (request.command > pet_command::Dismiss)
 		{
 			WLOG("Player " << log_hex_digit(m_character->GetGuid()) << " sent unknown pet command " << static_cast<uint32>(request.command));
@@ -156,6 +162,11 @@ namespace mmo
 		if (!(contentReader >> request))
 		{
 			ELOG("Failed to read PetCastSpell packet");
+			return;
+		}
+
+		if (IsInCutscene())
+		{
 			return;
 		}
 

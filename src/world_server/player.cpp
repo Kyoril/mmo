@@ -726,6 +726,11 @@ namespace mmo
 			objects.push_back(object);
 		}
 
+		DespawnForClient(objects, reason);
+	}
+
+	void Player::DespawnForClient(const std::vector<GameObjectS*>& objects, const game::despawn_reason::Type reason)
+	{
 		if (objects.empty())
 		{
 			return;
@@ -836,9 +841,14 @@ namespace mmo
 		}
 		else
 		{
-			// True invisibility keeps its original despawn semantics.
-			const std::vector<GameObjectS*> objects{ &unit };
-			NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
+			// True invisibility keeps its original despawn semantics. Not through
+			// NotifyObjectsDespawned: that keeps what the camera of a cutscene still sees, and this
+			// unit is gone for both points of view.
+			if (unit.GetGuid() != m_character->GetGuid())
+			{
+				const std::vector<GameObjectS*> objects{ &unit };
+				DespawnForClient(objects, game::despawn_reason::OutOfSight);
+			}
 		}
 	}
 

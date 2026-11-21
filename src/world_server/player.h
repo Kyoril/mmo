@@ -207,7 +207,9 @@ namespace mmo
 		/// @param cutsceneId Id of the cutscene to play.
 		/// @return false if the cutscene does not exist, has nothing to play or belongs to another
 		///         map, or if the character is dead, in combat or in a cutscene already.
-		bool StartCutscene(uint32 cutsceneId);
+		/// @param force true to start right after another cutscene (GM command); otherwise a
+		///        cutscene does not start within a short time after the previous one.
+		bool StartCutscene(uint32 cutsceneId, bool force = false);
 
 		/// Ends the running cutscene, if any: the point of view returns to the character, the flag
 		/// is removed and the client is told to stop playing.
@@ -218,6 +220,10 @@ namespace mmo
 		[[nodiscard]] bool IsInCutscene() const { return m_cutscene != nullptr; }
 
 	private:
+		/// Tells the client that objects are gone and forgets that it knows them. No questions asked:
+		/// NotifyObjectsDespawned decides which objects that is.
+		void DespawnForClient(const std::vector<GameObjectS*>& objects, game::despawn_reason::Type reason);
+
 		/// Drops the cutscene state without telling the client that the cutscene ended.
 		/// @param notifyClient true to despawn what only the camera saw; false if the character
 		///        leaves the world anyway.
@@ -1309,6 +1315,12 @@ namespace mmo
 
 		/// When the client started playing the cutscene, or 0 while it has not yet.
 		GameTime m_cutsceneStartTime{ 0 };
+
+		/// Where the character stood when the cutscene was announced.
+		Vector3 m_cutsceneStartPosition;
+
+		/// No cutscene starts before this time, unless forced.
+		GameTime m_cutsceneCooldownEnd{ 0 };
 
 		/// Moves the point of view along the camera path, and ends a cutscene the client does not end.
 		Countdown m_cutsceneTick;

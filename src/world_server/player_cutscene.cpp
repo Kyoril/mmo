@@ -19,7 +19,7 @@ namespace mmo
 	{
 		/// How long the client may take to report that it started playing: it may still be on its
 		/// loading screen when the cutscene is announced.
-		constexpr GameTime CutsceneBeginTimeout = constants::OneMinute * 3;
+		constexpr GameTime CutsceneBeginTimeout = constants::OneMinute * 2;
 
 		/// How often the point of view is moved along the camera path.
 		constexpr GameTime CutsceneTickInterval = 200;
@@ -31,12 +31,16 @@ namespace mmo
 		/// A client may report the natural end of a cutscene this much before the server reaches it.
 		constexpr GameTime CutsceneEarlyEndTolerance = constants::OneSecond * 3;
 
-		/// Movement packets that were on their way when the cutscene was announced are let through
-		/// for this long.
-		constexpr GameTime CutsceneMovementGrace = 1500;
+		/// How far the character may end up from where it stood when the cutscene was announced: it
+		/// may finish the step it was taking, or settle onto the ground after entering the world.
+		constexpr float CutsceneMovementTolerance = 4.0f;
+
+		/// How long after a cutscene the next one has to wait. A cutscene protects the character, and
+		/// a trigger that can be walked into again and again must not hand that out without a pause.
+		constexpr GameTime CutsceneCooldown = constants::OneSecond * 30;
 	}
 
-	bool Player::StartCutscene(const uint32 cutsceneId)
+	bool Player::StartCutscene(const uint32 cutsceneId, const bool force)
 	{
 		if (!m_worldInstance || !m_character)
 		{
@@ -68,9 +72,16 @@ namespace mmo
 			return false;
 		}
 
+		const GameTime now = GetAsyncTimeMs();
+		if (!force && now < m_cutsceneCooldownEnd)
+		{
+			return false;
+		}
+
 		m_cutscene = cutscene;
-		m_cutsceneRequestTime = GetAsyncTimeMs();
+		m_cutsceneRequestTime = now;
 		m_cutsceneStartTime = 0;
+		m_cutsceneStartPosition = m_character->GetPosition();
 
 		// The character stands still and is left alone until the cutscene is over
 		m_character->StopAttack();
@@ -111,6 +122,10 @@ namespace mmo
 	void Player::ResetCutsceneState(const bool notifyClient)
 	{
 		m_cutsceneTick.Cancel();
+		if (m_cutscene)
+		{
+			m_cutsceneCooldownEnd = GetAsyncTimeMs() + CutsceneCooldown;
+		}
 		m_cutscene = nullptr;
 		m_cutsceneStartTime = 0;
 
@@ -234,12 +249,11 @@ namespace mmo
 			return false;
 		}
 
-		if (GetAsyncTimeMs() - m_cutsceneRequestTime < CutsceneMovementGrace)
-		{
-			return false;
-		}
-
-		return info.IsMoving() || info.IsStrafing();
+		// Judged by where the character ends up, not by movement flags: a jump or a fall changes the
+		// position without any of them.
+		const float dx = info.position.x - m_cutsceneStartPosition.x;
+		const float dz = info.position.z - m_cutsceneStartPosition.z;
+		return dx * dx + dz * dz > CutsceneMovementTolerance * CutsceneMovementTolerance;
 	}
 
 #if MMO_WITH_DEV_COMMANDS
@@ -256,7 +270,7 @@ namespace mmo
 
 		// Asking again while one runs ends the running one first, so a GM can iterate on a path
 		EndCutscene(cutscene_end_reason::Cancelled);
-		StartCutscene(cutsceneId);
+		StartCutscene(cutsceneId, true);
 	}
 #endif
 }

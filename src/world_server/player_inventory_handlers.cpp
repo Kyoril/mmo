@@ -774,6 +774,12 @@ namespace mmo
 			return;
 		}
 
+		// A character in a cutscene is protected, so it does not act either
+		if (IsInCutscene())
+		{
+			return;
+		}
+
 		// Get item
 		const InventorySlot invSlot = InventorySlot::FromRelative(bagId, slotId);
 		auto item = m_character->GetInventory().GetItemAtSlot(invSlot.GetAbsolute());
