@@ -464,19 +464,12 @@ namespace mmo
 
 	void World::ConsumeOnCharacterJoinedCallback(const uint64 characterGuid, const bool success, const InstanceId instanceId)
 	{
-		JoinWorldCallback callback = nullptr;
-
+		if (!m_joinCallbacks.Consume(characterGuid, instanceId, success))
 		{
-			std::scoped_lock lock { m_joinCallbackMutex};
-
-			if (const auto result = m_joinCallbacks.find(characterGuid); result != m_joinCallbacks.end())
-			{
-				callback = std::move(result->second);
-				m_joinCallbacks.erase(result);
-			}
+			// Expected when the client asked again while a slow instance creation was still
+			// running: the node answers both requests, only one of them is still waiting.
+			WLOG("World node answered a join of character " << log_hex_digit(characterGuid) << " that has no pending join request, ignoring it");
 		}
-		
-		callback(instanceId, success);
 	}
 
 	PacketParseResult World::OnPropagateMapList(auth::IncomingPacket& packet)
@@ -508,12 +501,8 @@ namespace mmo
 
 	void World::Join(CharacterData characterData, const std::vector<std::string>& accountFeatures, const LocaleIndex locale, JoinWorldCallback callback)
 	{
-		// TODO: What if we already have a waiting callback? Right now we just discard the old one
-		if (callback)
-		{
-			std::scoped_lock lock { m_joinCallbackMutex };
-			m_joinCallbacks.emplace(characterData.characterId, std::move(callback));
-		}
+		// A request still waiting for this character is replaced, see JoinCallbackRegistry.
+		m_joinCallbacks.Register(characterData.characterId, std::move(callback));
 
 		GetConnection().sendSinglePacket([characterData, accountFeatures, locale](auth::OutgoingPacket& outPacket)
 		{

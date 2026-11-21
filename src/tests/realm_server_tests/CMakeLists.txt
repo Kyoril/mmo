@@ -25,6 +25,7 @@ target_sources(realm_server_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_spell_cache.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_name.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/character_order.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/join_callback_registry.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../realm_server/modules/pet_module.cpp
 )
 
