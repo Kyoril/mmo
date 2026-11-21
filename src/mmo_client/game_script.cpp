@@ -47,6 +47,7 @@
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/spell_target_map.h"
+#include "game/traversal.h"
 #include "game_client/game_bag_c.h"
 #include "game_client/game_item_c.h"
 #include "game_client/object_mgr.h"
@@ -705,6 +706,30 @@ namespace mmo
 			}
 
 			return 0;
+		}
+
+		/// Vigor is only known for the own character: the prediction between the server's writes.
+		float Script_UnitVigor(const std::string &unitName)
+		{
+			const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+			if (!player || Script_GetUnitByName(unitName) != player)
+			{
+				return 0.0f;
+			}
+
+			return player->GetPredictedVigor();
+		}
+
+		/// Maximum Vigor of the own character, 0 while it knows no traversal ability.
+		float Script_UnitVigorMax(const std::string &unitName)
+		{
+			const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+			if (!player || Script_GetUnitByName(unitName) != player)
+			{
+				return 0.0f;
+			}
+
+			return player->GetMaxVigor();
 		}
 
 		int32 Script_PlayerNextLevelXp()
@@ -1661,6 +1686,25 @@ namespace mmo
 					   luabind::def("UnitDisplayId", &Script_UnitDisplayId),
 					   luabind::def("PlayerXp", &Script_PlayerXp),
 					   luabind::def("PlayerNextLevelXp", &Script_PlayerNextLevelXp),
+					   luabind::def("UnitVigor", &Script_UnitVigor),
+					   luabind::def("UnitVigorMax", &Script_UnitVigorMax),
+					   luabind::def<std::function<void()>>("ToggleDash", [this]()
+														   {
+				// Dash is a toggle: a second press ends the aura instead of casting again.
+				const std::shared_ptr<GamePlayerC> player = ObjectMgr::GetActivePlayer();
+				if (!player)
+				{
+					return;
+				}
+
+				if (player->HasAura(traversal_spells::Dash))
+				{
+					m_realmConnector.CancelAura(traversal_spells::Dash);
+				}
+				else
+				{
+					m_spellCast.CastSpell(traversal_spells::Dash);
+				} }),
 					   luabind::def<std::function<void(const char *)>>("TargetUnit", [this](const char *unitName)
 																	   { this->TargetUnit(unitName); }),
 

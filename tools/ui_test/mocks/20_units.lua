@@ -224,3 +224,18 @@ end
 function UnitDisplayId(name)
 	return 0
 end
+
+-- Vigor (Dash, Glider) of the own character. max = 0: the character knows no traversal ability,
+-- so the vigor bar stays hidden. Scenarios set both and raise PLAYER_VIGOR_CHANGED.
+UiTest.data.vigor = { current = 0, max = 0 }
+
+function UnitVigor(name)
+	return name == "player" and UiTest.data.vigor.current or 0
+end
+
+function UnitVigorMax(name)
+	return name == "player" and UiTest.data.vigor.max or 0
+end
+
+function ToggleDash()
+end

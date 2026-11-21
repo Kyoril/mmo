@@ -3144,6 +3144,8 @@ namespace mmo
 		else
 		{
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
+			// Gliding is only valid while falling: never send it without Falling.
+			ClearGliding();
 			m_movementInfo.fallTime = 0;
 			m_movementInfo.jumpVelocity = Vector3::Zero;
 		}

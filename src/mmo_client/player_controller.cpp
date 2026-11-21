@@ -577,10 +577,21 @@ namespace mmo
 			return;
 		}
 
-		// Can't jump when dead, rooted or while the server controls our movement (charge)
-		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted() ||
-			m_controlledUnit->IsMovementControlledByServer())
+		// Can't jump when dead or while the server controls our movement (charge)
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsMovementControlledByServer())
 		{
+			return;
+		}
+
+		// Rooted: no jump and no new glide, but an open glider can still be closed. Otherwise a
+		// root in an updraft would lift the player until Vigor runs out.
+		if (m_controlledUnit->IsRooted())
+		{
+			if (m_controlledUnit->IsGliding())
+			{
+				m_controlledUnit->StopGlide();
+			}
+
 			return;
 		}
 
