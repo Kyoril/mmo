@@ -88,6 +88,9 @@ out that leaves off far from the character. Fades hide the transition.
 | By hand | Console command `cutscene <id>` (GM level 2). Running it again restarts the cutscene, which helps while tuning a path. |
 | In code | `Player::StartCutscene(id)` on the world node. |
 
+The intro is announced to the client before its own character is sent, so the loading screen of
+the world entry stays up until the first picture of the cutscene is loaded as well.
+
 The intro is recognised by the character's played time being zero. It is saved whenever the
 character leaves a world, so a relog or a teleport to another map never plays the intro again, also
 not when the first session ended in a crash.
@@ -121,4 +124,6 @@ not when the first session ended in a crash.
   camera that looks at something more than about 70 m away shows it without its creatures.
 - Zone name, weather profile and ambience still follow the character, not the camera.
 - A cutscene plays on the map the character is on. It cannot show another map.
-- There is no voice-over yet for the intro; its narration is subtitles only.
+- Narration is recorded per language. The intro (sound entries 445-449, files under
+  `Voice/Cutscene/Intro/` in each locale) is spoken in English and German; French and Russian
+  clients hear the English recording and read the English subtitles.

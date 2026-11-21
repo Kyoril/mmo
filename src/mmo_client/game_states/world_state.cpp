@@ -355,6 +355,7 @@ namespace mmo
 	}
 
 	IInputControl *WorldState::s_inputControl = nullptr;
+	WorldState *WorldState::s_luaWorldState = nullptr;
 	PlayerController *WorldState::s_playerController = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
@@ -649,6 +650,7 @@ namespace mmo
 		m_cutsceneConnections.disconnect();
 		m_cutscenePlayer.reset();
 
+		s_luaWorldState = nullptr;
 		s_inputControl = nullptr;
 		s_playerController = nullptr;
 		m_playerController.reset();
@@ -750,97 +752,124 @@ namespace mmo
 			return;
 		}
 
+		// The functions are registered once per Lua state and reach the world state through a
+		// static pointer. Registering them again on every ui reload would add a second overload with
+		// the same signature each time, and luabind then refuses every call as ambiguous.
+		s_luaWorldState = this;
+
+		lua_getglobal(L, "__WorldLuaFunctionsRegistered");
+		const bool alreadyRegistered = lua_toboolean(L, -1) != 0;
+		lua_pop(L, 1);
+		if (alreadyRegistered)
+		{
+			return;
+		}
+
+		lua_pushboolean(L, 1);
+		lua_setglobal(L, "__WorldLuaFunctionsRegistered");
+
 		// The list is parenthesized: a comma inside [] would be read as a multidimensional subscript
 		luabind::module(L)
 		[(
 			// Override SendPing to do hovered-object check + terrain raycast before sending
-			luabind::def<std::function<void()>>("SendPing", [this]()
+			luabind::def<std::function<void()>>("SendPing", []()
 			{
-				if (!m_playerController || !m_scene)
+				if (s_luaWorldState)
 				{
-					return;
-				}
-
-				// 1) Check hovered object (unit or game object)
-				const auto hovered = m_playerController->GetHoveredObject();
-				if (hovered && hovered->IsUnit())
-				{
-					m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
-					return;
-				}
-
-				// 2) Terrain/collidable raycast using current mouse position
-				if (m_rayQuery)
-				{
-					const int32 mouseX = m_playerController->GetMouseX();
-					const int32 mouseY = m_playerController->GetMouseY();
-
-					int32 screenW = 1920, screenH = 1080;
-					GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
-
-					const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
-					const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
-
-					const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
-
-					m_rayQuery->ClearResult();
-					m_rayQuery->SetSortByDistance(true);
-					m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
-					m_rayQuery->SetRay(mouseRay);
-					m_rayQuery->Execute();
-
-					const auto& results = m_rayQuery->GetLastResult();
-					for (const auto& result : results)
-					{
-						if (!result.movable)
-						{
-							continue;
-						}
-
-						const ICollidable* collidable = result.movable->GetCollidable();
-						if (!collidable || !collidable->IsCollidable())
-						{
-							continue;
-						}
-
-						CollisionResult collision;
-						if (collidable->TestRayCollision(mouseRay, collision))
-						{
-							const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
-							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
-							return;
-						}
-					}
-				}
-
-				// 3) Fallback: ping at player position
-				auto player = ObjectMgr::GetActivePlayer();
-				if (player)
-				{
-					const Vector3& pos = player->GetPosition();
-					m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
+					s_luaWorldState->SendPingFromCursor();
 				}
 			}),
 
 			// Cutscenes: the overlay (black fade, subtitles, skip hint) reads these every frame
-			luabind::def<std::function<bool()>>("IsCutscenePlaying", [this]()
+			luabind::def<std::function<bool()>>("IsCutscenePlaying", []()
 			{
-				return IsCutsceneActive();
+				return s_luaWorldState != nullptr && s_luaWorldState->IsCutsceneActive();
 			}),
-			luabind::def<std::function<float()>>("GetCutsceneFade", [this]()
+			luabind::def<std::function<float()>>("GetCutsceneFade", []()
 			{
 				CutscenePlayer::View view;
-				return (m_cutscenePlayer && m_cutscenePlayer->GetView(view)) ? view.fade : 0.0f;
+				const WorldState* state = s_luaWorldState;
+				return (state && state->m_cutscenePlayer && state->m_cutscenePlayer->GetView(view)) ? view.fade : 0.0f;
 			}),
-			luabind::def<std::function<std::string()>>("GetCutsceneSubtitle", [this]()
+			luabind::def<std::function<std::string()>>("GetCutsceneSubtitle", []()
 			{
-				return m_cutscenePlayer ? std::string(m_cutscenePlayer->GetSubtitle()) : std::string();
+				const WorldState* state = s_luaWorldState;
+				return (state && state->m_cutscenePlayer) ? std::string(state->m_cutscenePlayer->GetSubtitle()) : std::string();
 			}),
-			luabind::def<std::function<bool()>>("IsCutsceneSkipHintVisible", [this]()
+			luabind::def<std::function<bool()>>("IsCutsceneSkipHintVisible", []()
 			{
-				return m_cutscenePlayer && m_cutscenePlayer->IsSkipHintVisible();
+				const WorldState* state = s_luaWorldState;
+				return state && state->m_cutscenePlayer && state->m_cutscenePlayer->IsSkipHintVisible();
 			})
 		)];
+	}
+
+	void WorldState::SendPingFromCursor()
+	{
+		if (!m_playerController || !m_scene)
+		{
+			return;
+		}
+
+		// 1) Check hovered object (unit or game object)
+		const auto hovered = m_playerController->GetHoveredObject();
+		if (hovered && hovered->IsUnit())
+		{
+			m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
+			return;
+		}
+
+		// 2) Terrain/collidable raycast using current mouse position
+		if (m_rayQuery)
+		{
+			const int32 mouseX = m_playerController->GetMouseX();
+			const int32 mouseY = m_playerController->GetMouseY();
+
+			int32 screenW = 1920, screenH = 1080;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
+
+			const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
+			const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
+
+			const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
+
+			m_rayQuery->ClearResult();
+			m_rayQuery->SetSortByDistance(true);
+			m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
+			m_rayQuery->SetRay(mouseRay);
+			m_rayQuery->Execute();
+
+			const auto& results = m_rayQuery->GetLastResult();
+			for (const auto& result : results)
+			{
+				if (!result.movable)
+				{
+					continue;
+				}
+
+				const ICollidable* collidable = result.movable->GetCollidable();
+				if (!collidable || !collidable->IsCollidable())
+				{
+					continue;
+				}
+
+				CollisionResult collision;
+				if (collidable->TestRayCollision(mouseRay, collision))
+				{
+					const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
+					m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
+					return;
+				}
+			}
+		}
+
+		// 3) Fallback: ping at player position
+		auto player = ObjectMgr::GetActivePlayer();
+		if (player)
+		{
+			const Vector3& pos = player->GetPosition();
+			m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
+		}
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
