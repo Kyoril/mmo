@@ -1178,6 +1178,9 @@ namespace mmo
 		/// @brief Checks the speed and height gain of the character's glides.
 		GlideMoveValidator m_glideValidator;
 
+		/// @brief The vertical speed of the character's glide, for the fall damage after it.
+		GlideFallModel m_glideFallModel;
+
 		/// @brief When the server last ended the character's glide (ForceStopGlide), or 0 while the
 		/// client has no forced stop to answer. Cleared once the Gliding flag is gone.
 		GameTime m_glideForceStopTime{ 0 };

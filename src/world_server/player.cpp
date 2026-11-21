@@ -2463,8 +2463,18 @@ namespace mmo
 		const GlideFlagChange glideChange = ClassifyGlideFlagChange(opCode, prevMovementInfo, info);
 		if (glideChange == GlideFlagChange::Invalid)
 		{
-			ELOG("Client tried to change the GLIDING flag in a packet that may not (opcode " << log_hex_digit(opCode)
-				<< ", flags " << log_hex_digit(info.movementFlags) << ", previous flags " << log_hex_digit(prevMovementInfo.movementFlags) << ")");
+			// Within the grace period after a forced stop (refused start, teleport) honest clients
+			// still send the flag until they process the ForceStopGlide: no error for those.
+			if (m_glideForceStopTime != 0 && IsWithinEmptyGrace(glideNow, m_glideForceStopTime))
+			{
+				DLOG("Dropping a movement packet that still changes the GLIDING flag after a forced glide stop (opcode "
+					<< log_hex_digit(opCode) << ", flags " << log_hex_digit(info.movementFlags) << ")");
+			}
+			else
+			{
+				ELOG("Client tried to change the GLIDING flag in a packet that may not (opcode " << log_hex_digit(opCode)
+					<< ", flags " << log_hex_digit(info.movementFlags) << ", previous flags " << log_hex_digit(prevMovementInfo.movementFlags) << ")");
+			}
 
 			// A client that glides while the server does not (a refused start or a teleport it has
 			// not caught up with) is told to close its glider, at most once per grace period.
@@ -2485,10 +2495,24 @@ namespace mmo
 				incapacitated);
 			if (decision != GlideStartDecision::Allowed)
 			{
-				WLOG("[AntiCheat] Player " << m_character->GetName() << " may not start gliding (reason "
-					<< static_cast<uint32>(decision) << ") at " << info.position);
+				// Temporary states (Vigor, stun, landing in flight) only close the glider; refusals
+				// no honest client sends are violations as well.
+				const bool violation = IsGlideStartRefusalViolation(decision);
+				if (violation)
+				{
+					WLOG("[AntiCheat] Player " << m_character->GetName() << " may not start gliding (reason "
+						<< static_cast<uint32>(decision) << ") at " << info.position);
+				}
+				else
+				{
+					DLOG("Refusing glide start of player " << m_character->GetName() << " (reason " << static_cast<uint32>(decision) << ")");
+				}
+
 				ForceStopGlide("glide start refused");
-				RecordMovementViolation("refused glide start");
+				if (violation)
+				{
+					RecordMovementViolation("refused glide start");
+				}
 				return;
 			}
 		}
@@ -2570,11 +2594,15 @@ namespace mmo
 				return;
 			}
 
-			// Landing with the glider open is no fall. A glide the server already ended
-			// (ForceStopGlide) is: its fall is measured from where the glider closed.
+			// Landing with the glider open hits the ground at the glider's vertical speed: the fall
+			// is measured from the height a free fall needs for that speed, so a glider opened just
+			// before the ground still takes the fall damage. A glide the server already ended
+			// (ForceStopGlide) falls from where the glider closed.
 			if (prevMovementInfo.IsGliding() && m_glideForceStopTime == 0)
 			{
-				m_trackingFall = false;
+				m_glideFallModel.Advance(info.timestamp, GetUpdraftStrength(m_worldInstance->GetUpdrafts(), info.position), m_character->GetVigor().GetSettings());
+				m_fallStartHeight = m_glideFallModel.GetVirtualFallStartY(info.position.y);
+				m_trackingFall = true;
 			}
 
 			// Calculate and apply fall damage on landing
@@ -4294,8 +4322,10 @@ namespace mmo
 			// Vigor stops draining now, not when the client's MoveStopGlide arrives.
 			m_character->SetVigorGliding(false, false);
 
-			// The fall continues from where the glider closed.
-			m_fallStartHeight = m_character->GetPosition().y;
+			// The fall continues from where the glider closed, at the glider's vertical speed.
+			const Vector3 position = m_character->GetPosition();
+			m_glideFallModel.Advance(GetAsyncTimeMs(), GetUpdraftStrength(m_worldInstance->GetUpdrafts(), position), m_character->GetVigor().GetSettings());
+			m_fallStartHeight = m_glideFallModel.GetVirtualFallStartY(position.y);
 			m_trackingFall = true;
 			m_pendingFallStart = false;
 		}
@@ -4335,7 +4365,9 @@ namespace mmo
 			m_glideValidator.Begin(info.position, info.timestamp, info.jumpVelocity.y, settings);
 			m_character->SetVigorGliding(true, GetUpdraftStrength(updrafts, info.position) > 0.0f);
 
-			// Opening the glider restarts the fall.
+			// The glider starts braking at the speed of the fall it interrupts. From here on the fall
+			// height follows the glider's vertical speed (GlideFallModel).
+			m_glideFallModel.Begin(m_trackingFall ? m_fallStartHeight : info.position.y, info.position.y, info.timestamp);
 			m_fallStartHeight = info.position.y;
 			m_trackingFall = true;
 			m_pendingFallStart = false;
@@ -4363,6 +4395,8 @@ namespace mmo
 			}
 		}
 
+		m_glideFallModel.Advance(info.timestamp, GetUpdraftStrength(updrafts, info.position), settings);
+
 		if (change == GlideFlagChange::Stop || change == GlideFlagChange::ImplicitStop)
 		{
 			m_glideValidator.End();
@@ -4371,11 +4405,14 @@ namespace mmo
 				m_character->SetVigorGliding(false, false);
 			}
 
-			// Closing the glider in the air restarts the fall here. After a ForceStopGlide the fall
-			// was already restarted where the server closed it, which is not undercut by a late stop.
+			// Closing the glider in the air restarts the fall here, at the glider's vertical speed:
+			// the fall is measured from the height a free fall needs for it (barely above the stop
+			// at sink speed). After a ForceStopGlide the fall was already restarted where the server
+			// closed it, which is not undercut by a late stop.
 			if (change == GlideFlagChange::Stop)
 			{
-				m_fallStartHeight = m_glideForceStopTime != 0 ? std::max(m_fallStartHeight, info.position.y) : info.position.y;
+				const float stopFallStartY = m_glideFallModel.GetVirtualFallStartY(info.position.y);
+				m_fallStartHeight = m_glideForceStopTime != 0 ? std::max(m_fallStartHeight, stopFallStartY) : stopFallStartY;
 				m_trackingFall = true;
 				m_pendingFallStart = false;
 			}

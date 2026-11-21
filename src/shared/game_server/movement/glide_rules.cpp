@@ -45,6 +45,71 @@ namespace mmo
 		return GlideStartDecision::Allowed;
 	}
 
+	bool IsGlideStartRefusalViolation(const GlideStartDecision decision)
+	{
+		switch (decision)
+		{
+		case GlideStartDecision::NoGlider:
+		case GlideStartDecision::Swimming:
+		case GlideStartDecision::AlreadyGliding:
+			return true;
+
+		case GlideStartDecision::Allowed:
+		case GlideStartDecision::NotFalling:
+		case GlideStartDecision::NoVigor:
+		case GlideStartDecision::Incapacitated:
+			return false;
+		}
+
+		return true;
+	}
+
+	float GetFreeFallSpeed(const float fallHeight)
+	{
+		if (fallHeight <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		return std::min(glide_rules::TerminalFallSpeed, std::sqrt(2.0f * glide_rules::FallGravity * fallHeight));
+	}
+
+	float GetEquivalentFallHeight(const float downwardSpeed)
+	{
+		if (downwardSpeed <= 0.0f)
+		{
+			return 0.0f;
+		}
+
+		return downwardSpeed * downwardSpeed / (2.0f * glide_rules::FallGravity);
+	}
+
+	void GlideFallModel::Begin(const float fallStartY, const float glideStartY, const GameTime time)
+	{
+		m_verticalSpeed = -GetFreeFallSpeed(fallStartY - glideStartY);
+		m_time = time;
+	}
+
+	void GlideFallModel::Advance(const GameTime time, const float updraftStrength, const TraversalSettings& settings)
+	{
+		if (time <= m_time)
+		{
+			return;
+		}
+
+		// GameTime differences stay integral; only the elapsed seconds become a float.
+		const float seconds = static_cast<float>(time - m_time) / 1000.0f;
+		m_time = time;
+
+		// Same vertical rule as the client's glide physics; horizontal input does not matter here.
+		m_verticalSpeed = StepGlideVelocity(Vector3(0.0f, m_verticalSpeed, 0.0f), Vector3::Zero, updraftStrength, settings, seconds).y;
+	}
+
+	float GlideFallModel::GetVirtualFallStartY(const float y) const
+	{
+		return y + GetEquivalentFallHeight(-m_verticalSpeed);
+	}
+
 	GlideFlagChange ClassifyGlideFlagChange(const uint16 clientOpCode, const MovementInfo& previous, const MovementInfo& next)
 	{
 		// The glider only exists in the air: the flag is never valid without Falling.

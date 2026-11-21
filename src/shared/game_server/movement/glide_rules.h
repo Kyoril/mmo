@@ -36,6 +36,13 @@ namespace mmo
 		/// accumulated into the next one, so packets sent in quick succession (facing changes while
 		/// steering) never produce near-zero elapsed times with inflated implied speeds.
 		constexpr GameTime MinCheckIntervalMs = 250;
+
+		/// Gravity of a falling character in units per second squared: 9.8 times the client
+		/// movement's gravity scale of 2 (see RemoteMovementRenderer::kGravity).
+		constexpr float FallGravity = 19.6f;
+
+		/// Highest speed a falling character reaches, in units per second.
+		constexpr float TerminalFallSpeed = 55.0f;
 	}
 
 	/// Result of CanStartGlide.
@@ -93,6 +100,55 @@ namespace mmo
 	/// @param incapacitated Whether the character is stunned, rooted or dead.
 	/// @return Allowed, or the first reason that forbids the glide.
 	[[nodiscard]] GlideStartDecision CanStartGlide(const MovementInfo& current, bool knowsGlider, float vigor, bool incapacitated);
+
+	/// Whether a refused glide start is an anti-cheat violation. Refusals caused by a temporary state
+	/// the client may not know of yet (Vigor mispredicted, a stun or a landing in flight) are not:
+	/// the server only closes the glider. Refusals no honest client sends (no Glider, swimming,
+	/// already gliding) are.
+	/// @param decision The refusal from CanStartGlide.
+	[[nodiscard]] bool IsGlideStartRefusalViolation(GlideStartDecision decision);
+
+	/// @param fallHeight Height fallen from rest.
+	/// @return The downward speed after falling that height (glide_rules::FallGravity), capped at
+	///	        glide_rules::TerminalFallSpeed.
+	[[nodiscard]] float GetFreeFallSpeed(float fallHeight);
+
+	/// @param downwardSpeed Downward speed in units per second (upward speeds count as 0).
+	/// @return The height a free fall from rest needs to reach that speed: v^2 / (2 g).
+	[[nodiscard]] float GetEquivalentFallHeight(float downwardSpeed);
+
+	/// The server's model of a glider's vertical speed, used for fall damage: a glider opened in a
+	/// fast fall needs time to brake (the vertical speed approaches -glideSinkSpeed, or the updraft
+	/// strength, at glideVerticalAccel like StepGlideVelocity), so opening it just before the ground
+	/// does not avoid the fall damage.
+	class GlideFallModel final
+	{
+	public:
+		/// Starts a glide.
+		/// @param fallStartY Height at which the fall that the glide interrupts started.
+		/// @param glideStartY Height at which the glider opened.
+		/// @param time When the glider opened.
+		void Begin(float fallStartY, float glideStartY, GameTime time);
+
+		/// Advances the vertical speed to the given time.
+		/// @param time The new time. Times before the last one are ignored.
+		/// @param updraftStrength The updraft at the glider's position, 0 if none.
+		/// @param settings The traversal tuning values.
+		void Advance(GameTime time, float updraftStrength, const TraversalSettings& settings);
+
+		/// @return The vertical speed (Y up, negative while sinking).
+		[[nodiscard]] float GetVerticalSpeed() const { return m_verticalSpeed; }
+
+		/// @param y The glider's current height.
+		/// @return The height a fall from rest would have started at to reach the current downward
+		///	        speed at y. Fall damage of a landing (or of the fall after the glider closes) is
+		///	        measured from there.
+		[[nodiscard]] float GetVirtualFallStartY(float y) const;
+
+	private:
+		float m_verticalSpeed = 0.0f;
+		GameTime m_time = 0;
+	};
 
 	/// Classifies how a client movement packet changes the Gliding flag.
 	/// @param clientOpCode The game::client_realm_packet op code of the packet.

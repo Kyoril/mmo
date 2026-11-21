@@ -16,6 +16,8 @@
 
 #include "catch.hpp"
 
+#include <cmath>
+
 using namespace mmo;
 using namespace mmo::test;
 
@@ -206,6 +208,105 @@ TEST_CASE("Fall height restarts at glide stop", "[glide]")
 
 	// A broken configuration (lethal not above minimum) never divides by zero.
 	CHECK(ComputeFallDamagePercent(20.0f, 0.0f, 5.0f, 5.0f) == Approx(0.0f));
+}
+
+TEST_CASE("Only refused glide starts no honest client sends are violations", "[glide]")
+{
+	// Temporary states the client may not know of yet: the glider is closed, nothing more.
+	CHECK_FALSE(IsGlideStartRefusalViolation(GlideStartDecision::NoVigor));
+	CHECK_FALSE(IsGlideStartRefusalViolation(GlideStartDecision::Incapacitated));
+	CHECK_FALSE(IsGlideStartRefusalViolation(GlideStartDecision::NotFalling));
+
+	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::NoGlider));
+	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::Swimming));
+	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::AlreadyGliding));
+
+	CHECK_FALSE(IsGlideStartRefusalViolation(GlideStartDecision::Allowed));
+}
+
+TEST_CASE("Free fall speed and equivalent height are inverse", "[glide]")
+{
+	CHECK(GetFreeFallSpeed(10.0f) == Approx(std::sqrt(2.0f * glide_rules::FallGravity * 10.0f)));
+	CHECK(GetEquivalentFallHeight(GetFreeFallSpeed(10.0f)) == Approx(10.0f));
+	CHECK(GetFreeFallSpeed(-3.0f) == Approx(0.0f));
+	CHECK(GetEquivalentFallHeight(-5.0f) == Approx(0.0f));
+
+	// Terminal speed caps very long falls.
+	CHECK(GetFreeFallSpeed(10000.0f) == Approx(glide_rules::TerminalFallSpeed));
+}
+
+TEST_CASE("Last-moment glide open still takes fall damage", "[glide]")
+{
+	const TraversalSettings settings;
+
+	// Fell 59 m from 60 m, opened the glider 1 m above the ground and landed 0.1 s later.
+	GlideFallModel model;
+	model.Begin(60.0f, 1.0f, 1000);
+	model.Advance(1100, 0.0f, settings);
+
+	const float withGlider = ComputeFallDamagePercent(model.GetVirtualFallStartY(0.0f), 0.0f, 5.0f, 40.0f);
+	const float withoutGlider = ComputeFallDamagePercent(60.0f, 0.0f, 5.0f, 40.0f);
+	CHECK(withGlider > 0.0f);
+	CHECK(withGlider >= 0.9f * withoutGlider);
+
+	// Measured without the lethal clamp, the 0.1 s of braking saves only a little height.
+	CHECK(model.GetVirtualFallStartY(0.0f) > 50.0f);
+	CHECK(model.GetVirtualFallStartY(0.0f) < 60.0f);
+}
+
+TEST_CASE("Long glide landing takes no fall damage", "[glide]")
+{
+	const TraversalSettings settings;
+
+	// Opened from rest (at the top of a jump) and glided for 5 s: the glider sinks at its sink speed.
+	GlideFallModel model;
+	model.Begin(80.0f, 80.0f, 1000);
+	model.Advance(6000, 0.0f, settings);
+	CHECK(model.GetVerticalSpeed() == Approx(-settings.glideSinkSpeed));
+
+	CHECK(ComputeFallDamagePercent(model.GetVirtualFallStartY(67.5f), 67.5f, 5.0f, 40.0f) == Approx(0.0f));
+
+	// A glider opened in a fast fall has braked to its sink speed after 5 s as well.
+	GlideFallModel fast;
+	fast.Begin(100.0f, 50.0f, 1000);
+	fast.Advance(6000, 0.0f, settings);
+	CHECK(fast.GetVerticalSpeed() == Approx(-settings.glideSinkSpeed));
+	CHECK(ComputeFallDamagePercent(fast.GetVirtualFallStartY(20.0f), 20.0f, 5.0f, 40.0f) == Approx(0.0f));
+}
+
+TEST_CASE("Glide stop 3 m above ground takes no damage", "[glide]")
+{
+	const TraversalSettings settings;
+
+	GlideFallModel model;
+	model.Begin(50.0f, 50.0f, 1000);
+	model.Advance(4000, 0.0f, settings);
+
+	// The fall after the stop is measured from the virtual start height above the stop.
+	const float fallStartY = model.GetVirtualFallStartY(3.0f);
+	CHECK(ComputeFallDamagePercent(fallStartY, 0.0f, 5.0f, 40.0f) == Approx(0.0f));
+}
+
+TEST_CASE("Glide stop high above ground restarts at sink speed", "[glide]")
+{
+	const TraversalSettings settings;
+
+	GlideFallModel model;
+	model.Begin(150.0f, 120.0f, 1000);
+	model.Advance(6000, 0.0f, settings);
+
+	// Sinking slowly, the fall restarts practically at the stop height ...
+	const float fallStartY = model.GetVirtualFallStartY(100.0f);
+	CHECK(fallStartY == Approx(100.0f + GetEquivalentFallHeight(settings.glideSinkSpeed)));
+	CHECK(fallStartY - 100.0f < 0.5f);
+
+	// ... and a fall from there to the ground is as deadly as any other.
+	CHECK(ComputeFallDamagePercent(fallStartY, 0.0f, 5.0f, 40.0f) == Approx(1.0f));
+
+	// Rising in an updraft, the stop is a fall from rest.
+	model.Advance(9000, settings.defaultUpdraftStrength, settings);
+	CHECK(model.GetVerticalSpeed() > 0.0f);
+	CHECK(model.GetVirtualFallStartY(100.0f) == Approx(100.0f));
 }
 
 TEST_CASE("Updraft volumes are built from the map's area triggers", "[glide]")
