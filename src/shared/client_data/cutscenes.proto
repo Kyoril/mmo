@@ -1,0 +1,108 @@
+syntax = "proto2";
+package mmo.proto_client;
+
+import "localization.proto";
+
+// NOTE: Keep this file in sync with src/shared/proto_data/cutscenes.proto!
+// The client reads the exported binary data with this mirrored schema,
+// so every field number in here has to match the mirror exactly.
+//
+// A cutscene is a camera flight through the world of one map. Both sides know it: the client plays
+// it, and the world server follows the same camera path with the player's point of view so that the
+// client is sent the creatures and players around the camera. See docs/cutscenes.md.
+
+// One camera placement on a shot's timeline. Same values as a world editor viewpoint.
+message CutsceneKeyframe
+{
+	// Milliseconds from the start of the shot. Keyframes are ordered by time.
+	required uint32 time = 1;
+
+	// Eye position in world units.
+	required float x = 2;
+	required float y = 3;
+	required float z = 4;
+
+	// Heading in degrees. 0 looks north (-Z), 90 west (-X), 180 south, 270 east.
+	required float yaw = 5;
+
+	// Elevation in degrees. Negative looks down.
+	required float pitch = 6;
+
+	// Vertical field of view in degrees. 0 keeps the player camera's field of view.
+	optional float fov = 7 [default = 0];
+}
+
+// One camera. The shots of a cutscene play one after another, and going from one shot to the next
+// is a hard cut: this is how a cutscene switches cameras.
+message CutsceneShot
+{
+	// Editor-only label.
+	optional string name = 1;
+
+	repeated CutsceneKeyframe keyframes = 2;
+
+	// 0 = smooth curve through the keyframes, 1 = straight lines between them.
+	optional uint32 interpolation = 3 [default = 0];
+
+	// Milliseconds the picture fades in from black at the start of the shot, and out to black at its end.
+	optional uint32 fade_in = 4 [default = 0];
+	optional uint32 fade_out = 5 [default = 0];
+}
+
+// A sound started at a point on the cutscene timeline.
+message CutsceneSound
+{
+	// Milliseconds from the start of the cutscene.
+	required uint32 time = 1;
+
+	// Sound entry to play (sounds table). Its category decides whether it is music, voice or an effect.
+	required uint32 sound = 2;
+}
+
+// A subtitle or narration line shown at a point on the cutscene timeline.
+message CutsceneText
+{
+	// Milliseconds from the start of the cutscene.
+	required uint32 time = 1;
+
+	// Milliseconds the line stays up.
+	required uint32 duration = 2;
+
+	// Base English text.
+	optional string text = 3;
+
+	repeated LocalizedString text_loc = 200;
+}
+
+message CutsceneEntry
+{
+	required uint32 id = 1;
+
+	// Editor-only label shown in the entry list.
+	required string name = 2;
+
+	// The map this cutscene plays on. It only starts for a player who is on that map.
+	required uint32 map = 3;
+
+	// Bit field, see cutscene_flags in shared/game/cutscene.h.
+	optional uint32 flags = 4 [default = 1];
+
+	// Milliseconds the camera takes to glide from the player's own camera onto the path at the start,
+	// and back from the path to the player's camera at the end. 0 cuts.
+	optional uint32 blend_in = 5 [default = 0];
+	optional uint32 blend_out = 6 [default = 0];
+
+	repeated CutsceneShot shots = 7;
+
+	repeated CutsceneSound sounds = 8;
+
+	repeated CutsceneText texts = 9;
+
+	// Sound entry that replaces the zone music for the length of the cutscene. 0 keeps the zone music.
+	optional uint32 music = 10 [default = 0];
+}
+
+message Cutscenes
+{
+	repeated CutsceneEntry entry = 1;
+}

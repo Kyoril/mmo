@@ -1509,6 +1509,60 @@ namespace mmo
 			}
 		}
 
+		/// Leaves cutscenes the server starts to the scenario (false) or lets the client skip them
+		/// right away as a bot does (true, the default).
+		void luaSetCutsceneAutoSkip(const bool autoSkip)
+		{
+			g_runtime->session->GetRealm().SetCutsceneAutoSkip(autoSkip);
+		}
+
+		uint32 luaCutsceneStartCount()
+		{
+			return g_runtime->session->GetRealm().GetCutsceneStartCount();
+		}
+
+		uint32 luaCutsceneEndCount()
+		{
+			return g_runtime->session->GetRealm().GetCutsceneEndCount();
+		}
+
+		uint32 luaLastCutsceneId()
+		{
+			return g_runtime->session->GetRealm().GetLastCutsceneId();
+		}
+
+		int32 luaLastCutsceneEndReason()
+		{
+			return g_runtime->session->GetRealm().GetLastCutsceneEndReason();
+		}
+
+		void luaCutsceneBegin(const uint32 cutsceneId)
+		{
+			g_runtime->session->GetRealm().CutsceneBegin(cutsceneId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("CutsceneBegin", {});
+			}
+		}
+
+		void luaCutsceneEnd(const uint32 cutsceneId, const bool skipped)
+		{
+			g_runtime->session->GetRealm().CutsceneEnd(cutsceneId, skipped);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("CutsceneEnd", {});
+			}
+		}
+
+		void luaGmPlayCutscene(const uint32 cutsceneId)
+		{
+			g_runtime->session->GetRealm().CheatPlayCutscene(cutsceneId);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("GM.PlayCutscene", {});
+			}
+		}
+
 		void luaGmPetMake()
 		{
 			g_runtime->session->GetRealm().CheatPetMake();
@@ -2118,6 +2172,13 @@ namespace mmo
 				luabind::def_lambda("DespawnReason", &luaDespawnReason),
 				luabind::def_lambda("SpawnReason", &luaSpawnReason),
 				luabind::def_lambda("SoundCount", &luaSoundCount),
+				luabind::def_lambda("SetCutsceneAutoSkip", &luaSetCutsceneAutoSkip),
+				luabind::def_lambda("CutsceneStartCount", &luaCutsceneStartCount),
+				luabind::def_lambda("CutsceneEndCount", &luaCutsceneEndCount),
+				luabind::def_lambda("LastCutsceneId", &luaLastCutsceneId),
+				luabind::def_lambda("LastCutsceneEndReason", &luaLastCutsceneEndReason),
+				luabind::def_lambda("CutsceneBegin", &luaCutsceneBegin),
+				luabind::def_lambda("CutsceneEnd", &luaCutsceneEnd),
 				luabind::def_lambda("ClearHeardSounds", &luaClearHeardSounds),
 				luabind::def_lambda("IsSubsystemAvailable", &luaIsSubsystemAvailable),
 				luabind::def_lambda("SubsystemStatusCount", &luaSubsystemStatusCount),
@@ -2246,6 +2307,7 @@ namespace mmo
 				luabind::def_lambda("GM_PetRemove", &luaGmPetRemove),
 				luabind::def_lambda("GM_PetTame", &luaGmPetTame),
 				luabind::def_lambda("GM_PetMake", &luaGmPetMake),
+				luabind::def_lambda("GM_PlayCutscene", &luaGmPlayCutscene),
 				luabind::def_lambda("GM_LevelUp", &luaGmLevelUp),
 				luabind::def_lambda("GM_ClassLevelUp", &luaGmClassLevelUp),
 				luabind::def_lambda("GM_GiveMoney", &luaGmGiveMoney),
@@ -2368,6 +2430,7 @@ namespace mmo
 				PetRemove = GM_PetRemove,
 				PetTame = GM_PetTame,
 				PetMake = GM_PetMake,
+				PlayCutscene = GM_PlayCutscene,
 				LevelUp = GM_LevelUp,
 				ClassLevelUp = GM_ClassLevelUp,
 				GiveMoney = GM_GiveMoney,

@@ -51,6 +51,11 @@ namespace mmo
             {
                 for (auto* subscriber : tile.GetWatchers())
                 {
+                    if (subscriber->IsRemoteView())
+                    {
+                        continue;
+                    }
+
                     subscribers.insert(subscriber);
                 }
             });

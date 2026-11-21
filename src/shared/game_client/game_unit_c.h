@@ -614,6 +614,10 @@ namespace mmo
 
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
 
+		/// @brief Returns true while the player behind this unit watches a cutscene: the character
+		///	stands where it is and cannot be harmed.
+		bool IsInCutscene() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCutscene) != 0; }
+
 		/// @brief Returns true while the unit holds its weapon(s) drawn (combat-ready stance). This
 		///	mirrors the flag that drives the combat-ready animation, so the drawn weapon model and
 		///	the ready pose stay in sync.

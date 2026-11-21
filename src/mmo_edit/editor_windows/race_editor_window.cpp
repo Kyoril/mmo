@@ -196,6 +196,31 @@ namespace mmo
 
 			VECTOR3_PROP(startposx, startposy, startposz, "Starting Position");
 			SLIDER_FLOAT_PROP(startrotation, "Starting Rotation", 0.0f, Pi * 2.0f);
+
+			// The cutscene a character of this race is shown when it enters the world for the very first time
+			DrawSectionHeader("Intro");
+			const auto* introCutscene = m_project.cutscenes.getById(currentEntry.cinematic());
+			if (ImGui::BeginCombo("Intro Cutscene", introCutscene != nullptr ? introCutscene->name().c_str() : "<None>", ImGuiComboFlags_None))
+			{
+				if (ImGui::Selectable("<None>", currentEntry.cinematic() == 0))
+				{
+					currentEntry.set_cinematic(0);
+				}
+
+				for (int i = 0; i < m_project.cutscenes.count(); i++)
+				{
+					ImGui::PushID(i);
+					const auto& cutscene = m_project.cutscenes.getTemplates().entry(i);
+					if (ImGui::Selectable(cutscene.name().c_str(), cutscene.id() == currentEntry.cinematic()))
+					{
+						currentEntry.set_cinematic(cutscene.id());
+					}
+					ImGui::PopID();
+				}
+
+				ImGui::EndCombo();
+			}
+			ImGui::TextDisabled("Played once, when a new character of this race enters the world for the first time. It has to belong to the start map.");
 		}
 
 
