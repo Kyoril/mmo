@@ -254,6 +254,38 @@ TEST_CASE("Last-moment glide open still takes fall damage", "[glide]")
 	CHECK(model.GetVirtualFallStartY(0.0f) < 60.0f);
 }
 
+TEST_CASE("Glide fall model follows the server clock, not claimed packet times", "[glide]")
+{
+	const TraversalSettings settings;
+
+	// The client opens the glider 1 m above the ground after a 59 m fall and lands 0.1 s later by
+	// the server clock, but its packet timestamps claim the landing came 5 s after the opening.
+	const GameTime serverOpen = 20000;
+	const GameTime serverLand = 20100;
+	const GameTime claimedOpen = 20000;
+	const GameTime claimedLand = 25000;
+
+	// Driven by the server clock (what the world server does): the landing is as hard as without
+	// the glider.
+	GlideFallModel serverClock;
+	serverClock.Begin(60.0f, 1.0f, serverOpen);
+	serverClock.Advance(serverLand, 0.0f, settings);
+	const float withoutGlider = ComputeFallDamagePercent(60.0f, 0.0f, 5.0f, 40.0f);
+	CHECK(ComputeFallDamagePercent(serverClock.GetVirtualFallStartY(0.0f), 0.0f, 5.0f, 40.0f) >= 0.9f * withoutGlider);
+
+	// Driven by the claimed times the glider would have braked to sink speed: no damage. This is
+	// why the model must never see packet timestamps.
+	GlideFallModel claimedClock;
+	claimedClock.Begin(60.0f, 1.0f, claimedOpen);
+	claimedClock.Advance(claimedLand, 0.0f, settings);
+	CHECK(ComputeFallDamagePercent(claimedClock.GetVirtualFallStartY(0.0f), 0.0f, 5.0f, 40.0f) == Approx(0.0f));
+
+	// Times going backwards (a packet older than the last one) change nothing.
+	const float speed = serverClock.GetVerticalSpeed();
+	serverClock.Advance(serverOpen, 0.0f, settings);
+	CHECK(serverClock.GetVerticalSpeed() == Approx(speed));
+}
+
 TEST_CASE("Long glide landing takes no fall damage", "[glide]")
 {
 	const TraversalSettings settings;

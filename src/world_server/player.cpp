@@ -2597,12 +2597,22 @@ namespace mmo
 			// Landing with the glider open hits the ground at the glider's vertical speed: the fall
 			// is measured from the height a free fall needs for that speed, so a glider opened just
 			// before the ground still takes the fall damage. A glide the server already ended
-			// (ForceStopGlide) falls from where the glider closed.
+			// (ForceStopGlide) falls from where the glider closed: m_glideForceStopTime is only
+			// cleared by ApplyGlideState, which runs after this block.
+			// The model runs on the server clock: a client cannot shorten its fall by claiming a
+			// longer glide in its packet timestamps.
 			if (prevMovementInfo.IsGliding() && m_glideForceStopTime == 0)
 			{
-				m_glideFallModel.Advance(info.timestamp, GetUpdraftStrength(m_worldInstance->GetUpdrafts(), info.position), m_character->GetVigor().GetSettings());
+				m_glideFallModel.Advance(GetAsyncTimeMs(), GetUpdraftStrength(m_worldInstance->GetUpdrafts(), info.position), m_character->GetVigor().GetSettings());
 				m_fallStartHeight = m_glideFallModel.GetVirtualFallStartY(info.position.y);
 				m_trackingFall = true;
+
+				// The glide ends with this landing: the fall damage below must not count as damage
+				// taken while gliding (which would send a ForceStopGlide to a client on the ground).
+				if (m_character->GetVigor().IsGliding())
+				{
+					m_character->SetVigorGliding(false, false);
+				}
 			}
 
 			// Calculate and apply fall damage on landing
@@ -4315,12 +4325,22 @@ namespace mmo
 	{
 		DLOG("Stopping the glide of player " << m_character->GetName() << ": " << reason);
 
+		// This stop ends a glide the server accepted if the tracker still glides, or if the glide is
+		// still followed (validator active) and no earlier forced stop ended it already. Repeated
+		// stops in the grace period, refused starts (no glide accepted) and teleports (the teleport
+		// restarts the fall itself) keep the fall height as it is.
+		const bool endsAcceptedGlide = m_character->GetVigor().IsGliding() ||
+			(m_glideForceStopTime == 0 && m_glideValidator.IsActive());
+
 		m_glideForceStopTime = GetAsyncTimeMs();
 
-		if (m_character->GetVigor().IsGliding())
+		if (endsAcceptedGlide)
 		{
 			// Vigor stops draining now, not when the client's MoveStopGlide arrives.
-			m_character->SetVigorGliding(false, false);
+			if (m_character->GetVigor().IsGliding())
+			{
+				m_character->SetVigorGliding(false, false);
+			}
 
 			// The fall continues from where the glider closed, at the glider's vertical speed.
 			const Vector3 position = m_character->GetPosition();
@@ -4367,7 +4387,7 @@ namespace mmo
 
 			// The glider starts braking at the speed of the fall it interrupts. From here on the fall
 			// height follows the glider's vertical speed (GlideFallModel).
-			m_glideFallModel.Begin(m_trackingFall ? m_fallStartHeight : info.position.y, info.position.y, info.timestamp);
+			m_glideFallModel.Begin(m_trackingFall ? m_fallStartHeight : info.position.y, info.position.y, GetAsyncTimeMs());
 			m_fallStartHeight = info.position.y;
 			m_trackingFall = true;
 			m_pendingFallStart = false;
@@ -4395,7 +4415,7 @@ namespace mmo
 			}
 		}
 
-		m_glideFallModel.Advance(info.timestamp, GetUpdraftStrength(updrafts, info.position), settings);
+		m_glideFallModel.Advance(GetAsyncTimeMs(), GetUpdraftStrength(updrafts, info.position), settings);
 
 		if (change == GlideFlagChange::Stop || change == GlideFlagChange::ImplicitStop)
 		{
