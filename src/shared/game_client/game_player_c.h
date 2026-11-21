@@ -72,6 +72,12 @@ namespace mmo
 			return Get<uint32>(object_fields::TalentPoints);
 		}
 
+		/// The Vigor the glider checks. For now the last replicated value (object_fields::Vigor).
+		float GetPredictedVigor() const override
+		{
+			return Get<float>(object_fields::Vigor);
+		}
+
 		const proto_client::ClassEntry* GetClass() const;
 
 		/// One entry of the character's known-class list, replicated from the server (see the

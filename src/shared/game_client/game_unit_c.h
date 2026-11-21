@@ -218,6 +218,40 @@ namespace mmo
 		/// for the locally controlled player, emits a StopSwim movement event (network packet).
 		void OnStopSwimming();
 
+		/// @brief Whether the unit glides (the Gliding movement flag is set).
+		[[nodiscard]] bool IsGliding() const { return m_movementInfo.IsGliding(); }
+
+		/// @brief Whether this unit could open its glider right now: it knows the Glider spell, has
+		///	Vigor left, is alive, not rooted (stuns root the client too) and not moved by the server.
+		///	Does not check whether the unit is in the air (TryToggleGlide does).
+		[[nodiscard]] virtual bool IsGliderUsable() const;
+
+		/// @brief The Vigor the client assumes this unit has right now. The only place that decides
+		///	which Vigor value the glider checks; units without a Vigor pool have none.
+		[[nodiscard]] virtual float GetPredictedVigor() const { return 0.0f; }
+
+		/// @brief The jump key while airborne: closes an open glider, or opens it while falling
+		///	(not swimming) if the glider is usable.
+		/// @return True if the glider was opened or closed.
+		bool TryToggleGlide();
+
+		/// @brief Opens the glider: sets the Gliding flag and raises the StartGlide movement event.
+		///	The unit must be falling. Does nothing while already gliding.
+		void StartGlide();
+
+		/// @brief Closes the glider while still in the air: clears the Gliding flag and raises the
+		///	StopGlide movement event.
+		/// @return True if the unit was gliding (and the event was raised).
+		bool StopGlide();
+
+		/// @brief Clears the Gliding flag without a movement event. Used where the server ends the
+		///	glide itself (landing, entering water, teleports).
+		void ClearGliding() { m_movementInfo.movementFlags &= ~movement_flags::Gliding; }
+
+		/// @brief Sets the function that returns the updraft strength at a position (0 for none).
+		///	Used by the glide physics of the own unit and the remote simulation alike.
+		void SetUpdraftProvider(std::function<float(const Vector3&)> provider);
+
 		/// @brief Visually pitches the character mesh by the current swim pitch while actively
 		/// swimming forward/backward, and smoothly returns it to level (0 pitch) when idle or out of
 		/// water. The control pitch itself is preserved; only the displayed mesh tilt is gated on

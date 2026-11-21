@@ -2927,6 +2927,13 @@ namespace mmo
 				if (object->GetTypeId() == ObjectTypeId::Player)
 				{
 					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC &>(*object));
+
+					// Updrafts lift gliding players: the own one and the remote copies of others, so
+					// both simulate the glide the server validates.
+					static_cast<GamePlayerC &>(*object).SetUpdraftProvider([this](const Vector3 &position)
+					{
+						return m_areaTriggerManager.GetUpdraftStrength(position);
+					});
 				}
 
 				// Pet state: the persistent pet coming into sight, temporary pets, persistent pet names.

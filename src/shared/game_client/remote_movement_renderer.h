@@ -32,6 +32,9 @@
 #include "game/movement_info.h"
 #include "math/vector3.h"
 #include "math/radian.h"
+#include "game/traversal.h"
+
+#include <functional>
 
 namespace mmo
 {
@@ -109,6 +112,10 @@ namespace mmo
 		/// @brief Resets all state (e.g. on despawn/teleport).
 		void Reset();
 
+		/// @brief Sets the function that returns the updraft strength at a position (0 or less for
+		///	no updraft). Gliding remote players are lifted by it.
+		void SetUpdraftProvider(std::function<float(const Vector3&)> provider) { m_updraftProvider = std::move(provider); }
+
 	private:
 		/// @brief Computes the velocity vector for a given movement state.
 		Vector3 ComputeVelocity(const Vector3& forward, const Vector3& right,
@@ -117,6 +124,10 @@ namespace mmo
 
 		/// @brief Simulates one step of jump/fall physics.
 		void StepFallArc(float deltaTime);
+
+		/// @brief Simulates one step of glide physics (StepGlideVelocity, like the owning client).
+		/// @param desiredHorizontalDir Horizontal movement input direction (zero without input).
+		void StepGlide(const Vector3& desiredHorizontalDir, float deltaTime);
 
 	private:
 		bool m_initialized = false;
@@ -143,6 +154,12 @@ namespace mmo
 		// ── Fall/jump state ────────────────────────────────────────────────────
 		Vector3  m_fallVelocity;
 		float    m_fallTimeAccumSec = 0.0f;
+
+		/// @brief Returns the updraft strength at a position (see SetUpdraftProvider).
+		std::function<float(const Vector3&)> m_updraftProvider;
+
+		/// @brief Glide tuning, the same values the owning client and the server use.
+		TraversalSettings m_traversalSettings;
 
 		/// @brief How long the scene node has been held further than kStuckDistance from the target.
 		float    m_stuckSec = 0.0f;

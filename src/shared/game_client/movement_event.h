@@ -46,6 +46,11 @@ namespace mmo
             StartWalk,
             /// @brief Player switched to run mode
             StopWalk,
+            /// @brief Player opened the glider while falling
+            StartGlide,
+            /// @brief Player closed the glider (still falling). Landing and entering water end a
+            ///	glide without this event.
+            StopGlide,
 
             Count_
         };

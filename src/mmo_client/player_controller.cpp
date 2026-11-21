@@ -591,6 +591,14 @@ namespace mmo
 			return;
 		}
 
+		// In the air, the jump key opens or closes the glider instead. A mid-air jump is not
+		// possible anyway (one jump at a time), so the jump state is left alone.
+		if (m_controlledUnit->GetUnitMovement() && m_controlledUnit->GetUnitMovement()->IsFalling())
+		{
+			m_controlledUnit->TryToggleGlide();
+			return;
+		}
+
 		m_controlledUnit->Jump();
 	}
 
@@ -766,6 +774,12 @@ namespace mmo
 			break;
 		case MovementEventType::StopWalk:
 			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopWalk, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartGlide:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartGlide, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopGlide:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopGlide, movementEvent.movementInfo);
 			break;
 		default:
 			// Unknown event type

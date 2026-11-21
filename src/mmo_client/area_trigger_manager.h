@@ -5,6 +5,7 @@
 #include "base/typedefs.h"
 #include "base/non_copyable.h"
 #include "math/vector3.h"
+#include "game/traversal.h"
 
 #include <vector>
 #include <unordered_set>
@@ -45,6 +46,12 @@ namespace mmo
 			std::vector<uint32>& outNewlyEnteredTriggers,
 			std::vector<uint32>& outNewlyExitedTriggers);
 
+		/// Gets the updraft strength at a position: the strongest updraft trigger of the current map
+		/// containing it, or 0 if there is none. The volumes match the world server's
+		/// (glide_rules BuildUpdraftVolumes), so the glide physics agree with its validation.
+		/// @param position The position to test (a unit's feet).
+		[[nodiscard]] float GetUpdraftStrength(const Vector3& position) const;
+
 		/// Tests if a point is inside a specific area trigger.
 		/// @param trigger The area trigger to test against.
 		/// @param position The point to test.
@@ -61,6 +68,9 @@ namespace mmo
 	private:
 		/// All area triggers for the current map.
 		std::vector<const proto_client::AreaTriggerEntry*> m_triggers;
+
+		/// Updraft volumes of the current map (triggers with updraft_strength > 0).
+		std::vector<UpdraftVolume> m_updrafts;
 
 		/// Set of trigger IDs the player is currently inside.
 		std::unordered_set<uint32> m_activeTriggers;

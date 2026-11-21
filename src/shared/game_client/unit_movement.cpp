@@ -3,6 +3,7 @@
 #include "game_unit_c.h"
 #include "movement_log.h"
 #include "game/movement_ability.h"
+#include "game/traversal.h"
 #include "log/default_log_levels.h"
 
 #include <sstream>
@@ -351,11 +352,21 @@ namespace mmo
 
 		Vector3 currentPos = GetUpdatedNode().GetPosition();
 
+		const Vector3 lateralInput = Vector3::VectorPlaneProject(inputVector, -GetGravityDirection());
+
+		// Gliding: the glide model moves the unit along its input, as on the owning client.
+		if (m_movementMode == MovementMode::Falling && m_movedUnit.IsGliding())
+		{
+			m_velocity = StepGlideVelocity(m_velocity, lateralInput, GetUpdraftStrength(currentPos), TraversalSettings(), deltaTime);
+			currentPos += m_velocity * deltaTime;
+			GetUpdatedNode().SetPosition(currentPos);
+			return;
+		}
+
 		// Extrapolate lateral position from movement flags.
 		// The input vector already contains direction * speed from the Update() loop.
 		if (!inputVector.IsZero())
 		{
-			const Vector3 lateralInput = Vector3::VectorPlaneProject(inputVector, -GetGravityDirection());
 			currentPos += lateralInput * deltaTime;
 		}
 
@@ -1658,7 +1669,15 @@ namespace mmo
 		}
 
 		const Vector3 fallAcceleration = ProjectToGravityFloor(GetFallingLateralAcceleration(deltaTime));
-		const bool bHasLimitedAirControl = ShouldLimitAirControl(fallAcceleration);
+
+		// An open glider replaces gravity and air control with the shared glide model
+		// (StepGlideVelocity), which the server validates the glide against. It steers along the
+		// unscaled movement input. Collision and landing are handled exactly like a normal fall.
+		const bool bGliding = m_movedUnit.IsGliding();
+		const Vector3 glideDirection = bGliding ? ProjectToGravityFloor(m_acceleration) : Vector3::Zero;
+		const TraversalSettings glideSettings;
+
+		const bool bHasLimitedAirControl = !bGliding && ShouldLimitAirControl(fallAcceleration);
 
 		float remainingTime = deltaTime;
 		while ((remainingTime >= MIN_TICK_TIME) && (iterations < m_maxSimulationIterations))
@@ -1675,23 +1694,37 @@ namespace mmo
 			// Apply input
 			const float maxDeceleration = GetMaxBrakingDeceleration();
 
-			// Compute Velocity
-			{
-				// Acceleration = FallAcceleration for CalcVelocity(), but we restore it after using it.
-				GuardValue restoreAcceleration(m_acceleration, fallAcceleration);
-
-				m_velocity.y = 0.f;
-				CalcVelocity(timeTick, m_fallingLateralFriction, false, maxDeceleration);
-				m_velocity.y = oldVelocity.y;
-			}
-
 			// Compute current gravity
 			const Vector3 gravity = -GetGravityDirection() * GetGravityY();
 			float gravityTime = timeTick;
+			bool bEndingJumpForce = false;
+
+			if (bGliding)
+			{
+				// The glider ends any remaining jump force.
+				if (m_movedUnit.GetJumpForceTimeRemaining() > 0.0f)
+				{
+					m_movedUnit.SetJumpForceTimeRemining(0.0f);
+				}
+
+				m_velocity = StepGlideVelocity(oldVelocity, glideDirection,
+					GetUpdraftStrength(GetUpdatedNode().GetPosition()), glideSettings, timeTick);
+			}
+			else
+			{
+				// Compute Velocity
+				{
+					// Acceleration = FallAcceleration for CalcVelocity(), but we restore it after using it.
+					GuardValue restoreAcceleration(m_acceleration, fallAcceleration);
+
+					m_velocity.y = 0.f;
+					CalcVelocity(timeTick, m_fallingLateralFriction, false, maxDeceleration);
+					m_velocity.y = oldVelocity.y;
+				}
+			}
 
 			// If jump is providing force, gravity may be affected.
-			bool bEndingJumpForce = false;
-			if (m_movedUnit.GetJumpForceTimeRemaining() > 0.0f)
+			if (!bGliding && m_movedUnit.GetJumpForceTimeRemaining() > 0.0f)
 			{
 				// Consume some of the force time. Only the remaining time (if any) is affected by gravity when bApplyGravityWhileJumping=false.
 				const float jumpForceTime = std::min(m_movedUnit.GetJumpForceTimeRemaining(), timeTick);
@@ -1707,7 +1740,10 @@ namespace mmo
 			}
 
 			// Apply gravity
-			m_velocity = NewFallVelocity(m_velocity, gravity, gravityTime);
+			if (!bGliding)
+			{
+				m_velocity = NewFallVelocity(m_velocity, gravity, gravityTime);
+			}
 
 			// Compute change in position (using midpoint integration method).
 			Vector3 adjusted = (oldVelocity + m_velocity) * 0.5f * timeTick;

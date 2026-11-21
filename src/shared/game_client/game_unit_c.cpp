@@ -29,6 +29,7 @@
 #include "game/emote_defs.h"
 #include "game/owner_chain.h"
 #include "game/spell.h"
+#include "game/traversal.h"
 #include "trade_skill_list.h"
 #include "game/character_customization/avatar_definition_mgr.h"
 #include "log/default_log_levels.h"
@@ -240,6 +241,9 @@ namespace mmo
 		{
 			UpdateMovementInfo();
 			m_movementInfo.movementFlags &= ~movement_flags::Falling;
+			// Landing ends a glide: the server treats MoveFallLand as an implicit stop, so there is
+			// no StopGlide event (and Gliding without Falling would be rejected).
+			ClearGliding();
 
 			m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::Land, m_movementInfo.timestamp, m_movementInfo));
 
@@ -3617,6 +3621,8 @@ namespace mmo
 		m_movementInfo.position = m_sceneNode->GetDerivedPosition();
 		m_movementInfo.facing = GetSceneNode()->GetOrientation().GetYaw();
 		m_movementInfo.movementFlags &= ~movement_flags::Falling;
+		// Gliding is only valid while falling; the server ends the glide with the landing itself.
+		ClearGliding();
 		m_movementInfo.timestamp = GetAsyncTimeMs();
 	}
 
@@ -3633,14 +3639,84 @@ namespace mmo
 		}
 	}
 
+	bool GameUnitC::IsGliderUsable() const
+	{
+		return HasSpell(traversal_spells::Glider) &&
+			GetPredictedVigor() > 0.0f &&
+			IsAlive() &&
+			!IsRooted() &&
+			!IsMovementControlledByServer();
+	}
+
+	bool GameUnitC::TryToggleGlide()
+	{
+		if (IsGliding())
+		{
+			return StopGlide();
+		}
+
+		if (!m_unitMovement || !m_unitMovement->IsFalling() || m_movementInfo.IsSwimming() || !IsGliderUsable())
+		{
+			return false;
+		}
+
+		StartGlide();
+		return IsGliding();
+	}
+
+	void GameUnitC::StartGlide()
+	{
+		if (IsGliding() || !m_unitMovement || !m_unitMovement->IsFalling())
+		{
+			return;
+		}
+
+		// The glider replaces whatever is left of the jump's upward force.
+		m_jumpForceTimeRemaining = 0.0f;
+
+		// Sets Falling and the current velocity as jump velocity: the server measures the rise the
+		// glider may still carry from its vertical part.
+		UpdateMovementInfo();
+		m_movementInfo.movementFlags |= movement_flags::Gliding;
+		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StartGlide, m_movementInfo.timestamp, m_movementInfo));
+	}
+
+	bool GameUnitC::StopGlide()
+	{
+		if (!IsGliding())
+		{
+			return false;
+		}
+
+		UpdateMovementInfo();
+		ClearGliding();
+		m_lastHeartbeat = m_movementInfo.timestamp;
+
+		m_netDriver.OnMoveEvent(*this, MovementEvent(movement_event_type::StopGlide, m_movementInfo.timestamp, m_movementInfo));
+		return true;
+	}
+
+	void GameUnitC::SetUpdraftProvider(std::function<float(const Vector3&)> provider)
+	{
+		m_remoteMovementRenderer.SetUpdraftProvider(provider);
+		if (m_unitMovement)
+		{
+			m_unitMovement->SetUpdraftProvider(std::move(provider));
+		}
+	}
+
 	void GameUnitC::OnStartSwimming()
 	{
 		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;
 
 		UpdateMovementInfo();
 		m_movementInfo.movementFlags |= movement_flags::Swimming;
-		// Swimming and falling are mutually exclusive movement states.
+		// Swimming and falling are mutually exclusive movement states. Entering water also ends a
+		// glide: the server treats MoveStartSwim as an implicit stop, so no StopGlide event.
 		m_movementInfo.movementFlags &= ~movement_flags::Falling;
+		ClearGliding();
 
 		if (!wasSwimming)
 		{

@@ -40,7 +40,11 @@ namespace mmo
 			{
 				m_fallVelocity     = info.jumpVelocity;
 				m_fallTimeAccumSec = static_cast<float>(info.fallTime) / 1000.0f;
-				m_fallVelocity.y  += kGravity * m_fallTimeAccumSec;
+				// A glider's jump velocity is its current velocity: gravity does not act on it.
+				if (!info.IsGliding())
+				{
+					m_fallVelocity.y += kGravity * m_fallTimeAccumSec;
+				}
 			}
 			else
 			{
@@ -75,7 +79,10 @@ namespace mmo
 		{
 			m_fallVelocity     = info.jumpVelocity;
 			m_fallTimeAccumSec = static_cast<float>(info.fallTime) / 1000.0f;
-			m_fallVelocity.y  += kGravity * m_fallTimeAccumSec;
+			if (!info.IsGliding())
+			{
+				m_fallVelocity.y += kGravity * m_fallTimeAccumSec;
+			}
 		}
 		else
 		{
@@ -112,7 +119,15 @@ namespace mmo
 
 		Vector3 desiredDelta = Vector3::Zero;
 
-		if (isFalling)
+		if (isFalling && (m_authFlags & movement_flags::Gliding) != 0)
+		{
+			// Gliding: the same glide model as the owning client, steered by the movement flags.
+			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
+			StepGlide(lateral, deltaTime);
+			desiredDelta = m_fallVelocity * deltaTime;
+			m_renderedPos += desiredDelta;
+		}
+		else if (isFalling)
 		{
 			const Vector3 lateral = ComputeVelocity(forward, right, m_authFlags, runSpeed, backwardsSpeed, walkSpeed);
 			desiredDelta.x = lateral.x * deltaTime;
@@ -241,6 +256,13 @@ namespace mmo
 			: lateralSpeed;
 
 		return dir * speed;
+	}
+
+	void RemoteMovementRenderer::StepGlide(const Vector3& desiredHorizontalDir, const float deltaTime)
+	{
+		const float updraftStrength = m_updraftProvider ? m_updraftProvider(m_renderedPos) : 0.0f;
+		m_fallVelocity = StepGlideVelocity(m_fallVelocity, desiredHorizontalDir, updraftStrength, m_traversalSettings, deltaTime);
+		m_fallTimeAccumSec += deltaTime;
 	}
 
 	void RemoteMovementRenderer::StepFallArc(const float deltaTime)
