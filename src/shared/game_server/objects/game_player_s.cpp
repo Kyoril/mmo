@@ -123,6 +123,24 @@ namespace mmo
 		OnVigorTransition();
 	}
 
+	void GamePlayerS::EndGlide()
+	{
+		m_movementInfo.movementFlags &= ~movement_flags::Gliding;
+
+		if (m_vigor.IsGliding())
+		{
+			SetVigorGliding(false, false);
+		}
+	}
+
+	void GamePlayerS::OnTeleporting()
+	{
+		GameUnitS::OnTeleporting();
+
+		// A teleport ends a glide: the client arrives falling with the glider closed.
+		EndGlide();
+	}
+
 	void GamePlayerS::ModifyVigorDrain(const int32 perSecond, const bool apply)
 	{
 		m_vigorAuraDrain += apply ? perSecond : -perSecond;

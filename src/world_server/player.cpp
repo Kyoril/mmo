@@ -116,6 +116,22 @@ namespace mmo
 			inventory.itemInstanceUpdated.connect(this, &Player::OnItemUpdated),
 			inventory.itemInstanceDestroyed.connect(this, &Player::OnItemDestroyed),
 
+			// Running out of Vigor and taking damage close the glider.
+			m_character->GetVigor().exhausted.connect([this]()
+			{
+				if (m_character->GetVigor().IsGliding())
+				{
+					ForceStopGlide("out of vigor");
+				}
+			}),
+			m_character->damageTakenAmount.connect([this](GameUnitS*, const uint32 amount, uint32)
+			{
+				if (amount > 0 && m_character->GetVigor().IsGliding())
+				{
+					ForceStopGlide("damage taken");
+				}
+			}),
+
 			// Combat history for bug reports
 			m_character->damageTakenAmount.connect([this](GameUnitS* attacker, const uint32 amount, const uint32 school)
 			{
@@ -1787,6 +1803,11 @@ namespace mmo
 			m_tradeSession = nullptr;
 		}
 
+		// Leaving the world (logout, map change) ends a glide.
+		m_character->EndGlide();
+		m_glideValidator.End();
+		m_glideForceStopTime = 0;
+
 		// No longer watch for network events
 		m_character->SetNetUnitWatcher(nullptr);
 
@@ -2434,6 +2455,63 @@ namespace mmo
 			}
 		}
 
+		// Gliding (rules in glide_rules.h): only MoveStartGlide adds the GLIDING flag and only
+		// MoveStopGlide removes it, apart from landing, entering water and the end of a
+		// server-controlled move, which end a glide implicitly. The flag is never valid without
+		// FALLING. Decisions are made here, the glide state is applied once all checks passed.
+		const GameTime glideNow = GetAsyncTimeMs();
+		const GlideFlagChange glideChange = ClassifyGlideFlagChange(opCode, prevMovementInfo, info);
+		if (glideChange == GlideFlagChange::Invalid)
+		{
+			ELOG("Client tried to change the GLIDING flag in a packet that may not (opcode " << log_hex_digit(opCode)
+				<< ", flags " << log_hex_digit(info.movementFlags) << ", previous flags " << log_hex_digit(prevMovementInfo.movementFlags) << ")");
+
+			// A client that glides while the server does not (a refused start or a teleport it has
+			// not caught up with) is told to close its glider, at most once per grace period.
+			if (info.IsGliding() && !prevMovementInfo.IsGliding() &&
+				(m_glideForceStopTime == 0 || !IsWithinEmptyGrace(glideNow, m_glideForceStopTime)))
+			{
+				ForceStopGlide("gliding flag without a glide");
+			}
+			return;
+		}
+
+		if (glideChange == GlideFlagChange::Start)
+		{
+			const bool incapacitated = !m_character->IsAlive() || m_character->IsStunned() || m_character->IsRooted();
+			const GlideStartDecision decision = CanStartGlide(prevMovementInfo,
+				m_character->CanUseTraversal(traversal_spells::Glider),
+				m_character->GetVigor().GetCurrent(glideNow),
+				incapacitated);
+			if (decision != GlideStartDecision::Allowed)
+			{
+				WLOG("[AntiCheat] Player " << m_character->GetName() << " may not start gliding (reason "
+					<< static_cast<uint32>(decision) << ") at " << info.position);
+				ForceStopGlide("glide start refused");
+				RecordMovementViolation("refused glide start");
+				return;
+			}
+		}
+		else if (info.IsGliding())
+		{
+			// The server ended this glide (ForceStopGlide, out of Vigor) and the client keeps
+			// gliding beyond the grace period, or it glides without the server knowing of it.
+			if (m_glideForceStopTime != 0 && !IsWithinEmptyGrace(glideNow, m_glideForceStopTime))
+			{
+				WLOG("[AntiCheat] Player " << m_character->GetName() << " keeps gliding "
+					<< (glideNow - m_glideForceStopTime) << " ms after the glide was stopped");
+				ForceStopGlide("still gliding after the stop");
+				if (RecordMovementViolation("gliding after the glide was stopped"))
+				{
+					return;
+				}
+			}
+			else if (m_glideForceStopTime == 0 && !m_character->GetVigor().IsGliding())
+			{
+				ForceStopGlide("gliding flag without a server-side glide");
+			}
+		}
+
 		// Did the client try to sneak in a FALLING flag without sending a jump packet?
 		// MoveStopSwim is allowed to add the FALLING flag: leaving water into the air (e.g. swimming
 		// off the top of a waterfall) transitions directly from swimming into falling.
@@ -2492,36 +2570,28 @@ namespace mmo
 				return;
 			}
 
+			// Landing with the glider open is no fall. A glide the server already ended
+			// (ForceStopGlide) is: its fall is measured from where the glider closed.
+			if (prevMovementInfo.IsGliding() && m_glideForceStopTime == 0)
+			{
+				m_trackingFall = false;
+			}
+
 			// Calculate and apply fall damage on landing
 			if (m_trackingFall && m_character->IsAlive())
 			{
-				const float fallDistance = m_fallStartHeight - info.position.y;
-				if (fallDistance > m_fallDamageMinHeight)
+				// Percentage of max HP, scaling linearly from 0% at minHeight to 100% at lethalHeight
+				const float damagePct = ComputeFallDamagePercent(m_fallStartHeight, info.position.y, m_fallDamageMinHeight, m_fallDamageLethalHeight);
+
+				const uint32 maxHealth = m_character->GetMaxHealth();
+				const uint32 fallDamage = static_cast<uint32>(static_cast<float>(maxHealth) * damagePct);
+				if (fallDamage > 0)
 				{
-					// Calculate damage as a percentage of max HP, scaling linearly from 0% at minHeight to 100% at lethalHeight
-					const float damageRange = m_fallDamageLethalHeight - m_fallDamageMinHeight;
-					float damagePct = 0.0f;
-					if (damageRange > 0.0f)
-					{
-						damagePct = (fallDistance - m_fallDamageMinHeight) / damageRange;
-					}
+					// Apply fall damage as physical damage with no instigator
+					const uint32 actualDamage = m_character->Damage(fallDamage, static_cast<uint32>(DamageSchool::Physical), nullptr, damage_type::PhysicalAbility);
 
-					// Clamp to 0..1 range (100% at lethal height or beyond)
-					if (damagePct > 1.0f)
-					{
-						damagePct = 1.0f;
-					}
-
-					const uint32 maxHealth = m_character->GetMaxHealth();
-					uint32 fallDamage = static_cast<uint32>(static_cast<float>(maxHealth) * damagePct);
-					if (fallDamage > 0)
-					{
-						// Apply fall damage as physical damage with no instigator
-						const uint32 actualDamage = m_character->Damage(fallDamage, static_cast<uint32>(DamageSchool::Physical), nullptr, damage_type::PhysicalAbility);
-
-						// Send environmental damage log to the client
-						m_character->EnvironmentalDamageLog(m_character->GetGuid(), actualDamage, environmental_damage_type::Fall);
-					}
+					// Send environmental damage log to the client
+					m_character->EnvironmentalDamageLog(m_character->GetGuid(), actualDamage, environmental_damage_type::Fall);
 				}
 			}
 
@@ -2848,6 +2918,11 @@ namespace mmo
 		if (m_loot && info.IsChangingPosition())
 		{
 			CloseLootDialog();
+		}
+
+		if (!ApplyGlideState(glideChange, prevMovementInfo, info))
+		{
+			return;
 		}
 
 		m_character->ApplyMovementInfo(info);
@@ -3544,6 +3619,10 @@ namespace mmo
 
 			DLOG("Received teleport ack towards " << change.teleportInfo.x << "," << change.teleportInfo.y << "," << change.teleportInfo.z);
 
+			// The teleport ended any glide; a client that has not closed its glider yet does so after
+			// the ForceStopGlide sent with the teleport, through MoveStopGlide.
+			info.movementFlags &= ~movement_flags::Gliding;
+
 			// Start tracking fall damage from the teleport position since the player
 			// is now falling after the teleport (Falling flag is always sent in teleport)
 			m_fallStartHeight = info.position.y;
@@ -4204,6 +4283,120 @@ namespace mmo
 		m_fallDamageLethalHeight = lethalHeight;
 	}
 
+	void Player::ForceStopGlide(const char* reason)
+	{
+		DLOG("Stopping the glide of player " << m_character->GetName() << ": " << reason);
+
+		m_glideForceStopTime = GetAsyncTimeMs();
+
+		if (m_character->GetVigor().IsGliding())
+		{
+			// Vigor stops draining now, not when the client's MoveStopGlide arrives.
+			m_character->SetVigorGliding(false, false);
+
+			// The fall continues from where the glider closed.
+			m_fallStartHeight = m_character->GetPosition().y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
+		}
+
+		const uint64 guid = m_character->GetGuid();
+		SendPacket([guid](game::OutgoingPacket& packet)
+		{
+			packet.Start(game::realm_client_packet::ForceStopGlide);
+			packet << io::write<uint64>(guid);
+			packet.Finish();
+		});
+	}
+
+	bool Player::RecordMovementViolation(const char* what)
+	{
+		const GameTime now = GetAsyncTimeMs();
+		m_antiCheatTracker.RecordViolation(now);
+		if (!m_antiCheatTracker.ShouldKick(now))
+		{
+			return false;
+		}
+
+		ELOG("[AntiCheat] Kicking player " << m_character->GetName()
+			<< " (GUID " << log_hex_digit(m_character->GetGuid()) << "): " << what);
+		Kick();
+		return true;
+	}
+
+	bool Player::ApplyGlideState(const GlideFlagChange change, const MovementInfo& previous, const MovementInfo& info)
+	{
+		const TraversalSettings& settings = m_character->GetVigor().GetSettings();
+		const std::vector<UpdraftVolume>& updrafts = m_worldInstance->GetUpdrafts();
+
+		if (change == GlideFlagChange::Start)
+		{
+			m_glideForceStopTime = 0;
+			m_glideValidator.Begin(info.position, info.timestamp, info.jumpVelocity.y, settings);
+			m_character->SetVigorGliding(true, GetUpdraftStrength(updrafts, info.position) > 0.0f);
+
+			// Opening the glider restarts the fall.
+			m_fallStartHeight = info.position.y;
+			m_trackingFall = true;
+			m_pendingFallStart = false;
+			return true;
+		}
+
+		if (!previous.IsGliding())
+		{
+			// Not gliding (any more): nothing waits for the client to close its glider.
+			if (!info.IsGliding())
+			{
+				m_glideForceStopTime = 0;
+			}
+			return true;
+		}
+
+		// Every packet of a glide, including the one that ends it, counts for the speed check.
+		if (m_glideValidator.Check(info.position, info.timestamp, updrafts) == GlideMoveValidator::Result::Violation)
+		{
+			WLOG("[AntiCheat] Glide violation of player " << m_character->GetName() << ": too fast or rising without an updraft at "
+				<< info.position << " (flags " << log_hex_digit(info.movementFlags) << ")");
+			if (!m_character->HasPendingMovementChange() && RecordMovementViolation("glide speed or height hack"))
+			{
+				return false;
+			}
+		}
+
+		if (change == GlideFlagChange::Stop || change == GlideFlagChange::ImplicitStop)
+		{
+			m_glideValidator.End();
+			if (m_character->GetVigor().IsGliding())
+			{
+				m_character->SetVigorGliding(false, false);
+			}
+
+			// Closing the glider in the air restarts the fall here. After a ForceStopGlide the fall
+			// was already restarted where the server closed it, which is not undercut by a late stop.
+			if (change == GlideFlagChange::Stop)
+			{
+				m_fallStartHeight = m_glideForceStopTime != 0 ? std::max(m_fallStartHeight, info.position.y) : info.position.y;
+				m_trackingFall = true;
+				m_pendingFallStart = false;
+			}
+
+			m_glideForceStopTime = 0;
+			return true;
+		}
+
+		// Still gliding: entering or leaving an updraft changes the drain.
+		if (m_character->GetVigor().IsGliding())
+		{
+			const bool inUpdraft = GetUpdraftStrength(updrafts, info.position) > 0.0f;
+			if (inUpdraft != m_character->GetVigor().IsInUpdraft())
+			{
+				m_character->SetVigorGliding(true, inUpdraft);
+			}
+		}
+
+		return true;
+	}
+
 	void Player::OnSpeedChangeApplied(MovementType type, float speed, uint32 ackId)
 	{
 		SendPacket([type, speed, ackId](game::OutgoingPacket& packet)
@@ -4230,6 +4423,14 @@ namespace mmo
 	void Player::OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing)
 	{
 		ASSERT(m_worldInstance);
+
+		// The teleport ended any glide (GamePlayerS::OnTeleporting). A client that was gliding
+		// closes its glider.
+		if (m_glideValidator.IsActive())
+		{
+			m_glideValidator.End();
+			ForceStopGlide("teleport");
+		}
 
 		if (mapId == m_worldInstance->GetMapId())
 		{

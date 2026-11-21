@@ -181,6 +181,17 @@ namespace mmo
 		/// @param inUpdraft Whether the glide is inside an updraft.
 		void SetVigorGliding(bool gliding, bool inUpdraft);
 
+		/// Ends a glide on the server's side: stops the Vigor drain of the glide and removes the
+		/// Gliding movement flag (teleport, map change, logout). Does nothing if the character does
+		/// not glide.
+		void EndGlide();
+
+	protected:
+		/// Ends a glide before the character is teleported.
+		void OnTeleporting() override;
+
+	public:
+
 		/// Adds or removes a Vigor drain (a DrainVigor aura).
 		/// @param perSecond Vigor drained per second.
 		/// @param apply True to add the drain, false to remove it.

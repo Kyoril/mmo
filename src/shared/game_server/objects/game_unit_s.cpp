@@ -1834,6 +1834,8 @@ namespace mmo
 
 	void GameUnitS::TeleportOnMap(const Vector3 &position, const Radian &facing)
 	{
+		OnTeleporting();
+
 		// Update position and facing
 		Relocate(position, facing);
 
@@ -1853,6 +1855,7 @@ namespace mmo
 		}
 
 		// Teleport to different map
+		OnTeleporting();
 		if (m_netUnitWatcher)
 		{
 			m_netUnitWatcher->OnTeleport(mapId, position, facing);

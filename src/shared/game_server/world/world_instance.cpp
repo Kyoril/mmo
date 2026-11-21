@@ -22,6 +22,7 @@
 #include "game_server/objects/game_object_s.h"
 #include "game_server/world/each_tile_in_region.h"
 #include "game_server/trigger_handler.h"
+#include "game_server/movement/glide_rules.h"
 #include "proto_data/project.h"
 #include "nav_mesh/door_volume.h"
 
@@ -347,6 +348,9 @@ namespace mmo
 				WLOG("Map " << m_mapId << " references unknown instance trigger " << triggerId);
 			}
 		}
+
+		// Updrafts are area triggers with an updraft strength; the glide validation reads them.
+		m_updrafts = BuildUpdraftVolumes(m_project.areaTriggers.getTemplates(), m_mapId);
 
 		m_mapData = std::make_unique<NavMapData>(m_manager.GetMapStaticData().Acquire(m_mapEntry->directory()));
 

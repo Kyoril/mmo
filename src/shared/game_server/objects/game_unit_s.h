@@ -1135,6 +1135,12 @@ namespace mmo
 		/// @param facing The new facing direction.
 		virtual void Teleport(uint32 mapId, const Vector3 &position, const Radian &facing);
 
+	protected:
+		/// Executed right before the unit is teleported (on the same map or to another one).
+		virtual void OnTeleporting() {}
+
+	public:
+
 		/// Modifies the character spell modifiers by applying or misapplying a new mod.
 		/// @param mod The spell modifier to apply or misapply.
 		/// @param apply Whether to apply or misapply the spell mod.
