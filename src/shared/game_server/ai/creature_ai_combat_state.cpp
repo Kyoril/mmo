@@ -519,10 +519,10 @@ namespace mmo
 		// Only switch victims if necessary
 		if (newVictim && newVictim != currentVictim)
 		{
-			if (!newVictim->CanBeSeenBy(controlled))
+			if (!newVictim->CanBeSeenBy(controlled) || newVictim->IsInCutscene())
 			{
-				// Unit is invisible/stealthed - drop from threat list so the creature
-				// can reset if no other valid targets remain.
+				// Unit is invisible/stealthed or watches a cutscene - drop from threat list so the
+				// creature can reset if no other valid targets remain.
 				RemoveThreat(*newVictim);
 			}
 			else
@@ -534,8 +534,8 @@ namespace mmo
 		}
 		else if (newVictim && newVictim == currentVictim)
 		{
-			// Existing victim — check if they've gone invisible/stealthed mid-combat.
-			if (!newVictim->CanBeSeenBy(controlled))
+			// Existing victim — check if they've gone invisible/stealthed or into a cutscene mid-combat.
+			if (!newVictim->CanBeSeenBy(controlled) || newVictim->IsInCutscene())
 			{
 				RemoveThreat(*newVictim);
 			}
@@ -2068,7 +2068,7 @@ namespace mmo
 
 		const auto usable = [&controlled](GameUnitS* unit)
 		{
-			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(controlled);
+			return unit && unit != &controlled && unit->IsAlive() && controlled.UnitCanAttack(*unit) && unit->CanBeSeenBy(controlled) && !unit->IsInCutscene();
 		};
 
 		GameUnitS* preferred = nullptr;

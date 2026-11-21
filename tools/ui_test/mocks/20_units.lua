@@ -122,6 +122,7 @@ function UiTest.MakeUnit(data)
 		power = { [0] = 50 },
 		maxPower = { [0] = 100 },
 		alive = true,
+		inCutscene = false,
 		friendly = true,
 		hostile = false,
 		guildName = "",

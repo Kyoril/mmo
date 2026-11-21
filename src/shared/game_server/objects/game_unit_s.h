@@ -1713,6 +1713,10 @@ public:
 
 		/// Checks if the unit is in combat.
 		/// @returns true if the unit is in combat, false otherwise.
+		/// Whether the player behind this unit watches a cutscene. Such a unit takes no damage and
+		/// creatures neither attack nor keep attacking it.
+		bool IsInCutscene() const noexcept { return (Get<uint32>(object_fields::Flags) & unit_flags::InCutscene) != 0; }
+
 		bool IsInCombat() const noexcept { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; } /// Sets the combat state of the unit.
 		/// @param inCombat true to set the unit in combat, false to set it out of combat.
 		void SetInCombat(bool inCombat, bool pvp);

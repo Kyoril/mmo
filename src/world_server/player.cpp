@@ -23,6 +23,7 @@
 #include "game_server/world/universe.h"
 #include "game_server/condition_mgr.h"
 #include "game_server/world/tile_subscriber.h"
+#include "game_server/world/remote_view.h"
 #include "binary_io/vector_sink.h"
 #include "binary_io/writer.h"
 #include "group_manager.h"
@@ -46,7 +47,10 @@ namespace mmo
 		, m_inventoryAutoSaveTimer(instance.GetUniverse().GetTimers())
 		, m_tradeDistanceCheckTimer(instance.GetUniverse().GetTimers())
 		, m_pendingReviveTimeout(instance.GetUniverse().GetTimers())
+		, m_cutsceneTick(instance.GetUniverse().GetTimers())
 	{
+		m_cutsceneTick.ended.connect(*this, &Player::OnCutsceneTick);
+
 		m_character->SetNetUnitWatcher(this);
 		m_character->SetPlayerWatcher(this);
 
@@ -284,6 +288,8 @@ namespace mmo
 		{
 			m_character->SetNetUnitWatcher(nullptr);
 		}
+
+		ResetCutsceneState(false);
 
 		if (m_worldInstance && m_character)
 		{
@@ -695,8 +701,41 @@ namespace mmo
 		m_connector.flush();
 	}
 
-	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& objects, const game::despawn_reason::Type reason)
+	void Player::NotifyObjectsDespawned(const std::vector<GameObjectS*>& requested, const game::despawn_reason::Type reason)
 	{
+		// An object that walks out of sight of the character stays with the client while the camera
+		// of a cutscene still sees it. And whatever happens, the client keeps its own character.
+		std::vector<GameObjectS*> objects;
+		objects.reserve(requested.size());
+		for (auto* object : requested)
+		{
+			if (object->GetGuid() == m_character->GetGuid())
+			{
+				continue;
+			}
+
+			if (reason == game::despawn_reason::OutOfSight && m_cutsceneView)
+			{
+				TileIndex2D objectTile;
+				if (object->GetTileIndex(objectTile) && m_cutsceneView->Sees(objectTile))
+				{
+					continue;
+				}
+			}
+
+			objects.push_back(object);
+		}
+
+		DespawnForClient(objects, reason);
+	}
+
+	void Player::DespawnForClient(const std::vector<GameObjectS*>& objects, const game::despawn_reason::Type reason)
+	{
+		if (objects.empty())
+		{
+			return;
+		}
+
 		for (const auto* object : objects)
 		{
 			m_spawnedGuids.erase(object->GetGuid());
@@ -802,9 +841,14 @@ namespace mmo
 		}
 		else
 		{
-			// True invisibility keeps its original despawn semantics.
-			const std::vector<GameObjectS*> objects{ &unit };
-			NotifyObjectsDespawned(objects, game::despawn_reason::OutOfSight);
+			// True invisibility keeps its original despawn semantics. Not through
+			// NotifyObjectsDespawned: that keeps what the camera of a cutscene still sees, and this
+			// unit is gone for both points of view.
+			if (unit.GetGuid() != m_character->GetGuid())
+			{
+				const std::vector<GameObjectS*> objects{ &unit };
+				DespawnForClient(objects, game::despawn_reason::OutOfSight);
+			}
 		}
 	}
 
@@ -909,6 +953,9 @@ namespace mmo
 			break;
 		case game::client_realm_packet::CheatPetMake:
 			OnCheatPetMake(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CheatPlayCutscene:
+			OnCheatPlayCutscene(opCode, buffer.size(), reader);
 			break;
 		case game::client_realm_packet::CheatLearnSpell:
 			OnCheatLearnSpell(opCode, buffer.size(), reader);
@@ -1128,6 +1175,12 @@ namespace mmo
 			break;
 		case game::client_realm_packet::TimePlayedRequest:
 			OnTimePlayedRequest(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CutsceneBegin:
+			OnCutsceneBegin(opCode, buffer.size(), reader);
+			break;
+		case game::client_realm_packet::CutsceneEnd:
+			OnCutsceneEnd(opCode, buffer.size(), reader);
 			break;
 
 		case game::client_realm_packet::TimeSyncResponse:
@@ -1759,6 +1812,18 @@ namespace mmo
 		// Allow the client to transition into falling state without a jump packet.
 		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
 		m_pendingFallStart = true;
+
+		// A character that enters the world for the very first time is shown the intro of its race.
+		// Nothing has been played yet exactly then: the played time is saved whenever the character
+		// leaves a world, so every later entry (relog, teleport to another map) finds it above zero.
+		if (m_characterData.timePlayed == 0)
+		{
+			const proto::RaceEntry* race = m_character->GetRaceEntry();
+			if (race && race->cinematic() != 0)
+			{
+				StartCutscene(race->cinematic());
+			}
+		}
 	}
 
 	void Player::OnDespawned(GameObjectS& object)
@@ -1785,6 +1850,10 @@ namespace mmo
 			m_tradeSession = nullptr;
 		}
 
+		// The camera of a running cutscene no longer watches either. The client forgets the world
+		// on its own, so it is told nothing.
+		ResetCutsceneState(false);
+
 		// No longer watch for network events
 		m_character->SetNetUnitWatcher(nullptr);
 
@@ -1798,6 +1867,8 @@ namespace mmo
 
 	void Player::OnKilled(GameUnitS* killer)
 	{
+		EndCutscene(cutscene_end_reason::Cancelled);
+
 		// Fires exactly once per death (GameUnitS::Damage only reaches OnKilled on the health
 		// transition to 0, and further damage on an already-dead unit returns early). Close the
 		// loot dialog right here rather than in OnReviveRequest: CloseLootDialog also sends
@@ -1820,6 +1891,12 @@ namespace mmo
 			newTile.GetPosition(),
 			[this](VisibilityTile &tile)
 			{
+				// The camera of a cutscene may still see what the character leaves behind
+				if (m_cutsceneView && m_cutsceneView->Sees(tile.GetPosition()))
+				{
+					return;
+				}
+
 				// Only despawn objects the client actually knows about.  Invisible units
 				// (e.g. those with a ModVisibility aura) are never sent as creation packets,
 				// so sending a destroy for them would cause a client disconnect.
@@ -1827,7 +1904,7 @@ namespace mmo
 				toDestroy.reserve(tile.GetGameObjects().size());
 				for (const auto *object : tile.GetGameObjects())
 				{
-					if (m_spawnedGuids.contains(object->GetGuid()))
+					if (object->GetGuid() != m_character->GetGuid() && m_spawnedGuids.contains(object->GetGuid()))
 					{
 						toDestroy.push_back(object->GetGuid());
 					}
@@ -1877,6 +1954,12 @@ namespace mmo
 		{
 			ASSERT(obj);
 			if (obj->GetGuid() == GetCharacterGuid())
+			{
+				continue;
+			}
+
+			// Already sent through the camera of a cutscene
+			if (m_cutsceneView && m_spawnedGuids.contains(obj->GetGuid()))
 			{
 				continue;
 			}
@@ -2418,6 +2501,12 @@ namespace mmo
 			return;
 		}
 
+		// Walking away ends a cutscene: its protection is for a character that stands still
+		if (IsCutsceneMovementViolation(info))
+		{
+			EndCutscene(cutscene_end_reason::Cancelled);
+		}
+
 		// Should the character currently be moved automatically?
 		if (m_character->GetMover().IsMoving())
 		{
@@ -2851,13 +2940,19 @@ namespace mmo
 		ForEachTileInSight(
 			m_worldInstance->GetGrid(),
 			tile.GetPosition(),
-			[characterGuid, opCode, info](VisibilityTile &tile)
+			[characterGuid, opCode, info, moverTile = tile.GetPosition()](VisibilityTile &tile)
 		{
 			MovementInfo copy = info;
 
 			for (const auto& watcher : tile.GetWatchers())
 			{
 				if (watcher->GetGameUnit().GetGuid() == characterGuid)
+				{
+					continue;
+				}
+
+				// A client with a second point of view is subscribed twice: tell it once
+				if (!watcher->AcceptsBroadcastFrom(moverTile))
 				{
 					continue;
 				}
@@ -2975,6 +3070,12 @@ namespace mmo
 			return;
 		}
 
+		// The client hides its action bar during a cutscene; a cast that arrives anyway is dropped
+		if (IsInCutscene())
+		{
+			return;
+		}
+
 		// Get the cast time of this spell
 		int64 castTime = spell->casttime();
 		const uint64 casterId = m_character->GetGuid();
@@ -3056,8 +3157,8 @@ namespace mmo
 			return;
 		}
 
-		// Cant attack ourself
-		if (victimGuid == m_character->GetGuid())
+		// Cant attack ourself, and nobody while watching a cutscene
+		if (victimGuid == m_character->GetGuid() || IsInCutscene())
 		{
 			return;
 		}
@@ -4226,6 +4327,9 @@ namespace mmo
 	void Player::OnTeleport(uint32 mapId, const Vector3& position, const Radian& facing)
 	{
 		ASSERT(m_worldInstance);
+
+		// A cutscene belongs to the place the character stood at
+		EndCutscene(cutscene_end_reason::Cancelled);
 
 		if (mapId == m_worldInstance->GetMapId())
 		{

@@ -107,7 +107,8 @@ namespace mmo
 		"SetEncounterState", "SummonCreature", "Taunt", "ModifyThreat", "ResetThreat",
 		"ApplyAura", "RemoveAura", "SetInstanceVariable", "BroadcastMessage",
 		"QuestExplorationCredit", "QuestFailQuest", "SetFollowTarget", "ClearFollowTarget",
-		"PlaySpellVisual", "PlaySound", "RandomTrigger", "SetFaction", "DeliverFollowers"
+		"PlaySpellVisual", "PlaySound", "RandomTrigger", "SetFaction", "DeliverFollowers",
+		"PlayCutscene"
 	};
 
 	static_assert(std::size(s_actionTypeNames) == trigger_actions::Count_, "s_actionTypeNames size mismatch");
@@ -496,6 +497,8 @@ namespace mmo
 			case trigger_actions::QuestKillCredit:
 			case trigger_actions::DeliverFollowers:
 				return DescribeEntryRef(project.units, GetActionDataValue(action, 0));
+			case trigger_actions::PlayCutscene:
+				return DescribeEntryRef(project.cutscenes, GetActionDataValue(action, 0));
 			case trigger_actions::SetFaction:
 				if (GetActionDataValue(action, 0) == 0)
 				{
@@ -1302,6 +1305,12 @@ namespace mmo
 					DrawActionDataPicker(action, 0, "##SetFactionTemplate", "Faction template (none = entry's own)", project.factionTemplates);
 					DrawActionDataInt(action, 1, "##SetFactionAttack", "Attack triggering unit (0/1)", 150.0f,
 						"With 1 the creature starts fighting the triggering unit right away, if its new faction is hostile to it. The override ends when the creature resets or respawns.");
+					break;
+				}
+				case trigger_actions::PlayCutscene:
+				{
+					// Data: <CUTSCENE-ID>
+					DrawActionDataPicker(action, 0, "##PlayCutsceneId", "Cutscene", project.cutscenes);
 					break;
 				}
 				case trigger_actions::DeliverFollowers:
