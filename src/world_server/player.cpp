@@ -1694,6 +1694,23 @@ namespace mmo
 		m_character->RestorePersistentAuras(m_characterData.auras);
 		m_character->RestorePersistentCooldowns(m_characterData.cooldowns);
 
+		// A character that enters the world for the very first time is shown the intro of its race.
+		// Nothing has been played yet exactly then: the played time is saved whenever the character
+		// leaves a world, so every later entry (relog, teleport to another map) finds it above zero.
+		//
+		// The cutscene is announced before the character itself is sent. The client loads the world
+		// when it receives its character, and it has to know by then that a cutscene follows: its
+		// loading screen stays up until the world at the first picture of the cutscene is loaded
+		// too, instead of going away and coming back.
+		if (m_characterData.timePlayed == 0)
+		{
+			const proto::RaceEntry* race = m_character->GetRaceEntry();
+			if (race && race->cinematic() != 0)
+			{
+				StartCutscene(race->cinematic());
+			}
+		}
+
 		// Ensure the inventory is initialized
 		std::vector<GameObjectS*> objects;
 		objects.push_back(m_character.get());
@@ -1812,18 +1829,6 @@ namespace mmo
 		// Allow the client to transition into falling state without a jump packet.
 		// This handles the case where the player spawns in the air (e.g., cross-map teleport).
 		m_pendingFallStart = true;
-
-		// A character that enters the world for the very first time is shown the intro of its race.
-		// Nothing has been played yet exactly then: the played time is saved whenever the character
-		// leaves a world, so every later entry (relog, teleport to another map) finds it above zero.
-		if (m_characterData.timePlayed == 0)
-		{
-			const proto::RaceEntry* race = m_character->GetRaceEntry();
-			if (race && race->cinematic() != 0)
-			{
-				StartCutscene(race->cinematic());
-			}
-		}
 	}
 
 	void Player::OnDespawned(GameObjectS& object)

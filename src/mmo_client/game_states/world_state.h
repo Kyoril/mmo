@@ -184,8 +184,17 @@ namespace mmo
 
 		void ReloadUI();
 
-		/// Registers WorldState-specific Lua globals (called from ReloadUI so they survive UI reload).
+		/// Registers WorldState-specific Lua globals. Called from every ReloadUI, but the functions
+		/// are only registered once per Lua state: they reach the current world state through
+		/// s_luaWorldState, which this call refreshes.
 		void RegisterWorldLuaFunctions();
+
+		/// Sends a party ping for whatever is under the mouse cursor: the hovered unit, else the
+		/// point of the world under it, else the player's own position.
+		void SendPingFromCursor();
+
+		/// The world state the Lua functions of RegisterWorldLuaFunctions act on, or nullptr.
+		static WorldState* s_luaWorldState;
 
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
