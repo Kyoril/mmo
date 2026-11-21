@@ -359,6 +359,9 @@ namespace mmo
 		/// Whether the world is loaded around a position, judged from where the camera is.
 		[[nodiscard]] bool IsWorldLoadedAround(const Vector3& position) const;
 
+		/// Whether the terrain page under a position is loaded. True for a world without terrain.
+		[[nodiscard]] bool IsTerrainLoadedAt(const Vector3& position) const;
+
 		/// Per frame: begins a pending cutscene once the world is ready, advances the playing one and
 		/// puts the camera where it says.
 		void UpdateCutscene(float deltaSeconds);

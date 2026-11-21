@@ -13,6 +13,8 @@
 #include "frame_ui/frame_mgr.h"
 #include "log/default_log_levels.h"
 #include "scene_graph/camera.h"
+#include "terrain/page.h"
+#include "terrain/terrain.h"
 
 namespace mmo
 {
@@ -30,6 +32,25 @@ namespace mmo
 
 		return std::abs(pageX - static_cast<int32>(cameraPage.x())) <= 1 &&
 			std::abs(pageZ - static_cast<int32>(cameraPage.y())) <= 1;
+	}
+
+	bool WorldState::IsTerrainLoadedAt(const Vector3& position) const
+	{
+		if (!m_worldInstance || !m_worldInstance->HasTerrain())
+		{
+			return true;
+		}
+
+		const terrain::Terrain* terrain = m_worldInstance->GetTerrain();
+
+		int32 pageX = 0, pageZ = 0;
+		if (!terrain->GetPageIndexByWorldPosition(position, pageX, pageZ))
+		{
+			return true;
+		}
+
+		const terrain::Page* page = terrain->GetPage(static_cast<uint32>(pageX), static_cast<uint32>(pageZ));
+		return page != nullptr && page->IsLoaded();
 	}
 
 	void WorldState::UpdateCutscene(const float deltaSeconds)
@@ -114,6 +135,13 @@ namespace mmo
 
 	void WorldState::OnCutsceneStarted(const proto_client::CutsceneEntry& cutscene)
 	{
+		// The world streams in around the camera and out everywhere else, also under the player's
+		// own character. It is not simulated until the ground is back, or it would fall through.
+		if (const auto& unit = m_playerController->GetControlledUnit())
+		{
+			unit->SetMovementSuspended(true);
+		}
+
 		m_playerController->SetInputLocked(true);
 		FrameManager::Get().SetUiHidden(true);
 
@@ -132,15 +160,27 @@ namespace mmo
 		// the character has been unloaded in the meantime. Measured before the camera moves back:
 		// the loaded pages are the ones around the last picture of the cutscene.
 		const auto unit = m_playerController->GetControlledUnit();
-		const bool reload = unit && m_worldLoaded && !IsWorldLoadedAround(unit->GetPosition());
+		const bool farAway = unit && m_worldLoaded && !IsWorldLoadedAround(unit->GetPosition());
 
 		RestoreAfterCutscene();
 
-		if (reload)
+		if (unit)
 		{
-			LoadingScreen::Show();
-			LoadWorldAround(unit->GetPosition());
-			LoadingScreen::Hide();
+			if (farAway)
+			{
+				LoadingScreen::Show();
+				LoadWorldAround(unit->GetPosition());
+				LoadingScreen::Hide();
+			}
+			else if (m_worldLoaded && !IsTerrainLoadedAt(unit->GetPosition()))
+			{
+				// The camera flew back to the character, but streaming has not caught up under its
+				// feet yet. A short hitch without the loading screen; nothing is visibly missing.
+				LoadWorldAround(unit->GetPosition());
+			}
+
+			// Only now is there ground to stand on again
+			unit->SetMovementSuspended(false);
 		}
 
 		FrameManager::Get().TriggerLuaEvent("CUTSCENE_ENDED", cutscene.id(), static_cast<int32>(reason));
@@ -172,10 +212,15 @@ namespace mmo
 
 		RestoreAfterCutscene();
 
-		if (m_cutsceneHoldsLoadingScreen)
+		if (m_playerController)
 		{
-			m_cutsceneHoldsLoadingScreen = false;
+			if (const auto& unit = m_playerController->GetControlledUnit())
+			{
+				unit->SetMovementSuspended(false);
+			}
 		}
+
+		m_cutsceneHoldsLoadingScreen = false;
 	}
 
 	PacketParseResult WorldState::OnCutsceneStart(game::IncomingPacket& packet)
