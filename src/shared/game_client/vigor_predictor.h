@@ -29,7 +29,8 @@ namespace mmo
 		/// @param now Current time in milliseconds.
 		void Anchor(float value, float maxValue, GameTime now);
 
-		/// @brief Advances the prediction to the given time.
+		/// @brief Advances the prediction to the given time. The first call with a gliding activity
+		///	after one without also applies TraversalSettings::glideStartCost (opening the glider).
 		/// @param now Current time in milliseconds. Times before the last step are ignored.
 		/// @param activity What drains Vigor (gliding, gliding in an updraft, nothing).
 		/// @param extraDrainPerSecond Drain on top of the glide drain (DrainVigor auras such as Dash).
@@ -63,6 +64,7 @@ namespace mmo
 		VigorState m_state;
 		GameTime m_lastTime = 0;
 		bool m_anchored = false;
+		bool m_wasGliding = false;
 		bool m_becameEmpty = false;
 		bool m_hasNotified = false;
 		float m_notifiedValue = 0.0f;

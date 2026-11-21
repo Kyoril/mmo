@@ -2,6 +2,8 @@
 
 #include "vigor_predictor.h"
 
+#include <algorithm>
+
 namespace mmo
 {
 	VigorPredictor::VigorPredictor(TraversalSettings settings)
@@ -31,17 +33,34 @@ namespace mmo
 
 	void VigorPredictor::Advance(const GameTime now, const VigorActivity activity, const float extraDrainPerSecond, const bool inCombat, const bool grounded)
 	{
-		if (!m_anchored || now <= m_lastTime)
+		// Opening the glider costs TraversalSettings::glideStartCost at once, like on the server
+		// (VigorTracker::SetGliding). The server's next write already contains the cost.
+		const bool gliding = activity == VigorActivity::Gliding || activity == VigorActivity::GlidingInUpdraft;
+		const bool glideStarted = gliding && !m_wasGliding;
+		m_wasGliding = gliding;
+
+		if (!m_anchored)
 		{
 			return;
 		}
 
-		// Absolute times stay integer; only the step becomes a float.
-		const float seconds = static_cast<float>(now - m_lastTime) / 1000.0f;
-		m_lastTime = now;
-
 		const float previous = m_state.current;
-		AdvanceVigor(m_state, m_settings, activity, extraDrainPerSecond, inCombat, grounded, seconds);
+
+		if (now > m_lastTime)
+		{
+			// Absolute times stay integer; only the step becomes a float.
+			const float seconds = static_cast<float>(now - m_lastTime) / 1000.0f;
+			m_lastTime = now;
+
+			AdvanceVigor(m_state, m_settings, activity, extraDrainPerSecond, inCombat, grounded, seconds);
+		}
+
+		if (glideStarted)
+		{
+			m_state.current = std::max(0.0f, m_state.current - m_settings.glideStartCost);
+			m_state.secondsSinceDrain = 0.0f;
+		}
+
 		UpdateEmptyFlag(previous);
 	}
 

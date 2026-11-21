@@ -897,6 +897,14 @@ namespace mmo
 			return spell_cast_result::FailedNotKnown;
 		}
 
+		// No casting while gliding (spells and item uses alike). Procs and server-authoritative
+		// casts (ignoreKnownSpellCheck: trigger actions such as a portal's teleport) are not the
+		// glider's own action and still go off.
+		if (!isProc && !ignoreKnownSpellCheck && GetMovementInfo().IsGliding())
+		{
+			return spell_cast_result::FailedMoving;
+		}
+
 		SpellCastResult r = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
 
 		// A proc does not occupy the caster and never reports its end through SpellCast::ended, so

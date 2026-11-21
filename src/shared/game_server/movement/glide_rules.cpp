@@ -17,11 +17,6 @@ namespace mmo
 			return GlideStartDecision::NotFalling;
 		}
 
-		if (current.IsGliding())
-		{
-			return GlideStartDecision::AlreadyGliding;
-		}
-
 		if (current.IsSwimming())
 		{
 			return GlideStartDecision::Swimming;
@@ -51,7 +46,6 @@ namespace mmo
 		{
 		case GlideStartDecision::NoGlider:
 		case GlideStartDecision::Swimming:
-		case GlideStartDecision::AlreadyGliding:
 			return true;
 
 		case GlideStartDecision::Allowed:

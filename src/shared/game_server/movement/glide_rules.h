@@ -54,9 +54,6 @@ namespace mmo
 		/// The character is not in the air (the glider only opens while falling).
 		NotFalling,
 
-		/// The character already glides.
-		AlreadyGliding,
-
 		/// The character swims.
 		Swimming,
 
@@ -103,8 +100,8 @@ namespace mmo
 
 	/// Whether a refused glide start is an anti-cheat violation. Refusals caused by a temporary state
 	/// the client may not know of yet (Vigor mispredicted, a stun or a landing in flight) are not:
-	/// the server only closes the glider. Refusals no honest client sends (no Glider, swimming,
-	/// already gliding) are.
+	/// the server only closes the glider. Refusals no honest client sends (no Glider, swimming)
+	/// are. A MoveStartGlide while already gliding never gets here: ClassifyGlideFlagChange rejects it.
 	/// @param decision The refusal from CanStartGlide.
 	[[nodiscard]] bool IsGlideStartRefusalViolation(GlideStartDecision decision);
 

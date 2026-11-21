@@ -1576,6 +1576,13 @@ namespace mmo
 			return;
 		}
 
+		// Not every area trigger fires something on entry (updrafts only carry a lift strength). The
+		// client reports every trigger it enters, like every trigger it leaves (see OnAreaTriggerLeft).
+		if (!trigger->has_on_enter_trigger() || trigger->on_enter_trigger() == 0)
+		{
+			return;
+		}
+
 		// All validation passed
 		const proto::TriggerEntry* triggerEntry = m_project.triggers.getById(trigger->on_enter_trigger());
 		if (!triggerEntry)
@@ -1828,6 +1835,14 @@ namespace mmo
 		// frame, and doing it at death (not at release) avoids the window between death and
 		// release where the character would otherwise still show as looting.
 		CloseLootDialog();
+
+		// Dying ends a glide. A death through damage already closed it (damageTakenAmount), but a
+		// death without damage (GM kill, falling below the death height) would otherwise keep the
+		// Vigor drain running until the corpse lands.
+		if (m_character->GetVigor().IsGliding())
+		{
+			ForceStopGlide("died");
+		}
 	}
 
 	void Player::OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile)
@@ -2634,6 +2649,11 @@ namespace mmo
 			}
 
 			m_trackingFall = false;
+
+			// Airborne heartbeats (falls, glides at glideForwardSpeed) move the speed-check baseline
+			// without being checked: reset it so the first grounded packet after the landing is not
+			// measured against the last airborne position at the run speed limit.
+			m_lastPositionPacketTimestamp = 0;
 		}
 
 		// Clear the pending fall start flag if the player is on the ground

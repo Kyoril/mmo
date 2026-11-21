@@ -12,6 +12,7 @@
 #include "game/spell.h"
 #include "game/traversal.h"
 #include "game/spell_target_map.h"
+#include "game/movement_info.h"
 #include "game_server/condition_mgr.h"
 #include "game_server/trigger_handler.h"
 #include "game_server/world/universe.h"
@@ -346,6 +347,64 @@ TEST_CASE("A Vigor drain spell cannot be cast without Vigor", "[vigor]")
 	player->GetVigor().Reset(GetAsyncTimeMs(), 100.0f);
 	CHECK(player->CastSpell(targetMap, *dash, 0) == spell_cast_result::CastOkay);
 	CHECK(player->HasAuraSpell(traversal_spells::Dash));
+
+	world.RemoveGameObject(*player);
+	io.stop();
+}
+
+TEST_CASE("A gliding player cannot cast", "[vigor][glide]")
+{
+	asio::io_service io;
+	TimerQueue timers{ io };
+	proto::Project project;
+	Universe universe{ io, timers };
+	IdGenerator<uint64> objectIds{ 1 };
+	NullTriggerHandler triggerHandler;
+
+	auto* dash = project.spells.add(traversal_spells::Dash);
+	*dash = MakeDashSpell();
+
+	// A plain instant spell on the caster, cast by a trigger action (server-authoritative).
+	auto* scripted = project.spells.add(9001);
+	*scripted = MakeSpell();
+	scripted->set_id(9001);
+	scripted->set_name("Scripted");
+
+	auto* map = project.maps.add(0);
+	map->set_name("Vigor Test");
+	map->set_directory("Worlds/__vigor_test__/__vigor_test__");
+	ConditionMgr conditionMgr{ project.conditions };
+	WorldInstanceManager manager{ io, universe, project, objectIds, triggerHandler, conditionMgr };
+	WorldInstance& world = manager.CreateInstance(0);
+
+	auto player = MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+	player->Set<uint32>(object_fields::Health, 100);
+	player->AddSpell(traversal_spells::Dash);
+	world.AddGameObject(*player);
+
+	MovementInfo gliding;
+	gliding.movementFlags = movement_flags::Falling | movement_flags::Gliding;
+	gliding.position = Vector3(0.0f, 50.0f, 0.0f);
+	player->ApplyMovementInfo(gliding);
+
+	SpellTargetMap targetMap;
+	targetMap.SetTargetMap(spell_cast_target_flags::Self);
+	CHECK(player->CastSpell(targetMap, *dash, 0) == spell_cast_result::FailedMoving);
+	CHECK_FALSE(player->HasAuraSpell(traversal_spells::Dash));
+
+	// Back on the ground the same cast goes off.
+	MovementInfo grounded;
+	grounded.position = Vector3(0.0f, 0.0f, 0.0f);
+	player->ApplyMovementInfo(grounded);
+	CHECK(player->CastSpell(targetMap, *dash, 0) == spell_cast_result::CastOkay);
+	CHECK(player->HasAuraSpell(traversal_spells::Dash));
+
+	// Scripted casts are not the glider's own action: they still go off while gliding.
+	// (The Dash cast started the global cooldown, which is not what this checks.)
+	player->ResetCooldowns();
+	player->ApplyMovementInfo(gliding);
+	CHECK(player->CastSpell(targetMap, *scripted, 0, false, 0, true) == spell_cast_result::CastOkay);
 
 	world.RemoveGameObject(*player);
 	io.stop();

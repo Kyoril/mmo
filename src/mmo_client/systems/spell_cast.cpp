@@ -267,6 +267,13 @@ namespace mmo
 			return;
 		}
 
+		// No casting while gliding: the server refuses it as well (GameUnitS::CastSpell).
+		if (unit->GetMovementInfo().IsGliding())
+		{
+			NotifyCastFailed("SPELL_CAST_FAILED_MOVING");
+			return;
+		}
+
 		const uint64 targetUnitGuid = ObjectMgr::GetSelectedObjectGuid();
 
 		// Is known spell?

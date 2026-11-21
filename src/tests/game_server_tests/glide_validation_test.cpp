@@ -53,10 +53,9 @@ TEST_CASE("Cannot start glide at zero vigor", "[glide]")
 	CHECK(CanStartGlide(MakeInfo(Falling), true, 0.1f, false) == GlideStartDecision::Allowed);
 }
 
-TEST_CASE("Cannot start glide while swimming, gliding, stunned or rooted", "[glide]")
+TEST_CASE("Cannot start glide while swimming, stunned or rooted", "[glide]")
 {
 	CHECK(CanStartGlide(MakeInfo(Falling | movement_flags::Swimming), true, 50.0f, false) == GlideStartDecision::Swimming);
-	CHECK(CanStartGlide(MakeInfo(Gliding), true, 50.0f, false) == GlideStartDecision::AlreadyGliding);
 	CHECK(CanStartGlide(MakeInfo(Falling), true, 50.0f, true) == GlideStartDecision::Incapacitated);
 	CHECK(CanStartGlide(MakeInfo(Falling | movement_flags::Rooted), true, 50.0f, false) == GlideStartDecision::Incapacitated);
 }
@@ -219,7 +218,6 @@ TEST_CASE("Only refused glide starts no honest client sends are violations", "[g
 
 	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::NoGlider));
 	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::Swimming));
-	CHECK(IsGlideStartRefusalViolation(GlideStartDecision::AlreadyGliding));
 
 	CHECK_FALSE(IsGlideStartRefusalViolation(GlideStartDecision::Allowed));
 }

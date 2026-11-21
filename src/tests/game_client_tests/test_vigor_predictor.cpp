@@ -11,6 +11,8 @@ TEST_CASE("Predictor re-anchors on server value", "[vigor]")
 	VigorPredictor predictor;
 	CHECK_FALSE(predictor.IsAnchored());
 
+	// The glider is already open when the first value arrives: no start cost.
+	predictor.Advance(0, VigorActivity::Gliding, 0.0f, false, false);
 	predictor.Anchor(100.0f, 100.0f, 1000);
 	CHECK(predictor.IsAnchored());
 	CHECK(predictor.GetCurrent() == Approx(100.0f));
@@ -75,6 +77,7 @@ TEST_CASE("Predictor does not advance before it is anchored", "[vigor]")
 TEST_CASE("Predictor reports empty once", "[vigor]")
 {
 	VigorPredictor predictor;
+	predictor.Advance(0, VigorActivity::Gliding, 0.0f, false, false);
 	predictor.Anchor(4.0f, 100.0f, 0);
 	CHECK_FALSE(predictor.ConsumeBecameEmpty());
 
@@ -134,4 +137,31 @@ TEST_CASE("Predictor notifies changes at most 10 times per second", "[vigor]")
 
 	// No change, no notification.
 	CHECK_FALSE(predictor.ConsumeChangeNotification(5000));
+}
+
+TEST_CASE("Predictor applies the glide start cost when the glider opens", "[vigor]")
+{
+	VigorPredictor predictor;
+	predictor.Anchor(50.0f, 100.0f, 0);
+
+	// Falling, glider closed: nothing drains.
+	predictor.Advance(500, VigorActivity::Idle, 0.0f, false, false);
+	CHECK(predictor.GetCurrent() == Approx(50.0f));
+
+	// Opening the glider costs 5 at once, plus half a second of glide drain (8 per second).
+	predictor.Advance(1000, VigorActivity::Gliding, 0.0f, false, false);
+	CHECK(predictor.GetCurrent() == Approx(41.0f));
+
+	// Gliding on costs no further start cost, also not across a server write that contains it.
+	predictor.Anchor(41.0f, 100.0f, 1000);
+	predictor.Advance(1500, VigorActivity::GlidingInUpdraft, 0.0f, false, false);
+	CHECK(predictor.GetCurrent() == Approx(39.0f));
+
+	// Closing and reopening the glider costs again; the cost alone may empty the prediction.
+	predictor.Anchor(3.0f, 100.0f, 2000);
+	predictor.Advance(2000, VigorActivity::Idle, 0.0f, false, false);
+	(void)predictor.ConsumeBecameEmpty();
+	predictor.Advance(2000, VigorActivity::Gliding, 0.0f, false, false);
+	CHECK(predictor.GetCurrent() == Approx(0.0f));
+	CHECK(predictor.ConsumeBecameEmpty());
 }

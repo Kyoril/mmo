@@ -877,6 +877,7 @@ namespace mmo
 		/// @param itemGuid The GUID of the item used to cast the spell (optional).
 		/// @param ignoreKnownSpellCheck If true, skips the check whether the unit actually knows the spell.
 		///        This is meant for server-authoritative casts (e.g. triggers) where no client packet is involved.
+		///        Such casts (and procs) also go off while the unit glides; all others fail with FailedMoving then.
 		/// @returns The result of the spell cast.
 		SpellCastResult CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0, bool ignoreKnownSpellCheck = false);
 
