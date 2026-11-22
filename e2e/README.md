@@ -118,6 +118,9 @@ unit, `""` if not heard since `ClearHeardSounds()` or the session started; trigg
 come from their speaker),
 `SoundCount(soundId)` (how many `PlaySoundById` packets for `soundId` arrived since
 `ClearHeardSounds()` — counts repetitions such as the strikes of the hourly town bells),
+`CutsceneStartCount()` / `CutsceneEndCount()` (CutsceneStart / CutsceneEnd packets since the
+connection was established), `LastCutsceneId()`, `LastCutsceneEndReason()` (0 finished, 1 skipped,
+2 cancelled by the server, -1 before the first CutsceneEnd),
 `IsChanneling(g)` (the server sent `g` a ChannelStart and no ChannelUpdate(0) since — what a
 real client believes), `ChannelStartCount(g)` (ChannelStart packets received for `g`),
 `IsSpellOnCooldown(spellId)` (own character, as the server's cooldown packets left it; the global
@@ -197,6 +200,7 @@ side of a door, never the door itself, since its own geometry occludes its cente
 `GM.KillTarget()` (tags an untagged creature to the GM
 character first, so the kill grants real kill xp and quest kill credit),
 `GM.Worldport(map, x, y, z, facing)` (waits for the teleport),
+`GM.PlayCutscene(cutsceneId)` (plays a cutscene for this character, see "Cutscenes" below),
 `GM.Summon(playerName)` (teleports that player to this character, across maps and into instances),
 `GM.Revive()` (revives the current target, or the character itself without one),
 `GM.SetSpeed(multiplier)`, `GM.AcceptQuest(questId)` (no questgiver needed),
@@ -294,3 +298,16 @@ src/e2e_client/      headless client (ported mmo_bot core) + Lua scenario engine
 e2e/scenarios/       committed test scenarios (*.lua)
 e2e/runtime/         generated: configs, pids, logs, transcripts (gitignored)
 ```
+
+## Cutscenes
+
+This client has no screen, so it does not play a cutscene: when the server starts one, it answers
+that it plays and skips it in the same breath. That matters because a brand-new human character is
+shown its intro on the first world entry, and a character in a cutscene can neither cast nor attack.
+
+A scenario that tests cutscenes takes over with `SetCutsceneAutoSkip(false)` and sends the answers
+itself: `CutsceneBegin(id)` (the server starts moving the point of view along the camera path) and
+`CutsceneEnd(id, skipped)`. While the cutscene runs, the client is sent what is around the camera,
+so `FindUnitByEntry` finds creatures far from the character; the character itself carries unit flag
+`0x40`. See `cutscene_camera_view.lua` and [docs/cutscenes.md](../docs/cutscenes.md). Switch the
+auto skip back on at the end of the scenario.

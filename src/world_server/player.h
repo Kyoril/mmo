@@ -10,6 +10,7 @@
 #include "game_server/character_data.h"
 #include "game/bank.h"
 #include "game/chat_type.h"
+#include "game/cutscene.h"
 #include "game/mail.h"
 #include "game/vendor.h"
 #include "game_server/objects/game_object_s.h"
@@ -45,8 +46,11 @@ namespace mmo
 		class GossipMenuEntry;
 		class TrainerEntry;
 		class VendorEntry;
+		class CutsceneEntry;
 		class Project;
 	}
+
+	class RemoteView;
 
 	/// @brief This class represents the connection to a player on a realm server that this
 	///	       world node is connected to.
@@ -196,6 +200,57 @@ namespace mmo
 	public:
 		/// Gets the current tile index for the character.
 		TileIndex2D GetTileIndex() const;
+
+	public:
+		/// Starts a cutscene for this player: the character is flagged as being in a cutscene (it
+		/// stands still, takes no damage and is ignored by creatures), and the client is told to play.
+		/// Once the client reports that it plays, the player's point of view follows the camera path.
+		/// @param cutsceneId Id of the cutscene to play.
+		/// @return false if the cutscene does not exist, has nothing to play or belongs to another
+		///         map, or if the character is dead, in combat or in a cutscene already.
+		/// @param force true to start right after another cutscene (GM command); otherwise a
+		///        cutscene does not start within a short time after the previous one.
+		bool StartCutscene(uint32 cutsceneId, bool force = false);
+
+		/// Ends the running cutscene, if any: the point of view returns to the character, the flag
+		/// is removed and the client is told to stop playing.
+		/// @param reason Why it ends.
+		void EndCutscene(cutscene_end_reason::Type reason);
+
+		/// Whether a cutscene runs for this player.
+		[[nodiscard]] bool IsInCutscene() const { return m_cutscene != nullptr; }
+
+	private:
+		/// Tells the client that objects are gone and forgets that it knows them. No questions asked:
+		/// NotifyObjectsDespawned decides which objects that is.
+		void DespawnForClient(const std::vector<GameObjectS*>& objects, game::despawn_reason::Type reason);
+
+		/// Drops the cutscene state without telling the client that the cutscene ended.
+		/// @param notifyClient true to despawn what only the camera saw; false if the character
+		///        leaves the world anyway.
+		void ResetCutsceneState(bool notifyClient);
+
+		/// Fired by m_cutsceneTick: moves the point of view on, or ends the cutscene.
+		void OnCutsceneTick();
+
+		/// Puts the point of view where the camera is after the given time.
+		/// @param elapsed Milliseconds since the client started playing.
+		void UpdateCutsceneView(GameTime elapsed);
+
+		/// Whether a movement packet means that the client walks during a cutscene.
+		bool IsCutsceneMovementViolation(const MovementInfo& info) const;
+
+		/// The client started playing the announced cutscene.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCutsceneBegin(uint16 opCode, uint32 size, io::Reader& contentReader);
+
+		/// The client stopped playing its cutscene.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCutsceneEnd(uint16 opCode, uint32 size, io::Reader& contentReader);
 
 	private:
 		// Client Network Handlers, Implemented in player_trade_handlers.cpp
@@ -782,6 +837,12 @@ namespace mmo
 		/// @param contentReader Reader object used to read the packets content bytes (none).
 		void OnCheatPetMake(uint16 opCode, uint32 size, io::Reader& contentReader);
 
+		/// GM command: plays a cutscene for the sender.
+		///	@param opCode The op code of the packet.
+		///	@param size The size of the packet content in bytes, excluding the packet header.
+		/// @param contentReader Reader object used to read the packets content bytes.
+		void OnCheatPlayCutscene(uint16 opCode, uint32 size, io::Reader& contentReader);
+
 		/// @return The player a GM pet command acts on: the sender's selected unit if it is a
 		///	        player, else the sender.
 		GamePlayerS& GetCheatPetTargetPlayer() const;
@@ -1277,6 +1338,28 @@ namespace mmo
 		/// packets instead of spawn/despawn to avoid packet churn while stealth visibility
 		/// flips during movement.
 		std::unordered_set<uint64> m_hiddenGuids;
+
+		/// The cutscene that runs for this player, or nullptr.
+		const proto::CutsceneEntry* m_cutscene{ nullptr };
+
+		/// When the cutscene was announced to the client.
+		GameTime m_cutsceneRequestTime{ 0 };
+
+		/// When the client started playing the cutscene, or 0 while it has not yet.
+		GameTime m_cutsceneStartTime{ 0 };
+
+		/// Where the character stood when the cutscene was announced.
+		Vector3 m_cutsceneStartPosition;
+
+		/// No cutscene starts before this time, unless forced.
+		GameTime m_cutsceneCooldownEnd{ 0 };
+
+		/// Moves the point of view along the camera path, and ends a cutscene the client does not end.
+		Countdown m_cutsceneTick;
+
+		/// The player's second point of view at the camera of the cutscene. Only exists while the
+		/// client plays one.
+		std::unique_ptr<RemoteView> m_cutsceneView;
 
 	public:
 		/// @brief Sends a time sync request to the client with incremented index.

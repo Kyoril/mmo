@@ -411,6 +411,13 @@ namespace mmo
 		std::map<uint64, uint8> m_spawnReasons;
 		std::map<uint32, uint32> m_heardSoundCounts;
 
+		// Cutscenes, see SetCutsceneAutoSkip
+		bool m_cutsceneAutoSkip = true;
+		uint32 m_cutsceneStartCount = 0;
+		uint32 m_cutsceneEndCount = 0;
+		uint32 m_lastCutsceneId = 0;
+		int32 m_lastCutsceneEndReason = -1;
+
 		// Ground zones by id
 		std::map<uint32, BotSpellZone> m_spellZones;
 
@@ -522,6 +529,33 @@ namespace mmo
 			m_heardSounds.clear();
 			m_heardSoundCounts.clear();
 		}
+
+		/// Chooses what happens when the server starts a cutscene for this client. A bot has no screen
+		/// to watch it on, so by default it reports that it plays and skips right away, which frees
+		/// its character again. With false the cutscene is left to the caller (CutsceneBegin,
+		/// CutsceneEnd), which is what scenarios testing cutscenes want.
+		void SetCutsceneAutoSkip(const bool autoSkip) { m_cutsceneAutoSkip = autoSkip; }
+
+		/// How many cutscenes the server started for this client since the connection was established.
+		[[nodiscard]] uint32 GetCutsceneStartCount() const { return m_cutsceneStartCount; }
+
+		/// How many cutscenes the server ended for this client since the connection was established.
+		[[nodiscard]] uint32 GetCutsceneEndCount() const { return m_cutsceneEndCount; }
+
+		/// Id of the cutscene the server started or ended last, or 0.
+		[[nodiscard]] uint32 GetLastCutsceneId() const { return m_lastCutsceneId; }
+
+		/// The cutscene_end_reason of the last CutsceneEnd, or -1 if none arrived yet.
+		[[nodiscard]] int32 GetLastCutsceneEndReason() const { return m_lastCutsceneEndReason; }
+
+		/// Tells the world node that this client started playing the announced cutscene.
+		void CutsceneBegin(uint32 cutsceneId);
+
+		/// Tells the world node that this client stopped playing its cutscene.
+		void CutsceneEnd(uint32 cutsceneId, bool skipped);
+
+		/// GAME MASTER only. Plays a cutscene for the sender.
+		void CheatPlayCutscene(uint32 cutsceneId);
 
 		/// Whether the realm announced the subsystem as available.
 		[[nodiscard]] bool IsSubsystemAvailable(game::Subsystem subsystem) const
@@ -1054,6 +1088,10 @@ namespace mmo
 		PacketParseResult OnPlaySpellVisual(game::IncomingPacket& packet);
 
 		PacketParseResult OnPlaySoundById(game::IncomingPacket& packet);
+
+		PacketParseResult OnCutsceneStart(game::IncomingPacket& packet);
+
+		PacketParseResult OnCutsceneEnd(game::IncomingPacket& packet);
 
 		PacketParseResult OnSubsystemStatus(game::IncomingPacket& packet);
 

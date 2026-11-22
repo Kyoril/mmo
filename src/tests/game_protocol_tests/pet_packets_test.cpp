@@ -257,11 +257,17 @@ TEST_CASE("pet opcodes are appended at the end of the opcode lists", "[pets][pro
 	CHECK(realm_client_packet::PetResult == realm_client_packet::PetNameQueryResult + 1);
 	CHECK(realm_client_packet::GuildMemberPositions == realm_client_packet::PetResult + 1);
 
-	// Later opcodes (version 39: guild member positions, version 42: glide) follow the pet opcodes.
-	CHECK(client_realm_packet::MoveStartGlide == client_realm_packet::GuildMemberPositions + 1);
+	// Later opcodes (version 39: guild member positions, version 42: cutscenes, version 43: glide)
+	// follow the pet opcodes.
+	CHECK(client_realm_packet::CutsceneBegin == client_realm_packet::GuildMemberPositions + 1);
+	CHECK(client_realm_packet::CutsceneEnd == client_realm_packet::CutsceneBegin + 1);
+	CHECK(client_realm_packet::CheatPlayCutscene == client_realm_packet::CutsceneEnd + 1);
+	CHECK(client_realm_packet::MoveStartGlide == client_realm_packet::CheatPlayCutscene + 1);
 	CHECK(client_realm_packet::MoveStopGlide == client_realm_packet::MoveStartGlide + 1);
 	CHECK(client_realm_packet::Count_ == client_realm_packet::MoveStopGlide + 1);
-	CHECK(realm_client_packet::MoveStartGlide == realm_client_packet::GuildMemberPositions + 1);
+	CHECK(realm_client_packet::CutsceneStart == realm_client_packet::GuildMemberPositions + 1);
+	CHECK(realm_client_packet::CutsceneEnd == realm_client_packet::CutsceneStart + 1);
+	CHECK(realm_client_packet::MoveStartGlide == realm_client_packet::CutsceneEnd + 1);
 	CHECK(realm_client_packet::MoveStopGlide == realm_client_packet::MoveStartGlide + 1);
 	CHECK(realm_client_packet::ForceStopGlide == realm_client_packet::MoveStopGlide + 1);
 	CHECK(realm_client_packet::Count_ == realm_client_packet::ForceStopGlide + 1);

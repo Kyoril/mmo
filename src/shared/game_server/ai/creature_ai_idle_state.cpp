@@ -56,6 +56,12 @@ namespace mmo
 					return true;
 				}
 
+				// A player watching a cutscene cannot defend the character: leave it alone
+				if (unit.IsInCutscene())
+				{
+					return true;
+				}
+
 				const float dist = sqrtf(controlled.GetSquaredDistanceTo(unit.GetPosition(), true));
 
 				// TODO: Check if we are hostile against target unit. For now we will only attack player characters
@@ -342,7 +348,7 @@ namespace mmo
 						return true;
 					}
 
-					if (!controlled.UnitIsEnemy(unit) || !unit.CanBeSeenBy(controlled))
+					if (!controlled.UnitIsEnemy(unit) || !unit.CanBeSeenBy(controlled) || unit.IsInCutscene())
 					{
 						return true;
 					}

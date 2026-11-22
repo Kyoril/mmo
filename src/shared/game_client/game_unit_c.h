@@ -353,6 +353,15 @@ namespace mmo
 		/// @brief Returns true while the unit's movement is controlled by the server (e.g. charge).
 		bool IsMovementControlledByServer() const { return m_serverControlledMovement; }
 
+		/// @brief Stops or resumes the movement simulation of this unit (gravity, collision, input).
+		///	A suspended unit stays exactly where it is. Used for the player's own character while a
+		///	cutscene shows another part of the world: the ground under the character is unloaded then,
+		///	and a simulated character would fall through it.
+		void SetMovementSuspended(const bool suspended) { m_movementSuspended = suspended; }
+
+		/// @brief Whether the movement simulation of this unit is suspended (see SetMovementSuspended).
+		bool IsMovementSuspended() const { return m_movementSuspended; }
+
 	public:
 		/// @brief Starts moving the unit forward or backward.
 		void StartMove(bool forward);
@@ -647,6 +656,10 @@ namespace mmo
 		void NotifyAttackStopped();
 
 		bool IsInCombat() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCombat) != 0; }
+
+		/// @brief Returns true while the player behind this unit watches a cutscene: the character
+		///	stands where it is and cannot be harmed.
+		bool IsInCutscene() const { return (Get<uint32>(object_fields::Flags) & unit_flags::InCutscene) != 0; }
 
 		/// @brief Returns true while the unit holds its weapon(s) drawn (combat-ready stance). This
 		///	mirrors the flag that drives the combat-ready animation, so the drawn weapon model and
@@ -1010,6 +1023,9 @@ namespace mmo
 		/// Whether movement is currently controlled by the server (charge effect). While set,
 		/// no movement packets are sent and local movement input is suppressed.
 		bool m_serverControlledMovement = false;
+
+		/// See SetMovementSuspended.
+		bool m_movementSuspended = false;
 		/// When server controlled movement began; used as a failsafe to release control if the
 		/// expected movement path never arrives.
 		GameTime m_serverControlStartTime = 0;

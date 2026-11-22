@@ -648,6 +648,12 @@ namespace mmo
 				continue; // Skip subscribers that cannot see this unit
 			}
 
+			// A client that watches this tile from two points of view (RemoteView) is told once.
+			if (subscriber->IsObjectKnown(added.GetGuid()))
+			{
+				continue;
+			}
+
 			subscriber->NotifyObjectsSpawned(objects, game::spawn_reason::Spawned);
 		}
 	});

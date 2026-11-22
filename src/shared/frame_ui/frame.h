@@ -512,6 +512,15 @@ namespace mmo
 
 		void SetClickable(const bool clickable) { m_clickable = clickable; }
 
+		/// Decides whether this frame, and what it contains, is still drawn while the ui is hidden
+		/// (FrameManager::SetUiHidden): the world viewport and the overlay of a cutscene are, the rest
+		/// of the ui is not. A frame that was never told either way follows its parent.
+		void SetVisibleWhileUiHidden(const bool visible) { m_visibleWhileUiHidden = visible ? 1 : 0; Invalidate(false); }
+
+		/// Whether this frame is drawn while the ui is hidden: the setting of the nearest frame up the
+		/// parent chain (this one included) that has one, false if none has.
+		[[nodiscard]] bool IsVisibleWhileUiHidden() const;
+
 		bool IsClickable() const { return m_clickable; }
 
 		void SetDragEnabled(bool enabled);
@@ -624,6 +633,8 @@ namespace mmo
 
 		void OnMousePassThroughPropertyChanged(const Property& property);
 
+		void OnVisibleWhileUiHiddenPropertyChanged(const Property& property);
+
 		void OnDragEnabledPropertyChanged(const Property& property);
 
 		void OnDropEnabledPropertyChanged(const Property& property);
@@ -728,6 +739,9 @@ namespace mmo
 		int32 m_id = 0;
 
 		float m_opacity{ 1.0f };
+
+		/// See SetVisibleWhileUiHidden: -1 = follows the parent, 0 = hidden with the ui, 1 = stays.
+		int8 m_visibleWhileUiHidden{ -1 };
 
 		Color m_color { Color::White };
 

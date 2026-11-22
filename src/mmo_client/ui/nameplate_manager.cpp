@@ -197,6 +197,9 @@ namespace mmo
 		m_layer = std::make_shared<Frame>("Frame", "NameplateLayer");
 		m_layer->SetClickable(false);
 
+		// The world frame stays visible during a cutscene; the plates in front of it do not
+		m_layer->SetVisibleWhileUiHidden(false);
+
 		// Keep the layer above the chat bubble layer (frame level 0) regardless of which
 		// of the two is created first: hit-testing only descends into the topmost
 		// full-screen sibling, and nameplates must receive clicks while bubbles don't.

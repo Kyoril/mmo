@@ -131,6 +131,10 @@ namespace mmo
 			m_lastSpellVisual.reset();
 			m_heardSounds.clear();
 			m_heardSoundCounts.clear();
+			m_cutsceneStartCount = 0;
+			m_cutsceneEndCount = 0;
+			m_lastCutsceneId = 0;
+			m_lastCutsceneEndReason = -1;
 			m_subsystemStatus.fill(game::subsystem_status::Unavailable);
 			m_lastBugReportResult.clear();
 			m_lastFriendCommandResult = -1;
@@ -148,6 +152,8 @@ namespace mmo
 			RegisterPacketHandler(game::realm_client_packet::KickReason, *this, &BotRealmConnector::OnKickReason);
 			RegisterPacketHandler(game::realm_client_packet::PlaySpellVisual, *this, &BotRealmConnector::OnPlaySpellVisual);
 			RegisterPacketHandler(game::realm_client_packet::PlaySoundById, *this, &BotRealmConnector::OnPlaySoundById);
+			RegisterPacketHandler(game::realm_client_packet::CutsceneStart, *this, &BotRealmConnector::OnCutsceneStart);
+			RegisterPacketHandler(game::realm_client_packet::CutsceneEnd, *this, &BotRealmConnector::OnCutsceneEnd);
 			RegisterPacketHandler(game::realm_client_packet::SubsystemStatus, *this, &BotRealmConnector::OnSubsystemStatus);
 			RegisterPacketHandler(game::realm_client_packet::BugReportResult, *this, &BotRealmConnector::OnBugReportResult);
 			RegisterPacketHandler(game::realm_client_packet::FriendCommandResult, *this, &BotRealmConnector::OnFriendCommandResult);
@@ -794,6 +800,43 @@ namespace mmo
 
 		m_heardSounds[soundId] = sourceGuid;
 		++m_heardSoundCounts[soundId];
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnCutsceneStart(game::IncomingPacket& packet)
+	{
+		uint32 cutsceneId = 0;
+		if (!(packet >> io::read<uint32>(cutsceneId)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		++m_cutsceneStartCount;
+		m_lastCutsceneId = cutsceneId;
+
+		// Nobody watches: play and skip in one go, so the character is not left standing protected
+		// and unable to act until the server gives up on the cutscene.
+		if (m_cutsceneAutoSkip)
+		{
+			CutsceneBegin(cutsceneId);
+			CutsceneEnd(cutsceneId, true);
+		}
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnCutsceneEnd(game::IncomingPacket& packet)
+	{
+		uint32 cutsceneId = 0;
+		uint8 reason = 0;
+		if (!(packet >> io::read<uint32>(cutsceneId) >> io::read<uint8>(reason)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		++m_cutsceneEndCount;
+		m_lastCutsceneId = cutsceneId;
+		m_lastCutsceneEndReason = reason;
 		return PacketParseResult::Pass;
 	}
 
@@ -3303,6 +3346,33 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatPetTame);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CutsceneBegin(const uint32 cutsceneId)
+	{
+		sendSinglePacket([cutsceneId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CutsceneBegin);
+			packet << io::write<uint32>(cutsceneId);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CutsceneEnd(const uint32 cutsceneId, const bool skipped)
+	{
+		sendSinglePacket([cutsceneId, skipped](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CutsceneEnd);
+			packet << io::write<uint32>(cutsceneId) << io::write<uint8>(skipped ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void BotRealmConnector::CheatPlayCutscene(const uint32 cutsceneId)
+	{
+		sendSinglePacket([cutsceneId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPlayCutscene);
+			packet << io::write<uint32>(cutsceneId);
 			packet.Finish();
 			});
 	}

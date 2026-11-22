@@ -140,6 +140,12 @@ namespace mmo
 			m_cameraNode = nullptr;
 		}
 
+		if (m_overrideCameraNode)
+		{
+			m_scene.DestroySceneNode(*m_overrideCameraNode);
+			m_overrideCameraNode = nullptr;
+		}
+
 		if (m_cameraAnchorNode)
 		{
 			m_scene.DestroySceneNode(*m_cameraAnchorNode);
@@ -523,6 +529,12 @@ namespace mmo
 
 	void PlayerController::SetControlBit(const ControlFlags::Type flag, bool set)
 	{
+		// A locked controller only lets go of things
+		if (set && m_inputLocked)
+		{
+			return;
+		}
+
 		if (set)
 		{
 			m_controlFlags |= flag;
@@ -572,7 +584,7 @@ namespace mmo
 
 	void PlayerController::Jump()
 	{
-		if (!m_controlledUnit)
+		if (!m_controlledUnit || m_inputLocked)
 		{
 			return;
 		}
@@ -799,10 +811,111 @@ namespace mmo
 		}
 	}
 
+	void PlayerController::SetCameraOverride(const Vector3& position, const Quaternion& orientation, const float weight, const float fovDegrees)
+	{
+		m_cameraOverrideActive = true;
+		m_cameraOverridePosition = position;
+		m_cameraOverrideOrientation = orientation;
+		m_cameraOverrideWeight = std::clamp(weight, 0.0f, 1.0f);
+		m_cameraOverrideFov = fovDegrees;
+
+		// Right away, not only with the next Update: the world streams in around the camera, also
+		// while the world is not loaded yet and Update does not run.
+		ApplyCameraOverride();
+	}
+
+	void PlayerController::ClearCameraOverride()
+	{
+		if (!m_cameraOverrideActive)
+		{
+			return;
+		}
+
+		m_cameraOverrideActive = false;
+		ApplyCameraOverride();
+	}
+
+	void PlayerController::ApplyCameraOverride()
+	{
+		ASSERT(m_defaultCamera);
+		ASSERT(m_cameraNode);
+		ASSERT(m_overrideCameraNode);
+
+		if (!m_cameraOverrideActive)
+		{
+			if (m_cameraOnOverrideNode)
+			{
+				m_overrideCameraNode->DetachObject(*m_defaultCamera);
+				m_cameraNode->AttachObject(*m_defaultCamera);
+				m_cameraOnOverrideNode = false;
+				m_defaultCamera->SetFOVy(m_defaultFovY);
+				m_defaultCamera->InvalidateView();
+			}
+
+			return;
+		}
+
+		if (!m_cameraOnOverrideNode)
+		{
+			m_defaultFovY = m_defaultCamera->GetFOVy();
+			m_cameraNode->DetachObject(*m_defaultCamera);
+			m_overrideCameraNode->AttachObject(*m_defaultCamera);
+			m_cameraOnOverrideNode = true;
+		}
+
+		// Without a controlled unit the player camera hangs nowhere, and there is nothing to blend with
+		const float weight = m_controlledUnit ? m_cameraOverrideWeight : 1.0f;
+
+		Vector3 position = m_cameraOverridePosition;
+		Quaternion orientation = m_cameraOverrideOrientation;
+		Radian fov = m_cameraOverrideFov > 0.0f ? Radian(Degree(m_cameraOverrideFov)) : m_defaultFovY;
+
+		if (weight < 1.0f)
+		{
+			m_cameraNode->Update(false, true);
+			const Vector3 playerPosition = m_cameraNode->GetDerivedPosition();
+			const Quaternion playerOrientation = m_cameraNode->GetDerivedOrientation();
+
+			position = playerPosition.Lerp(m_cameraOverridePosition, weight);
+			orientation = Quaternion::Slerp(weight, playerOrientation, m_cameraOverrideOrientation, true);
+			fov = Radian(m_defaultFovY.GetValueRadians() + (fov.GetValueRadians() - m_defaultFovY.GetValueRadians()) * weight);
+		}
+
+		m_overrideCameraNode->SetPosition(position);
+		m_overrideCameraNode->SetOrientation(orientation);
+		m_overrideCameraNode->Update(true, true);
+		m_defaultCamera->SetFOVy(fov);
+		m_defaultCamera->InvalidateView();
+	}
+
+	void PlayerController::SetInputLocked(const bool locked)
+	{
+		if (m_inputLocked == locked)
+		{
+			return;
+		}
+
+		if (locked)
+		{
+			// Let go of everything that is held. The cleared flags make the next Update send the
+			// stop of every movement that was going on.
+			SetControlBit(ControlFlags::TurnCamera, false);
+			SetControlBit(ControlFlags::TurnPlayer, false);
+			m_controlFlags = ControlFlags::None;
+			m_leftButtonDown = false;
+			m_rightButtonDown = false;
+			m_swimAscend = false;
+			Platform::ReleaseMouseCapture();
+		}
+
+		m_inputLocked = locked;
+	}
+
 	void PlayerController::Update(const float deltaSeconds)
 	{
 		if (!m_controlledUnit)
 		{
+			ApplyCameraOverride();
 			return;
 		}
 
@@ -810,6 +923,9 @@ namespace mmo
 
 		// Layer combat camera shake on top of the collision-resolved camera position.
 		UpdateCameraShake(deltaSeconds);
+
+		// A cutscene may have taken the camera away
+		ApplyCameraOverride();
 
 		int32 w, h;
 		GraphicsDevice::Get().GetViewport(nullptr, nullptr, &w, &h);
@@ -1014,7 +1130,7 @@ namespace mmo
 		m_x = x;
 		m_y = y;
 
-		if (!m_controlledUnit)
+		if (!m_controlledUnit || m_inputLocked)
 		{
 			return;
 		}
@@ -1047,7 +1163,7 @@ namespace mmo
 		m_x = x;
 		m_y = y;
 
-		if (!m_controlledUnit)
+		if (!m_controlledUnit || m_inputLocked)
 		{
 			return;
 		}
@@ -1290,7 +1406,7 @@ namespace mmo
 
 	void PlayerController::OnMouseWheel(const int32 delta)
 	{
-		if (!m_controlledUnit)
+		if (!m_controlledUnit || m_inputLocked)
 		{
 			return;
 		}
@@ -1352,6 +1468,10 @@ namespace mmo
 		m_cameraOffsetNode = &m_scene.CreateSceneNode("CameraOffset");
 		m_cameraOffsetNode->AddChild(*m_cameraAnchorNode);
 		m_cameraOffsetNode->Yaw(Degree(-90.0f), TransformSpace::Parent);
+
+		// Where the camera sits while a cutscene has taken it away from the player
+		m_overrideCameraNode = m_scene.GetRootSceneNode().CreateChildSceneNode("CameraOverride");
+		m_defaultFovY = m_defaultCamera->GetFOVy();
 
 		NotifyCameraZoomChanged();
 	}

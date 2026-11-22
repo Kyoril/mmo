@@ -1002,8 +1002,8 @@ namespace mmo
 			return 0;
 		}
 
-		// Check if the unit is immune to damage
-		if (Get<uint32>(object_fields::Flags) & unit_flags::Immune)
+		// Check if the unit is immune to damage. A character whose player watches a cutscene is.
+		if (Get<uint32>(object_fields::Flags) & (unit_flags::Immune | unit_flags::InCutscene))
 		{
 			return 0;
 		}

@@ -492,6 +492,12 @@ namespace mmo
 		return Get()->IsAlive();
 	}
 
+	bool UnitHandle::IsInCutscene() const
+	{
+		if (!CheckNonNull()) return false;
+		return Get()->IsInCutscene();
+	}
+
 	bool UnitHandle::IsFriendly() const
 	{
 		if (!CheckNonNull()) return false;

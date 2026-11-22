@@ -5,7 +5,7 @@ Two constants describe what a binary can say on the wire:
 | Constant | Defined in | Current |
 |---|---|---|
 | `mmo::auth::ProtocolVersion` | [auth_protocol.h](../src/shared/auth_protocol/auth_protocol.h) | 13 |
-| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 42 |
+| `mmo::game::ProtocolVersion` | [game_protocol.h](../src/shared/game_protocol/game_protocol.h) | 43 |
 
 When they disagree between two peers, the handshake is refused. When they *agree* but the
 formats do not, nothing is refused — the peers authenticate and then misread each other,
@@ -122,7 +122,8 @@ that are individually forgettable.
 
 | Version | Date | Change |
 |---|---|---|
-| 42 | 2026-11-21 | Traversal: movement flag `Gliding` (bit 22, added to `PositionChanging`; only valid together with `Falling`), client `MoveStartGlide`/`MoveStopGlide` (movement info, proxied to the world node) and their server observer broadcasts, server `ForceStopGlide` (uint64 guid), and player float fields `Vigor` and `MaxVigor` appended after `BankBagSlotCount` |
+| 43 | 2026-11-22 | Traversal: movement flag `Gliding` (bit 22, added to `PositionChanging`; only valid together with `Falling`), client `MoveStartGlide`/`MoveStopGlide` (movement info, proxied to the world node) and their server observer broadcasts, server `ForceStopGlide` (uint64 guid), and player float fields `Vigor` and `MaxVigor` appended after `BankBagSlotCount`. The glide opcodes follow the cutscene opcodes of version 42 |
+| 42 | 2026-11-21 | Cutscenes: server `CutsceneStart` (uint32 cutscene id) and `CutsceneEnd` (uint32 cutscene id, uint8 cutscene_end_reason); client `CutsceneBegin` (uint32 cutscene id), `CutsceneEnd` (uint32 cutscene id, uint8 skipped) and GM `CheatPlayCutscene` (uint32 cutscene id), all proxied to the world node. New `unit_flags::InCutscene` (0x40) in the replicated unit `Flags` field. See [cutscenes.md](cutscenes.md). |
 | 41 | 2026-11-18 | Quest objective areas: `QuestQueryResult`'s `QuestInfo` payload gains a uint8 flag after the quest flags and, when set, the objective area (uint32 map id, float X, float Z, float radius in metres) from the quest's pointmapid/pointx/pointy/pointopt. Clients draw it on the minimap and the world map |
 | 40 | 2026-11-13 | Quest objective text: every objective in `QuestQueryResult`'s `QuestInfo` payload gains a uint8-length string after its entry id and count, carrying the author's own wording for that objective (`QuestRequirement::text`, localized by the realm). Clients show it instead of the generated "<name> slain" / "<name>" wording in the quest log, the tracker and the progress message |
 | 39 | 2026-11-08 | World map member positions: `group_update_flags::Zone` (bit 7) becomes `Map` and carries the member's uint32 map id instead of an always-zero uint16 zone, so `PartyMemberStats` lets clients place far-away party members on their own map. Client `GuildMemberPositions` (no payload, handled by the realm, at most one per second) is answered by server `GuildMemberPositions` (uint16 count, then per member uint64 guid, uint8-length name, float x, float z) listing the online guild mates in the sender's world instance |

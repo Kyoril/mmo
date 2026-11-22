@@ -49,6 +49,10 @@ namespace mmo
 
 			/// Unit cannot be targeted or attacked.
 			NotAttackable = 0x00000020,
+
+			/// The player behind this unit watches a cutscene: the character stands where it is, takes
+			/// no damage and is ignored by creatures until the cutscene is over.
+			InCutscene = 0x00000040,
 		};
 	}
 
