@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "game_unit_s.h"
+#include "vigor_tracker.h"
 #include "game_server/inventory.h"
 #include "game_server/character_data.h"
 #include "game_server/trade_skill_book.h"
@@ -157,9 +158,48 @@ namespace mmo
 	public:
 		GamePlayerS(const proto::Project &project, TimerQueue &timerQueue);
 
-		~GamePlayerS() override = default;
+		~GamePlayerS() override;
 
 		virtual void Initialize() override;
+
+		/// @return The character's Vigor. After changing it directly, call OnVigorTransition.
+		[[nodiscard]] VigorTracker& GetVigor() { return m_vigor; }
+
+		/// @copydoc GetVigor
+		[[nodiscard]] const VigorTracker& GetVigor() const { return m_vigor; }
+
+		/// @param spellId The traversal spell (traversal_spells::Glider or traversal_spells::Dash).
+		/// @return Whether the character knows the spell and has a Vigor pool (MaxVigor > 0). Does
+		///	        not look at the current Vigor: a drain spell cast at 0 Vigor is refused by the
+		///	        cast validation, and glide starts are checked against the current value by the
+		///	        glide validation.
+		[[nodiscard]] bool CanUseTraversal(uint32 spellId) const;
+
+		/// Starts or stops gliding (or changes the updraft state of a glide) and replicates the
+		/// resulting Vigor.
+		/// @param gliding Whether the character glides.
+		/// @param inUpdraft Whether the glide is inside an updraft.
+		void SetVigorGliding(bool gliding, bool inUpdraft);
+
+		/// Ends a glide on the server's side: stops the Vigor drain of the glide and removes the
+		/// Gliding movement flag (teleport, map change, logout). Does nothing if the character does
+		/// not glide.
+		void EndGlide();
+
+	protected:
+		/// Ends a glide before the character is teleported.
+		void OnTeleporting() override;
+
+	public:
+
+		/// Adds or removes a Vigor drain (a DrainVigor aura).
+		/// @param perSecond Vigor drained per second.
+		/// @param apply True to add the drain, false to remove it.
+		void ModifyVigorDrain(int32 perSecond, bool apply);
+
+		/// Replicates the current Vigor and re-arms the timer for running empty or regenerating to
+		/// full. Call after every change made through GetVigor().
+		void OnVigorTransition();
 
 		void SetConfiguration(const AvatarConfiguration &configuration);
 
@@ -759,10 +799,9 @@ namespace mmo
 
 		void OnSpellLearned(const proto::SpellEntry &spell) override;
 
-		void OnSpellUnlearned(const proto::SpellEntry &spell) override
-		{
-			spellUnlearned(*this, spell);
-		}
+		void OnSpellUnlearned(const proto::SpellEntry &spell) override;
+
+		void OnCombatStateChanging(bool inCombat) override;
 
 	protected:
 		void PrepareFieldMap() override
@@ -783,6 +822,19 @@ namespace mmo
 
 		/// Fails all quests in the quest log that have the StayAlive flag set. Called on death.
 		void FailQuestsOnDeath();
+
+		/// @return The maximum Vigor: TraversalSettings::maxVigor if the character knows a traversal
+		///	        spell, otherwise 0.
+		[[nodiscard]] float ComputeMaxVigor() const;
+
+		/// Applies ComputeMaxVigor to the tracker and the MaxVigor field.
+		void UpdateMaxVigor();
+
+		/// Starts over at full Vigor (entering a world).
+		void ResetVigor();
+
+		/// The Vigor timer ended: Vigor ran out or regenerated to full.
+		void OnVigorTimer();
 
 		// === Persistent pets (game_player_s_pets.cpp) ===
 
@@ -920,6 +972,18 @@ namespace mmo
 		scoped_connection m_summonedPetKilled;
 		scoped_connection m_summonedPetDespawned;
 		scoped_connection m_onSpawnedPets;
+
+		/// Vigor, the resource spent by gliding and dashing.
+		VigorTracker m_vigor;
+		/// Ends when Vigor runs out or regenerates to full.
+		Countdown m_vigorCountdown;
+		scoped_connection m_onVigorTimer;
+		scoped_connection m_onSpawnedVigor;
+		/// Sum of the basepoints of all applied DrainVigor auras.
+		int32 m_vigorAuraDrain = 0;
+		/// Set when exhaustion was signalled, cleared once Vigor is above zero again or a new drain
+		/// starts. Keeps the timer from signalling every tick while a glide waits for its stop.
+		bool m_vigorExhaustedSignalled = false;
 
 	private:
 		friend io::Writer &operator<<(io::Writer &w, GamePlayerS const &object);

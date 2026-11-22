@@ -661,6 +661,8 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveSetFacing, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveJump, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStartGlide, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::MoveStopGlide, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnCreatureMove);
 
 		// Spell/state packets
@@ -2338,6 +2340,10 @@ namespace mmo
 			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::NextLevelXp))
 			{
 				unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor) || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			{
+				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor), fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
 			}
 		}
 

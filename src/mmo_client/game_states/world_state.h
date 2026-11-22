@@ -78,6 +78,7 @@ namespace mmo
 namespace mmo
 {
 	class IAudio;
+	class GamePlayerC;
 	class DeferredRenderer;
 	class PostProcessPass;
 }
@@ -214,6 +215,10 @@ namespace mmo
 		/// Raises PLAYER_HEALTH_CHANGED / PLAYER_POWER_CHANGED when the own player's predicted
 		///	(regenerating) health or power reaches another whole point between server syncs.
 		void UpdatePredictedResources();
+
+		/// Advances the own player's Vigor prediction, raises PLAYER_VIGOR_CHANGED (at most 10 times
+		///	per second) and closes the glider when the prediction runs empty.
+		void UpdatePredictedVigor(GamePlayerC& player);
 
 		void OnMoneyChanged(uint64 monitoredGuid);
 

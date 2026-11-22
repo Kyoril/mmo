@@ -21,6 +21,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/placement_bounds.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience_scan.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/class_name_localizer.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/vigor_predictor.cpp
 	# The bot's unit model is self-contained; pet_friendliness_test checks its reaction rules.
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/bot_core/bot_unit.cpp
 )

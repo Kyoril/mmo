@@ -196,6 +196,10 @@ namespace mmo
 			/// so an abandoned follower is found where it belongs and not halfway across a field.
 			PreventAuraApplication = 46,
 
+			/// Drains the owner's Vigor while the aura is on it. Basepoints are Vigor per second.
+			/// When Vigor runs out, every aura of this type is removed (this ends Dash).
+			DrainVigor = 47,
+
 			// Add new aura types HERE (append only — never insert above an existing entry).
 
 			Count_,

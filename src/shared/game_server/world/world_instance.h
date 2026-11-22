@@ -26,6 +26,7 @@
 #include "shared/proto_data/trigger_event_filter.h"
 
 #include "game/movement_ability.h"
+#include "game/traversal.h"
 #include "game_server/deep_water_nav_filter.h"
 #include "nav_mesh/map.h"
 #include "nav_mesh/door_volume.h"
@@ -282,6 +283,10 @@ namespace mmo
 		/// Gets the map id of this world instance.
 		[[nodiscard]] MapId GetMapId() const { return m_mapId; }
 
+		/// Gets the updraft volumes of this map (area triggers with an updraft strength), which lift
+		/// gliders. Built once with the instance.
+		[[nodiscard]] const std::vector<UpdraftVolume>& GetUpdrafts() const { return m_updrafts; }
+
 		Universe& GetUniverse() const { return m_universe; }
 
 		WorldInstanceManager& GetManager() const { return m_manager; }
@@ -520,6 +525,10 @@ namespace mmo
 		/// The map's instance_triggers, resolved once and bucketed by event type so firing an
 		/// instance trigger event is an array index rather than a lookup per trigger.
 		proto::TriggerEventIndex m_instanceTriggers;
+
+		/// Updraft volumes of the map, see GetUpdrafts.
+		std::vector<UpdraftVolume> m_updrafts;
+
 		volatile bool m_updating { false };
 		std::unordered_set<GameObjectS*> m_objectUpdates;
 		std::unordered_set<GameObjectS*> m_queuedObjectUpdates;

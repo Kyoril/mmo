@@ -133,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x0000002A;
+		constexpr uint32 ProtocolVersion = 0x0000002B;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -580,6 +580,14 @@ namespace mmo
 				/// GAME MASTER. Plays a cutscene for the sender. Proxied to the world node.
 				/// Payload: uint32 cutscene id.
 				CheatPlayCutscene, // GAME MASTER
+
+				/// Sent by the client when the local player starts gliding (opens the glider while falling).
+				/// This is the only packet permitted to add the Gliding movement flag.
+				MoveStartGlide,
+
+				/// Sent by the client when the local player stops gliding (closes the glider or lands).
+				/// This is the only packet permitted to remove the Gliding movement flag.
+				MoveStopGlide,
 
 				/// Counter constant
 				Count_,
@@ -1037,6 +1045,15 @@ namespace mmo
 				/// client_realm_packet::CutsceneEnd, or the server ending it on its own.
 				/// Payload: uint32 cutscene id, uint8 cutscene_end_reason.
 				CutsceneEnd,
+
+				/// [PROXY] A unit started gliding.
+				MoveStartGlide,
+
+				/// [PROXY] A unit stopped gliding.
+				MoveStopGlide,
+
+				/// Sent to the client when the server ends its gliding (e.g. out of vigor). Payload: uint64 guid.
+				ForceStopGlide,
 
 				/// Counter constant
 				Count_,

@@ -959,5 +959,8 @@ namespace mmo
 		DismissPersistentPet(true);
 
 		GameUnitS::OnDespawn();
+
+		// Vigor starts over in the next world; no timer for it runs outside one.
+		m_vigorCountdown.Cancel();
 	}
 }

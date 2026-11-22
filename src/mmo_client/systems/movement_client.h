@@ -52,6 +52,9 @@ namespace mmo
 
 		PacketParseResult OnMoveTeleport(game::IncomingPacket &packet);
 
+		/// The server ended the own character's glide: close the glider and send MoveStopGlide.
+		PacketParseResult OnForceStopGlide(game::IncomingPacket &packet);
+
 		PacketParseResult OnMoveRoot(game::IncomingPacket &packet);
 
 		PacketParseResult OnMoveStun(game::IncomingPacket &packet);

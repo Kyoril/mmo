@@ -395,6 +395,16 @@ namespace mmo
 		/// @brief Gets the experience points required for the next level (players only).
 		uint32 GetNextLevelXp() const { return m_nextLevelXp; }
 
+		/// @brief Sets the replicated Vigor and maximum Vigor (the bot's own player only).
+		void SetVigor(float vigor, float maxVigor) { m_vigor = vigor; m_maxVigor = maxVigor; }
+
+		/// @brief Gets the Vigor the server last replicated. It only changes on transitions (an ability
+		///        starting or ending), so a drain in progress is not visible until it ends.
+		float GetVigor() const { return m_vigor; }
+
+		/// @brief Gets the replicated maximum Vigor (0 while no traversal ability is known).
+		float GetMaxVigor() const { return m_maxVigor; }
+
 		/// @brief Sets the active power snapshot.
 		void SetPower(PowerType powerType, uint32 power, uint32 maxPower);
 
@@ -504,6 +514,8 @@ namespace mmo
 		uint32 m_currentCastSpell = 0;
 		GameTime m_currentCastEndMs = 0;
 		uint32 m_nextLevelXp = 0;
+		float m_vigor = 0.0f;
+		float m_maxVigor = 0.0f;
 		uint32 m_maxHealth = 0;
 		PowerType m_powerType = power_type::Invalid_;
 		uint32 m_power = 0;

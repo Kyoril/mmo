@@ -15,6 +15,7 @@
 #include "game/vendor.h"
 #include "game_server/objects/game_object_s.h"
 #include "game_server/objects/game_player_s.h"
+#include "game_server/movement/glide_rules.h"
 #include "game_server/world/tile_index.h"
 #include "game_server/world/tile_subscriber.h"
 #include "game_protocol/game_protocol.h"
@@ -331,6 +332,27 @@ namespace mmo
 		/// otherwise a player who dies while looting stays kneeling in the loot pose after
 		/// reviving, since nothing else clears the Looting unit flag.
 		void OnKilled(GameUnitS* killer);
+
+		/// Ends the character's glide on the server's side and tells the client to close its glider
+		/// (ForceStopGlide). Vigor stops draining at once; the client's MoveStopGlide (or landing)
+		/// clears the Gliding flag. Gliding packets later than glide_rules::StopGraceMs after this are
+		/// violations. The fall from here on is measured from the current height.
+		/// @param reason Why the glide ends, for the log.
+		void ForceStopGlide(const char* reason);
+
+		/// Records an anti-cheat violation and kicks the player once the tracker's threshold is reached.
+		/// @param what What the violation was, for the kick log.
+		/// @return Whether the player was kicked (the packet must then be dropped).
+		bool RecordMovementViolation(const char* what);
+
+		/// Applies the glide part of an accepted movement packet: starts or ends the server-side glide,
+		/// checks the glide's speed and height gain, follows updrafts for the Vigor drain and restarts
+		/// the fall height where a glide ends.
+		/// @param change How the packet changes the Gliding flag (never GlideFlagChange::Invalid).
+		/// @param previous The movement info before the packet.
+		/// @param info The movement info of the packet.
+		/// @return False if the player was kicked (the packet must then be dropped).
+		bool ApplyGlideState(GlideFlagChange change, const MovementInfo& previous, const MovementInfo& info);
 
 		void OnTileChangePending(VisibilityTile& oldTile, VisibilityTile& newTile);
 
@@ -1213,6 +1235,16 @@ namespace mmo
 
 		/// @brief Fall distance in meters at which fall damage becomes lethal (100% of max HP).
 		float m_fallDamageLethalHeight{ 40.0f };
+
+		/// @brief Checks the speed and height gain of the character's glides.
+		GlideMoveValidator m_glideValidator;
+
+		/// @brief The vertical speed of the character's glide, for the fall damage after it.
+		GlideFallModel m_glideFallModel;
+
+		/// @brief When the server last ended the character's glide (ForceStopGlide), or 0 while the
+		/// client has no forced stop to answer. Cleared once the Gliding flag is gone.
+		GameTime m_glideForceStopTime{ 0 };
 
 		scoped_connection_container m_lootSignals;
 		scoped_connection m_onLootSourceDespawned;

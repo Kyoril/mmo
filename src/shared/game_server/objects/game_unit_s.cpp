@@ -897,6 +897,14 @@ namespace mmo
 			return spell_cast_result::FailedNotKnown;
 		}
 
+		// No casting while gliding (spells and item uses alike). Procs and server-authoritative
+		// casts (ignoreKnownSpellCheck: trigger actions such as a portal's teleport) are not the
+		// glider's own action and still go off.
+		if (!isProc && !ignoreKnownSpellCheck && GetMovementInfo().IsGliding())
+		{
+			return spell_cast_result::FailedMoving;
+		}
+
 		SpellCastResult r = m_spellCast->StartCast(spell, target, castTimeMs, isProc, itemGuid);
 
 		// A proc does not occupy the caster and never reports its end through SpellCast::ended, so
@@ -1514,6 +1522,27 @@ namespace mmo
 		}
 	}
 
+	uint32 GameUnitS::RemoveAurasByType(const AuraType type)
+	{
+		// Collected first: removing an aura mutates m_auras.
+		std::vector<std::shared_ptr<AuraContainer>> aurasToRemove;
+		for (const auto& aura : m_auras)
+		{
+			if (aura->IsApplied() && aura->HasEffect(type))
+			{
+				aurasToRemove.push_back(aura);
+			}
+		}
+
+		for (const auto& aura : aurasToRemove)
+		{
+			aura->SetApplied(false);
+			RemoveAura(aura);
+		}
+
+		return static_cast<uint32>(aurasToRemove.size());
+	}
+
 	void GameUnitS::RemoveCastInterruptAuras(const proto::SpellEntry& spell)
 	{
 		// Spells flagged NotBreakCastInterruptAuras (e.g. a Sprint buff) are exempt so they can be
@@ -1813,6 +1842,8 @@ namespace mmo
 
 	void GameUnitS::TeleportOnMap(const Vector3 &position, const Radian &facing)
 	{
+		OnTeleporting();
+
 		// Update position and facing
 		Relocate(position, facing);
 
@@ -1832,6 +1863,7 @@ namespace mmo
 		}
 
 		// Teleport to different map
+		OnTeleporting();
 		if (m_netUnitWatcher)
 		{
 			m_netUnitWatcher->OnTeleport(mapId, position, facing);
@@ -3234,10 +3266,11 @@ namespace mmo
 
 	void GameUnitS::SetInCombat(bool inCombat, bool pvp)
 	{
-		// Health and rage regenerate differently in combat
+		// Health and rage regenerate differently in combat, and Vigor does not regenerate at all
 		if (inCombat != IsInCombat())
 		{
 			SettleRegeneration();
+			OnCombatStateChanging(inCombat);
 		}
 
 		struct RegenRatesUpdate
@@ -3823,6 +3856,13 @@ namespace mmo
 		StopRegeneration();
 
 		Set<uint64>(object_fields::TargetUnit, 0);
+
+		// Dying ends combat without going through SetInCombat, so tell subclasses here: anything
+		// that mirrors the combat state (player Vigor) would otherwise stay "in combat" for good.
+		if (IsInCombat())
+		{
+			OnCombatStateChanging(false);
+		}
 		RemoveFlag<uint32>(object_fields::Flags, unit_flags::InCombat);
 
 		// Temporary pets die with their owner's life.

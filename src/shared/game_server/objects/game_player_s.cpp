@@ -20,6 +20,8 @@
 #include "game/item.h"
 #include "game/spell.h"
 #include "game/talent_rank_gate.h"
+#include "game/aura.h"
+#include "game/traversal.h"
 
 namespace mmo
 {
@@ -38,8 +40,16 @@ namespace mmo
 	}
 
 	GamePlayerS::GamePlayerS(const proto::Project &project, TimerQueue &timerQueue)
-		: GameUnitS(project, timerQueue), m_inventory(*this)
+		: GameUnitS(project, timerQueue), m_inventory(*this), m_vigorCountdown(timerQueue)
 	{
+		m_onVigorTimer = m_vigorCountdown.ended.connect(this, &GamePlayerS::OnVigorTimer);
+
+		// Entering a world (login, map change) starts at full Vigor.
+		m_onSpawnedVigor = spawned.connect([this](WorldInstance&)
+		{
+			ResetVigor();
+		});
+
 		// Auto-reward checks scheduled before the player entered a world (e.g. for quests loaded
 		// as Complete on login) are flushed once the player spawns.
 		m_onSpawnedAutoReward = spawned.connect([this](WorldInstance&)
@@ -82,6 +92,159 @@ namespace mmo
 		}
 
 		Set<uint32>(object_fields::AvailableAttributePoints, 0, false);
+
+		// No Vigor until a traversal spell is known.
+		m_vigor.Reset(GetAsyncTimeMs(), 0.0f);
+		Set<float>(object_fields::Vigor, 0.0f, false);
+		Set<float>(object_fields::MaxVigor, 0.0f, false);
+	}
+
+	GamePlayerS::~GamePlayerS()
+	{
+		// Removing a DrainVigor aura reports to m_vigor. GameUnitS's destructor clears the remaining
+		// auras when this part of the object is already gone, so these go while it still exists.
+		RemoveAurasByType(aura_type::DrainVigor);
+		m_vigorCountdown.Cancel();
+	}
+
+	bool GamePlayerS::CanUseTraversal(const uint32 spellId) const
+	{
+		return m_vigor.GetMax() > 0.0f && HasSpell(spellId);
+	}
+
+	void GamePlayerS::SetVigorGliding(const bool gliding, const bool inUpdraft)
+	{
+		if (gliding && !m_vigor.IsGliding())
+		{
+			m_vigorExhaustedSignalled = false;
+		}
+
+		m_vigor.SetGliding(GetAsyncTimeMs(), gliding, inUpdraft);
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::EndGlide()
+	{
+		m_movementInfo.movementFlags &= ~movement_flags::Gliding;
+
+		if (m_vigor.IsGliding())
+		{
+			SetVigorGliding(false, false);
+		}
+	}
+
+	void GamePlayerS::OnTeleporting()
+	{
+		GameUnitS::OnTeleporting();
+
+		// A teleport ends a glide: the client arrives falling with the glider closed.
+		EndGlide();
+	}
+
+	void GamePlayerS::ModifyVigorDrain(const int32 perSecond, const bool apply)
+	{
+		m_vigorAuraDrain += apply ? perSecond : -perSecond;
+		if (apply)
+		{
+			m_vigorExhaustedSignalled = false;
+		}
+
+		// SetExtraDrain settles at the old drain first.
+		m_vigor.SetExtraDrain(GetAsyncTimeMs(), static_cast<float>(std::max(0, m_vigorAuraDrain)));
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::OnVigorTransition()
+	{
+		const GameTime now = GetAsyncTimeMs();
+		m_vigor.Settle(now);
+
+		if (!m_vigor.IsEmpty(now))
+		{
+			m_vigorExhaustedSignalled = false;
+		}
+
+		// Between transitions the client predicts Vigor itself, so the field only changes here.
+		Set<float>(object_fields::Vigor, m_vigor.GetCurrent(now));
+
+		GameTime next = 0;
+		const GameTime emptyTime = m_vigor.GetEmptyTime(now);
+		if (emptyTime != 0 && !m_vigorExhaustedSignalled)
+		{
+			next = emptyTime;
+		}
+
+		const GameTime fullTime = m_vigor.GetFullTime(now);
+		if (fullTime != 0 && (next == 0 || fullTime < next))
+		{
+			next = fullTime;
+		}
+
+		if (next == 0)
+		{
+			m_vigorCountdown.Cancel();
+		}
+		else
+		{
+			m_vigorCountdown.SetEnd(next);
+		}
+	}
+
+	float GamePlayerS::ComputeMaxVigor() const
+	{
+		const bool knowsTraversal = HasSpell(traversal_spells::Glider) || HasSpell(traversal_spells::Dash);
+		return knowsTraversal ? m_vigor.GetSettings().maxVigor : 0.0f;
+	}
+
+	void GamePlayerS::UpdateMaxVigor()
+	{
+		const float maxVigor = ComputeMaxVigor();
+		m_vigor.SetMax(GetAsyncTimeMs(), maxVigor);
+		Set<float>(object_fields::MaxVigor, maxVigor);
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::ResetVigor()
+	{
+		const GameTime now = GetAsyncTimeMs();
+		m_vigorExhaustedSignalled = false;
+		m_vigor.Reset(now, ComputeMaxVigor());
+		m_vigor.SetInCombat(now, IsInCombat());
+		Set<float>(object_fields::MaxVigor, m_vigor.GetMax());
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::OnVigorTimer()
+	{
+		const GameTime now = GetAsyncTimeMs();
+		m_vigor.Settle(now);
+
+		if (m_vigor.IsDraining() && m_vigor.IsEmpty(now) && !m_vigorExhaustedSignalled)
+		{
+			m_vigorExhaustedSignalled = true;
+
+			// Ends Dash and every other drain aura. A glide is closed by the exhausted listener.
+			RemoveAurasByType(aura_type::DrainVigor);
+			m_vigor.exhausted();
+		}
+
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::OnCombatStateChanging(const bool inCombat)
+	{
+		m_vigor.SetInCombat(GetAsyncTimeMs(), inCombat);
+		OnVigorTransition();
+	}
+
+	void GamePlayerS::OnSpellUnlearned(const proto::SpellEntry& spell)
+	{
+		spellUnlearned(*this, spell);
+
+		if (spell.id() == traversal_spells::Glider || spell.id() == traversal_spells::Dash)
+		{
+			UpdateMaxVigor();
+		}
 	}
 
 	void GamePlayerS::WriteObjectUpdateBlock(io::Writer &writer, bool creation, bool spawned) const
@@ -3076,6 +3239,11 @@ namespace mmo
 		}
 
 		spellLearned(*this, spell);
+
+		if (spell.id() == traversal_spells::Glider || spell.id() == traversal_spells::Dash)
+		{
+			UpdateMaxVigor();
+		}
 	}
 
 	bool GamePlayerS::IsSpellGrantedByActiveClass(const proto::SpellEntry& spell) const
@@ -3619,6 +3787,15 @@ namespace mmo
 	{
 		// Call parent implementation first
 		GameUnitS::ApplyMovementInfo(info);
+
+		// Vigor only regenerates on the ground. Landing (or leaving it) is a transition. Swimming
+		// counts as grounded on purpose: only falling and gliding stop the regeneration.
+		const bool grounded = (info.movementFlags & (movement_flags::Falling | movement_flags::Gliding)) == 0;
+		if (grounded != m_vigor.IsGrounded())
+		{
+			m_vigor.SetGrounded(GetAsyncTimeMs(), grounded);
+			OnVigorTransition();
+		}
 
 		// Height safety check - kill player if they fall below the death threshold
 		constexpr float DeathHeight = -50.0f;
