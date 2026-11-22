@@ -24,6 +24,7 @@
 
 #include "game/bug_report.h"
 #include "realm_subsystem_table.h"
+#include "join_callback_registry.h"
 
 namespace mmo
 {
@@ -42,9 +43,6 @@ namespace mmo
 	class TimeOfDayManager;
 	class PetModule;
 	struct PersistentPetData;
-
-	/// Callback executed after a world join returned a result.
-	typedef std::function<void(InstanceId instanceId, bool success)> JoinWorldCallback;
 
 	/// This class represents a world node connection on the realm server.
 	class World final
@@ -201,8 +199,7 @@ namespace mmo
 		BigNumber m_reconnectProof;
 		BigNumber m_reconnectKey;
 		SHA1Hash m_m2;
-		std::mutex m_joinCallbackMutex;
-		std::map<uint64, JoinWorldCallback> m_joinCallbacks;
+		JoinCallbackRegistry m_joinCallbacks;
 		const proto::Project& m_project;
 		const TimeOfDayManager& m_timeOfDayManager;
 		PetModule& m_petModule;
