@@ -354,6 +354,44 @@ namespace mmo
 		}
 	}
 
+	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
+	///
+	/// The terrain pointer is refreshed every frame rather than captured once, because the world
+	/// instance is torn down and rebuilt on every world change; a captured pointer would dangle
+	/// across a zone transition.
+	///
+	/// Defined before the constructor below on purpose: the constructor's unwind path destroys the
+	/// m_waterQuery member, which instantiates unique_ptr's deleter right there, and that needs the
+	/// complete type (MSVC 14.52 and newer reject it otherwise).
+	class WorldState::TerrainWaterQuery final : public IWaterQuery
+	{
+	public:
+		void SetTerrain(terrain::Terrain* terrain) { m_terrain = terrain; }
+
+		[[nodiscard]] bool HasWaterAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr && m_terrain->HasWaterAtWorldPos(x, z);
+		}
+
+		[[nodiscard]] float GetWaterHeightAt(const float x, const float z) const override
+		{
+			return m_terrain != nullptr ? m_terrain->GetWaterHeightAtWorldPos(x, z) : 0.0f;
+		}
+
+		[[nodiscard]] uint32 GetWaterTypeAt(const float x, const float z) const override
+		{
+			if (m_terrain == nullptr)
+			{
+				return 0u;
+			}
+
+			return static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
+		}
+
+	private:
+		terrain::Terrain* m_terrain{ nullptr };
+	};
+
 	IInputControl *WorldState::s_inputControl = nullptr;
 	WorldState *WorldState::s_luaWorldState = nullptr;
 	PlayerController *WorldState::s_playerController = nullptr;
@@ -1808,42 +1846,8 @@ namespace mmo
 		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
 	}
 
-	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
-	///
-	/// The terrain pointer is refreshed every frame rather than captured once, because the world
-	/// instance is torn down and rebuilt on every world change; a captured pointer would dangle
-	/// across a zone transition.
-	class WorldState::TerrainWaterQuery final : public IWaterQuery
-	{
-	public:
-		void SetTerrain(terrain::Terrain* terrain) { m_terrain = terrain; }
-
-		[[nodiscard]] bool HasWaterAt(const float x, const float z) const override
-		{
-			return m_terrain != nullptr && m_terrain->HasWaterAtWorldPos(x, z);
-		}
-
-		[[nodiscard]] float GetWaterHeightAt(const float x, const float z) const override
-		{
-			return m_terrain != nullptr ? m_terrain->GetWaterHeightAtWorldPos(x, z) : 0.0f;
-		}
-
-		[[nodiscard]] uint32 GetWaterTypeAt(const float x, const float z) const override
-		{
-			if (m_terrain == nullptr)
-			{
-				return 0u;
-			}
-
-			return static_cast<uint32>(m_terrain->GetWaterTypeAtWorldPos(x, z));
-		}
-
-	private:
-		terrain::Terrain* m_terrain{ nullptr };
-	};
-
-	// Defined here rather than in the header so TerrainWaterQuery, declared just above, is a
-	// complete type at the point unique_ptr's deleter is instantiated.
+	// Defined here rather than in the header so TerrainWaterQuery, defined above, is a complete
+	// type at the point unique_ptr's deleter is instantiated.
 	//
 	// OnLeave() normally stops and joins m_backgroundLoader. If this instance is ever destroyed
 	// without an OnLeave first - e.g. left registered in GameStateMgr but not the current state
