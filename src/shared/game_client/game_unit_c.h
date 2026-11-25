@@ -326,6 +326,12 @@ namespace mmo
 		/// @brief Shows, unfolds and folds the glider while the unit glides (see GliderVisual).
 		void UpdateGliderVisual(float deltaTime, bool isDead);
 
+	public:
+		/// @brief Sets how the unit's glider looks (from its equipped glider item), or nothing if it
+		///	has none. A glider shown at the moment is rebuilt with the new look.
+		void SetGliderAttachment(std::optional<GliderAttachment> attachment);
+
+	protected:
 		void OnEntryChanged();
 
 		void OnScaleChanged() const;
@@ -1084,6 +1090,9 @@ namespace mmo
 
 		/// The visible glider while the unit glides or folds it; null otherwise.
 		std::unique_ptr<GliderVisual> m_gliderVisual;
+
+		/// Look of the equipped glider; without one no glider is drawn (sounds still play).
+		std::optional<GliderAttachment> m_gliderAttachment;
 
 		/// When the glider's open/close sounds and wind loop play.
 		GliderSoundCues m_gliderSoundCues;

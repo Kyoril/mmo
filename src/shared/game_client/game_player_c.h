@@ -220,6 +220,9 @@ namespace mmo
 
 		void OnEquipmentChanged(uint64);
 
+		/// Requests the equipped glider's item data; NotifyItemData then sets the glider's look.
+		void OnGliderChanged(uint64);
+
 		void RefreshDisplay();
 
 		void OnGuildChanged(uint64);
@@ -263,6 +266,7 @@ namespace mmo
 		String m_name;
 
 		scoped_connection m_equipmentChangedHandler;
+		scoped_connection m_gliderChangedHandler;
 		scoped_connection m_guildChangedHandler;
 
 		const GuildInfo* m_guild{ nullptr };

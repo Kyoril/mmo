@@ -228,12 +228,20 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetGliderAttachment(std::optional<GliderAttachment> attachment)
+	{
+		m_gliderAttachment = std::move(attachment);
+
+		// The next frame builds the glider with the new look if the unit still glides.
+		m_gliderVisual.reset();
+	}
+
 	void GameUnitC::UpdateGliderVisual(const float deltaTime, const bool isDead)
 	{
 		const bool gliding = IsGliding() && !isDead;
-		if (!m_gliderVisual && gliding && m_entity)
+		if (!m_gliderVisual && gliding && m_entity && m_gliderAttachment)
 		{
-			m_gliderVisual = std::make_unique<GliderVisual>(m_scene, *m_entity, GetGuid());
+			m_gliderVisual = std::make_unique<GliderVisual>(m_scene, *m_entity, GetGuid(), *m_gliderAttachment);
 		}
 
 		glider_event::Type event = glider_event::None;

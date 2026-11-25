@@ -17,14 +17,6 @@ namespace mmo
 {
 	namespace
 	{
-		/// Placement of the glider mesh relative to the attach bone. The mesh has its origin at
-		/// the harness, the span along +-X, forward +Z and up +Y, like the character model; the
-		/// player rigs' Back_M bone is turned -90 degrees about the model's up axis, which this
-		/// orientation undoes. The offset moves the harness from Back_M (a holster bone a hand's
-		/// width behind the back) onto the back. The Glide pose's grips match these values.
-		const Quaternion s_gliderOrientation = Quaternion(0.70710678f, 0.0f, 0.70710678f, 0.0f);
-		const Vector3 s_gliderOffset = Vector3(0.10f, 0.05f, 0.0f);
-
 		/// Wing tips in glider mesh space.
 		const std::array<Vector3, 2> s_wingTips = { Vector3(-1.5f, 0.21f, -0.26f), Vector3(1.5f, 0.21f, -0.26f) };
 
@@ -39,17 +31,18 @@ namespace mmo
 		}
 	}
 
-	GliderVisual::GliderVisual(Scene& scene, Entity& host, const uint64 guid)
+	GliderVisual::GliderVisual(Scene& scene, Entity& host, const uint64 guid, const GliderAttachment& attachment)
 		: m_scene(scene)
 		, m_host(host)
+		, m_attachment(attachment)
 		, m_guid(guid)
 	{
-		if (!m_host.HasSkeleton() || !m_host.GetSkeleton()->HasBone(AttachBone) || !AssetRegistry::HasFile(MeshFile))
+		if (!m_host.HasSkeleton() || !m_host.GetSkeleton()->HasBone(m_attachment.bone) || !AssetRegistry::HasFile(m_attachment.mesh))
 		{
 			return;
 		}
 
-		m_glider = m_scene.CreateEntity(m_host.GetName() + "_Glider", MeshFile);
+		m_glider = m_scene.CreateEntity(m_host.GetName() + "_Glider", m_attachment.mesh);
 		if (!m_glider)
 		{
 			return;
@@ -58,7 +51,7 @@ namespace mmo
 		// The glider never blocks movement or picking.
 		m_glider->SetCollisionEnabled(false);
 		m_glider->SetVisible(false);
-		m_gliderAttachment = m_host.AttachObjectToBone(AttachBone, *m_glider, s_gliderOrientation, s_gliderOffset);
+		m_gliderAttachment = m_host.AttachObjectToBone(m_attachment.bone, *m_glider, m_attachment.rotation, m_attachment.offset);
 
 		for (size_t i = 0; i < m_trails.size(); ++i)
 		{
@@ -66,7 +59,7 @@ namespace mmo
 			if (m_trails[i])
 			{
 				m_trails[i]->Stop();
-				m_host.AttachObjectToBone(AttachBone, *m_trails[i], Quaternion::Identity, s_gliderOffset + s_gliderOrientation * s_wingTips[i]);
+				m_host.AttachObjectToBone(m_attachment.bone, *m_trails[i], Quaternion::Identity, m_attachment.offset + m_attachment.rotation * (s_wingTips[i] * m_attachment.scale));
 			}
 		}
 	}
@@ -104,7 +97,7 @@ namespace mmo
 			m_openBurst = CreateEmitter(OpenParticles, "_GliderOpen");
 			if (m_openBurst)
 			{
-				m_host.AttachObjectToBone(AttachBone, *m_openBurst, Quaternion::Identity, s_gliderOffset);
+				m_host.AttachObjectToBone(m_attachment.bone, *m_openBurst, Quaternion::Identity, m_attachment.offset);
 				m_openBurst->Play();
 			}
 		}
@@ -115,7 +108,7 @@ namespace mmo
 
 		if (m_gliderAttachment)
 		{
-			m_gliderAttachment->SetScale(Vector3(SpanScale(m_fold.GetUnfold()), 1.0f, 1.0f));
+			m_gliderAttachment->SetScale(Vector3(SpanScale(m_fold.GetUnfold()) * m_attachment.scale.x, m_attachment.scale.y, m_attachment.scale.z));
 		}
 
 		// The trails stream only from a fully open glider.

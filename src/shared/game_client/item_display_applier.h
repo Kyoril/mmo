@@ -9,6 +9,10 @@
 
 namespace mmo
 {
+	/// @brief Resolves the mesh file a model data entry renders (the base mesh of customizable
+	///	models). Empty for unknown models. Used to match item display variants to models.
+	String ResolveModelMeshFile(uint32 modelId);
+
 	namespace proto_client
 	{
 		class ItemDisplayEntry;

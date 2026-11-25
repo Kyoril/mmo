@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "glider_display.h"
 #include "glider_fold_state.h"
 
 #include "base/non_copyable.h"
@@ -25,21 +26,18 @@ namespace mmo
 	class GliderVisual final : public NonCopyable
 	{
 	public:
-		/// Mesh of the glider.
-		static constexpr const char* MeshFile = "Models/Gear/Glider/Glider.hmsh";
 		/// Wind trail emitted from both wing tips while the glider is fully open.
 		static constexpr const char* TrailParticles = "Particles/GliderTrail.hpar";
 		/// One-shot burst when the glider opens.
 		static constexpr const char* OpenParticles = "Particles/GliderOpen.hpar";
-		/// Bone the glider is attached to (the back holster bone of the player rigs).
-		static constexpr const char* AttachBone = "Back_M";
 
 	public:
 		/// @brief Creates the glider objects for a host entity (folded and hidden).
 		/// @param scene Scene owning the host entity.
 		/// @param host Unit entity the glider is attached to. Must outlive this object.
 		/// @param guid Guid of the unit, used for unique scene object names.
-		GliderVisual(Scene& scene, Entity& host, uint64 guid);
+		/// @param attachment Mesh and bone attachment of the equipped glider (from its item display).
+		GliderVisual(Scene& scene, Entity& host, uint64 guid, const GliderAttachment& attachment);
 
 		/// @brief Detaches and destroys every scene object this glider created.
 		~GliderVisual();
@@ -65,6 +63,7 @@ namespace mmo
 	private:
 		Scene& m_scene;
 		Entity& m_host;
+		GliderAttachment m_attachment;
 		uint64 m_guid;
 		GliderFoldState m_fold;
 		Entity* m_glider{nullptr};
