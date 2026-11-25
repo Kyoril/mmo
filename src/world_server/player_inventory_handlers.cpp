@@ -351,6 +351,9 @@ namespace mmo
 		case inventory_type::Tabard:
 			targetSlot = player_equipment_slots::Tabard;
 			break;
+		case inventory_type::Glider:
+			targetSlot = player_glider_slots::Slot;
+			break;
 		case inventory_type::Hands:
 			targetSlot = player_equipment_slots::Hands;
 			break;

@@ -64,6 +64,8 @@ namespace mmo
 			RangedRight,
 			Quiver,
 			Relic,
+			/// Worn in the glider slot (player_glider_slots::Slot); lets the wearer glide.
+			Glider,
 
 			Count_
 		};
@@ -299,6 +301,23 @@ namespace mmo
 	}
 
 	typedef player_buy_back_slots::Enum PlayerBuyBackSlots;
+
+	/// The glider slot: an equipment slot of bag 255 that follows the buyback range instead of
+	/// the other equipment slots, so adding it moved no existing slot (bags, pack, bank and buyback
+	/// keep their numbers, and so do the inventory rows in the realm database).
+	namespace player_glider_slots
+	{
+		enum Enum
+		{
+			Slot = player_buy_back_slots::End
+		};
+	}
+
+	/// Whether a slot of bag 255 is the glider slot.
+	constexpr bool IsGliderSlot(const uint8 subslot)
+	{
+		return subslot == player_glider_slots::Slot;
+	}
 
 	namespace item_binding
 	{

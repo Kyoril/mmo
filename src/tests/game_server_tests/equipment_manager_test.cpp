@@ -891,3 +891,39 @@ TEST_CASE("EquipmentManager - Remove equipment effects", "[equipment_manager]")
 		REQUIRE_FALSE(context.WasItemSetEquipped());
 	}
 }
+
+TEST_CASE("EquipmentManager - glider slot accepts only gliders", "[equipment_manager][glider_slot]")
+{
+	MockEquipmentManagerContext context;
+	context.SetProject(&GetTestProject());
+	EquipmentManager manager(context);
+
+	const auto gliderSlot = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_glider_slots::Slot);
+	const auto glider = ItemEntryBuilder().WithInventoryType(inventory_type::Glider).Build();
+
+	SECTION("a glider fits the glider slot")
+	{
+		CHECK(manager.ValidateEquipment(glider, gliderSlot).IsSuccess());
+	}
+
+	SECTION("a glider does not fit the head slot")
+	{
+		const auto head = InventorySlot::FromRelative(player_inventory_slots::Bag_0, player_equipment_slots::Head);
+		CHECK(manager.ValidateEquipment(glider, head).IsFailure());
+	}
+
+	SECTION("a weapon does not fit the glider slot")
+	{
+		const auto axe = ItemEntryBuilder()
+			.WithClass(mock_item_class::Weapon)
+			.WithInventoryType(inventory_type::Weapon)
+			.Build();
+		CHECK(manager.ValidateEquipment(axe, gliderSlot).IsFailure());
+	}
+
+	SECTION("head armor does not fit the glider slot")
+	{
+		const auto head = ItemEntryBuilder().WithInventoryType(inventory_type::Head).Build();
+		CHECK(manager.ValidateEquipment(head, gliderSlot).IsFailure());
+	}
+}
