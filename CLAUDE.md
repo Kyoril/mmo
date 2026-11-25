@@ -23,6 +23,7 @@ The following systems are fully implemented and should not be suggested as futur
 - **Unit stat system** — creatures use stat formulas instead of hardcoded values
 - **Asset browser** — visual thumbnails, text search, drag & drop from browser into viewport
 - **World map** — OpenMap-style continuous zoomable map (baked art pyramid crossfading into minimap tiles, zone labels/hover), party and guild members on world map and minimap (edge-clamped when out of range); see [docs/world-map.md](docs/world-map.md)
+- **Cutscenes** — camera flights through the world as data (shots, keyframes, sounds, subtitles), intro on a new character's first world entry, `PlayCutscene` trigger action, server point of view that follows the camera; see [docs/cutscenes.md](docs/cutscenes.md)
 - **Pet system** — temporary swarms and persistent (stored, nameable, class-locked) pets, taming, pet AI, pet frame/bar, GM pet commands; authoring guide in [docs/pets.md](docs/pets.md)
 
 ## Agentic Workflow

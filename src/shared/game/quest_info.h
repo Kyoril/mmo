@@ -67,6 +67,13 @@ namespace mmo
 		/// Quest flags bitmask (see quest_flags in game/quest.h). Lets the client render special
 		/// quests (e.g. quest_flags::ClassUnlock feature-unlock chains) distinctly.
 		uint32 flags = 0;
+		/// Objective area for the minimap and world map (QuestEntry pointmapid/pointx/pointy/pointopt).
+		/// hasObjectiveArea is false for quests without one; the centre is in world X/Z, the radius in metres.
+		bool hasObjectiveArea = false;
+		uint32 objectiveAreaMapId = 0;
+		float objectiveAreaX = 0.0f;
+		float objectiveAreaZ = 0.0f;
+		float objectiveAreaRadius = 0.0f;
 		std::vector<QuestRequiredItem> requiredItems;
 		std::vector<QuestRequiredCreature> requiredCreatures;
 		/// World objects that have to be used (or hit with a quest spell) for this quest.

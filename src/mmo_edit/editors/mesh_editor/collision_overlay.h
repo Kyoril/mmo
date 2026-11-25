@@ -29,6 +29,16 @@ namespace mmo
 		int32 selectedShape { -1 };
 		/// @brief Whether to draw triangle edges.
 		bool wireframe { true };
+		/// @brief Material of the translucent faces. The default draws on top of everything (editor gizmo
+		///        style); a depth-tested material shows only the collision that is actually in view.
+		String faceMaterial { "Models/Engine/AxisPlaneHighlight.hmat" };
+		/// @brief Whether faceMaterial reads vertex colours as ABGR (Recast/Detour debug drawing) instead of ARGB.
+		bool abgrColors { false };
+		/// @brief Whether faces are darkened by their orientation, so adjacent boxes stay distinguishable without edges.
+		bool shadeByNormal { false };
+		/// @brief Distance each face is drawn off its plane (both sides), so depth-tested faces lying on render
+		///        geometry stay visible. 0 draws faces in place.
+		float surfaceOffset { 0.0f };
 	};
 
 	/// @brief Semi-transparent collision visualisation coloured by walkability and origin.

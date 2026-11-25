@@ -75,6 +75,7 @@
 #include "editor_windows/sound_editor_window.h"
 #include "editor_windows/surface_type_editor_window.h"
 #include "editor_windows/loading_tip_editor_window.h"
+#include "editor_windows/cutscene_editor_window.h"
 #include "editor_windows/gossip_editor_window.h"
 #include "editor_windows/item_display_editor_window.h"
 #include "editor_windows/object_display_editor_window.h"
@@ -403,6 +404,7 @@ int main(int argc, char* arg[])
 	mainWindow.AddEditorWindow(std::make_unique<mmo::WaterProfileEditorWindow>("Water Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::EnvironmentProfileEditorWindow>("Environment Profile Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::LoadingTipEditorWindow>("Loading Tip Editor", project, mainWindow));
+	mainWindow.AddEditorWindow(std::make_unique<mmo::CutsceneEditorWindow>("Cutscene Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::GossipEditorWindow>("Gossip Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::ConditionEditorWindow>("Condition Editor", project, mainWindow));
 	mainWindow.AddEditorWindow(std::make_unique<mmo::VariableEditorWindow>("Variable Editor", project, mainWindow));
@@ -972,7 +974,9 @@ int main(int argc, char* arg[])
 			{
 				// mmo_edit --capture-view <world.hwld> --view <x,y,z,yaw,pitch[,fov[,time]]> --out <file.png>
 				//          [--view ... --out ...] [--size <w>x<h>] [--grass] [--fog] [--prepass] [--far-radius <pages>] [--warmup <frames>]
+				//          [--collision <radius>]
 				// Renders each viewpoint of the world into a PNG, for comparing a zone against concept art.
+				// --collision draws the collision within <radius> m of the camera as a translucent overlay.
 				static std::ofstream captureLog("capture_view.log", std::ios::out | std::ios::trunc);
 				static std::mutex captureLogMutex;
 				mmo::g_DefaultLog.signal().connect([](const mmo::LogEntry& entry)
@@ -1002,6 +1006,7 @@ int main(int argc, char* arg[])
 				bool grass = false;
 				bool fog = false;
 				bool prepass = false;
+				float collisionRadius = 0.0f;
 				bool argumentsValid = true;
 				for (int j = i + 2; j < argCount; ++j)
 				{
@@ -1051,6 +1056,10 @@ int main(int argc, char* arg[])
 					{
 						prepass = true;
 					}
+					else if (arg == "--collision" && hasValue)
+					{
+						collisionRadius = static_cast<float>(std::atof(args[++j]));
+					}
 				}
 
 				if (argumentsValid && (views.empty() || views.size() != outputs.size()))
@@ -1063,6 +1072,7 @@ int main(int argc, char* arg[])
 				if (argumentsValid && mainWindow.OpenAsset(args[i + 1]) && mmo::WorldEditorInstance::GetLastCreated())
 				{
 					auto* world = mmo::WorldEditorInstance::GetLastCreated();
+					world->SetCaptureCollisionRadius(collisionRadius);
 					if (farRadius >= 0)
 					{
 						world->SetFarTerrainRadius(static_cast<uint32>(farRadius));

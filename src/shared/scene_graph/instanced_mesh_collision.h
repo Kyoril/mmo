@@ -62,6 +62,13 @@ namespace mmo
 		/// @brief Gets the number of collidable instances.
 		[[nodiscard]] size_t GetInstanceCount() const { return m_instances.size(); }
 
+		/// @brief Gets the local-to-world transform of an instance.
+		/// @param index Instance index, below GetInstanceCount().
+		[[nodiscard]] const Matrix4& GetInstanceTransform(const size_t index) const { return m_instances[index].worldTransform; }
+
+		/// @brief Gets the mesh whose collision tree all instances share.
+		[[nodiscard]] const MeshPtr& GetMesh() const { return m_mesh; }
+
 		// MovableObject -----------------------------------------------------------------------
 		[[nodiscard]] const String& GetMovableType() const override;
 		[[nodiscard]] const AABB& GetBoundingBox() const override { return m_bounds; }

@@ -40,6 +40,7 @@
 #include "client_data/project.h"
 #include "frame_ui/frame.h"
 #include "game/auto_attack.h"
+#include "game/cutscene.h"
 #include "game/spell.h"
 #include "paging/loaded_page_section.h"
 #include "paging/page_loader_listener.h"
@@ -112,6 +113,7 @@ namespace mmo
 	class Discord;
 	class InventoryClient;
 	class CooldownManager;
+	class CutscenePlayer;
 	class MaterialInterface;
 
 	/// This class represents the initial game state where the player is asked to enter
@@ -182,8 +184,17 @@ namespace mmo
 
 		void ReloadUI();
 
-		/// Registers WorldState-specific Lua globals (called from ReloadUI so they survive UI reload).
+		/// Registers WorldState-specific Lua globals. Called from every ReloadUI, but the functions
+		/// are only registered once per Lua state: they reach the current world state through
+		/// s_luaWorldState, which this call refreshes.
 		void RegisterWorldLuaFunctions();
+
+		/// Sends a party ping for whatever is under the mouse cursor: the hovered unit, else the
+		/// point of the world under it, else the player's own position.
+		void SendPingFromCursor();
+
+		/// The world state the Lua functions of RegisterWorldLuaFunctions act on, or nullptr.
+		static WorldState* s_luaWorldState;
 
 		void OnTargetSelectionChanged(uint64 monitoredGuid);
 
@@ -344,6 +355,49 @@ namespace mmo
 		void ToggleWireframe() const;
 
 		void WaitForWorldLoading();
+
+		/// Loads the terrain pages and world entities around a position synchronously, presenting the
+		/// loading screen while it does. The loading screen has to be shown by the caller.
+		void LoadWorldAround(const Vector3& position);
+
+	public:
+		/// Whether a cutscene plays or waits to begin.
+		[[nodiscard]] bool IsCutsceneActive() const;
+
+	private:
+		/// Whether the world is loaded around a position, judged from where the camera is.
+		[[nodiscard]] bool IsWorldLoadedAround(const Vector3& position) const;
+
+		/// Whether the terrain page under a position is loaded. True for a world without terrain.
+		[[nodiscard]] bool IsTerrainLoadedAt(const Vector3& position) const;
+
+		/// Per frame: begins a pending cutscene once the world is ready, advances the playing one and
+		/// puts the camera where it says.
+		void UpdateCutscene(float deltaSeconds);
+
+		/// Loads the world at the start of the pending cutscene if that is elsewhere, then plays it.
+		void BeginPendingCutscene();
+
+		/// Hands the camera of the playing cutscene to the player controller.
+		void ApplyCutsceneView();
+
+		/// The cutscene player started a cutscene: takes input and ui away from the player.
+		void OnCutsceneStarted(const proto_client::CutsceneEntry& cutscene);
+
+		/// The cutscene player finished a cutscene: gives everything back.
+		void OnCutsceneEnded(const proto_client::CutsceneEntry& cutscene, cutscene_end_reason::Type reason);
+
+		/// Gives camera, input, ui and zone music back to the player.
+		void RestoreAfterCutscene();
+
+		/// Drops a pending or playing cutscene without a word to the server: the world is left.
+		void AbortCutscene();
+
+		PacketParseResult OnCutsceneStart(game::IncomingPacket& packet);
+
+		PacketParseResult OnCutsceneEnd(game::IncomingPacket& packet);
+
+		void Command_Cutscene(const std::string& cmd, const std::string& args) const;
 
 	private:
 		// Network packet handlers
@@ -878,6 +932,19 @@ namespace mmo
 		TradeClient &m_tradeClient;
 
 		bool m_worldLoaded = false;
+
+		/// Plays the cutscenes the server announces. Lives as long as the world scene.
+		std::unique_ptr<CutscenePlayer> m_cutscenePlayer;
+		scoped_connection_container m_cutsceneConnections;
+
+		/// Shot of the playing cutscene that was shown last, to notice cuts.
+		int32 m_cutsceneShot = 0;
+
+		/// Whether the zone music is replaced by the music of the playing cutscene.
+		bool m_cutsceneMusic = false;
+
+		/// Whether the loading screen of the world is kept up for a cutscene that is about to begin.
+		bool m_cutsceneHoldsLoadingScreen = false;
 
 		/// Active pings received from the server, ticked down each frame.
 		std::vector<Minimap::PingDot> m_activePings;

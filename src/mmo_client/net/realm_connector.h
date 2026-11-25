@@ -644,6 +644,16 @@ namespace mmo
 
 		void SendTimePlayedRequest();
 
+		/// Tells the world node that this client started playing the announced cutscene.
+		void SendCutsceneBegin(uint32 cutsceneId);
+
+		/// Tells the world node that this client stopped playing its cutscene.
+		/// @param skipped true if the player skipped it, false if it played to its end.
+		void SendCutsceneEnd(uint32 cutsceneId, bool skipped);
+
+		/// FROM CONSOLE COMMAND: GAME MASTER only. Plays a cutscene for the controlled player.
+		void PlayCutscene(uint32 cutsceneId);
+
 		void SendTimeSyncResponse(uint32 syncIndex, GameTime clientTimestamp);
 
 		/// Sends a packet to the server notifying it that the player has entered an area trigger.

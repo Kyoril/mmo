@@ -821,9 +821,60 @@ namespace mmo
 
 	void FrameManager::Update(float elapsedSeconds)
 	{
+		// The ui replaces frames underneath a resting cursor (the inventory rebuilds its slot
+		// buttons whenever the equipment changes, for example), so the hovered frame has to be
+		// resolved anew every frame and not only when the cursor moved. Otherwise the destroyed
+		// frame stays hovered: it never gets its leave event, and the frame which took its place
+		// never gets its enter event, leaving e.g. the previous item's tooltip on screen.
+		UpdateHoveredFrame();
+
 		if (m_topFrame)
 		{
 			m_topFrame->Update(elapsedSeconds);
+		}
+	}
+
+	void FrameManager::UpdateHoveredFrame()
+	{
+		// Before the first cursor movement the cursor position is simply unknown, and resolving
+		// hover for the default position would enter whatever sits in the top left corner.
+		if (m_topFrame == nullptr || !m_mousePosKnown)
+		{
+			return;
+		}
+
+		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
+		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
+		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
+		FramePtr hoverFrame = m_uiHidden ? nullptr : m_topFrame->GetChildFrameAt(m_mousePos, FrameHitTest::Hover);
+		if (hoverFrame == m_hoverFrame)
+		{
+			return;
+		}
+
+		auto prevFrame = m_hoverFrame;
+		m_hoverFrame = std::move(hoverFrame);
+
+		if (prevFrame)
+		{
+			prevFrame->OnMouseLeave();
+		}
+
+		if (m_hoverFrame)
+		{
+			m_hoverFrame->OnMouseEnter();
+		}
+
+		// Invalidate the old hover frame if there was any
+		if (prevFrame)
+		{
+			prevFrame->Invalidate(false);
+		}
+
+		// Invalidate the new hover frame if there is any
+		if (m_hoverFrame)
+		{
+			m_hoverFrame->Invalidate(false);
 		}
 	}
 
@@ -840,6 +891,7 @@ namespace mmo
 
 		const Point delta = position - m_mousePos;
 		m_mousePos = position;
+		m_mousePosKnown = true;
 
 		// Notify every frame that currently has a mouse button held down, even when the cursor has moved
 		// off it. This lets a frame implement click-drag interactions (e.g. canvas panning) with any
@@ -854,11 +906,6 @@ namespace mmo
 
 		// Find the deepest enabled frame for the given point. It receives the mouse moved events.
 		const FramePtr enabledFrame = m_topFrame->GetChildFrameAt(position, false);
-
-		// Hover tracking (enter / leave, tooltips, IsHovered) also includes disabled frames that are
-		// clickable, so that e.g. a locked button can still show a tooltip explaining why it is locked.
-		// Disabled, non-clickable frames stay transparent so hover lands on their parent (nameplates).
-		FramePtr hoverFrame = m_topFrame->GetChildFrameAt(position, FrameHitTest::Hover);
 
 		// Trigger mouse moved events, skipping any frame already notified above as a pressed frame.
 		Frame* frame = enabledFrame.get();
@@ -881,33 +928,7 @@ namespace mmo
 			frame = frame->GetParent();
 		}
 
-		if (hoverFrame != m_hoverFrame)
-		{
-			auto prevFrame = m_hoverFrame;
-			m_hoverFrame = std::move(hoverFrame);
-
-			if (prevFrame)
-			{
-				prevFrame->OnMouseLeave();
-			}
-
-			if (m_hoverFrame)
-			{
-				m_hoverFrame->OnMouseEnter();
-			}
-
-			// Invalidate the old hover frame if there was any
-			if (prevFrame)
-			{
-				prevFrame->Invalidate(false);
-			}
-
-			// Invalidate the new hover frame if there is any
-			if (m_hoverFrame)
-			{
-				m_hoverFrame->Invalidate(false);
-			}
-		}
+		UpdateHoveredFrame();
 	}
 
 	bool FrameManager::NotifyMouseDown(MouseButton button, const Point & position)
@@ -917,6 +938,12 @@ namespace mmo
 		// Every press decides anew whether the ui owns this button, so a release which never
 		// arrived (e.g. because the window lost focus) can not swallow a later world click.
 		m_consumedPressButtons &= ~static_cast<int32>(button);
+
+		// A hidden ui cannot be clicked
+		if (m_uiHidden)
+		{
+			return false;
+		}
 
 		if (const auto activeCombo = m_activeComboBox.lock())
 		{
@@ -1004,6 +1031,11 @@ namespace mmo
 		const bool pressConsumed = (m_consumedPressButtons & static_cast<int32>(button)) != 0;
 		m_consumedPressButtons &= ~static_cast<int32>(button);
 
+		if (m_uiHidden)
+		{
+			return false;
+		}
+
 		// For mouse button up, we want to notify the same frame that received the corresponding
 		// MouseDown event, even if the new position doesn't hit the old frame. This is done so
 		// that the old frame can correctly update it's state.
@@ -1035,6 +1067,11 @@ namespace mmo
 
 	bool FrameManager::NotifyMouseWheel(const int32 delta)
 	{
+		if (m_uiHidden)
+		{
+			return false;
+		}
+
 		// Route the wheel to an open combo box popup if the cursor is hovering over it.
 		if (const auto activeCombo = m_activeComboBox.lock())
 		{
@@ -1075,7 +1112,7 @@ namespace mmo
 		m_pressedKeys.insert(key);
 
 		// We need an active input capture to handle key down events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1087,7 +1124,7 @@ namespace mmo
 	void FrameManager::NotifyKeyChar(uint16 codepoint)
 	{
 		// We need an active input capture to handle key up events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1101,7 +1138,7 @@ namespace mmo
 		m_pressedKeys.erase(key);
 
 		// We need an active input capture to handle key up events
-		if (!m_inputCapture)
+		if (!m_inputCapture || m_uiHidden)
 		{
 			return;
 		}
@@ -1142,6 +1179,25 @@ namespace mmo
 		{
 			m_activeComboBox.reset();
 		}
+	}
+
+	void FrameManager::SetUiHidden(const bool hidden)
+	{
+		if (m_uiHidden == hidden)
+		{
+			return;
+		}
+
+		m_uiHidden = hidden;
+
+		if (hidden)
+		{
+			// A text field that was being typed into must not keep swallowing the keyboard
+			SetCaptureWindow(nullptr);
+		}
+
+		// Leaves the hovered frame when hiding, finds the one under the cursor again when showing
+		UpdateHoveredFrame();
 	}
 
 	void FrameManager::SetCaptureWindow(FramePtr capture)

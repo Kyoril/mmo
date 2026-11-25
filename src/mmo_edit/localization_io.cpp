@@ -209,6 +209,17 @@ namespace mmo
 			ExportField(entries, "loading_tip", e.id(), 0, "text", e.text(), e.text_loc());
 		}
 
+		// Cutscene subtitles. A line has no id of its own, so its position in the cutscene is the sub id.
+		const auto& cutscenes = project.cutscenes.getTemplates();
+		for (int i = 0; i < cutscenes.entry_size(); ++i)
+		{
+			const auto& e = cutscenes.entry(i);
+			for (int t = 0; t < e.texts_size(); ++t)
+			{
+				ExportField(entries, "cutscene_text", e.id(), static_cast<uint32>(t), "text", e.texts(t).text(), e.texts(t).text_loc());
+			}
+		}
+
 		// Emotes (chat line templates)
 		const auto& emotes = project.emotes.getTemplates();
 		for (int i = 0; i < emotes.entry_size(); ++i)
@@ -429,6 +440,16 @@ namespace mmo
 				if (auto* e = project.loadingTips.getById(id))
 				{
 					if (field == "text") { loc = e->mutable_text_loc(); }
+				}
+			}
+			else if (type == "cutscene_text")
+			{
+				if (auto* e = project.cutscenes.getById(id))
+				{
+					if (static_cast<int>(sub) < e->texts_size())
+					{
+						if (field == "text") { loc = e->mutable_texts(static_cast<int>(sub))->mutable_text_loc(); }
+					}
 				}
 			}
 			else if (type == "emote")

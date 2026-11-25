@@ -993,6 +993,7 @@ namespace mmo
 			"water_profiles",
 			"environment_profiles",
 			"loading_tips",
+			"cutscenes",
 		};
 
 		const fs::path srcDir = m_config.projectPath;

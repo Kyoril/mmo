@@ -133,7 +133,7 @@ namespace mmo
 		///
 		/// After bumping: python tools/protocol_version_check.py --update
 		/// See docs/protocol_versions.md for what each version changed.
-		constexpr uint32 ProtocolVersion = 0x00000028;
+		constexpr uint32 ProtocolVersion = 0x0000002A;
 
 		/// Largest payload, in bytes, that a single incoming game packet may announce.
 		/// See mmo::auth::MaxIncomingPacketSize — same reasoning, same value.
@@ -565,6 +565,21 @@ namespace mmo
 				/// instance. Handled by the realm, answered with realm_client_packet::GuildMemberPositions.
 				/// Requests closer together than one second are dropped. No payload.
 				GuildMemberPositions,
+
+				/// The sender's client has the world around the camera loaded and starts playing the
+				/// cutscene announced by realm_client_packet::CutsceneStart. The world node starts moving
+				/// the sender's point of view along the camera path from this moment. Proxied to the
+				/// world node. Payload: uint32 cutscene id.
+				CutsceneBegin,
+
+				/// The sender's client stopped playing its cutscene: it reached the end, or the player
+				/// skipped it. A skip is only honoured for a skippable cutscene. Proxied to the world
+				/// node. Payload: uint32 cutscene id, uint8 skipped (0 or 1).
+				CutsceneEnd,
+
+				/// GAME MASTER. Plays a cutscene for the sender. Proxied to the world node.
+				/// Payload: uint32 cutscene id.
+				CheatPlayCutscene, // GAME MASTER
 
 				/// Counter constant
 				Count_,
@@ -1013,6 +1028,15 @@ namespace mmo
 				/// in the receiver's world instance at their last positions reported by the world node.
 				/// Payload: uint16 count, then per member uint64 guid, uint8-length name, float x, float z.
 				GuildMemberPositions,
+
+				/// The receiver's character enters a cutscene. The client plays it once its world is
+				/// loaded and answers with client_realm_packet::CutsceneBegin. Payload: uint32 cutscene id.
+				CutsceneStart,
+
+				/// The receiver's cutscene is over on the server: the answer to
+				/// client_realm_packet::CutsceneEnd, or the server ending it on its own.
+				/// Payload: uint32 cutscene id, uint8 cutscene_end_reason.
+				CutsceneEnd,
 
 				/// Counter constant
 				Count_,

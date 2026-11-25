@@ -197,6 +197,15 @@ namespace mmo
 		/// Sets the frame that is currently capturing the input.
 		void SetCaptureWindow(FramePtr capture);
 
+		/// Hides or restores the whole ui without touching the visibility of any frame, for a
+		/// cutscene. While hidden, only frames that are VisibleWhileUiHidden (see
+		/// Frame::SetVisibleWhileUiHidden) are drawn, and no frame receives mouse or keyboard input
+		/// or is hovered. Whatever was open is back exactly as it was once the ui is shown again.
+		void SetUiHidden(bool hidden);
+
+		/// Whether the ui is hidden, see SetUiHidden.
+		[[nodiscard]] bool IsUiHidden() const { return m_uiHidden; }
+
 		/// Called by ComboBox::Open() to register itself as the currently active combo.
 		/// FrameManager will intercept the next mouse-down outside the combo/popup and dismiss it.
 		void SetActiveComboBox(std::shared_ptr<ComboBox> combo);
@@ -241,6 +250,12 @@ namespace mmo
 		const Localization& GetLocalization() const { return m_localization; }
 
 	private:
+		/// Resolves which frame the cursor rests on right now and delivers the enter / leave
+		/// events if that changed. Called after the cursor moved and once per frame, because the
+		/// ui may replace the frame underneath a resting cursor.
+		void UpdateHoveredFrame();
+
+	private:
 		/// A map of mouse-down frames.
 		std::map<MouseButton, FramePtr> m_mouseDownFrames;
 
@@ -266,6 +281,9 @@ namespace mmo
 		/// The frame that is currently capturing input events.
 		FramePtr m_inputCapture;
 
+		/// See SetUiHidden.
+		bool m_uiHidden = false;
+
 		/// A map of font infos, keyed by a unique name. This is useful to make
 		/// setting fonts in xml easier.
 		std::map<std::string, FontMap, StrCaseIComp> m_fontMaps;
@@ -278,6 +296,9 @@ namespace mmo
 		Point m_uiScale { 1.0f, 1.0f };
 
 		Point m_mousePos;
+
+		/// Whether the cursor position above is one the window reported, and not just the default.
+		bool m_mousePosKnown = false;
 
 		TexturePtr m_cursorIconTexture;
 

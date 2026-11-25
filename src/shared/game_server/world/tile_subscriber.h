@@ -6,6 +6,8 @@
 
 #include "base/localization.h"
 
+#include "tile_index.h"
+
 namespace mmo
 {
 	class GameUnitS;
@@ -60,5 +62,15 @@ namespace mmo
 		/// Returns true if the given object is known to the client but currently hidden
 		/// from it (stealth). Hidden objects must not receive movement or field updates.
 		virtual bool IsObjectHiddenForClient(uint64 guid) const { return false; }
+
+		/// Returns false if this subscriber must be left out of a broadcast that starts at the given
+		/// tile. A RemoteView says no for every tile its owner sees from its own tile already, so a
+		/// client with two points of view is told about each event exactly once.
+		virtual bool AcceptsBroadcastFrom(const TileIndex2D& sourceTile) const { return true; }
+
+		/// Returns true if this subscriber is a second point of view of another subscriber (see
+		/// RemoteView) rather than a client of its own. Broadcasts that collect every subscriber of a
+		/// map skip these.
+		virtual bool IsRemoteView() const { return false; }
 	};
 }

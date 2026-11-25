@@ -943,6 +943,7 @@ namespace mmo
 		case game::client_realm_packet::CheatPetRemove:
 		case game::client_realm_packet::CheatPetTame:
 		case game::client_realm_packet::CheatPetMake:
+		case game::client_realm_packet::CheatPlayCutscene:
 			// Require GM level 2
 			if (!HasGMLevel(gm_level::SeniorGm))
 			{
@@ -3183,7 +3184,10 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetRemove, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetTame, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetMake, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPlayCutscene, *this, &Player::OnProxyPacket);
 #endif
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneBegin, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneEnd, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
@@ -3750,6 +3754,17 @@ namespace mmo
 		quest.rewardEmoteId = questEntry->rewardemote();
 		quest.requiredClasses = questEntry->requiredclasses();
 		quest.flags = questEntry->flags();
+
+		// Objective area for the client's minimap and world map (see quests.proto).
+		if (questEntry->pointx() != 0.0f || questEntry->pointy() != 0.0f)
+		{
+			constexpr float defaultObjectiveAreaRadius = 30.0f;
+			quest.hasObjectiveArea = true;
+			quest.objectiveAreaMapId = questEntry->pointmapid();
+			quest.objectiveAreaX = questEntry->pointx();
+			quest.objectiveAreaZ = questEntry->pointy();
+			quest.objectiveAreaRadius = questEntry->pointopt() != 0 ? static_cast<float>(questEntry->pointopt()) : defaultObjectiveAreaRadius;
+		}
 
 		for (const auto &requirement : questEntry->requirements())
 		{

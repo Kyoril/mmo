@@ -174,7 +174,7 @@ namespace mmo
 		m_window = [[MMOWindow alloc] initWithContentRect:contentRect styleMask:style backing:NSBackingStoreBuffered defer:NO];
 		m_window.releasedWhenClosed = NO;
 		m_window.acceptsMouseMovedEvents = YES;
-		m_window.title = @"MMORPG";
+		m_window.title = @"Alestia Online";
 
 		m_layer = [CAMetalLayer layer];
 		m_layer.device = device.GetDevice();

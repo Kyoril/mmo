@@ -133,6 +133,9 @@ namespace mmo
 		[[nodiscard]] virtual int32 GetAvailableAttributePoints() const;
 		[[nodiscard]] virtual int32 GetTalentPoints() const;
 		[[nodiscard]] virtual bool IsAlive() const;
+
+		/// Whether the player behind the unit watches a cutscene.
+		[[nodiscard]] virtual bool IsInCutscene() const;
 		[[nodiscard]] virtual bool IsFriendly() const;
 		[[nodiscard]] virtual bool IsHostile() const;
 		[[nodiscard]] virtual const char* GetType() const;
