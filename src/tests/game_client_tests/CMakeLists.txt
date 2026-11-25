@@ -24,6 +24,7 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/vigor_predictor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/animation/airborne_slot.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glider_fold_state.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/updraft_placement.cpp
 	# The bot's unit model is self-contained; pet_friendliness_test checks its reaction rules.
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/bot_core/bot_unit.cpp
 )

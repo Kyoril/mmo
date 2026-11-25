@@ -453,6 +453,7 @@ namespace mmo
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
 		m_worldPingVisualizer = std::make_unique<WorldPingVisualizer>(*m_scene);
+		m_updraftVisuals = std::make_unique<UpdraftVisuals>(*m_scene);
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string &name)
@@ -578,6 +579,7 @@ namespace mmo
 		CombatVignette::Destroy();
 
 		m_worldPingVisualizer.reset();
+		m_updraftVisuals.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
 		m_farTerrain.reset();
@@ -5346,6 +5348,10 @@ namespace mmo
 
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
+		if (m_updraftVisuals)
+		{
+			m_updraftVisuals->Show(m_areaTriggerManager.GetUpdrafts());
+		}
 
 		// Apply terrain LOD setting from console variable
 		if (m_worldInstance->HasTerrain() && s_terrainLodEnabledVar)

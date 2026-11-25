@@ -52,6 +52,9 @@ namespace mmo
 		/// @param position The position to test (a unit's feet).
 		[[nodiscard]] float GetUpdraftStrength(const Vector3& position) const;
 
+		/// Gets the updraft volumes of the current map (triggers with updraft_strength > 0).
+		[[nodiscard]] const std::vector<UpdraftVolume>& GetUpdrafts() const { return m_updrafts; }
+
 		/// Tests if a point is inside a specific area trigger.
 		/// @param trigger The area trigger to test against.
 		/// @param position The point to test.

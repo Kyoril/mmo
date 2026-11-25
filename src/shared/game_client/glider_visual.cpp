@@ -2,19 +2,16 @@
 
 #include "glider_visual.h"
 
+#include "particle_params_cache.h"
+
 #include "assets/asset_registry.h"
-#include "binary_io/reader.h"
-#include "binary_io/stream_source.h"
 #include "scene_graph/entity.h"
 #include "scene_graph/particle_emitter.h"
-#include "scene_graph/particle_emitter_serializer.h"
 #include "scene_graph/scene.h"
 #include "scene_graph/skeleton_instance.h"
 #include "scene_graph/tag_point.h"
 
 #include <algorithm>
-#include <map>
-#include <memory>
 
 namespace mmo
 {
@@ -33,36 +30,6 @@ namespace mmo
 
 		/// Smallest span scale of a visible glider, so a just-opened glider is never degenerate.
 		constexpr float MinSpanScale = 0.05f;
-
-		/// Loads particle system parameters once per file. Many gliders in view must not open
-		/// files every time one of them opens; a missing file is remembered as missing.
-		const ParticleSystemParameters* LoadParticles(const char* file)
-		{
-			static std::map<String, std::unique_ptr<ParticleSystemParameters>> s_cache;
-
-			const auto it = s_cache.find(file);
-			if (it != s_cache.end())
-			{
-				return it->second.get();
-			}
-
-			std::unique_ptr<ParticleSystemParameters> params;
-			if (const auto stream = AssetRegistry::OpenFile(file))
-			{
-				io::StreamSource source(*stream);
-				io::Reader reader(source);
-				ParticleSystemSerializer serializer;
-				auto loaded = std::make_unique<ParticleSystemParameters>();
-				if (serializer.Deserialize(*loaded, reader))
-				{
-					params = std::move(loaded);
-				}
-			}
-
-			const ParticleSystemParameters* result = params.get();
-			s_cache.emplace(file, std::move(params));
-			return result;
-		}
 
 		/// Ease-out unfold: fast at the start, settling into the open span.
 		float SpanScale(const float unfold)
@@ -179,7 +146,7 @@ namespace mmo
 
 	ParticleSystem* GliderVisual::CreateEmitter(const char* file, const char* suffix)
 	{
-		const ParticleSystemParameters* params = LoadParticles(file);
+		const ParticleSystemParameters* params = LoadCachedParticleSystem(file);
 		if (!params)
 		{
 			return nullptr;
