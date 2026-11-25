@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+#include "game/inventory_fields.h"
 
 #include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
@@ -3199,7 +3200,7 @@ namespace mmo
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 																	   {
-							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
+							if (FieldRangeChangesEquipment(fieldIndex, fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
 							}

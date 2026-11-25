@@ -36,3 +36,12 @@ TEST_CASE("The glider fields are appended at the end of the player fields", "[in
 	CHECK(object_fields::GliderSlot == object_fields::MaxVigor + 1);
 	CHECK(object_fields::PlayerFieldCount == object_fields::VisibleGlider_PROPERTIES + 1);
 }
+
+TEST_CASE("A change of the glider slot field counts as an equipment change", "[inventory_fields]")
+{
+	CHECK(FieldRangeChangesEquipment(object_fields::InvSlotHead, 2));
+	CHECK(FieldRangeChangesEquipment(object_fields::GliderSlot, 2));
+	CHECK(FieldRangeChangesEquipment(object_fields::GliderSlot + 1, 1));
+	CHECK_FALSE(FieldRangeChangesEquipment(object_fields::PackSlot_1, 2));
+	CHECK_FALSE(FieldRangeChangesEquipment(object_fields::VisibleGlider_0, 1));
+}

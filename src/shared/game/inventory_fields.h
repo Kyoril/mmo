@@ -30,6 +30,18 @@ namespace mmo
 		return InvalidField;
 	}
 
+	/// @brief Checks whether a changed player field range touches an equipped item's guid field
+	///	(equipment and bag bar slots, or the glider slot), so the UI must refresh the equipment.
+	/// @param fieldIndex First changed field.
+	/// @param fieldCount Number of changed fields.
+	constexpr bool FieldRangeChangesEquipment(const uint32 fieldIndex, const uint32 fieldCount)
+	{
+		const uint32 last = fieldIndex + fieldCount - 1;
+		const bool regular = fieldIndex < object_fields::PackSlot_1 && last >= object_fields::InvSlotHead;
+		const bool glider = fieldIndex <= object_fields::GliderSlot + 1 && last >= object_fields::GliderSlot;
+		return regular || glider;
+	}
+
 	/// Number of fields of one visible item block.
 	constexpr uint32 VisibleItemFieldStride = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
 

@@ -1,5 +1,6 @@
 
 #include "action_bar.h"
+#include "game/inventory_fields.h"
 
 #include "cursor.h"
 #include "spell_cast.h"
@@ -310,7 +311,10 @@ namespace mmo
 
 				if (bag == player_inventory_slots::Bag_0)
 				{
-					itemGuid = player->Get<uint64>(object_fields::InvSlotHead + bagSlot * 2);
+					if (const uint32 field = GetInventorySlotField(bagSlot); field != InvalidField)
+					{
+						itemGuid = player->Get<uint64>(field);
+					}
 				}
 				else
 				{
