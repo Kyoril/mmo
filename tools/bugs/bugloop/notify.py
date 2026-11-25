@@ -116,13 +116,16 @@ def _duration(previous, now):
 
 
 def mode_message(name, previous, now, queue, reason, poll_minutes):
-	"""The loop changed between busy, idle and paused. `previous` is the mode it left; leaving
+	"""The loop changed between busy, idle, holding and paused. `previous` is the mode it left; leaving
 	busy reports what that stretch finished."""
 	if name == "busy":
 		return "**Bug loop busy** — {} bug(s) queued; working through them without waiting".format(queue)
 	if name == "paused":
 		return "**Bug loop paused** — {}; {} bug(s) wait".format(reason, queue)
-	text = "**Bug loop idle** — the fix queue is empty; polling for new reports every {} min".format(poll_minutes)
+	if name == "holding":
+		text = "**Bug loop holding** — the fix queue is empty, but {}".format(reason)
+	else:
+		text = "**Bug loop idle** — the fix queue is empty; polling for new reports every {} min".format(poll_minutes)
 	counts = previous.get("counts") or {}
 	if previous.get("name") == "busy" and counts:
 		shipped = counts.get("shipped", 0) + counts.get("shipped-by-maintainer", 0)

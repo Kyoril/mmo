@@ -30,6 +30,9 @@ class LoopConfig:
 	# Automatic re-applications of a fix on today's develop per bug, after a ship conflict the
 	# resolver could not resolve.
 	max_reapply: int = 2
+	# Obstacles a maintainer's ship decision may meet before the loop gives it back (re-applications
+	# after a conflict or a red merge gate, retries after a lost push race). A red develop costs none.
+	mandate_rounds: int = 3
 	ci_poll_seconds: int = 300
 	ci_push_workflow: str = "ccpp.yml"
 	ci_nightly_workflow: str = "nightly-release.yml"

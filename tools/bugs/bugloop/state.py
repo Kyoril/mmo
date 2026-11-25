@@ -30,6 +30,11 @@ _DEFAULT = {
 	"reapply_rounds": {},
 	# Automatic self-correction rounds per bug since its last maintainer decision.
 	"self_correct_rounds": {},
+	# Ship decisions the loop is still carrying out: bug id -> {"files": the paths of the approved
+	# diff, "reasons": its park reasons, "rounds": obstacles met so far, "since"}. A ship decision is
+	# a mandate: a red merge gate, a conflict or a lost push race is the loop's to remove, not a
+	# reason to ask again. Dropped once shipped, discarded, refixed, or given up on.
+	"ship_mandates": {},
 	"pending_summary": None,
 	# Maintainer-accepted features: bug id -> the accepted description. It lives here, not in
 	# the bug's artifacts folder, because the fixer can write that folder.
@@ -167,6 +172,23 @@ class LoopState:
 
 	def count_reapply(self, bug_id):
 		self.data["reapply_rounds"][bug_id] = self.reapply_count(bug_id) + 1
+
+	def ship_mandate(self, bug_id):
+		"""The maintainer's ship decision the loop is still carrying out for `bug_id`, or None."""
+		return self.data["ship_mandates"].get(bug_id)
+
+	def set_ship_mandate(self, bug_id, files, reasons, now):
+		self.data["ship_mandates"][bug_id] = {"files": sorted(set(files)), "reasons": list(reasons), "rounds": 0,
+			"since": now.isoformat()}
+
+	def count_mandate_round(self, bug_id):
+		"""Counts an obstacle the mandate of `bug_id` met; returns the count."""
+		mandate = self.data["ship_mandates"][bug_id]
+		mandate["rounds"] = mandate.get("rounds", 0) + 1
+		return mandate["rounds"]
+
+	def drop_ship_mandate(self, bug_id):
+		self.data["ship_mandates"].pop(bug_id, None)
 
 	def ci_phase(self):
 		return self.data["ci"]["phase"]

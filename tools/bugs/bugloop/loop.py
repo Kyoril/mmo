@@ -40,6 +40,14 @@ RESTART_NOTE = ("the earlier fix branch could not be merged with today's develop
 REAPPLY_GUIDANCE = ("From the bug loop, not the maintainer: this fix could not be merged with today's develop ({}). "
 	"Re-apply the same fix on today's develop: keep its intent and its regression test, adapt it to what develop "
 	"changed in the same places, and change nothing else.")
+GATE_REAPPLY_GUIDANCE = ("From the bug loop, not the maintainer: the maintainer decided to ship this fix, but merged "
+	"with today's develop it fails the fast gate ({}). Make the fix pass the fast gate on today's develop: keep its "
+	"intent and its regression test, adapt it to what develop changed, and change nothing else.")
+# The note of a ship decision the loop could not carry out; only then the maintainer decides again.
+MANDATE_GAVE_UP = "the bug loop could not carry out your ship decision"
+# A maintainer's ship whose merge gate is red while develop is red in CI: develop's breakage, not the fix's.
+WAIT_GREEN_REASON = "the fast gate on the merge is red while develop is red"
+MERGE_GATE_RED = "the fast gate on the merge is red"
 # How much of the earlier diff a restarted refix sees.
 EARLIER_DIFF_LIMIT = 40000
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
@@ -52,7 +60,8 @@ NEEDS_INFO_HINT = "; waiting for the maintainer: set the status to new to retry,
 IMPLEMENT_HISTORY_PREFIX = "decision: implement: "
 # Bug ids are Mongo ObjectIds; they become paths and branch names, so nothing else is accepted.
 BUG_ID = re.compile(r"^[0-9a-f]{24}$")
-# While develop is red in CI nothing but the emergency ticket ships; everything else queues.
+# While develop is red in CI only the emergency ticket and the maintainer's ship decisions ship;
+# every auto-ship queues.
 RED_REASON = "develop is red"
 # The pre-ship CI check failed (not GitHub: the bug API, say): the CI state is unknown, so nothing ships.
 CI_UNKNOWN_REASON = "CI check failed"
@@ -134,6 +143,28 @@ def self_correctable(reasons):
 		if not (reason.startswith(SELF_CORRECTABLE) or reason.startswith("review: ")):
 			return False
 	return True
+
+
+# A security property the reviewer saw weakened: carried by a mandate only when the approved diff had it too.
+SECURITY_REVIEW_PREFIX = "review: the diff reduces a security"
+
+
+def mandate_blockers(mandate, changes, reasons):
+	"""The reasons a candidate the loop made under a ship decision must not ship on that decision:
+	a red gate, a failed proof (unless the approved candidate had one too), a weakened security
+	property the approved candidate did not have, and production files the approved diff did not
+	touch (regression tests may be added). Empty: it ships."""
+	approved = mandate.get("reasons") or []
+	blockers = [reason for reason in reasons if reason == "the fast gate is red"]
+	if not any(reason.startswith("proof: ") for reason in approved):
+		blockers += [reason for reason in reasons if reason.startswith("proof: ")]
+	if not any(reason.startswith(SECURITY_REVIEW_PREFIX) for reason in approved):
+		blockers += [reason for reason in reasons if reason.startswith(SECURITY_REVIEW_PREFIX)]
+	covered = set(mandate.get("files") or [])
+	extra = [change.path for change in changes if change.path not in covered and not change.path.startswith(guard.TEST_PREFIXES)]
+	if extra:
+		blockers.append("the re-applied fix touches files your ship decision did not cover: " + ", ".join(extra[:10]))
+	return blockers
 
 
 def short_id(bug_id):
@@ -332,7 +363,10 @@ class BugLoop:
 		the mode lives in the state, so a restart does not announce it again."""
 		queue = len(self.state.data["fix_queue"])
 		reason = ""
-		if not queue:
+		if not queue and self.state.data["ship_queue"]:
+			name = "holding"
+			reason = self._holding_reason()
+		elif not queue:
 			name = "idle"
 		elif not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
 			name = "paused"
@@ -342,6 +376,9 @@ class BugLoop:
 			name = "busy"
 		previous = self.state.data.get("mode") or {}
 		if previous.get("name") == name:
+			if previous.get("reason") != reason:
+				# Same mode, new cause (develop turned green, the breaker tripped): status shows it, Discord does not.
+				previous["reason"] = reason
 			return
 		now = self.clock()
 		self.state.data["mode"] = {"name": name, "since": now.isoformat(), "reason": reason, "counts": {}}
@@ -354,6 +391,30 @@ class BugLoop:
 			self.notifier.send(notify.mode_message(name, previous, now, queue, reason, max(1, poll // 60)))
 		except Exception:  # a notification must never stop the loop
 			self.log(traceback.format_exc())
+
+	def _holding_reason(self):
+		"""What the queued ships wait for, for the status and the "holding" message."""
+		queue = self.state.data["ship_queue"]
+		count = len(queue)
+		decided = sum(1 for item in queue if item.get("by_maintainer"))
+		waits = []
+		if loop_state.breaker_active(self.artifacts_dir):
+			waits.append(BREAKER_REASON)
+		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
+			waits.append("the nightly freeze window")
+		if self._develop_red():
+			# Not RED_REASON's words: the "develop is red" message is sent once per red phase.
+			red = "CI is red on develop"
+			phase = self.state.ci_phase()
+			if phase and phase.get("ci", {}).get("workflow"):
+				red += " ({})".format(phase["ci"]["workflow"])
+			if phase and phase.get("parked"):
+				red += "; its emergency ticket is parked and needs you"
+			waits.append(red)
+		if any(item.get("retry_after") for item in queue):
+			waits.append("a retry time")
+		text = "{} ship(s) wait ({} by your decision)".format(count, decided)
+		return text + (": " + "; ".join(waits) if waits else "; they go out at the next poll")
 
 	def _count_for_mode(self, outcome):
 		"""Counts a finished bug for the current mode; the idle message reports the busy stretch."""
@@ -751,6 +812,9 @@ class BugLoop:
 			reasons += ["guard: " + reason for reason in guard_result["reasons"]]
 			if self.state.is_feature(bug_id):
 				reasons.append(FEATURE_REASON)
+			if emergency is None and self.state.ship_mandate(bug_id) is not None:
+				self.state.drop_ship_mandate(bug_id)
+				reasons.append(MANDATE_GAVE_UP + " (the re-applied fix is too large to review); decide again")
 			self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
 			# An emergency park says it in its "needs you" message only.
 			self._park(bug_id, branch, reasons, announce=emergency is None)
@@ -797,6 +861,10 @@ class BugLoop:
 			# Locally green: CI on the exact head decides, never _try_ship.
 			self._push_for_ci(bug_id, branch, base, head)
 			return
+		mandate = self.state.ship_mandate(bug_id)
+		if mandate is not None:
+			self._carry_out_mandate(bug_id, verdict, branch, head, changes, reasons, review, guidance, feature, mandate)
+			return
 		if self.state.is_feature(bug_id):
 			green = not reasons
 			reasons = reasons + [FEATURE_REASON]
@@ -814,6 +882,26 @@ class BugLoop:
 				self.notifier.send(notify.feature_ready_message(self.notifier, bug_id, self._summary(bug_id), branch))
 			return
 		self._try_ship(bug_id, branch, verdict["observed"][:200], head)
+
+	def _carry_out_mandate(self, bug_id, verdict, branch, head, changes, reasons, review, guidance, feature, mandate):
+		"""A candidate the loop made to carry out the maintainer's ship decision (re-applied on today's
+		develop, or a self-correction of that): it ships on the decision unless it leaves what was
+		approved. Guard findings, the fixer's confidence and the reviewer's questions were the
+		maintainer's to weigh and they did; a red gate, a failed proof, a newly weakened security
+		property or a file the approved diff did not touch are not."""
+		self._write(bug_id, "decision.json", {"reasons": reasons, "head": head})
+		blockers = mandate_blockers(mandate, changes, reasons)
+		if not blockers:
+			self.log("bug {}: the re-applied fix stays within the ship decision; shipping it".format(bug_id))
+			self._ship_mandated(bug_id, branch, verdict["observed"][:200], head,
+				"re-applied on today's develop under your ship decision")
+			return
+		if self._self_correct(bug_id, branch, blockers, guidance, feature):
+			return
+		self.state.drop_ship_mandate(bug_id)
+		self.state.save()
+		self._park(bug_id, branch, blockers + [MANDATE_GAVE_UP + "; decide again"] + [
+			reason for reason in reasons if reason not in blockers], review)
 
 	def _self_correct(self, bug_id, branch, reasons, guidance, feature):
 		"""Runs another fix round on the branch instead of parking, when the fixer can repair every
@@ -944,6 +1032,7 @@ class BugLoop:
 
 	def _drop_queued_ship(self, bug_id):
 		"""A later discard or refix overrides an earlier ship decision still waiting out the freeze."""
+		self.state.drop_ship_mandate(bug_id)
 		queue = self.state.data["ship_queue"]
 		kept = [item for item in queue if item.get("bug") != bug_id]
 		if len(kept) != len(queue):
@@ -1075,6 +1164,7 @@ class BugLoop:
 		if shipped:
 			# A second click while the first ship waited in the queue (develop red, breaker, freeze):
 			# the fix is on develop already. On 2026-10-26 this reopened a shipped bug as "branch moved".
+			self.state.drop_ship_mandate(bug_id)
 			self._update(bug_id, status="resolved", release_claim=True,
 				note="already shipped in {}; this ship decision has nothing left to do".format(shipped))
 			self._finish(bug_id, "already-shipped", announce=False, commit=shipped)
@@ -1100,23 +1190,84 @@ class BugLoop:
 		if any(item.get("bug") == bug_id for item in self.state.data["ship_queue"]):
 			self._update(bug_id, note="already queued to ship")
 			return
+		if bug_id != self.state.emergency_ticket():
+			# From here on the decision is the loop's job: it ends shipped, or with a note why it could not.
+			# (The emergency ticket has its own retries: develop's CI decides there.)
+			self._start_mandate(bug_id, branch, head)
+		self._ship_mandated(bug_id, branch, summary, head, "maintainer approved {}".format(branch))
+
+	def _start_mandate(self, bug_id, branch, head):
+		"""Records what the maintainer approved: the files of the candidate diff and its park reasons."""
+		try:
+			reasons = self._read(bug_id, "decision.json").get("reasons") or []
+		except (OSError, ValueError):
+			reasons = []
+		files = [change.path for change in self.worktree.changes(self.worktree.fork_point(branch), head)]
+		self.state.set_ship_mandate(bug_id, files, [reason for reason in reasons if isinstance(reason, str)], self.clock())
+		# The maintainer's decision starts a new candidate history: it gets self-correction rounds of its own.
+		self.state.reset_self_correct(bug_id)
+		self.state.save()
+
+	def _ensure_mandate(self, bug_id, branch, head):
+		"""A maintainer's ship queued before mandates existed has none yet."""
+		if self.state.ship_mandate(bug_id) is None:
+			self._start_mandate(bug_id, branch, head)
+		return self.state.ship_mandate(bug_id)
+
+	def _ship_mandated(self, bug_id, branch, summary, head, what):
+		"""Ships on the maintainer's decision. A red develop does not hold it (the merge gate still has
+		to pass); a tripped breaker and the nightly freeze window queue it, never use it up."""
 		if loop_state.breaker_active(self.artifacts_dir):
 			# The decision stays valid: it ships once the breaker is cleared (by hand, or by the next
 			# green nightly when the loop tripped it), so the maintainer never has to decide again.
-			self._queue_held(bug_id, branch, summary, head, BREAKER_REASON, "maintainer approved {}".format(branch), by_maintainer=True)
-			return
-		reason = self._ci_hold(bug_id)
-		if reason:
-			self._queue_held(bug_id, branch, summary, head, reason, "maintainer approved {}".format(branch), by_maintainer=True)
+			self._queue_held(bug_id, branch, summary, head, BREAKER_REASON, what, by_maintainer=True)
 			return
 		if loop_state.in_freeze(self.clock(), self.config.freeze_start_utc, self.config.freeze_end_utc):
 			self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=True)
 			self.state.mark_attempted(bug_id, "ship-queued")
-			self._update(bug_id, note="maintainer approved {}; ships after the nightly freeze window".format(branch))
+			self._update(bug_id, note="{}; ships after the nightly freeze window".format(what))
 			self.state.record(bug_id, "ship-queued", branch=branch)
 			self._announce(bug_id, "ship-queued", {"branch": branch})
 			return
 		self._ship(bug_id, branch, summary, head, by_maintainer=True)
+
+	def _mandate_obstacle(self, bug_id, branch, summary, head, result):
+		"""A maintainer's ship failed. The loop removes what it can: a red merge gate on a red develop
+		waits for develop, a conflict or a red merge gate re-applies the fix on today's develop, a lost
+		push race retries. Only after `mandate_rounds` obstacles does the maintainer hear about it."""
+		reason = "ship: " + result.reason
+		merge_gate_red = result.reason.startswith(MERGE_GATE_RED)
+		if merge_gate_red and self._develop_red():
+			self._queue_held(bug_id, branch, summary, head, WAIT_GREEN_REASON, "maintainer approved {}".format(branch),
+				by_maintainer=True, wait_green=True)
+			return
+		mandate = self._ensure_mandate(bug_id, branch, head)
+		if mandate.get("rounds", 0) >= self.config.mandate_rounds:
+			self.state.drop_ship_mandate(bug_id)
+			self.state.save()
+			self._park(bug_id, branch, [reason, "{} after {} attempt(s); decide again".format(MANDATE_GAVE_UP, mandate.get("rounds", 0) + 1)])
+			return
+		reapply = bool(getattr(result, "conflict", False)) or merge_gate_red
+		if reapply and not (self._claude_ok and self.state.budget_left(self.config.invocation_budget_per_day, needed=2)):
+			# Nothing is used up: the ship is tried again once Claude can run (tomorrow's budget, say).
+			retry = self.clock() + datetime.timedelta(minutes=self.config.claude_retry_minutes)
+			if not self.state.budget_left(self.config.invocation_budget_per_day, needed=2):
+				retry = (self.clock() + datetime.timedelta(days=1)).replace(hour=0, minute=5, second=0, microsecond=0)
+			self._queue_held(bug_id, branch, summary, head, "re-applying it needs Claude, which cannot run now",
+				"maintainer approved {}; {}".format(branch, reason), by_maintainer=True, retry_after=retry)
+			return
+		rounds = self.state.count_mandate_round(bug_id)
+		self.state.save()
+		if reapply:
+			self._park(bug_id, branch, [reason, "re-applying it on today's develop to carry out your ship decision"], announce=False)
+			self._reapply(bug_id, result.reason, gate=merge_gate_red)
+			return
+		self.log("bug {}: ship decision met '{}', trying again (attempt {} of {})".format(
+			bug_id, result.reason[:200], rounds + 1, self.config.mandate_rounds + 1))
+		# Not within this poll: the ship already retried a moving develop itself.
+		self._queue_held(bug_id, branch, summary, head, result.reason[:300],
+			"maintainer approved {}; attempt {} of {}".format(branch, rounds, self.config.mandate_rounds + 1), by_maintainer=True,
+			retry_after=self.clock() + datetime.timedelta(minutes=1))
 
 	def _adopt_candidate(self, bug_id, branch, head, reasons):
 		"""Makes `head` of `branch` the candidate: decision.json records it and diff.patch (uploaded
@@ -1262,15 +1413,28 @@ class BugLoop:
 			return RED_REASON
 		return ""
 
-	def _queue_held(self, bug_id, branch, summary, head, reason, what, by_maintainer=False):
+	def _queue_held(self, bug_id, branch, summary, head, reason, what, by_maintainer=False, wait_green=False, retry_after=None):
 		self.state.enqueue_ship(bug_id, branch, summary, head, by_maintainer=by_maintainer)
+		item = self.state.data["ship_queue"][-1]
+		if wait_green:
+			item["wait_green"] = True
+		if retry_after is not None:
+			item["retry_after"] = retry_after.isoformat()
 		self.state.mark_attempted(bug_id, "ship-queued")
 		self.state.record(bug_id, "ship-queued", branch=branch, reason=reason)
 		self.state.save()
 		if reason == BREAKER_REASON:
 			when = "ships once the breaker is cleared"
+		elif wait_green:
+			when = "ships once develop is green"
+		elif retry_after is not None:
+			when = "tried again after {} UTC".format(retry_after.strftime("%Y-%m-%d %H:%M"))
+		elif reason == RED_REASON:
+			when = "ships once CI is green"
+		elif reason == CI_UNKNOWN_REASON:
+			when = "ships once CI is confirmed green"
 		else:
-			when = "ships once CI is green" if reason == RED_REASON else "ships once CI is confirmed green"
+			when = "trying again at the next poll"
 		try:
 			self._update(bug_id, note="{}; {}: {}".format(what, reason, when))
 		except Exception:  # the fix is queued; a lost note must not throw it away
@@ -1290,6 +1454,9 @@ class BugLoop:
 		with self.lock():
 			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
 		resolved = self._write_resolutions(bug_id)
+		if not result.ok and by_maintainer and not emergency and bug_id != self.state.emergency_ticket():
+			self._mandate_obstacle(bug_id, branch, summary, head, result)
+			return
 		if not result.ok:
 			reapply = getattr(result, "conflict", False) and not emergency and self._may_reapply(bug_id)
 			self._park(bug_id, branch, ["ship: " + result.reason], announce=not emergency and not reapply)
@@ -1301,6 +1468,7 @@ class BugLoop:
 		if not by_maintainer and not emergency:
 			self.state.count_autoship()
 		outcome = "shipped-emergency" if emergency else ("shipped-by-maintainer" if by_maintainer else "shipped")
+		self.state.drop_ship_mandate(bug_id)
 		if emergency or bug_id == self.state.emergency_ticket():
 			# Also a maintainer ship of the emergency ticket: develop's own CI run now decides.
 			self._await_develop(result.commit)
@@ -1342,7 +1510,7 @@ class BugLoop:
 		return (bug_id != self.state.emergency_ticket() and self.state.reapply_count(bug_id) < self.config.max_reapply
 			and self.state.budget_left(self.config.invocation_budget_per_day, needed=2))
 
-	def _reapply(self, bug_id, reason):
+	def _reapply(self, bug_id, reason, gate=False):
 		"""A ship ran into a conflict with develop nothing could resolve: the fixer re-applies the fix on
 		today's develop at once (the parked branch stays the backup until then). The new candidate goes
 		through guard, review, proof and gate again: it auto-ships only if it qualifies on its own,
@@ -1353,23 +1521,34 @@ class BugLoop:
 		try:
 			self._recover_feature(bug_id)
 			feature = self.state.feature_description(bug_id) if self.state.is_feature(bug_id) else None
-			self._fix(bug_id, guidance=REAPPLY_GUIDANCE.format(reason[:500]), feature=feature)
+			guidance = (GATE_REAPPLY_GUIDANCE if gate else REAPPLY_GUIDANCE).format(reason[:500])
+			self._fix(bug_id, guidance=guidance, feature=feature)
 		except Exception:  # the bug is parked already; it waits for the maintainer as before
 			self.log(traceback.format_exc())
+
+	def _ship_held(self, item, now, ci_known, red):
+		"""Why a queued ship must wait this poll (True) or may go (False). The emergency ticket waits
+		only for an unknown CI state, a maintainer's ship only for its own retry time or, when its merge
+		gate was red on a red develop, for develop to be green; every auto-ship waits for green CI."""
+		retry_after = item.get("retry_after")
+		if retry_after and now < datetime.datetime.fromisoformat(retry_after):
+			return True
+		if item.get("bug") == self.state.emergency_ticket():
+			return not ci_known
+		if item.get("by_maintainer") and not item.get("wait_green"):
+			return False
+		return not ci_known or red
 
 	def _ship_queued(self, now):
 		if loop_state.in_freeze(now, self.config.freeze_start_utc, self.config.freeze_end_utc):
 			return
-		if self.state.data["ship_queue"] and not self._recheck_ci():
-			return  # CI state unknown: everything stays queued
+		# CI state unknown (the check failed for another reason than GitHub): auto-ships stay queued.
+		ci_known = self._recheck_ci() if self.state.data["ship_queue"] else True
+		red = self._develop_red()
 		pending = self.state.take_ship_queue()
-		kept = []
-		if self._develop_red():
-			# Only the emergency ticket ships while develop is red; the rest waits untouched.
-			ticket = self.state.emergency_ticket()
-			kept = [item for item in pending if item.get("bug") != ticket]
-			pending = [item for item in pending if item.get("bug") == ticket]
-			self.state.data["ship_queue"] = kept + list(pending)
+		kept = [item for item in pending if self._ship_held(item, now, ci_known, red)]
+		pending = [item for item in pending if item not in kept]
+		self.state.data["ship_queue"] = kept + list(pending)
 		while pending:
 			item = pending.pop(0)
 			try:
@@ -1387,7 +1566,11 @@ class BugLoop:
 					elif blockers:
 						self._park(item["bug"], item["branch"], blockers)
 					else:
+						before = kept + list(pending)
+						self.state.data["ship_queue"] = list(before)
 						self._ship(item["bug"], item["branch"], item["summary"], item["head"], by_maintainer=by_maintainer)
+						# A ship that queued itself again (a retry, a hold) keeps that place.
+						kept.extend(extra for extra in self.state.data["ship_queue"] if extra not in before)
 				except Exception:
 					self.log(traceback.format_exc())
 					self._park(item["bug"], item["branch"], ["ship error, see the runner log"])

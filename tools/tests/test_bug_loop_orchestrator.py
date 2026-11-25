@@ -873,19 +873,126 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_ship_conflict_reapply_is_limited(self):
-		self.park_with_decision("ship", head="head1", max_reapply=0)
+		self.park_with_decision("ship", head="head1", mandate_rounds=0)
 		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
 		self.loop.poll_once()
 		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
 		self.assertIn("ship: merge conflict", self.api.notes(BUG_ID)[-1])
+		self.assertIn(loop.MANDATE_GAVE_UP, self.api.notes(BUG_ID)[-1])
 
-	def test_other_ship_failures_do_not_reapply(self):
-		self.park_with_decision("ship", head="head1")
-		self.worktree.ship_result = gitops.ShipResult(False, "", "the fast gate on the merge is red")
+	def test_an_auto_ship_conflict_still_uses_the_reapply_limit(self):
+		self.make(max_reapply=0)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
 		self.loop.poll_once()
-		self.assertNotIn("fix", [kind for kind, _ in self.runner.inputs])
+		self.assertEqual(self.runner.calls.count("fix"), 1)
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+
+	# ---- a ship decision is a mandate: the loop carries it out past every obstacle it can remove
+
+	def reapplied(self, head="head2", changes=None):
+		"""on_fix for a re-application: the branch moves to `head` and the next ship succeeds."""
+		patcher = mock.patch.dict(FILES, {head: FILES["head1"]})
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
+		def refixed():
+			self.worktree.head_ = head
+			self.worktree.branch_heads[BRANCH] = head
+			self.worktree.ship_result = gitops.ShipResult(True, "merge2", "")
+			if changes is not None:
+				self.worktree.changes_ = changes
+		return refixed
+
+	def reapply_inputs(self):
+		return [text for kind, text in self.runner.inputs if kind == "fix" and "From the bug loop, not the maintainer" in text]
+
+	def test_red_merge_gate_reapplies_and_ships_under_the_decision(self):
+		# Before 2026-11-25 a red gate on the merge parked the bug: "decide again".
+		self.park_with_decision("ship", head="head1", autoship_cap_per_day=0)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "the fast gate on the merge is red (origin/develop or submodule master moved)")
+		self.runner.on_fix = self.reapplied()
+		self.loop.poll_once()
+		self.assertEqual(len(self.reapply_inputs()), 1)
+		self.assertIn("fast gate", self.reapply_inputs()[0])
+		# The re-applied candidate would not auto-ship (the cap is 0): the decision ships it.
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head2"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+		self.assertIn("shipped-by-maintainer", self.outcomes())
+		self.assertIsNone(self.state.ship_mandate(BUG_ID))
+
+	def test_a_reapplied_fix_with_guard_findings_still_ships_under_the_decision(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
+		self.runner.fix = dict(GOOD_FIX, confidence="low")
+		self.runner.review = dict(GOOD_REVIEW, design_question="Is a tie the closest?")
+		self.runner.on_fix = self.reapplied()
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head2"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_a_reapplied_fix_that_touches_other_files_parks(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
+		other = guard.FileChange("src/shared/game_server/ai/creature_ai_combat_state.cpp", 1, 1, False)
+		self.runner.on_fix = self.reapplied(changes=BENIGN_CHANGES + [other])
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn("creature_ai_combat_state.cpp", self.api.notes(BUG_ID)[-1])
+		self.assertIn("your ship decision", self.api.notes(BUG_ID)[-1])
+
+	def test_a_reapplied_fix_with_a_red_gate_self_corrects_and_ships(self):
+		self.park_with_decision("ship", head="head1", self_correct_rounds=1)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "merge conflict with head1: x", True)
+		rounds = []
+
+		def refixed():
+			rounds.append(1)
+			self.reapplied(head="head{}".format(len(rounds) + 1))()
+			self.verifier.gate_ok = len(rounds) > 1
+		self.runner.on_fix = refixed
+		self.loop.poll_once()
+		self.assertEqual(len(rounds), 2)
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head3"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_a_lost_push_race_retries_the_ship_instead_of_parking(self):
+		self.park_with_decision("ship", head="head1")
+		self.worktree.ship_result = gitops.ShipResult(False, "", "push of develop failed: rejected")
+		self.loop.poll_once()
+		self.assertNotIn("parked", self.outcomes())
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+		self.assertIn("tried again after", self.api.notes(BUG_ID)[-1])
+		self.loop.poll_once()  # not within the same minute
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.worktree.ship_result = gitops.ShipResult(True, "merge2", "")
+		self.now += datetime.timedelta(minutes=2)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head1"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_the_mandate_gives_up_only_after_its_rounds(self):
+		self.park_with_decision("ship", head="head1", mandate_rounds=2)
+		self.worktree.ship_result = gitops.ShipResult(False, "", "push of develop failed: rejected")
+		for _ in range(4):
+			self.loop.poll_once()
+			self.now += datetime.timedelta(minutes=2)
+		self.assertEqual(self.worktree.shipped_heads, ["head1"] * 3)
+		self.assertEqual(self.state.data["ship_queue"], [])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "pr_open")
+		self.assertIn(loop.MANDATE_GAVE_UP, self.api.notes(BUG_ID)[-1])
+		self.assertIsNone(self.state.ship_mandate(BUG_ID))
+
+	def test_discard_and_refix_end_the_mandate(self):
+		for action, guidance in (("discard", "No."), ("refix", "Other way.")):
+			self.park_with_decision("ship", head="head1")
+			self.worktree.ship_result = gitops.ShipResult(False, "", "push of develop failed: rejected")
+			self.loop.poll_once()
+			self.assertIsNotNone(self.state.ship_mandate(BUG_ID))
+			self.api.bugs[BUG_ID]["decision"] = self.decision(action, guidance, decided_at="t2")
+			self.loop.poll_once()
+			self.assertIsNone(self.state.ship_mandate(BUG_ID))
 
 	def test_ship_records_the_conflicts_it_resolved(self):
 		self.park_with_decision("ship", head="head1")
@@ -1999,12 +2106,44 @@ class LoopTests(unittest.TestCase):
 		self.loop.poll_once()
 		self.assertEqual([branch for branch, _ in self.worktree.shipped], [BRANCH])
 
-	def test_maintainer_ship_waits_while_red(self):
-		self.park_with_decision("ship", github=FakeGitHub())
+	def test_maintainer_ship_goes_out_while_develop_is_red(self):
+		# Before 2026-11-25 a red Nightly Release held four ship decisions for days.
+		self.park_with_decision("ship", head="head1", github=FakeGitHub())
 		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
 		self.loop.poll_once()
-		self.assertEqual(self.worktree.shipped, [])
-		self.assertEqual(self.state.data["ship_queue"][0]["bug"], BUG_ID)
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_a_queued_maintainer_ship_goes_out_while_develop_is_red(self):
+		self.make(github=FakeGitHub(), bugs=[dict(BUG, status="pr_open", prUrl="branch:" + BRANCH)])
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.worktree.branch_heads[BRANCH] = "head1"
+		self.state.enqueue_ship(BUG_ID, BRANCH, "s", "head1", by_maintainer=True)
+		self.state.enqueue_ship("a" * 24, "bugfix/aaaaaaaa", "s", "head1")
+		self.loop._watch_ci(self.now)
+		self.loop._ship_queued(self.now)
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], ["a" * 24])
+
+	def test_maintainer_ship_with_a_red_merge_gate_waits_for_green_develop(self):
+		self.park_with_decision("ship", head="head1", github=FakeGitHub())
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.worktree.ship_result = gitops.ShipResult(False, "", "the fast gate on the merge is red (origin/develop or submodule master moved)")
+		self.loop.poll_once()
+		# develop's own breakage is not the fix's: no re-application, no park, no second gate run.
+		self.assertEqual(self.reapply_inputs(), [])
+		self.assertNotIn("parked", [entry["outcome"] for entry in self.state.data["outcomes"] if entry["bug"] == BUG_ID])
+		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
+		self.assertIn("ships once develop is green", self.api.notes(BUG_ID)[-1])
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
+		self.loop.github.runs_by_workflow["ccpp.yml"].insert(0, run(3, "success", "fixed1"))
+		self.worktree.ship_result = gitops.ShipResult(True, "merge2", "")
+		self.now += datetime.timedelta(minutes=6)
+		self.loop.poll_once()
+		self.assertEqual(self.worktree.shipped_heads, ["head1", "head1"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_red_nightly_restarts_after_a_newer_green_push_run(self):
 		self.make(github=FakeGitHub())
@@ -2051,15 +2190,12 @@ class LoopTests(unittest.TestCase):
 		self.assertEqual(self.worktree.shipped, [])
 		self.assertEqual([item["bug"] for item in self.state.data["ship_queue"]], [BUG_ID])
 
-	def test_bug_api_blip_in_the_ci_check_holds_a_maintainer_ship(self):
-		self.park_with_decision("ship", github=FakeGitHub())
+	def test_bug_api_blip_in_the_ci_check_does_not_hold_a_maintainer_ship(self):
+		self.park_with_decision("ship", head="head1", github=FakeGitHub())
 		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
 		self.api_down_for_tickets()
 		self.loop._ship_by_decision(BUG_ID, self.api.bugs[BUG_ID]["decision"])  # must not raise
-		self.assertEqual(self.worktree.shipped, [])
-		self.assertEqual(self.state.data["ship_queue"][0]["bug"], BUG_ID)
-		self.assertTrue(self.state.data["ship_queue"][0]["by_maintainer"])
-		self.assertIn(loop.CI_UNKNOWN_REASON, self.api.notes(BUG_ID)[-1])
+		self.assertEqual(self.worktree.shipped_heads, ["head1"])
 
 	def test_bug_api_blip_in_the_ci_check_keeps_the_ship_queue(self):
 		self.make(github=FakeGitHub())
@@ -2738,6 +2874,19 @@ class StatusAndModeTests(LoopTests):
 		self.assertEqual(snapshot["branch"], BRANCH)
 		self.assertEqual(snapshot["pid"], os.getpid())
 		self.assertEqual(snapshot["budget"], self.loop.config.invocation_budget_per_day)
+
+	def test_mode_is_holding_while_ships_wait(self):
+		# Before 2026-11-25 the status said "idle: nothing to do" with five ships held for days.
+		self.make(github=FakeGitHub(), bugs=[dict(BUG, status="resolved")])
+		self.loop.github.runs_by_workflow["ccpp.yml"] = [run(2, "failure", "red1")]
+		self.state.data["mode"] = {"name": "idle", "since": self.now.isoformat(), "reason": "", "counts": {}}
+		self.state.enqueue_ship("a" * 24, "bugfix/aaaaaaaa", "s", "head1")
+		self.loop.poll_once()
+		mode = self.state.data["mode"]
+		self.assertEqual(mode["name"], "holding")
+		self.assertIn("CI is red on develop", mode["reason"])
+		self.assertTrue(any("Bug loop holding" in m for m in self.notifier.messages))
+		self.assertIn("holding", loop.loop_status.MODE_LABELS)
 
 	def test_status_lists_the_next_fix_first(self):
 		self.make()
