@@ -1,128 +1,167 @@
-# The Skywright of Haven — glider questline (design)
+# Gliders as equipment, glide stats and the Skywright questline (design)
 
-Status: approved by the user 2026-11-25. Builds on the traversal pillar
-(`docs/superpowers/specs/2026-11-21-traversal-pillar-design.md`) and the glider visuals
-(`docs/superpowers/specs/2026-11-22-glider-visuals-design.md`, branch `feature/glider-visuals`).
+Status: revision 2, waiting for the user's approval (revision 1, the questline alone, was approved
+2026-11-25; the user then turned the glider into equipment and added glide stats).
+Builds on the traversal pillar (`docs/superpowers/specs/2026-11-21-traversal-pillar-design.md`) and
+the glider visuals (`docs/superpowers/specs/2026-11-22-glider-visuals-design.md`, branch
+`feature/glider-visuals`, not yet shipped).
 
 ## Intent
 
-The glider (spell 1436) and Dash (spell 1437) work, but only a GM can learn them. They should
-reach players through a short questline in and around Haven, available from level 10, so that
-gliding becomes something players earn and remember about Alestia rather than a hidden tool.
+The glider works, but only a GM can learn it, and every glider looks the same. Players should earn
+a glider in a questline from level 10, and later find or buy other gliders that look different and
+fly differently. Gliders become **equipment**: a new slot in the character window, a new item type,
+the glider's look and its glide stats come from the equipped item. This also lays the ground for
+the planned mount categories (one item per category, collectible skins with their own abilities).
 
-Level 10 is where today's content ends (Haven Road 78–94, Hollow Choir 57–65); the questline is the
-first thing to do after it.
+## Decided by the user (2026-11-25)
 
-## Story (proposed by Claude, accepted by the user)
+- Questline in or around Haven, from level 10; the story below.
+- Every quest gives class XP as well as character XP (`rewardxp` and `rewardclassxp`).
+- The glider is an item in a **new equipment slot**; new gliders change the glider's look.
+- The glider spell (1436) becomes a **base spell** every character knows, **hidden in the spellbook**,
+  and it only works with a glider item equipped.
+- The questline gives the **first glider item**, not the spell.
+- Gliders may carry normal item stats, and **separate glide stats** such as glide speed and agility.
+- The slot must be **embedded properly in the UI**: the character window is reworked for it, and a
+  new item type is added.
+- The ungating work (anti-cheat, creature AI, E2E) is in the same branch as the questline.
 
-In Haven's harbour lives an eccentric inventor, **Master Elowen Marsh, "the Skywright"**. For years
-she has studied the flight of gulls and bats and built wings of ash wood and sailcloth. The Thorn
-smugglers had an eye on her plans: with gliders, any town wall can be crossed. Now that the ring has
-been broken (q94), she needs someone to help her finish the glider and be the first to fly it.
+## The four parts (built in this order, one branch, a green gate after each)
 
-Tone matches the Haven Road content: grounded, a little humorous, no magic involved in the glider
-itself — it is craft and courage.
+### Part 1 — Glider item and equipment slot
 
-## The quests (all level 10, min level 10)
+- New `inventory_type::Glider` (appended before `Count_`; string tables in game, editor and Lua
+  `INVENTORY_TYPE_GLIDER` updated).
+- New equipment slot **118** (`player_item_slots::Glider`, appended after the buyback range) instead
+  of slot 19. *(Claude's call: inserting at 19 would shift every bag, pack, bank and buyback slot,
+  renumber `character_items.slot` in the realm database and break the additive-migration rule, since
+  the previous build could no longer read the inventory.)*
+  - Treated as an equipment slot everywhere equipment is handled: equip validation (only
+    `inventory_type::Glider` fits), auto-equip, unequip, stats and OnEquip spells, durability as for
+    other equipment.
+  - Not part of `CharacterView` (character select shows no glider), so the character list payload
+    stays the same.
+  - DB: no migration for existing rows; a glider row is a new slot value (`0xFF76`). The previous
+    build must ignore an unknown slot without deleting the item (verify; if it would delete it, the
+    plan guards that path first).
+- Replication: one new visible item block for the glider slot, **appended at the end of the player
+  fields**, so other clients know which glider to draw. Game protocol bump and fingerprint update.
+- Spell 1436 is granted to every character as a base spell (also existing characters on login),
+  flagged hidden so the spellbook does not list it.
+  - Server gate `CanUseTraversal(Glider)` becomes "knows 1436 **and** has a glider equipped";
+    refusal stays `NoGlider` (a violation only when the client claims to glide without one).
+  - Client gate `IsGliderUsable` checks the glider slot the same way; without a glider the jump key
+    shows "You have no glider equipped." / deDE "Ihr habt keinen Gleiter angelegt."
+  - Max Vigor follows "can glide or knows Dash" instead of "knows 1436".
+- The glider's look: `GliderVisual` takes mesh, material and attach transform from the equipped
+  glider's item display (`ItemDisplayEntry` variant with mesh + bone attachment, as weapons do)
+  instead of the fixed `Models/Gear/Glider/Glider.hmsh`. The current mesh becomes the item display
+  of "Elowen's Prototype". Remote players use their replicated glider.
+- GM path: adding the prototype item replaces `.learn 1436` for testing.
+
+**Character window (UI):** the paperdoll gets a **travel row** below the weapon row: the glider slot
+with its own wing-silhouette slot icon and a label ("Glider" / deDE "Gleiter"), laid out so a mount
+slot can join it later. The window is resized as needed so nothing overlaps; checked with `ui_test`
+screenshots (all locales) and sent to the user for sign-off. *(Claude's call on the placement; the
+user signs off the screenshots.)*
+
+### Part 2 — Glide stats
+
+- Four new item stat types for gliders (appended item stat ids, shown in the item tooltip):
+
+  | Stat | enUS / deDE | Effect (scales the base value in `TraversalSettings`) |
+  |---|---|---|
+  | Glide speed | Glide Speed / Gleitgeschwindigkeit | `glideForwardSpeed` |
+  | Agility | Agility in Flight / Wendigkeit | new turn rate: how fast the glide direction follows input (today it turns instantly) |
+  | Lift | Lift / Tragkraft | lower `glideSinkSpeed` |
+  | Endurance | Flight Endurance / Flugausdauer | lower `glideDrainPerSecond` |
+
+  Values are percentages (e.g. +10 %), with caps so data cannot make a glider rise on its own or
+  outrun the validator.
+- One function builds a player's effective `TraversalSettings` from base settings + equipped glider
+  stats; server physics, the server glide validator, the own client's physics and the remote movement
+  renderer all use it. Remote clients get the glider's item entry through the visible slot.
+- The prototype from the questline has no glide stats (base values); later gliders add them.
+
+### Part 3 — Ungating for players
+
+From the test field's open items, with what the code does today:
+- Glide rise tolerance: `IsGlideSpeedValid` adds a fixed 0.5 m plus carried rise per checked interval
+  with no upper bound on the interval; scale the allowance with elapsed time and bound the interval.
+- Client timestamps: the glide validator takes `dt` from converted client timestamps without a clamp;
+  clamp them against the server receive time.
+- Creature AI vs airborne players: range checks are flat, so a creature chases under a glider and may
+  hit it overhead. No melee hits on targets more than a melee height above; evade as for unreachable
+  targets; ranged attacks allowed.
+- E2E: the bot cannot jump, fall or glide today (it lands at once). Add bot fall/glide physics and Lua
+  `Jump`, `OpenGlider`, `CloseGlider`, `IsGliding`, `IsFalling`; scenario: equip the prototype,
+  worldport onto a height, jump, glide through an updraft, land without fall damage, plus a refusal
+  case without a glider.
+
+### Part 4 — The Skywright questline
+
+**Story (proposed by Claude, accepted by the user).** In Haven's harbour lives an eccentric inventor,
+**Master Elowen Marsh, "the Skywright"**. For years she has studied the flight of gulls and bats and
+built wings of ash wood and sailcloth. The Thorn smugglers had an eye on her plans: with gliders, any
+town wall can be crossed. Now that the ring has been broken (q94), she needs someone to help her
+finish the glider and fly it first. Grounded and a little humorous, no magic in the glider itself.
 
 | # | Working title | Giver → ender | What the player does | Reward |
 |---|---|---|---|---|
-| 1 | Wings over the Basin | Watch-Captain Corwin Ashby (u98, Haven north gate) → Elowen Marsh | Breadcrumb: Ashby mentions "the mad woman with the wings" in the harbour; visit her workshop. Ashby's quest text links to the end of the Thorn story; the Thorn chain is **not** a prerequisite. | char XP, class XP, small money |
-| 2 | Ash and Sailcloth | Elowen → Elowen | Gather seasoned ash staves (world objects) in the river valley; collect waxed sailcloth from a sailmaker NPC in the harbour (talk/deliver). | char XP, class XP, money |
-| 3 | The Stolen Folio | Elowen → Elowen | Surviving Thornhand smugglers stole her notebook; recover it at Thornhand Landing (kill + loot, quest item). | char XP, class XP, **Dash (1437)** — "so you outrun the thieves next time" |
-| 4 | First Flight | Elowen → Elowen | Elowen hands over the prototype (**Glider 1436 is learned on accepting this quest**). Jump from the Keep wall and glide through three ribbon markers down into the lower court (exploration objectives, airborne). Teaches open, close and Vigor. | char XP, class XP |
-| 5 | On Warm Air | Elowen → Elowen | Use new updrafts around the harbour (above the smithy chimneys, at Gate Island) to climb to the top of Haven Keep and raise her flag there (object use). | char XP, class XP, a cosmetic/keepsake item (q≥2, see quest item rule) |
+| 1 | Wings over the Basin | Watch-Captain Corwin Ashby (u98) → Elowen Marsh | Breadcrumb to her harbour workshop; texts link to the end of the Thorn story, which is **not** a prerequisite. | XP, class XP, money |
+| 2 | Ash and Sailcloth | Elowen → Elowen | Gather seasoned ash staves (world objects) in the river valley; collect waxed sailcloth from a harbour sailmaker. | XP, class XP, money |
+| 3 | The Stolen Folio | Elowen → Elowen | Thornhand survivors stole her notebook; recover it at Thornhand Landing (kill + loot). | XP, class XP, **Dash (1437)** |
+| 4 | First Flight | Elowen → Elowen | On accept she hands over **"Elowen's Prototype"** (glider item, `srcitemid`); equip it, jump from the Keep wall and glide through three ribbon markers into the lower court. | XP, class XP |
+| 5 | On Warm Air | Elowen → Elowen | Ride new updrafts at the harbour (smithy chimneys, Gate Island) to the top of Haven Keep and raise her flag. | XP, class XP, keepsake item (q ≥ 2) |
 
-Quest 4 makes the glider the player's for good. A temporary "prototype" glider was rejected as
-much more engineering for little gain (Claude's call, accepted by the user).
+Mechanics settled:
+- Strict chain q1 → q5 (prev/next quest ids). Dash before the first flight, so Vigor is known.
+- The prototype is the player's to keep; abandoning q4 keeps it, q4 can be re-accepted. A lost or
+  destroyed prototype can be asked from Elowen again (gossip option while the player has none and
+  q4 is accepted or done). *(Claude's call)*
+- Updrafts are area triggers with `updraft_strength`; a column as tall as the climb lifts the player
+  all the way, shown as a particle column. New area triggers need the ClientDB copy.
+- q4's markers are area triggers floating in mid-air where no jump or fall from the wall passes
+  through them; credit via `on_enter_trigger` → `QuestExplorationCredit` with a `QuestStatus`
+  condition, as in the Haven Road quests.
+- Safe way down: gliding; the flag in q5 sits where a walkable way down also exists.
+- The hand-over uses `srcitemid`; `starttriggers` is not used (it never runs).
 
 ## Goals
 
-- Players reach Glider and Dash by playing, from level 10.
-- Every quest rewards **character XP and class XP** (`rewardxp` and `rewardclassxp`; user rule).
-- The questline teaches the mechanics in order: Vigor via Dash (q3), opening/closing/landing (q4),
-  updrafts (q5).
-- Updrafts and markers become part of Haven's world, visible with the updraft particle columns.
-- All texts in every locale (enUS, deDE at least; deDE addresses the player with Ihr/Euch/Euer).
+- Players reach the glider and Dash by playing, from level 10; later gliders change look and flight.
+- The character window shows the glider slot cleanly in every locale.
+- Server and client agree on glide physics for every glider (no rubber-banding, no false kicks).
+- All texts in every locale (enUS, deDE at least; deDE uses Ihr/Euch/Euer).
 
 ## Non-goals
 
-- Mount categories, mount abilities, free climbing (pillar spec: later).
-- New zones or terrain reshaping around Haven; only placed NPCs, objects and area triggers.
-- A glider skin or crafting system.
+- Mount slot, mount categories, mount abilities (the travel row only leaves room for them).
+- Glider crafting, glider vendors, more glider items than the prototype (data can add them later).
+- Free climbing; terrain reshaping around Haven.
 
-## Anti-goals (would make this a failure even if it works)
+## Anti-goals
 
-- Gliding unlocked for players while the known anti-cheat gaps are open (see Constraints): a
-  speed/fly-hack surface on the live realm.
-- A quest that can be completed without gliding (e.g. markers reachable on foot) — the line must
-  teach the glider, not skip it.
-- A quest that strands the player (on the Keep roof, on Gate Island) without a way down.
+- Gliding for players while the anti-cheat gaps are open.
+- A slot change that renumbers existing inventory or breaks a rollback to the previous build.
+- A quest completable without gliding; a quest that strands the player.
+- Glide stats that let data make a glider climb without updrafts or exceed the validator.
 
 ## Constraints
 
-- **Ungating for players** requires the open items from the traversal test field, in the same
-  branch or before it merges:
-  - scale the glide rise tolerance by elapsed time (server glide validation);
-  - clamp client timestamps in the glide speed check;
-  - creature AI against airborne players (no permanent evade/leash loops, no unreachable-target exploits);
-  - an E2E scenario covering the glide path (open, glide, updraft, close, landing without fall damage).
-- Glider/Dash spells stay as they are (1436/1437); the quests grant them (`srcspell` or reward spell
-  on accept for q4, `rewardspell` for q3), no GM path removed.
-- Quest data follows the mmo-quest-creator skill patterns (`.agents/skills/mmo-quest-creator/`):
-  editor data and ClientDB copies byte-identical where both exist, ids appended.
-- Next free ids at the time of writing: quests from 95 (verify on develop at branch time); units,
-  objects, items, area triggers, sound entries likewise appended (sounds 450–453 are taken by the
-  glider visuals).
-- Quest rewards and collect objectives never use grey items (quest item quality rule).
-- Feature branch `feature/skywright-quests`, stacked on `feature/glider-visuals` (not yet shipped;
-  shipping that branch first stays the user's call); fast gate before /ship; data submodules on their own branches, landed on master before
-  develop is pushed.
-- World placement: Haven town WMO at (−689, 1025), north gate z ≈ 950, lower court z ≈ 976, Keep
-  z ≈ 1060+; Gate Island between the two bridges before the north gate; Thornhand Landing on the
-  west bank above the harbour (bible §3.3, §3.13).
-
-## Approaches considered
-
-- **Glider as the final reward only** (q5): the player would have to glide in q4 without owning
-  the glider → needs a temporary aura/item-based glider. Rejected: more engine work for no player gain.
-- **Glider learned on accepting q4 (chosen):** one data field, the tutorial uses the real glider.
-- **Prerequisite on the Thorn chain (q94):** rejected; level 10 is the only gate, so players who
-  came via the Hollow Choir are not locked out.
-
-## Mechanics settled (builder check, 2026-11-25)
-
-- **Updrafts are data:** area triggers with `updraft_strength` (field 14, both protos; client DB is a
-  byte copy), sphere or yaw-rotated box. Strength is the upward speed; a unit inside rises as long as
-  it stays inside, so a column as tall as the climb lifts the player all the way (several stacked
-  volumes are also fine). The client shows each one as a particle column (UpdraftVisuals). Code is on
-  develop since 0959b8ea.
-- **Order:** strict chain q1 → q2 → q3 → q4 → q5 (prev/next quest ids). Dash (q3) comes before the
-  first flight (q4) so Vigor is known. *(Claude's call)*
-- **Glider on accept of q4 is permanent;** abandoning q4 does not take it away, and q4 can be
-  re-accepted. *(Claude's call: the spell is the player's from then on)*
-- **q4 markers count only from the air** by placement: the three marker area triggers float in
-  mid-air, far enough out from the Keep wall and high enough above the court that a jump or fall
-  without the glider cannot pass through them, and no walkable surface touches them. No new engine
-  condition. *(Claude's call)*
-- **Safe way down:** the player owns the glider by q4/q5, so gliding down is the way back; the Keep
-  top used in q5 must also have a walkable way down (stairs) or the flag is placed where one exists.
-  The builder checks the Keep's walkable collision before placing. *(Claude's call)*
-
-## Decided by the user
-
-- Questline in or around Haven, from level 10 (2026-11-25).
-- Every quest gives class XP as well as character XP (2026-11-25).
-- Story as above (2026-11-25).
-- The ungating work (glide rise tolerance, timestamp clamp, creature AI vs airborne players, glide
-  E2E) is built in the same branch as the questline, so both go live together (2026-11-25).
+- Feature branch `feature/skywright-quests`, stacked on `feature/glider-visuals`; data submodules on
+  their own branches, landed on master before develop is pushed.
+- Game protocol bump with `tools/protocol_version_check.py --update` and `docs/protocol_versions.md`.
+- Realm DB migrations additive only.
+- Next free ids (data master 1fe20f8, re-check on develop): quests 95, units 151, objects 24, object
+  displays 16, items 181, item displays 240, area triggers 14, triggers 144, gossip menus 33,
+  conditions 27, unit loot 37, spells 2009; sound entries 454 (450–453 taken by the glider visuals).
+- Quest data via the mmo-quest-creator / npc / item skills; `tools/world/lint.py` and `report.py`
+  after placing; `tools/xp_audit.py` coverage ≥ 120 % (it skips exploration and object quests).
+- Quest rewards and collect objectives never grey.
 
 ## Left to the builder
 
-- Exact NPC/object/marker/updraft positions and heights (needs a look at the Keep's walkable roof and
-  the harbour terrain; the user signs off placements visually).
-- XP and money amounts (keep `tools/xp_audit.py` coverage ≥ 120%; class XP sized like the other
-  level-10 quests).
-- Quest texts in enUS/deDE, NPC names besides Elowen Marsh, the sailmaker's name.
-- Whether the flag in q5 is a world object state change or a spawned object.
-- The keepsake item for q5.
+Exact positions and heights (Keep walkable collision checked first), XP/money/class XP amounts, stat
+caps and percentages, quest texts, NPC names besides Elowen Marsh, the slot icon art, the keepsake.
