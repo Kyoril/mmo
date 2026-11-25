@@ -2,6 +2,8 @@
 
 #include "inventory.h"
 
+#include "game/inventory_fields.h"
+
 #include "game_server/objects/game_bag_s.h"
 #include "game_server/objects/game_item_s.h"
 #include "game_server/objects/game_player_s.h"
@@ -131,8 +133,8 @@ namespace mmo
 		
 		if (invSlot.IsInventory() || invSlot.IsEquipment() || invSlot.IsBagPack() || invSlot.IsBankItem() || invSlot.IsBankBag())
 		{
-			m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2));
-			m_owner.Invalidate(object_fields::InvSlotHead + ((slot & 0xFF) * 2) + 1);
+			m_owner.Invalidate(GetInventorySlotField(static_cast<uint8>(slot & 0xFF)));
+			m_owner.Invalidate(GetInventorySlotField(static_cast<uint8>(slot & 0xFF)) + 1);
 		}
 		else if (invSlot.IsBag() || invSlot.IsBankBagContent())
 		{
@@ -217,7 +219,7 @@ namespace mmo
 
 		if (bag == player_inventory_slots::Bag_0)
 		{
-			m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
+			m_owner.Set<uint64>(GetInventorySlotField(subslot), item->GetGuid());
 
 			if (invSlot.IsBagPack())
 			{
@@ -390,7 +392,7 @@ namespace mmo
 
 		if (bag == player_inventory_slots::Bag_0)
 		{
-			m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), 0);
+			m_owner.Set<uint64>(GetInventorySlotField(subslot), 0);
 			
 			if (invSlot.IsBagPack())
 			{
@@ -399,9 +401,8 @@ namespace mmo
 
 			if (invSlot.IsEquipment())
 			{
-				constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
-				m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
-				m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
+				m_owner.Set<uint32>(GetVisibleItemField(subslot), item->GetEntry().id());
+				m_owner.Set<uint64>(GetVisibleItemCreatorField(subslot), item->Get<uint64>(object_fields::Creator));
 				m_owner.ApplyItemStats(*item, false);
 			}
 		}
@@ -1098,12 +1099,9 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 
 					if (InventorySlot::FromAbsolute(data.slot).IsEquipment())
 					{
-						// Ensure slot size is valid
-						constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
-
-						m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
-						m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (subslot * slotSize), item->GetEntry().id());
-						m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (subslot * slotSize), item->Get<uint64>(object_fields::Creator));
+						m_owner.Set<uint64>(GetInventorySlotField(subslot), item->GetGuid());
+						m_owner.Set<uint32>(GetVisibleItemField(subslot), item->GetEntry().id());
+						m_owner.Set<uint64>(GetVisibleItemCreatorField(subslot), item->Get<uint64>(object_fields::Creator));
 						m_owner.ApplyItemStats(*item, true);
 						if (item->GetEntry().itemset() != 0)
 						{
@@ -1120,11 +1118,11 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 							 InventorySlot::FromAbsolute(data.slot).IsBankItem() ||
 							 InventorySlot::FromAbsolute(data.slot).IsBankBag())
 					{
-						m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
+						m_owner.Set<uint64>(GetInventorySlotField(subslot), item->GetGuid());
 					}
 					else if (InventorySlot::FromAbsolute(data.slot).IsBagPack() && item->GetTypeId() == ObjectTypeId::Container)
 					{
-						m_owner.Set<uint64>(object_fields::InvSlotHead + (subslot * 2), item->GetGuid());
+						m_owner.Set<uint64>(GetInventorySlotField(subslot), item->GetGuid());
 
 						// Increase slot count since this is an equipped bag
 						m_freeSlots += reinterpret_cast<GameBagS *>(item.get())->GetSlotCount();
@@ -1470,7 +1468,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		// Update player fields
 		if (InventorySlot::FromAbsolute(slot).IsEquipment() || InventorySlot::FromAbsolute(slot).IsInventory() || InventorySlot::FromAbsolute(slot).IsBagPack())
 		{
-			m_owner.Set<uint64>(object_fields::InvSlotHead + (slot & 0xFF) * 2, 0);
+			m_owner.Set<uint64>(GetInventorySlotField(static_cast<uint8>(slot & 0xFF)), 0);
 		}
 
 		// Remove from tracking
@@ -1573,7 +1571,7 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 		
 		if (invSlot.IsEquipment() || invSlot.IsInventory() || invSlot.IsBagPack() || invSlot.IsBankItem() || invSlot.IsBankBag())
 		{
-			m_owner.Set<uint64>(object_fields::InvSlotHead + (slot & 0xFF) * 2, item ? item->GetGuid() : 0);
+			m_owner.Set<uint64>(GetInventorySlotField(static_cast<uint8>(slot & 0xFF)), item ? item->GetGuid() : 0);
 			UpdateItemContained(item, m_owner.GetGuid(), slot);
 		}
 		else if (invSlot.IsBag() || invSlot.IsBankBagContent())
@@ -2056,9 +2054,8 @@ InventoryChangeFailure Inventory::IsValidSlot(uint16 slot, const proto::ItemEntr
 
 	void Inventory::UpdateEquipmentVisual(uint8 equipSlot, uint32 entryId, uint64 creatorGuid) noexcept
 	{
-		constexpr uint32 slotSize = object_fields::VisibleItem2_CREATOR - object_fields::VisibleItem1_CREATOR;
-		m_owner.Set<uint32>(object_fields::VisibleItem1_0 + (equipSlot * slotSize), entryId);
-		m_owner.Set<uint64>(object_fields::VisibleItem1_CREATOR + (equipSlot * slotSize), creatorGuid);
+		m_owner.Set<uint32>(GetVisibleItemField(equipSlot), entryId);
+		m_owner.Set<uint64>(GetVisibleItemCreatorField(equipSlot), creatorGuid);
 	}
 
 	void Inventory::HandleItemSetEffect(uint32 itemSetId, bool equipped) noexcept
