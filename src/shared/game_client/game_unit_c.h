@@ -228,6 +228,9 @@ namespace mmo
 		/// @brief Whether this unit could open its glider right now: it knows the Glider spell, has
 		///	Vigor left, is alive, not rooted (stuns root the client too) and not moved by the server.
 		///	Does not check whether the unit is in the air (TryToggleGlide does).
+		/// @brief Whether a glider is equipped. Only players have a glider slot (GamePlayerC).
+		[[nodiscard]] virtual bool HasGliderEquipped() const { return false; }
+
 		/// @brief Whether the glider can be opened now, and if not, whether the player is told why.
 		[[nodiscard]] glider_usability::Type GetGliderUsability() const;
 

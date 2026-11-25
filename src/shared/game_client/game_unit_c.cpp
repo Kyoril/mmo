@@ -3711,7 +3711,7 @@ namespace mmo
 	{
 		GliderUsabilityInput input;
 		input.knowsGlider = HasSpell(traversal_spells::Glider);
-		input.hasGliderEquipped = Get<uint64>(object_fields::GliderSlot) != 0;
+		input.hasGliderEquipped = HasGliderEquipped();
 		input.predictedVigor = GetPredictedVigor();
 		input.alive = IsAlive();
 		input.rooted = IsRooted();

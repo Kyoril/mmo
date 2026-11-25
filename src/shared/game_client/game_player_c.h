@@ -220,6 +220,11 @@ namespace mmo
 
 		void OnEquipmentChanged(uint64);
 
+	public:
+		/// Whether an item is equipped in the glider slot (the GliderSlot player field).
+		[[nodiscard]] bool HasGliderEquipped() const override { return Get<uint64>(object_fields::GliderSlot) != 0; }
+
+	protected:
 		/// Requests the equipped glider's item data; NotifyItemData then sets the glider's look.
 		void OnGliderChanged(uint64);
 
