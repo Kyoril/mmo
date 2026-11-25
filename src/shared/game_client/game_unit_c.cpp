@@ -260,7 +260,7 @@ namespace mmo
 		if (cue.startLoop)
 		{
 			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
-			m_gliderWindChannel = s_soundEntryPlayer->PlayEntry(glider_sounds::WindLoop, position);
+			m_gliderWindChannel = s_soundEntryPlayer->PlayEntry(glider_sounds::WindLoop, position, GliderWindLoopPriority);
 		}
 		if (cue.playClose)
 		{

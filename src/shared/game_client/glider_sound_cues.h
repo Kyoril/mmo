@@ -22,6 +22,10 @@ namespace mmo
 		};
 	}
 
+	/// Channel priority of the glider's wind loop: above the 1.0 of one-shots, so their channel
+	///	stealing never takes the loop's channel while the unit keeps moving and stopping it.
+	constexpr float GliderWindLoopPriority = 1.5f;
+
 	/// @brief Decides when a unit's glider plays its open and close sounds and runs its wind
 	///	loop. Pure logic; GameUnitC turns the cues into sound entry playback.
 	class GliderSoundCues final
@@ -40,7 +44,8 @@ namespace mmo
 		/// @brief Advances the cues.
 		/// @param gliding Whether the unit glides this frame.
 		/// @param event The fold edge GliderVisual reported this frame.
-		/// @return The open sound and the loop start on Opened; the close sound and the loop stop
+		/// @return The open sound and the loop start on Opened (not again for an Opened while the
+		///	loop runs, which a glider visual rebuilt mid-glide reports); the close sound and the loop stop
 		///	once when the glide ends (when folding starts, not when it finishes); a re-open while
 		///	still folding restarts the loop without a second open sound.
 		Cue Update(bool gliding, glider_event::Type event);

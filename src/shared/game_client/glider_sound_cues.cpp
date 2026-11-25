@@ -7,7 +7,9 @@ namespace mmo
 	GliderSoundCues::Cue GliderSoundCues::Update(const bool gliding, const glider_event::Type event)
 	{
 		Cue cue;
-		if (event == glider_event::Opened)
+		// A glider visual rebuilt mid-glide (display change) reports Opened again; the loop
+		// already running tells that apart from a real opening.
+		if (event == glider_event::Opened && !m_loopRunning)
 		{
 			cue.playOpen = true;
 		}

@@ -91,3 +91,15 @@ TEST_CASE("StopChannel stops the voice and forgets the channel", "[sound_entry_p
 	player.StopChannel(channel);
 	CHECK(channel == InvalidChannel);
 }
+
+TEST_CASE("a positioned entry can be played at a raised priority", "[sound_entry_player]")
+{
+	FakeAudio audio;
+	proto_client::SoundManager sounds;
+	REQUIRE(AddLooped3DEntry(sounds, 452) != nullptr);
+
+	SoundEntryPlayer player(audio, sounds);
+	const ChannelIndex channel = player.PlayEntry(452, Vector3::Zero, 1.5f);
+	REQUIRE(channel != InvalidChannel);
+	CHECK(audio.channelPriorities[channel] == Approx(1.5f));
+}

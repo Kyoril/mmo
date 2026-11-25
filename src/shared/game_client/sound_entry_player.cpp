@@ -57,7 +57,7 @@ namespace mmo
 		return channel;
 	}
 
-	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId, const Vector3& position)
+	ChannelIndex SoundEntryPlayer::PlayEntry(const uint32 soundId, const Vector3& position, const float priority)
 	{
 		const proto_client::SoundEntry* entry = m_sounds.getById(soundId);
 		if (!entry)
@@ -75,11 +75,11 @@ namespace mmo
 		ChannelIndex channel = InvalidChannel;
 		if (entry->is_3d())
 		{
-			m_audio.PlaySound3D(sound, &channel, position, entry->min_distance(), entry->max_distance(), 1.0f, GetCategoryFromEntry(*entry));
+			m_audio.PlaySound3D(sound, &channel, position, entry->min_distance(), entry->max_distance(), priority, GetCategoryFromEntry(*entry));
 		}
 		else
 		{
-			m_audio.PlaySound(sound, &channel, 1.0f, GetCategoryFromEntry(*entry));
+			m_audio.PlaySound(sound, &channel, priority, GetCategoryFromEntry(*entry));
 		}
 
 		ApplyChannelSettings(channel, *entry);

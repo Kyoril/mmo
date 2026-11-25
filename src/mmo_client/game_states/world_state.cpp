@@ -5297,6 +5297,12 @@ namespace mmo
 
 	bool WorldState::LoadMap()
 	{
+		// The old map's updraft columns, also when loading the new map fails.
+		if (m_updraftVisuals)
+		{
+			m_updraftVisuals->Clear();
+		}
+
 		// The distant terrain belongs to the old world's terrain.
 		m_farTerrain.reset();
 

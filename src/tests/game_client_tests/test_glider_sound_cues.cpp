@@ -56,3 +56,14 @@ TEST_CASE("re-opening while still folding restarts the loop without a second ope
 	CHECK(cue.startLoop);
 	CHECK(cues.IsLoopRunning());
 }
+
+TEST_CASE("a glider rebuilt mid-glide (display change) does not play the open sound again", "[glider][sound]")
+{
+	GliderSoundCues cues;
+	cues.Update(true, glider_event::Opened);
+
+	// The new GliderVisual reports Opened again on its first frame.
+	const auto cue = cues.Update(true, glider_event::Opened);
+	CHECK_FALSE(cue.playOpen);
+	CHECK_FALSE(cue.startLoop);
+}
