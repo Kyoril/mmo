@@ -33,7 +33,7 @@ the planned mount categories (one item per category, collectible skins with thei
 
 - New `inventory_type::Glider` (appended before `Count_`; string tables in game, editor and Lua
   `INVENTORY_TYPE_GLIDER` updated).
-- New equipment slot **118** (`player_item_slots::Glider`, appended after the buyback range) instead
+- New equipment slot **86** (`player_glider_slots::Slot`, the first unused subslot after the buyback range) instead
   of slot 19. *(Claude's call: inserting at 19 would shift every bag, pack, bank and buyback slot,
   renumber `character_items.slot` in the realm database and break the additive-migration rule, since
   the previous build could no longer read the inventory.)*
@@ -42,7 +42,7 @@ the planned mount categories (one item per category, collectible skins with thei
     other equipment.
   - Not part of `CharacterView` (character select shows no glider), so the character list payload
     stays the same.
-  - DB: no migration for existing rows; a glider row is a new slot value (`0xFF76`). The previous
+  - DB: no migration for existing rows; a glider row is a new slot value (`0xFF56`). The previous
     build must ignore an unknown slot without deleting the item (verify; if it would delete it, the
     plan guards that path first).
 - Replication: one new visible item block for the glider slot, **appended at the end of the player
