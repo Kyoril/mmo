@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "animation_controller.h"
+#include "airborne_slot.h"
 
 #include <random>
 
@@ -224,13 +225,17 @@ namespace mmo
 		else if (ctx.airborne)
 		{
 			AnimationState* jumpStart = m_bindings.Get(proto_client::ANIM_SLOT_JUMP_START);
-			if (ctx.verticalVelocity > 0.0f && jumpStart && !jumpStart->HasEnded())
+			switch (SelectAirborneSlot(ctx, jumpStart && !jumpStart->HasEnded()))
 			{
+			case airborne_slot::JumpStart:
 				single(jumpStart);
-			}
-			else
-			{
+				break;
+			case airborne_slot::Glide:
+				single(m_bindings.Get(proto_client::ANIM_SLOT_GLIDE));
+				break;
+			default:
 				single(m_bindings.Get(proto_client::ANIM_SLOT_FALL));
+				break;
 			}
 			m_idleSeconds = 0.0f;
 		}

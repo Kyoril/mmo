@@ -666,8 +666,10 @@ namespace mmo
 		const float inputVector2DSize = (m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).GetLength();
 		ctx.moving = m_unitMovement && m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f;
 		ctx.pathMoving = IsFollowingPath();
+		// A glider hovering in an updraft barely moves vertically but must keep its glide pose.
+		ctx.gliding = IsGliding();
 		ctx.airborne = m_unitMovement && m_unitMovement->IsFalling() &&
-			std::abs(m_unitMovement->GetVelocity().y) > 0.05f;
+			(ctx.gliding || std::abs(m_unitMovement->GetVelocity().y) > 0.05f);
 		ctx.verticalVelocity = m_unitMovement ? m_unitMovement->GetVelocity().y : 0.0f;
 		ctx.swimming = m_movementInfo.IsSwimming();
 		ctx.walkMode = IsWalkModeEnabled();
