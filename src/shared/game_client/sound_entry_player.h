@@ -60,6 +60,14 @@ namespace mmo
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f);
 
+		/// @brief Moves a playing positional voice, e.g. a loop that follows a unit.
+		/// @param channel Channel returned by one of the play methods; InvalidChannel is ignored.
+		void MoveChannel(ChannelIndex channel, const Vector3& position);
+
+		/// @brief Stops a voice started by one of the play methods and resets the index to
+		///	InvalidChannel. Stopping an InvalidChannel does nothing.
+		void StopChannel(ChannelIndex& channel);
+
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;
 

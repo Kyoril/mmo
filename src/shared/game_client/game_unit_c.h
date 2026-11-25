@@ -21,6 +21,8 @@
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
 #include "glider_visual.h"
+#include "glider_sound_cues.h"
+#include "shared/audio/audio.h"
 #include "animation/animation_context.h"
 #include "unit_cast_info.h"
 #include "base/clock.h"
@@ -1078,6 +1080,12 @@ namespace mmo
 
 		/// The visible glider while the unit glides or folds it; null otherwise.
 		std::unique_ptr<GliderVisual> m_gliderVisual;
+
+		/// When the glider's open/close sounds and wind loop play.
+		GliderSoundCues m_gliderSoundCues;
+
+		/// Channel of the glider's wind loop while it plays.
+		ChannelIndex m_gliderWindChannel = InvalidChannel;
 
 		/// @brief Weapon category of the equipped main-hand item, fed into the animation
 		/// controller to select weapon-specific combat idle override sets.

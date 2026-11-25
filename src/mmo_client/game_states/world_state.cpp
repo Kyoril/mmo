@@ -1053,6 +1053,14 @@ namespace mmo
 				: VigorActivity::Gliding;
 		}
 
+		// A rising whoosh each time the own glider catches an updraft.
+		const bool glidingInUpdraft = activity == VigorActivity::GlidingInUpdraft;
+		if (glidingInUpdraft && !m_playerGlidingInUpdraft)
+		{
+			m_soundEntryPlayer.PlayEntry(glider_sounds::Updraft, player.GetPosition());
+		}
+		m_playerGlidingInUpdraft = glidingInUpdraft;
+
 		float extraDrain = 0.0f;
 		for (uint32 i = 0; i < player.GetAuraCount(); ++i)
 		{

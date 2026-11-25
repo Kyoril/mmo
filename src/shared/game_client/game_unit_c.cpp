@@ -144,6 +144,10 @@ namespace mmo
 
 		// Detaches from the entity, which the base class destroys after this destructor.
 		m_gliderVisual.reset();
+		if (s_soundEntryPlayer)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+		}
 
 		// Ensure quest giver status is removed
 		SetQuestGiverStatus(questgiver_status::None);
@@ -227,20 +231,47 @@ namespace mmo
 	void GameUnitC::UpdateGliderVisual(const float deltaTime, const bool isDead)
 	{
 		const bool gliding = IsGliding() && !isDead;
-		if (!m_gliderVisual)
+		if (!m_gliderVisual && gliding && m_entity)
 		{
-			if (!gliding || !m_entity)
-			{
-				return;
-			}
-
 			m_gliderVisual = std::make_unique<GliderVisual>(m_scene, *m_entity, GetGuid());
 		}
 
-		if (m_gliderVisual->Update(gliding, deltaTime) == glider_event::Closed)
+		glider_event::Type event = glider_event::None;
+		if (m_gliderVisual)
 		{
-			m_gliderVisual.reset();
+			event = m_gliderVisual->Update(gliding, deltaTime);
+			if (event == glider_event::Closed)
+			{
+				m_gliderVisual.reset();
+			}
 		}
+
+		const GliderSoundCues::Cue cue = m_gliderSoundCues.Update(gliding, event);
+		if (!s_soundEntryPlayer)
+		{
+			return;
+		}
+
+		const Vector3 position = GetPosition();
+		if (cue.playOpen)
+		{
+			s_soundEntryPlayer->PlayEntry(glider_sounds::Open, position);
+		}
+		if (cue.startLoop)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+			m_gliderWindChannel = s_soundEntryPlayer->PlayEntry(glider_sounds::WindLoop, position);
+		}
+		if (cue.playClose)
+		{
+			s_soundEntryPlayer->PlayEntry(glider_sounds::Close, position);
+		}
+		if (cue.stopLoop)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+		}
+
+		s_soundEntryPlayer->MoveChannel(m_gliderWindChannel, position);
 	}
 
 	void GameUnitC::AddYawInput(const Radian &value)

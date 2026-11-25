@@ -961,6 +961,9 @@ namespace mmo
 		/// Particle columns over the current map's updrafts.
 		std::unique_ptr<UpdraftVisuals> m_updraftVisuals;
 
+		/// Whether the own player glided inside an updraft last frame (updraft sound edge).
+		bool m_playerGlidingInUpdraft = false;
+
 		bool m_timeSyncResponseSent = false;
 
 		/// True between TransferPending and NewWorld; later TransferPending packets for the same transfer are ignored.
