@@ -79,7 +79,8 @@ class HumanRacialDataTest(unittest.TestCase):
 
     def test_human_race_lists_the_racials(self):
         human = next(race for race in self.races.entry if race.id == 0)
-        self.assertEqual(list(human.racialSpells), list(self.ahr.SPELL_IDS))
+        # The glider (1436) is a hidden base spell of every race, listed after the human kit.
+        self.assertEqual(list(human.racialSpells), list(self.ahr.SPELL_IDS) + [1436])
 
     def test_client_db_mirrors_the_editor_blobs(self):
         # Compared as messages, not bytes: protobuf map fields (RaceEntry.initialItems) have no
