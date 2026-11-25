@@ -222,21 +222,24 @@ auto-ships against their limits, breaker and red develop. The command prints it 
 the recorded process no longer runs ("NOT RUNNING"), so a loop that died is not mistaken for
 one that waits. Run it from a worktree with `--repo <main checkout>`.
 
-### Busy, idle and paused
+### Busy, idle, holding and paused
 
 The loop never sleeps between bugs: a poll that did work starts the next one at once. It sleeps
 (`ci_poll_seconds`, 5 min, with the CI watch on, else `poll_seconds`) only after a poll that
-found nothing to do. The mode in `state.json` (`mode`) names which of three it is in:
+found nothing to do. The mode in `state.json` (`mode`) names which of four it is in:
 
 | Mode | When |
 |---|---|
 | busy | bugs are queued for a fix and the daily budget allows one |
 | paused | bugs are queued but the daily invocation budget is used up (it resumes at 00:00 UTC) |
-| idle | the fix queue is empty; the loop polls for new reports |
+| holding | the fix queue is empty, but ships wait in the ship queue; the reason says for what (a red develop and whether its emergency ticket is parked, the breaker, the freeze window, a retry time) |
+| idle | both queues are empty; the loop polls for new reports |
 
 Each change is logged (`mode: idle -> busy`) and posted to Discord once ("Bug loop busy — N
-bug(s) queued", "Bug loop paused — <reason>", "Bug loop idle", the last with what the busy
-stretch shipped, parked and gave up on). The mode survives a restart, so the day-boundary restart
+bug(s) queued", "Bug loop paused — <reason>", "Bug loop holding — <reason>", "Bug loop idle",
+the last two with what the busy stretch shipped, parked and gave up on). A new reason within the
+same mode only updates the status. Before 2026-11-25 there was no holding mode: the status said
+"idle: nothing to do" while five ships waited for days on a red Nightly Release. The mode survives a restart, so the day-boundary restart
 does not announce it again; the first mode after an upgrade is recorded silently. A dry run and
 `notify_status_changes: false` post nothing. A worktree that cannot reach develop keeps its own
 "stalled"/"resumed" messages and does not change the mode.
@@ -351,7 +354,8 @@ not parked (see below). The loop consumes decisions before it does anything else
   same race again before it ships. A refix with empty guidance is
   refused ("decide again"). If a guided refix fails, the bug goes back to `pr_open` so it can
   be decided again; at the limit the loop posts a "refix limit reached" message.
-- **Ship**: ships exactly the recorded commit. The daily cap does not apply. A ship decision for a
+- **Ship**: a mandate. The loop carries it out and gives it back only when it cannot (see "A ship
+  decision is a mandate" below). It ships exactly the recorded commit. The daily cap does not apply. A ship decision for a
   bug whose branch is already merged on develop (a second click while the first ship waited in the
   queue) only notes "already shipped in <commit>" and keeps the bug resolved. If the branch tip
   no longer matches the recorded commit (or none is recorded, or the branch is gone), the bug
@@ -363,9 +367,10 @@ not parked (see below). The loop consumes decisions before it does anything else
   commit; decide again") and uploads the real diff. The API refuses a new review diff while a
   decision is pending, the UI proxy refuses review-diff uploads altogether, and "Ship as is" is
   disabled until a diff is uploaded. An active circuit breaker queues the ship
-  ("the circuit breaker is tripped; ships once the breaker is cleared"), and so do the nightly
-  freeze window and a red develop: the decision is never used up by a hold, and the ship goes
-  out on its own once the hold ends. A second ship decision for a queued bug only adds a note.
+  ("the circuit breaker is tripped; ships once the breaker is cleared"), and so does the nightly
+  freeze window: the decision is never used up by a hold, and the ship goes out on its own once
+  the hold ends. A red develop does not hold it (see below). A second ship decision for a queued
+  bug only adds a note.
 
   Every ship (auto or decided) lands in the same order: each changed data submodule commit is
   pushed, fast-forward only, to `master` of the submodule's repository on GitHub (the remote
@@ -383,6 +388,38 @@ not parked (see below). The loop consumes decisions before it does anything else
   submodules from the main checkout: "not our ref") fetches the `.gitmodules` remote and retries
   once.
 - **Discard**: sets the bug to `wontfix` and deletes the branch.
+
+### A ship decision is a mandate
+
+"Ship as is" means: get this onto develop. The decision is checked once (the recorded commit, the
+hash of the approved diff); from then on every obstacle the loop can remove is its own job, not
+a reason to ask again. The loop records the mandate in `state.json` (`ship_mandates`: the files of
+the approved diff and its park reasons) and keeps it until the fix ships, the maintainer discards
+or refixes the bug, or the loop gives up.
+
+- **Red develop:** does not hold a maintainer's ship (it holds every auto-ship). The merge still
+  runs the fast gate. If that gate is red while develop is red in CI, the breakage is develop's,
+  not the fix's: the ship stays queued ("ships once develop is green"), nothing is re-applied and
+  no attempt is used. On 2026-11-25 a Nightly Release red for days on a Windows-only compile error
+  held four ship decisions this way.
+- **Conflict or red merge gate on a green develop:** the loop re-applies the fix on today's
+  develop at once (guidance "From the bug loop, not the maintainer: ..."). The new candidate goes
+  through guard, review, proof and gate again and ships on the decision unless it leaves what was
+  approved: a red gate, a failed proof (unless the approved candidate had one too), a weakened
+  security property the approved candidate did not have, or a production file the approved diff
+  did not touch (added regression tests are fine). Guard findings, the fixer's confidence and the
+  reviewer's questions were the maintainer's to weigh, and they did. A red gate or a failed proof
+  first gets the usual self-correction rounds.
+- **Lost push race and other ship failures:** the ship is tried again a minute later.
+- **No Claude** (budget used up, logged out): a needed re-application waits; the ship is queued
+  with a retry time (00:05 UTC the next day for the budget), nothing is used up.
+- **Giving up:** after `mandate_rounds` (3) obstacles, or when the re-applied fix leaves what was
+  approved, the bug parks with "the bug loop could not carry out your ship decision" and the
+  reason, and the maintainer decides again.
+
+A refix decision ends the mandate (the maintainer asked for a different fix), and so does a
+discard. A branch that moved before the decision was consumed, or an approved diff that does not
+match the candidate, still re-parks: the maintainer approved something else than what would ship.
 - **Implement as feature** (Feature request panel, only for `wontfix`/`not_a_bug` and
   `triaged`/`design_request` without a pending decision): the maintainer's description (at
   most 4000 characters) becomes the trusted expected behaviour for the fixer and the reviewer.
@@ -434,8 +471,8 @@ webhook nothing is sent. Messages:
   discarded, merged by hand, interrupted, loop error. Outcomes with a message of their own
   (shipped, refix limit, design decision needed, feature ready) are not repeated. Each message
   links the bug and quotes the triage summary;
-- the loop's mode changes: busy, paused (budget used up with bugs queued), idle (see "Busy, idle
-  and paused"), sent with the status messages and switched off with them;
+- the loop's mode changes: busy, paused (budget used up with bugs queued), holding (ships wait), idle (see "Busy, idle,
+  holding and paused"), sent with the status messages and switched off with them;
 - a daily summary (outcomes, Claude invocations against the budget, bugs waiting for a
   decision: parked ones without a decision and `needs_info` ones, plus the day's parked and
   needs-info outcomes with their first reason), sent once per UTC day when the day rolls over; it is persisted, so the restart at
@@ -523,11 +560,12 @@ ships are not held`.
   list the failing job yet, the ticket opens with "(log unavailable)" and the log is read again
   on a later poll. The ticket is resolved when develop is green again ("develop is green
   again"), even if the emergency fix is parked; a parked branch stays for the maintainer.
-- **While develop is red** every other ship is queued with the reason "develop is red"
-  (parking continues). A red result from the last read holds ships even before the phase could
+- **While develop is red** every other auto-ship is queued with the reason "develop is red"
+  (parking continues); a maintainer's ship decision is not held (see "A ship decision is a
+  mandate"). A red result from the last read holds ships even before the phase could
   be opened. When GitHub is unreachable, the last known state holds: ships continue if develop
   was green and stay held if it was red. If the check fails for another reason (the bug API
-  during the check, say), ships are queued with "CI check failed" until the CI state is
+  during the check, say), auto-ships are queued with "CI check failed" until the CI state is
   confirmed again; triage and decisions go on meanwhile.
 - **Discord:** the emergency ticket posts no per-attempt status messages; the CI messages
   ("develop is red", "Emergency fix shipped", "Emergency fix needs you", "develop is green

@@ -33,6 +33,7 @@ STAGE_LABELS = {
 MODE_LABELS = {
 	"busy": "busy: works the backlog without waiting",
 	"idle": "idle: nothing to do, polls for new reports",
+	"holding": "holding: no bug to fix, but ships wait",
 	"paused": "paused: bugs wait, but the loop cannot work them now",
 }
 
