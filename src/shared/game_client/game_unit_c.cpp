@@ -142,6 +142,9 @@ namespace mmo
 	{
 		UpdateSparkEmitter(false);
 
+		// Detaches from the entity, which the base class destroys after this destructor.
+		m_gliderVisual.reset();
+
 		// Ensure quest giver status is removed
 		SetQuestGiverStatus(questgiver_status::None);
 
@@ -218,6 +221,25 @@ namespace mmo
 				m_scene.DestroySceneNode(*m_sparkEmitterNode);
 				m_sparkEmitterNode = nullptr;
 			}
+		}
+	}
+
+	void GameUnitC::UpdateGliderVisual(const float deltaTime, const bool isDead)
+	{
+		const bool gliding = IsGliding() && !isDead;
+		if (!m_gliderVisual)
+		{
+			if (!gliding || !m_entity)
+			{
+				return;
+			}
+
+			m_gliderVisual = std::make_unique<GliderVisual>(m_scene, *m_entity, GetGuid());
+		}
+
+		if (m_gliderVisual->Update(gliding, deltaTime) == glider_event::Closed)
+		{
+			m_gliderVisual.reset();
 		}
 	}
 
@@ -515,6 +537,7 @@ namespace mmo
 		UpdateNormalMovement(deltaTime, isDead);
 
 		UpdateAnimation(deltaTime, isDead);
+		UpdateGliderVisual(deltaTime, isDead);
 
 		if (m_transition == TransitionState::Spawning && UpdateTransitionEffect(deltaTime) >= 1.0f)
 		{
@@ -2949,6 +2972,8 @@ namespace mmo
 
 		// The previous model's outfit meshes hang off bones which do not survive a mesh change.
 		ClearModelItemAttachments();
+		// So does the glider; it is created again on the new entity while the unit glides.
+		m_gliderVisual.reset();
 
 		if (m_entity)
 			m_entity->SetVisible(modelEntry != nullptr);

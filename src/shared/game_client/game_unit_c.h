@@ -20,6 +20,7 @@
 #include "unit_movement.h"
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
+#include "glider_visual.h"
 #include "animation/animation_context.h"
 #include "unit_cast_info.h"
 #include "base/clock.h"
@@ -315,6 +316,9 @@ namespace mmo
 		/// @brief Creates or destroys the spark particle emitter based on the lootable flag.
 		/// @param active If true, creates and plays the emitter; if false, destroys it.
 		void UpdateSparkEmitter(bool active);
+
+		/// @brief Shows, unfolds and folds the glider while the unit glides (see GliderVisual).
+		void UpdateGliderVisual(float deltaTime, bool isDead);
 
 		void OnEntryChanged();
 
@@ -1071,6 +1075,9 @@ namespace mmo
 	protected:
 		/// @brief Layered animation controller owning all animation state selection and weights.
 		std::unique_ptr<AnimationController> m_animationController;
+
+		/// The visible glider while the unit glides or folds it; null otherwise.
+		std::unique_ptr<GliderVisual> m_gliderVisual;
 
 		/// @brief Weapon category of the equipped main-hand item, fed into the animation
 		/// controller to select weapon-specific combat idle override sets.
