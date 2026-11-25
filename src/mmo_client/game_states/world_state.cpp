@@ -356,11 +356,18 @@ namespace mmo
 		}
 	}
 
+	IInputControl *WorldState::s_inputControl = nullptr;
+	WorldState *WorldState::s_luaWorldState = nullptr;
+	PlayerController *WorldState::s_playerController = nullptr;
+
 	/// Adapts the streamed client terrain to the water queries WaterVolumeSystem needs.
 	///
 	/// The terrain pointer is refreshed every frame rather than captured once, because the world
 	/// instance is torn down and rebuilt on every world change; a captured pointer would dangle
 	/// across a zone transition.
+	///
+	/// Must stay above the constructor: the constructor instantiates unique_ptr's deleter for
+	/// m_waterQuery (to clean up members if it fails), and newer MSVC rejects an incomplete type there.
 	class WorldState::TerrainWaterQuery final : public IWaterQuery
 	{
 	public:
@@ -389,10 +396,6 @@ namespace mmo
 	private:
 		terrain::Terrain* m_terrain{ nullptr };
 	};
-
-	IInputControl *WorldState::s_inputControl = nullptr;
-	WorldState *WorldState::s_luaWorldState = nullptr;
-	PlayerController *WorldState::s_playerController = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
 						   ActionBar &actionBar, SpellCast &spellCast, CooldownManager &cooldownManager, TrainerClient &trainerClient, QuestClient &questClient, IAudio &audio, SoundEntryPlayer &soundEntryPlayer, PartyInfo &partyInfo, CharSelect &charSelect, GuildClient &guildClient, FriendClient &friendClient, ICacheProvider &cache, Discord &discord,
@@ -1906,7 +1909,7 @@ namespace mmo
 		m_environment.SetTarget(m_environmentProfiles.Get(m_environmentProfileId), true);
 	}
 
-	// Defined here rather than in the header so TerrainWaterQuery, defined at the top of this file, is a
+	// Defined here rather than in the header so TerrainWaterQuery, defined above the constructor, is a
 	// complete type at the point unique_ptr's deleter is instantiated.
 	//
 	// OnLeave() normally stops and joins m_backgroundLoader. If this instance is ever destroyed
