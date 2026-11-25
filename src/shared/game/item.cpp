@@ -5,6 +5,7 @@
 #include "binary_io/reader.h"
 #include "binary_io/writer.h"
 
+#include <cmath>
 #include <cstring>
 #include <iterator>
 
@@ -177,14 +178,14 @@ namespace mmo
 		return s_defaultIcon;
 	}
 
-	float ItemInfo::GetMinDamage() const
+	int32 ItemInfo::GetMinDamage() const
 	{
-		return damage.min;
+		return static_cast<int32>(std::floor(damage.min));
 	}
 
-	float ItemInfo::GetMaxDamage() const
+	int32 ItemInfo::GetMaxDamage() const
 	{
-		return damage.max;
+		return static_cast<int32>(std::floor(damage.max));
 	}
 
 	float ItemInfo::GetAttackSpeed() const
