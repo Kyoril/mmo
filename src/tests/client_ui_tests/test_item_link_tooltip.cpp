@@ -12,6 +12,7 @@ namespace
 	/// The shipped UI scripts under test.
 	const std::string g_chatScriptPath = std::string(MMO_UI_SCRIPT_DIR) + "/ChatFrame.lua";
 	const std::string g_tooltipScriptPath = std::string(MMO_UI_SCRIPT_DIR) + "/GameTooltip.lua";
+	const std::string g_lootRollScriptPath = std::string(MMO_UI_SCRIPT_DIR) + "/LootRollFrame.lua";
 
 	/// Stand-ins for the globals ChatFrame_OnLoad touches, plus a recording item link tooltip.
 	const char* g_chatStubs = R"lua(
@@ -38,6 +39,44 @@ namespace
 			handler(eventFrame, linkType, payload);
 			return shownItems;
 		end
+	)lua";
+
+	/// Stand-ins for what the loot roll window needs to announce a roll in the chat: a recording
+	/// chat frame and silent roll item frames, so only the chat text is left to look at.
+	const char* g_lootRollStubs = R"lua(
+		chatLines = "";
+
+		ChatFrame = {};
+		function ChatFrame:AddMessage(message, r, g, b)
+			chatLines = chatLines .. message .. ";";
+		end
+
+		ItemQualityColors = { [1] = "FFFFFFFF" };
+
+		local function NewRollFrame()
+			local frame = {};
+			function frame:Show() end
+			function frame:Hide() end
+			function frame:SetText(text) end
+			function frame:SetProperty(name, value) end
+			function frame:GetChild(index) return NewRollFrame(); end
+			function frame:SetOnEnterHandler(handler) end
+			function frame:SetOnLeaveHandler(handler) end
+			function frame:SetClickedHandler(handler) end
+			return frame;
+		end
+
+		local rollItemFrames = {};
+		function getglobal(name)
+			if (rollItemFrames[name] == nil) then
+				rollItemFrames[name] = NewRollFrame();
+			end
+			return rollItemFrames[name];
+		end
+
+		function GetItemDisplayIcon(displayId) return ""; end
+
+		rollFrame = NewRollFrame();
 	)lua";
 
 	/// Frame stand-ins for the item link tooltip, and an item cache holding two item templates.
@@ -242,6 +281,41 @@ TEST_CASE("ItemLinkTooltip_Is_A_Single_Window_Beside_The_Hover_Tooltip", "[item_
 	// The window is closable, and its close button is what closes it.
 	RunChunk(state, "ItemRefTooltipCloseButton.clickedHandler();");
 	CHECK(EvalString(state, "return tostring(ItemRefTooltip:IsVisible());") == "false");
+
+	lua_close(state);
+}
+
+TEST_CASE("LootRollFrame_Chat_Lines_Name_Clickable_Items", "[item_link]")
+{
+	lua_State* state = luaL_newstate();
+	REQUIRE(state != nullptr);
+	luaL_openlibs(state);
+
+	RunChunk(state, g_chatStubs);
+	RunChunk(state, g_lootRollStubs);
+	RunFile(state, g_chatScriptPath);
+	RunFile(state, g_lootRollScriptPath);
+
+	// A roll the player can see in the loot roll window ...
+	RunChunk(state, "LootRollFrame_OnStartRoll(rollFrame, 7, 139, 60000, \"Wolf Meat\", 1, 0);");
+
+	// ... names a clickable item when somebody rolls on it ...
+	RunChunk(state, "LootRollFrame_OnRollResult(rollFrame, 1, 42, \"Kyo\", \"Wolf Meat\", 1, 139);");
+	CHECK(EvalString(state, "return chatLines;")
+		== "Kyo rolled Need - 42 on |cFFFFFFFF|Hitem:139|h[Wolf Meat]|h|r;");
+
+	// ... and when it is won.
+	RunChunk(state, "chatLines = \"\";");
+	RunChunk(state, "LootRollFrame_OnRollWon(rollFrame, 7, 139, 42, 1, \"Wolf Meat\", 1, \"Kyo\");");
+	CHECK(EvalString(state, "return chatLines;")
+		== "Kyo won |cFFFFFFFF|Hitem:139|h[Wolf Meat]|h|r (Need - 42);");
+
+	// The line for a roll nobody wanted names the same clickable item.
+	RunChunk(state, "chatLines = \"\";");
+	RunChunk(state, "LootRollFrame_OnStartRoll(rollFrame, 8, 137, 60000, \"Mangy Fur Clump\", 1, 0);");
+	RunChunk(state, "LootRollFrame_OnAllPassed(rollFrame, 8, 137);");
+	CHECK(EvalString(state, "return chatLines;")
+		== "Everyone passed on |cFFFFFFFF|Hitem:137|h[Mangy Fur Clump]|h|r;");
 
 	lua_close(state);
 }
