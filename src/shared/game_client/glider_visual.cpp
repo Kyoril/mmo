@@ -21,12 +21,15 @@ namespace mmo
 	namespace
 	{
 		/// Placement of the glider mesh relative to the attach bone. The mesh has its origin at
-		/// the harness, the span along +-X, forward +Z and up +Y.
-		const Quaternion s_gliderOrientation = Quaternion::Identity;
-		const Vector3 s_gliderOffset = Vector3::Zero;
+		/// the harness, the span along +-X, forward +Z and up +Y, like the character model; the
+		/// player rigs' Back_M bone is turned -90 degrees about the model's up axis, which this
+		/// orientation undoes. The offset moves the harness from Back_M (a holster bone a hand's
+		/// width behind the back) onto the back. The Glide pose's grips match these values.
+		const Quaternion s_gliderOrientation = Quaternion(0.70710678f, 0.0f, 0.70710678f, 0.0f);
+		const Vector3 s_gliderOffset = Vector3(0.10f, 0.05f, 0.0f);
 
 		/// Wing tips in glider mesh space.
-		const std::array<Vector3, 2> s_wingTips = { Vector3(-1.5f, 0.0f, 0.0f), Vector3(1.5f, 0.0f, 0.0f) };
+		const std::array<Vector3, 2> s_wingTips = { Vector3(-1.5f, 0.21f, -0.26f), Vector3(1.5f, 0.21f, -0.26f) };
 
 		/// Smallest span scale of a visible glider, so a just-opened glider is never degenerate.
 		constexpr float MinSpanScale = 0.05f;

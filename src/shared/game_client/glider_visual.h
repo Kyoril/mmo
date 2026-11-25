@@ -31,8 +31,8 @@ namespace mmo
 		static constexpr const char* TrailParticles = "Particles/GliderTrail.hpar";
 		/// One-shot burst when the glider opens.
 		static constexpr const char* OpenParticles = "Particles/GliderOpen.hpar";
-		/// Bone the glider is attached to.
-		static constexpr const char* AttachBone = "spine_03";
+		/// Bone the glider is attached to (the back holster bone of the player rigs).
+		static constexpr const char* AttachBone = "Back_M";
 
 	public:
 		/// @brief Creates the glider objects for a host entity (folded and hidden).
