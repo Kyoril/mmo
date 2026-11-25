@@ -3699,13 +3699,21 @@ namespace mmo
 		}
 	}
 
+	glider_usability::Type GameUnitC::GetGliderUsability() const
+	{
+		GliderUsabilityInput input;
+		input.knowsGlider = HasSpell(traversal_spells::Glider);
+		input.hasGliderEquipped = Get<uint64>(object_fields::GliderSlot) != 0;
+		input.predictedVigor = GetPredictedVigor();
+		input.alive = IsAlive();
+		input.rooted = IsRooted();
+		input.serverControlled = IsMovementControlledByServer();
+		return EvaluateGliderUsability(input);
+	}
+
 	bool GameUnitC::IsGliderUsable() const
 	{
-		return HasSpell(traversal_spells::Glider) &&
-			GetPredictedVigor() > 0.0f &&
-			IsAlive() &&
-			!IsRooted() &&
-			!IsMovementControlledByServer();
+		return GetGliderUsability() == glider_usability::Usable;
 	}
 
 	bool GameUnitC::TryToggleGlide()

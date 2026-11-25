@@ -22,6 +22,7 @@
 #include "remote_movement_renderer.h"
 #include "glider_visual.h"
 #include "glider_sound_cues.h"
+#include "glider_usability.h"
 #include "shared/audio/audio.h"
 #include "animation/animation_context.h"
 #include "unit_cast_info.h"
@@ -227,6 +228,9 @@ namespace mmo
 		/// @brief Whether this unit could open its glider right now: it knows the Glider spell, has
 		///	Vigor left, is alive, not rooted (stuns root the client too) and not moved by the server.
 		///	Does not check whether the unit is in the air (TryToggleGlide does).
+		/// @brief Whether the glider can be opened now, and if not, whether the player is told why.
+		[[nodiscard]] glider_usability::Type GetGliderUsability() const;
+
 		[[nodiscard]] virtual bool IsGliderUsable() const;
 
 		/// @brief The Vigor the client assumes this unit has right now. The only place that decides

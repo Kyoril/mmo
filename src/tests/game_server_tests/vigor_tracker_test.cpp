@@ -179,16 +179,17 @@ TEST_CASE("Max vigor is zero without traversal spells", "[vigor]")
 	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(0.0f));
 	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Glider));
 
+	// Knowing the glider spell alone does nothing: a glider has to be equipped (glider_gate_test).
 	player->AddSpell(traversal_spells::Glider);
+	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(0.0f));
+	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Glider));
+
+	// Dash grants Vigor on its own.
+	player->AddSpell(traversal_spells::Dash);
 	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(100.0f));
 	CHECK(player->Get<float>(object_fields::Vigor) == Approx(100.0f));
-	CHECK(player->CanUseTraversal(traversal_spells::Glider));
-	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Dash));
-
-	// Dash alone also grants Vigor, so unlearning Glider keeps it.
-	player->AddSpell(traversal_spells::Dash);
-	player->RemoveSpell(traversal_spells::Glider);
-	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(100.0f));
+	CHECK(player->CanUseTraversal(traversal_spells::Dash));
+	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Glider));
 
 	player->RemoveSpell(traversal_spells::Dash);
 	CHECK(player->Get<float>(object_fields::MaxVigor) == Approx(0.0f));
