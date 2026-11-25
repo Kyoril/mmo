@@ -373,6 +373,11 @@ namespace mmo
 	void RealmConnector::connectionMalformedPacket()
 	{
 		ELOG("Received a malformed packet");
+
+		// The connection has already closed the socket and detached us, so connectionLost() will
+		// not follow. Treat it as one: otherwise the world state keeps rendering a world that no
+		// longer receives anything, which looks exactly like a hung server.
+		connectionLost();
 	}
 
 	PacketParseResult RealmConnector::connectionPacketReceived(game::IncomingPacket & packet)
@@ -617,6 +622,33 @@ namespace mmo
 	{
 		sendSinglePacket([](game::OutgoingPacket& packet) {
 			packet.Start(game::client_realm_packet::CheatPetTame);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendCutsceneBegin(const uint32 cutsceneId)
+	{
+		sendSinglePacket([cutsceneId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CutsceneBegin);
+			packet << io::write<uint32>(cutsceneId);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::SendCutsceneEnd(const uint32 cutsceneId, const bool skipped)
+	{
+		sendSinglePacket([cutsceneId, skipped](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CutsceneEnd);
+			packet << io::write<uint32>(cutsceneId) << io::write<uint8>(skipped ? 1 : 0);
+			packet.Finish();
+			});
+	}
+
+	void RealmConnector::PlayCutscene(const uint32 cutsceneId)
+	{
+		sendSinglePacket([cutsceneId](game::OutgoingPacket& packet) {
+			packet.Start(game::client_realm_packet::CheatPlayCutscene);
+			packet << io::write<uint32>(cutsceneId);
 			packet.Finish();
 			});
 	}

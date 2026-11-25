@@ -42,7 +42,9 @@ if (-not (Test-Path $clientExe))
 
 $scenarios = if ($Scenario)
 {
-	$path = Join-Path $scenarioDir "$Scenario.lua"
+	# A name runs e2e/scenarios/<name>.lua; a path runs that file, e.g. the slow on-demand playtests in
+	# e2e/playtests, which the default suite (nightly, /release, /gate full) never picks up.
+	$path = if ($Scenario.EndsWith(".lua") -and (Test-Path $Scenario)) { (Resolve-Path $Scenario).Path } else { Join-Path $scenarioDir "$Scenario.lua" }
 	if (-not (Test-Path $path)) { throw "Scenario not found: $path" }
 	@(Get-Item $path)
 }

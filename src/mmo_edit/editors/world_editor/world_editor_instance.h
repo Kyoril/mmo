@@ -304,6 +304,7 @@ namespace mmo
 	class SelectedKitProp;
 	class SelectedSplinePoint;
 	class SelectedControlTransform;
+	class SelectedControlShape;
 	class SectionPanel;
 	class PcgDebugLayer;
 
@@ -332,6 +333,9 @@ namespace mmo
 
 		/// @brief Visits the transform of a placed procedural volume or point control.
 		virtual void Visit(SelectedControlTransform &selectable) = 0;
+
+		/// @brief Visits a placed procedural loop or spline control as a whole.
+		virtual void Visit(SelectedControlShape &selectable) = 0;
 	};
 
 	class WorldEditorInstance final : public EditorInstance, public IPageLoaderListener, public SelectableVisitor, public ChunkReader, public IWorldEditor
@@ -415,6 +419,9 @@ namespace mmo
 		void Visit(SelectedSplinePoint &selectable) override;
 
 		void Visit(SelectedControlTransform &selectable) override;
+
+		/// @brief Draws the details of a placed loop or spline control selected as a whole.
+		void Visit(SelectedControlShape &selectable) override;
 
 	private:
 		/// Draws the weighted unit entry table of a mixed unit spawn (UnitSpawnEntry::unitentries).
@@ -808,15 +815,24 @@ namespace mmo
 		///        anything is added if the type is missing or invalid, the points do not fit its shape, or a
 		///        setting names no property of the type or has an invalid value.
 		/// @param typePath Asset path of the control type (.hctl).
-		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume or
-		///        point exactly one (its centre).
+		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume,
+		///        rectangle or point exactly one (its centre).
 		/// @param name Name of the control; empty picks the default name.
 		/// @param settings Property overrides as name and value text, applied in order.
 		/// @param id Receives the id of the new control.
 		/// @param error Receives the reason when the call returns false.
+		/// @param transform Optional half extents and yaw for a transform shape (see ProceduralEditMode::CreatePlacedControl).
 		/// @return True if the control was added.
 		bool CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
-			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error);
+			const std::vector<std::pair<String, String>>& settings, uint64& id, String& error, const NewPlacedControlTransform& transform = {});
+
+		/// @brief Moves, rotates and scales a placed control as a whole (in that order), for unattended runs. The
+		///        world is not saved. See ProceduralEditMode::TransformPlacedControl.
+		/// @param id Id of the placed control.
+		/// @param edit The transform; unset parts are skipped.
+		/// @param error Receives the reason when the call returns false.
+		/// @return False if the id names no placed control or a value is not finite.
+		bool TransformProceduralControl(uint64 id, const PlacedControlTransformEdit& edit, String& error);
 
 		/// @brief Adds a graph instance over a closed area through the given x/z points, for unattended runs. Does
 		///        not build it and does not save the world. Refused before anything is added if the area has fewer
@@ -937,6 +953,11 @@ namespace mmo
 
 		/// @brief Turns the scene's fog and atmosphere on or off, like the World Settings "Show Fog" box.
 		void SetFogEnabled(const bool enabled) { m_scene.SetFogEnabled(enabled); }
+
+		/// @brief Makes CaptureViewpoint draw the collision geometry around the camera as a translucent,
+		///        depth-tested overlay (walkable green, too steep orange), for checking authored collision.
+		/// @param radius Collision of objects whose bounds come closer than this to the camera is drawn; 0 turns it off.
+		void SetCaptureCollisionRadius(const float radius) { m_captureCollisionRadius = std::max(radius, 0.0f); }
 
 		/// @brief Gets how many pages around the camera the distant terrain covers.
 		[[nodiscard]] uint32 GetFarTerrainRadius() const { return m_farTerrainRadius; }
@@ -1221,6 +1242,18 @@ namespace mmo
 
 		/// @brief Dirty kits used by other loaded placements, waiting for the save prompt.
 		std::vector<String> m_pendingKitSaves;
+
+		/// @brief Collision overlay of CaptureViewpoint (see SetCaptureCollisionRadius); exists only while capturing.
+		std::unique_ptr<CollisionOverlay> m_captureCollisionOverlay;
+		/// @brief World-space vertices and triangle list shown by m_captureCollisionOverlay.
+		std::vector<Vector3> m_captureCollisionVertices;
+		std::vector<uint32> m_captureCollisionIndices;
+		/// @brief Radius around the camera whose collision CaptureViewpoint draws (0: none).
+		float m_captureCollisionRadius{0.0f};
+
+		/// @brief Collects the world-space collision triangles of every collidable mesh entity and
+		///        instanced collision proxy whose bounds come within `radius` of `center`.
+		void CollectCollisionAround(const Vector3 &center, float radius, std::vector<Vector3> &vertices, std::vector<uint32> &indices);
 
 		/// @brief Collision display of the selected building's kit props; exists only while shown.
 		std::unique_ptr<CollisionOverlay> m_kitCollisionOverlay;

@@ -1065,6 +1065,11 @@ namespace mmo::pcg
 			error = "The section needs a positive length and half width and a non-negative side falloff.";
 			return false;
 		}
+		if (params.heightMode == SectionHeightMode::KeepGround && params.massEnabled)
+		{
+			error = "keepGround cannot be combined with the mass layer";
+			return false;
+		}
 		if ((params.heightMode == SectionHeightMode::FollowGround || params.heightMode == SectionHeightMode::SmoothedGround) && !baseGround)
 		{
 			error = "Follow-ground and smoothed-ground modes need the base ground.";
@@ -1148,7 +1153,9 @@ namespace mmo::pcg
 		out.centreHeights.reserve(samples.size());
 		for (const SplineSample& sample : samples)
 		{
-			out.centreHeights.push_back(params.heightMode == SectionHeightMode::FollowSpline ? sample.y : baseGround(sample.x, sample.z));
+			// keepGround never writes the height; the value is only read when props are laid without a ground function.
+			const bool useSpline = params.heightMode == SectionHeightMode::FollowSpline || (params.heightMode == SectionHeightMode::KeepGround && !baseGround);
+			out.centreHeights.push_back(useSpline ? sample.y : baseGround(sample.x, sample.z));
 		}
 		if (params.heightMode == SectionHeightMode::SmoothedGround)
 		{
@@ -1385,6 +1392,10 @@ namespace mmo::pcg
 			{
 				p.heightMode = SectionHeightMode::SmoothedGround;
 			}
+			else if (value == "keepGround")
+			{
+				p.heightMode = SectionHeightMode::KeepGround;
+			}
 			else
 			{
 				parsed = false;
@@ -1573,7 +1584,8 @@ namespace mmo::pcg
 			}
 
 			target.height = CentreHeightAt(shape, distance) + sample.height;
-			target.heightWeight = falloff;
+			// keepGround only paints: the terrain keeps its height.
+			target.heightWeight = shape.params.heightMode == SectionHeightMode::KeepGround ? 0.0f : falloff;
 			target.setMaterial = false;
 			std::array<int8, 4> map{ 0, 1, 2, 3 };
 			if (remap && sample.coverage / 255.0f * falloff > 0.0f)
@@ -2025,7 +2037,7 @@ namespace mmo::pcg
 				return true;
 			}
 
-			void Lay(const std::function<float(float, float)>& ground, std::vector<Placement>& out) const
+			void Lay(const std::function<float(float, float)>& ground, const PlacementExcludeFunction& excluded, std::vector<Placement>& out) const
 			{
 				float s0 = m_chain.start;
 				float endX = 0.0f, endZ = 0.0f;
@@ -2066,6 +2078,13 @@ namespace mmo::pcg
 					const float dirX = chord > 0.0f ? (x1 - x0) / chord : 0.0f;
 					const float dirZ = chord > 0.0f ? (z1 - z0) / chord : 1.0f;
 
+					// Dropped pieces are skipped after the layout step, so the others keep their exact transforms.
+					if (excluded && excluded(0.5f * (x0 + x1), 0.5f * (z0 + z1)))
+					{
+						s0 = s1;
+						continue;
+					}
+
 					Placement placement = piece.placement;
 					placement.key = Hash(m_chain.key, static_cast<int64>(index), 0, kRunPieceSalt);
 					placement.position.x = x0 - dirX * piece.startOffset;
@@ -2087,7 +2106,8 @@ namespace mmo::pcg
 		};
 
 		/// Places every kept run chain of the path.
-		void BuildRunPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out)
+		void BuildRunPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, const PlacementExcludeFunction& excluded,
+			std::vector<Placement>& out)
 		{
 			for (const RunChain& chain : BuildRunChains(shape))
 			{
@@ -2096,7 +2116,7 @@ namespace mmo::pcg
 				{
 					continue;
 				}
-				RunLayer(shape, chain).Lay(ground, out);
+				RunLayer(shape, chain).Lay(ground, excluded, out);
 			}
 		}
 	}
@@ -2168,7 +2188,8 @@ namespace mmo::pcg
 		return FinishProjection(best, maxAcross, distance, across);
 	}
 
-	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out)
+	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out,
+		const PlacementExcludeFunction& excluded)
 	{
 		out.clear();
 		if (!shape.path || shape.asset.variants.empty() || !(shape.asset.length > 0.0f))
@@ -2225,6 +2246,10 @@ namespace mmo::pcg
 				placement.key = SectionPlacementKey(copy, variantIndex, source.placement.key, source.placement.kind);
 				placement.position.x = frame.position.x + frame.rightX * localX;
 				placement.position.z = frame.position.z + frame.rightZ * localX;
+				if (excluded && excluded(placement.position.x, placement.position.z))
+				{
+					continue;
+				}
 				const float groundHeight = ground ? ground(placement.position.x, placement.position.z) : CentreHeightAt(shape, s);
 				placement.position.y = groundHeight + source.heightAboveTerrain;
 				// A mirrored copy reflects the authored rotation across its local XY plane: (w, x, y, z) -> (w, -x, -y, z).
@@ -2242,7 +2267,7 @@ namespace mmo::pcg
 			}
 		}
 
-		BuildRunPlacements(shape, ground, out);
+		BuildRunPlacements(shape, ground, excluded, out);
 
 		// Keys are 64-bit hashes; a collision is practically impossible, but keep the first one deterministically.
 		std::stable_sort(out.begin(), out.end(), [](const Placement& a, const Placement& b) { return a.key < b.key; });

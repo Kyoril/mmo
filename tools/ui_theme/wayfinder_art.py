@@ -261,6 +261,7 @@ def meter_ornaments():
             draw.line((0, y, 127, y), fill=(light, light, light, 255))
     fill.putalpha(mask)
     save("MeterFill", fill)
+    meter_tail(metals, stops)
     shadow = Image.new("RGBA", (128, 32))
     for y in range(32):
         for x in range(128):
@@ -269,6 +270,43 @@ def meter_ornaments():
                 alpha = round(204 * exp(-12 * dx**4 - 1.5 * dy**4) * (1 - (dx / 0.60)**3) * (1 - dy**3))
                 shadow.putpixel((x, y), (8, 11, 15, alpha))
     save("MeterLabelShade", shadow)
+
+
+def meter_tail(metals, stops):
+    """Bar hanging below a meter: flat on top, with ends that carry on the meter's lower diagonals.
+
+    Drawn as a border image whose left and right borders (64 texels) are as wide on screen as the
+    bar is high, so the ends come out at 45 degrees whatever the bar's height.
+    """
+    width, height, slant = 256, 128, 64
+
+    def silhouette(inset):
+        # A texel is half as high as it is wide on screen, hence the narrower side inset.
+        side = inset * 0.7
+        top, bottom = inset, height - 1 - inset
+        left_top = side + slant * top / (height - 1)
+        left_bottom = side + slant * bottom / (height - 1)
+        return [(left_top, top), (width - 1 - left_top, top),
+                (width - 1 - left_bottom, bottom), (left_bottom, bottom)]
+
+    for name, inner in (("MeterTailWell", (14, 19, 23, 255)), ("MeterTailRim", (0, 0, 0, 0))):
+        rail = Image.new("RGBA", (width, height))
+        draw = ImageDraw.Draw(rail)
+        for inset, color in zip((1, 3, 5, 8, 10, 12), metals):
+            draw.polygon(silhouette(inset), fill=color)
+        draw.polygon(silhouette(15), fill=inner)
+        save(name, rail)
+
+    fill = Image.new("RGBA", (width, height))
+    mask = Image.new("L", fill.size)
+    ImageDraw.Draw(mask).polygon(silhouette(1), fill=255)
+    draw = ImageDraw.Draw(fill)
+    for (y0, light0), (y1, light1) in zip(stops, stops[1:]):
+        for y in range(y0, y1 + 1):
+            light = round(light0 + (light1 - light0) * (y - y0) / (y1 - y0))
+            draw.line((0, y, width - 1, y), fill=(light, light, light, 255))
+    fill.putalpha(mask)
+    save("MeterTailFill", fill)
 
 
 def level_diamond():

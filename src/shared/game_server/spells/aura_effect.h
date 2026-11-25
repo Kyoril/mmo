@@ -144,6 +144,13 @@ namespace mmo
 		void HandleModPetStatsPct(bool apply) const;
 		/// Puts the passive spell in triggerspell on the owner's persistent pet, or takes it away.
 		void HandlePetPassive(bool apply) const;
+		/// Ends the claim when the mark goes: a creature that followed the unit which claimed it
+		/// stops following and runs back to its spawn point. Applying the mark does nothing here -
+		/// the cast validation reads it.
+		void HandlePreventAuraApplication(bool apply) const;
+		/// Stops a creature that follows the unit which claimed it and sends it back to its spawn
+		/// point. Does nothing when the follow belongs to somebody else.
+		void EndClaimFollow() const;
 
 	private:
 		void HandlePeriodicDamage() const;

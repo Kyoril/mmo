@@ -9,6 +9,8 @@
 #include "pcg/graph/evaluator.h"
 #include "pcg/graph/graph_io.h"
 #include "pcg/graph/node_registry.h"
+#include "pcg/graph/terrain_compose.h"
+#include "pcg/section_asset.h"
 
 #include <algorithm>
 #include <chrono>
@@ -20,6 +22,7 @@
 #include <vector>
 
 using namespace mmo;
+using namespace mmo::pcg;
 using namespace mmo::pcg::graph;
 
 namespace
@@ -111,6 +114,23 @@ namespace
 			}
 			inst->nextPointId = points.size() + 1;
 			inst->overrides = overrides;
+			instances.push_back(std::move(inst));
+
+			ResolvedControl rc;
+			std::vector<String> warnings;
+			REQUIRE(ResolveControl(*type, *instances.back(), rc, warnings));
+			CHECK(warnings.empty());
+			resolved.push_back(rc);
+		}
+
+		/// Adds a placed control without a spline (rectangle, volume, point) at the given transform.
+		void AddPlaced(const ControlType* type, const uint64 id, const Vector3& position, const Vector3& halfExtents)
+		{
+			auto inst = std::make_unique<ControlInstance>();
+			inst->id = id;
+			inst->typePath = type->name;
+			inst->position = position;
+			inst->halfExtents = halfExtents;
 			instances.push_back(std::move(inst));
 
 			ResolvedControl rc;
@@ -488,6 +508,442 @@ TEST_CASE("Waterfall graph: only a river end near and well above the lake yields
 		INFO("node " << id);
 		CHECK(node.output.error.empty());
 		CHECK(node.output.warnings.empty());
+	}
+}
+
+namespace
+{
+	const char* const FieldEdgePath = "Editor/Pcg/Sections/FieldEdge.hsec";
+	const char* const FieldFenceAsset = "Props/Fence.hmsh";
+	const char* const FarmlandMaterial = "Models/Terrain/Farmland_Plowed.hmi";
+	const char* const SoilTexture = "Textures/Tilesets/T_Field_Plowed_C.htex";
+	constexpr int8 SoilLayer = 2;
+
+	/// The field branch of FalwynValley.hpcgg next to a forest scatter. Get Controls(forest) -> Sample Area ->
+	/// Difference(Get Controls(exclusion)) is node 4. Get Controls(field) feeds Paint Splat (node 6, texture, falloff
+	/// and tileMaterial from the control) and Lay Section Along Loop (node 7, section from the control, keepGround,
+	/// floor inside), whose Exclude is Get Controls(exclusion without field).
+	const char* const FieldGraphJson = R"({
+  "version": 1,
+  "name": "Field",
+  "nodes": [
+    { "id": 1, "type": "GetControls", "settings": { "tags": { "type": "string", "value": "forest" } } },
+    { "id": 2, "type": "SampleArea", "settings": {
+        "cellSize": { "type": "float", "value": 5 },
+        "densityAttribute": { "type": "string", "value": "density" } } },
+    { "id": 3, "type": "GetControls", "settings": { "tags": { "type": "string", "value": "exclusion" } } },
+    { "id": 4, "type": "Difference", "settings": { "distance": { "type": "float", "value": 0 } } },
+    { "id": 5, "type": "GetControls", "settings": { "tags": { "type": "string", "value": "field" } } },
+    { "id": 6, "type": "PaintSplat", "settings": {} },
+    { "id": 7, "type": "LaySectionAlongLoop", "settings": {
+        "floorInside": { "type": "bool", "value": true },
+        "heightMode": { "type": "string", "value": "keepGround" },
+        "sectionAttribute": { "type": "string", "value": "section" } } },
+    { "id": 8, "type": "GetControls", "settings": {
+        "tags": { "type": "string", "value": "exclusion" },
+        "excludeTags": { "type": "string", "value": "field" } } }
+  ],
+  "links": [
+    { "fromNode": 1, "fromPin": "Out", "toNode": 2, "toPin": "In" },
+    { "fromNode": 2, "fromPin": "Out", "toNode": 4, "toPin": "In" },
+    { "fromNode": 3, "fromPin": "Out", "toNode": 4, "toPin": "Subtract" },
+    { "fromNode": 5, "fromPin": "Out", "toNode": 6, "toPin": "In" },
+    { "fromNode": 5, "fromPin": "Out", "toNode": 7, "toPin": "In" },
+    { "fromNode": 8, "fromPin": "Out", "toNode": 7, "toPin": "Exclude" }
+  ]
+})";
+
+	/// The field: a 40 m x 30 m rectangle around (100, 100).
+	constexpr float FieldX0 = 80.0f;
+	constexpr float FieldX1 = 120.0f;
+	constexpr float FieldZ0 = 85.0f;
+	constexpr float FieldZ1 = 115.0f;
+
+	/// The gate: an Exclusion loop over 6 m of the north edge (z = FieldZ1).
+	constexpr float GateX0 = 97.0f;
+	constexpr float GateX1 = 103.0f;
+	constexpr float GateZ0 = 110.0f;
+	constexpr float GateZ1 = 120.0f;
+
+	/// The road: along z = 100 from x = 110 (inside the field) east to x = 250, so it crosses the east edge.
+	constexpr float FieldRoadZ = 100.0f;
+	constexpr float FieldRoadX0 = 110.0f;
+	constexpr float FieldRoadX1 = 250.0f;
+
+	/// Terrain tiles of 32 m (4 m vertex spacing, 8 steps per tile).
+	constexpr float FieldTileSize = 32.0f;
+
+	/// Flat terrain at height 0 for the samplers.
+	class FlatTerrain final : public ITerrainSampler
+	{
+	public:
+		bool Height(float, float, float& h) const override
+		{
+			h = 0.0f;
+			return true;
+		}
+
+		Vector3 Normal(float, float) const override
+		{
+			return Vector3(0.0f, 1.0f, 0.0f);
+		}
+
+		float SplatWeight(const String&, float, float) const override
+		{
+			return 0.0f;
+		}
+
+		bool WaterLevel(float, float, float&) const override
+		{
+			return false;
+		}
+
+		uint64 Revision() const override
+		{
+			return 1;
+		}
+	};
+
+	/// The ground the terrain stage composes on and puts the props on: a gentle slope, so props on the ground
+	/// and a section that leaves the height alone are told apart from a flat section bed.
+	float FieldGround(const float x, float)
+	{
+		return 0.05f * x;
+	}
+
+	/// FieldEdge-like section: length 20, halfWidth 2, a straight and an inner corner variant, each with one continuous
+	/// fence run of five 4 m pieces (pivot in the middle) at local x = +1. No height grid and no paint.
+	SectionAsset MakeFieldEdge()
+	{
+		SectionAsset asset;
+		asset.name = "FieldEdge";
+		asset.length = 20.0f;
+		asset.halfWidth = 2.0f;
+		asset.sideFalloff = 1.0f;
+		uint64 key = 7000;
+		for (const SectionVariantRole role : { SectionVariantRole::Straight, SectionVariantRole::InnerCorner })
+		{
+			SectionVariant variant;
+			variant.role = role;
+			SectionRun run;
+			run.name = "Fence";
+			run.keepChance = 1.0f;
+			run.x = 1.0f;
+			run.startZ = 0.0f;
+			run.endZ = 20.0f;
+			for (uint32 i = 0; i < 5; ++i)
+			{
+				SectionRunPiece piece;
+				piece.placement.key = key++;
+				piece.placement.kind = PlacementKind::Entity;
+				piece.placement.asset = FieldFenceAsset;
+				piece.placement.position = Vector3(1.0f, 0.0f, 4.0f * static_cast<float>(i) + 2.0f);
+				piece.length = 4.0f;
+				piece.startOffset = -2.0f;
+				run.pieces.push_back(piece);
+			}
+			variant.runs.push_back(run);
+			asset.variants.push_back(variant);
+		}
+		return asset;
+	}
+
+	/// A forest area around a Field rectangle (Field.hctl's properties), a road with clearance 6 crossing the field's
+	/// east edge and, optionally, the gate's Exclusion loop.
+	struct FieldScene
+	{
+		ControlWorld world;
+
+		explicit FieldScene(const bool withGate)
+		{
+			const ControlType* forest = world.AddType("ForestArea", ControlShape::ClosedLoop, { "forest" }, "density", 0.3f);
+			const ControlType* excl = world.AddType("Exclusion", ControlShape::ClosedLoop, { "exclusion" });
+			const ControlType* road = world.AddType("Road", ControlShape::OpenSpline, { "road", "exclusion" }, "clearance", 0.0f);
+			const ControlType* field = AddFieldType();
+
+			world.Add(forest, 1, Rect(0, 0, 250, 200), true);
+			world.AddPlaced(field, 2, Vector3(100.0f, 0.0f, 100.0f), Vector3(20.0f, 1.0f, 15.0f));
+			world.Add(road, 3, { { FieldRoadX0, FieldRoadZ }, { FieldRoadX1, FieldRoadZ } }, false, { { "clearance", RoadClearance } });
+			if (withGate)
+			{
+				world.Add(excl, 4, Rect(GateX0, GateZ0, GateX1, GateZ1), true);
+			}
+		}
+
+		/// The Field control type as in Controls/Field.hctl.
+		const ControlType* AddFieldType()
+		{
+			auto t = std::make_unique<ControlType>();
+			t->name = "Field";
+			t->shape = ControlShape::Rectangle;
+			t->defaultTags = { "field", "exclusion" };
+			PropertyGroup group;
+			group.name = "Field";
+			const auto add = [&group](const String& name, const PropertyType type, const AttributeValue& value)
+			{
+				PropertyDef def;
+				def.name = name;
+				def.type = type;
+				def.defaultValue = value;
+				group.properties.push_back(def);
+			};
+			add("section", PropertyType::Asset, String(FieldEdgePath));
+			add("tileMaterial", PropertyType::Asset, String(FarmlandMaterial));
+			add("texture", PropertyType::Asset, String(SoilTexture));
+			add("falloff", PropertyType::Float, 1.5f);
+			t->groups.push_back(group);
+			world.types.push_back(std::move(t));
+			return world.types.back().get();
+		}
+	};
+
+	/// What the graph and the terrain stage made of a field scene.
+	struct FieldBuild
+	{
+		std::vector<Point> forest;
+		PreparedTerrain terrain;
+		std::vector<Placement> fence;
+	};
+
+	void BuildField(const FieldScene& scene, const SectionAsset& edge, FieldBuild& out)
+	{
+		const Graph graph = LoadGraph(FieldGraphJson);
+		const FlatTerrain sampler;
+		EvalContext ctx;
+		ctx.instanceSeed = 42;
+		ctx.controls = &scene.world.resolved;
+		ctx.controlsRevision = ControlsHash(scene.world.resolved);
+		ctx.terrain = &sampler;
+
+		const EvalResult result = Evaluate(graph, NodeRegistry::Default(), ctx, nullptr);
+		REQUIRE(result.ok);
+		for (const auto& [id, node] : result.nodes)
+		{
+			INFO("node " << id << ": " << node.output.error);
+			REQUIRE(node.output.error.empty());
+		}
+		for (const DataItem& item : result.nodes.at(4).output.pins.at("Out"))
+		{
+			out.forest.insert(out.forest.end(), item.points.points.begin(), item.points.points.end());
+		}
+
+		const std::vector<TerrainOpInput> ops = CollectTerrainOps(graph, result);
+		REQUIRE(ops.size() == 2);
+		const SectionAssetProvider provider = [&edge](const String& path, String& error) -> const SectionAsset*
+		{
+			if (path != FieldEdgePath)
+			{
+				error = "not found";
+				return nullptr;
+			}
+			return &edge;
+		};
+		PathSpline region;
+		region.closed = true;
+		region.points = Rect(-20, -20, 270, 220);
+		String error;
+		REQUIRE(out.terrain.Prepare(ops, FieldGround, provider, region, 8.0f, error));
+		CHECK(error.empty());
+		CHECK(out.terrain.GetWarnings().empty());
+
+		GridLayout layout;
+		layout.vertexSpacing = 4.0;
+		layout.pixelSpacing = 1.0;
+		layout.verticesPerTile = 8;
+		out.terrain.ResolveTileMaterials(layout, out.terrain.GetInfluence());
+
+		std::vector<String> warnings;
+		out.terrain.BuildPlacements(FieldGround, out.fence, &warnings);
+		CHECK(warnings.empty());
+		for (const Placement& p : out.fence)
+		{
+			CHECK(p.asset == FieldFenceAsset);
+		}
+	}
+
+	bool InsideField(const float x, const float z)
+	{
+		return x > FieldX0 && x < FieldX1 && z > FieldZ0 && z < FieldZ1;
+	}
+
+	bool InsideGate(const float x, const float z)
+	{
+		return x > GateX0 && x < GateX1 && z > GateZ0 && z < GateZ1;
+	}
+
+	/// Planar distance from (x, z) to the road segment.
+	float FieldRoadDistance(const float x, const float z)
+	{
+		const float dx = std::max({ FieldRoadX0 - x, 0.0f, x - FieldRoadX1 });
+		return std::hypot(dx, z - FieldRoadZ);
+	}
+}
+
+TEST_CASE("field branch: soil, fence, gate and road gap", "[graph_acceptance]")
+{
+	const SectionAsset edge = MakeFieldEdge();
+	const FieldScene scene(true);
+	FieldBuild build;
+	BuildField(scene, edge, build);
+	REQUIRE(build.fence.size() > 20);
+
+	SECTION("no forest point lies inside the field")
+	{
+		REQUIRE(build.forest.size() > 200);
+		for (const Point& p : build.forest)
+		{
+			INFO("point at " << p.position.x << ", " << p.position.z);
+			CHECK_FALSE(InsideField(p.position.x, p.position.z));
+		}
+		// Not vacuous: the forest grows right up to the field.
+		CHECK(CountIn(build.forest, FieldX0 - 15.0f, FieldZ0 - 15.0f, FieldX1 + 15.0f, FieldZ1 + 15.0f) > 0);
+	}
+
+	SECTION("no fence piece in the gate or near the road, pieces on all four edges outside the gaps")
+	{
+		size_t northWest = 0;
+		size_t northEast = 0;
+		size_t eastSouth = 0;
+		size_t eastNorth = 0;
+		size_t south = 0;
+		size_t west = 0;
+		for (const Placement& p : build.fence)
+		{
+			const float x = p.position.x;
+			const float z = p.position.z;
+			INFO("fence piece at " << x << ", " << z);
+			CHECK_FALSE(InsideGate(x, z));
+			CHECK(FieldRoadDistance(x, z) > RoadClearance);
+			// keepGround: the pieces stand on the ground (their baked height above the terrain is 0).
+			CHECK(p.position.y == Approx(FieldGround(x, z)).margin(1e-3));
+
+			const bool alongX = x >= FieldX0 - 2.0f && x <= FieldX1 + 2.0f;
+			const bool alongZ = z >= FieldZ0 - 2.0f && z <= FieldZ1 + 2.0f;
+			if (alongX && std::fabs(z - FieldZ1) <= 2.0f)
+			{
+				if (x < GateX0)
+				{
+					++northWest;
+				}
+				else if (x > GateX1)
+				{
+					++northEast;
+				}
+			}
+			if (alongZ && std::fabs(x - FieldX1) <= 2.0f)
+			{
+				if (z < FieldRoadZ)
+				{
+					++eastSouth;
+				}
+				else
+				{
+					++eastNorth;
+				}
+			}
+			if (alongX && std::fabs(z - FieldZ0) <= 2.0f)
+			{
+				++south;
+			}
+			if (alongZ && std::fabs(x - FieldX0) <= 2.0f)
+			{
+				++west;
+			}
+		}
+		INFO("north " << northWest << " + " << northEast << ", east " << eastSouth << " + " << eastNorth << ", south " << south << ", west " << west);
+		CHECK(northWest > 0);
+		CHECK(northEast > 0);
+		CHECK(eastSouth > 0);
+		CHECK(eastNorth > 0);
+		CHECK(south > 0);
+		CHECK(west > 0);
+	}
+
+	SECTION("inside the field the height is left alone and the soil is at full weight 3 m from the edge")
+	{
+		// Every tile the field touches is switched to the farmland material, and only those.
+		const std::vector<TileMaterialRequest>& tiles = build.terrain.GetTileMaterials();
+		REQUIRE(tiles.size() == 4);
+		for (const TileMaterialRequest& tile : tiles)
+		{
+			CHECK(tile.material == FarmlandMaterial);
+			CHECK((tile.tileX == 2 || tile.tileX == 3));
+			CHECK((tile.tileZ == 2 || tile.tileZ == 3));
+		}
+
+		// The soil layer exists on the switched tiles only, as with the real tile materials.
+		const TextureLayerLookup lookup = [&tiles](const float x, const float z, const String& key) -> int8
+		{
+			const int32 tileX = static_cast<int32>(std::floor(x / FieldTileSize));
+			const int32 tileZ = static_cast<int32>(std::floor(z / FieldTileSize));
+			for (const TileMaterialRequest& tile : tiles)
+			{
+				if (tile.tileX == tileX && tile.tileZ == tileZ && key == SoilTexture)
+				{
+					return SoilLayer;
+				}
+			}
+			return -1;
+		};
+
+		TerrainEvaluateNotes notes;
+		size_t samples = 0;
+		for (float z = FieldZ0 + 3.0f; z <= FieldZ1 - 3.0f; z += 2.0f)
+		{
+			for (float x = FieldX0 + 3.0f; x <= FieldX1 - 3.0f; x += 2.0f)
+			{
+				INFO("sample at " << x << ", " << z);
+				const TerrainTarget target = build.terrain.Evaluate(x, z, FieldGround(x, z), lookup, &notes);
+				CHECK(target.heightWeight == 0.0f);
+				CHECK(target.splatWeight == Approx(1.0f));
+				CHECK(target.splat[SoilLayer] == 255);
+				++samples;
+			}
+		}
+		CHECK(samples > 100);
+		CHECK(notes.missingLayerOps.empty());
+
+		// The edge section lies around the field and leaves the height alone too.
+		for (const Placement& p : build.fence)
+		{
+			const TerrainTarget target = build.terrain.Evaluate(p.position.x, p.position.z, FieldGround(p.position.x, p.position.z), lookup);
+			CHECK(target.heightWeight == 0.0f);
+		}
+	}
+
+	SECTION("removing the Exclusion loop adds pieces and changes no existing piece")
+	{
+		const FieldScene open(false);
+		FieldBuild openBuild;
+		BuildField(open, edge, openBuild);
+		REQUIRE(openBuild.fence.size() > build.fence.size());
+
+		std::map<uint64, const Placement*> openByKey;
+		for (const Placement& p : openBuild.fence)
+		{
+			openByKey[p.key] = &p;
+		}
+		std::set<uint64> gatedKeys;
+		for (const Placement& p : build.fence)
+		{
+			INFO("fence piece " << p.key << " at " << p.position.x << ", " << p.position.z);
+			gatedKeys.insert(p.key);
+			const auto it = openByKey.find(p.key);
+			REQUIRE(it != openByKey.end());
+			CHECK(it->second->position == p.position);
+			CHECK((it->second->rotation == p.rotation));
+			CHECK(it->second->asset == p.asset);
+		}
+
+		// The added pieces are exactly the ones in the gate.
+		for (const Placement& p : openBuild.fence)
+		{
+			if (gatedKeys.count(p.key) == 0)
+			{
+				INFO("added piece at " << p.position.x << ", " << p.position.z);
+				CHECK(InsideGate(p.position.x, p.position.z));
+			}
+		}
 	}
 }
 

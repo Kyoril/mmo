@@ -14,6 +14,7 @@
 #include "scene_graph/prop_kit_manager.h"
 #include "scene_graph/prop_kit_serializer.h"
 #include "selected_kit_prop.h"
+#include "selected_control_shape.h"
 #include "selected_control_transform.h"
 #include "selected_spline_point.h"
 #include "editors/world_model_editor/panels/world_model_properties_panel.h"
@@ -51,6 +52,8 @@
 #include "terrain/constants.h"
 #include "nav_build/common.h"
 #include "scene_graph/mesh_manager.h"
+#include "scene_graph/entity.h"
+#include "scene_graph/instanced_mesh_collision.h"
 #include "terrain/page.h"
 #include "terrain/tile.h"
 #include "edit_modes/navigation_edit_mode.h"
@@ -1167,7 +1170,7 @@ namespace mmo
 	}
 
 	bool WorldEditorInstance::CreateProceduralControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name,
-		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error)
+		const std::vector<std::pair<String, String>>& settings, uint64& id, String& error, const NewPlacedControlTransform& transform)
 	{
 		id = 0;
 		if (!m_proceduralEditMode)
@@ -1182,12 +1185,24 @@ namespace mmo
 			return false;
 		}
 
-		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error))
+		// The transform is checked before the control is added.
+		if (!m_proceduralEditMode->CreatePlacedControl(typePath, points, name, id, error, transform))
 		{
 			return false;
 		}
 
 		return m_proceduralEditMode->SetPlacedControlProperties(id, settings, error);
+	}
+
+	bool WorldEditorInstance::TransformProceduralControl(const uint64 id, const PlacedControlTransformEdit& edit, String& error)
+	{
+		if (!m_proceduralEditMode)
+		{
+			error = "The procedural edit mode is not available.";
+			return false;
+		}
+
+		return m_proceduralEditMode->TransformPlacedControl(id, edit, error);
 	}
 
 	bool WorldEditorInstance::CreateProceduralGraphInstance(const String& graphPath, const std::vector<std::pair<float, float>>& points, const uint64 seed,
@@ -2126,6 +2141,7 @@ namespace mmo
 			void Visit(SelectedFogVolume&) override {}
 			void Visit(SelectedSplinePoint&) override {}
 			void Visit(SelectedControlTransform&) override {}
+			void Visit(SelectedControlShape&) override {}
 		} extractor;
 
 		m_selection.GetSelectedObjects().back()->Visit(extractor);
@@ -2410,6 +2426,32 @@ namespace mmo
 			m_camera->SetFillMode(FillMode::Solid);
 			m_camera->InvalidateView();
 			m_deferredRenderer->Render(m_scene, *m_camera);
+
+			// Optional collision overlay: what movement collides with, drawn into the shot. Built after the
+			// first frame, because world models push their collision proxy instances while rendering.
+			if (frame == 0 && m_captureCollisionRadius > 0.0f)
+			{
+				m_captureCollisionVertices.clear();
+				m_captureCollisionIndices.clear();
+				CollectCollisionAround(viewpoint.position, m_captureCollisionRadius, m_captureCollisionVertices, m_captureCollisionIndices);
+				if (!m_captureCollisionOverlay)
+				{
+					m_captureCollisionOverlay = std::make_unique<CollisionOverlay>(m_scene, m_scene.GetRootSceneNode());
+				}
+
+				CollisionOverlayData data;
+				data.vertices = &m_captureCollisionVertices;
+				data.indices = &m_captureCollisionIndices;
+				// Depth-tested and translucent like the navigation mesh display, so only collision that is
+				// actually in view shows; that material reads colours as ABGR.
+				data.faceMaterial = "Models/Engine/DetourDebug.hmat";
+				data.abgrColors = true;
+				data.shadeByNormal = true;
+				data.wireframe = false;
+				data.surfaceOffset = 0.02f;
+				m_captureCollisionOverlay->Rebuild(data);
+				ILOG("Capture collision overlay: " << m_captureCollisionIndices.size() / 3 << " faces within " << m_captureCollisionRadius << " m");
+			}
 		}
 
 		// Draw calls of the saved frame per render pass, so a capture also answers "how many batches here"
@@ -2475,6 +2517,7 @@ namespace mmo
 		}
 		if (m_worldGrid) m_worldGrid->SetVisible(gridWasVisible);
 		if (m_debugBoundingBox) m_debugBoundingBox->SetVisible(debugBoxWasVisible);
+		m_captureCollisionOverlay.reset();
 
 		if (m_lastAvailViewportSize.x > 0.0f && m_lastAvailViewportSize.y > 0.0f)
 		{
@@ -2483,6 +2526,84 @@ namespace mmo
 
 		SetViewpoint(previous);
 		return written;
+	}
+
+	void WorldEditorInstance::CollectCollisionAround(const Vector3 &center, const float radius, std::vector<Vector3> &vertices, std::vector<uint32> &indices)
+	{
+		const auto appendTree = [&](const AABBTree &tree, const Matrix4 &transform)
+		{
+			const auto &treeVertices = tree.GetVertices();
+			const auto &treeIndices = tree.GetIndices();
+			const uint32 base = static_cast<uint32>(vertices.size());
+			for (const Vector3 &vertex : treeVertices)
+			{
+				vertices.push_back(transform.TransformAffine(vertex));
+			}
+			for (const uint32 index : treeIndices)
+			{
+				indices.push_back(base + index);
+			}
+		};
+
+		const auto isNear = [&](const AABB &bounds)
+		{
+			const Vector3 closest(
+				std::clamp(center.x, bounds.min.x, bounds.max.x),
+				std::clamp(center.y, bounds.min.y, bounds.max.y),
+				std::clamp(center.z, bounds.min.z, bounds.max.z));
+			return (closest - center).GetSquaredLength() <= radius * radius;
+		};
+
+		std::vector<const Node *> pending { &m_scene.GetRootSceneNode() };
+		while (!pending.empty())
+		{
+			const Node *node = pending.back();
+			pending.pop_back();
+			for (uint32 i = 0; i < node->GetNumChildren(); ++i)
+			{
+				pending.push_back(node->GetChild(i));
+			}
+
+			const auto *sceneNode = dynamic_cast<const SceneNode *>(node);
+			if (!sceneNode)
+			{
+				continue;
+			}
+
+			for (uint32 i = 0; i < sceneNode->GetNumAttachedObjects(); ++i)
+			{
+				MovableObject *object = sceneNode->GetAttachedObject(i);
+				if (const auto *entity = dynamic_cast<const Entity *>(object))
+				{
+					const ICollidable *collidable = object->GetCollidable();
+					if (!collidable || !collidable->IsCollidable() || !entity->GetMesh() || !isNear(object->GetWorldBoundingBox(true)))
+					{
+						continue;
+					}
+
+					appendTree(entity->GetMesh()->GetCollisionTree(), object->GetParentNodeFullTransform());
+				}
+				else if (const auto *proxy = dynamic_cast<const InstancedMeshCollision *>(object))
+				{
+					if (!proxy->IsCollidable())
+					{
+						continue;
+					}
+
+					const AABB &meshBounds = proxy->GetMesh()->GetBounds();
+					for (size_t instance = 0; instance < proxy->GetInstanceCount(); ++instance)
+					{
+						const Matrix4 &transform = proxy->GetInstanceTransform(instance);
+						AABB worldBounds = meshBounds;
+						worldBounds.Transform(transform);
+						if (isNear(worldBounds))
+						{
+							appendTree(proxy->GetMesh()->GetCollisionTree(), transform);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	void WorldEditorInstance::DrawViewSettings()
@@ -4720,6 +4841,18 @@ void WorldEditorInstance::DrawSceneOutlinePanel(const String &sceneOutlineId)
 		ImGui::TextDisabled(selectable.IsVolume()
 			? "Translate moves it (height too), Rotate turns it around up, Scale sets its half extents. Properties are in the mode panel."
 			: "Translate moves it (height too), Rotate turns it around up. Properties are in the mode panel.");
+	}
+
+	void WorldEditorInstance::Visit(SelectedControlShape &selectable)
+	{
+		if (!selectable.IsValid())
+		{
+			ImGui::TextDisabled("The selected control no longer exists.");
+			return;
+		}
+
+		ImGui::Text("Type: Placed %s Control (whole)", selectable.IsLoop() ? "Loop" : "Spline");
+		ImGui::TextDisabled("Translate moves every point, Rotate turns it around up and Scale stretches it along x/z, about its centre. Click a point to edit points again.");
 	}
 
 	void WorldEditorInstance::Visit(SelectedFogVolume &selectable)

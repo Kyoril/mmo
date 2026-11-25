@@ -943,6 +943,7 @@ namespace mmo
 		case game::client_realm_packet::CheatPetRemove:
 		case game::client_realm_packet::CheatPetTame:
 		case game::client_realm_packet::CheatPetMake:
+		case game::client_realm_packet::CheatPlayCutscene:
 			// Require GM level 2
 			if (!HasGMLevel(gm_level::SeniorGm))
 			{
@@ -3183,7 +3184,10 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetRemove, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetTame, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetMake, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPlayCutscene, *this, &Player::OnProxyPacket);
 #endif
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneBegin, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneEnd, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);
@@ -3751,19 +3755,34 @@ namespace mmo
 		quest.requiredClasses = questEntry->requiredclasses();
 		quest.flags = questEntry->flags();
 
+		// Objective area for the client's minimap and world map (see quests.proto).
+		if (questEntry->pointx() != 0.0f || questEntry->pointy() != 0.0f)
+		{
+			constexpr float defaultObjectiveAreaRadius = 30.0f;
+			quest.hasObjectiveArea = true;
+			quest.objectiveAreaMapId = questEntry->pointmapid();
+			quest.objectiveAreaX = questEntry->pointx();
+			quest.objectiveAreaZ = questEntry->pointy();
+			quest.objectiveAreaRadius = questEntry->pointopt() != 0 ? static_cast<float>(questEntry->pointopt()) : defaultObjectiveAreaRadius;
+		}
+
 		for (const auto &requirement : questEntry->requirements())
 		{
+			// The author may override the generated objective wording per requirement; an
+			// objective which is not completed by killing needs it (see quests.proto).
+			String objectiveText = GetLocalizedString(requirement.text(), requirement.text_loc(), m_locale);
+
 			if (requirement.itemid() != 0)
 			{
-				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount());
+				quest.requiredItems.emplace_back(requirement.itemid(), requirement.itemcount(), std::move(objectiveText));
 			}
 			else if (requirement.creatureid() != 0)
 			{
-				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount());
+				quest.requiredCreatures.emplace_back(requirement.creatureid(), requirement.creaturecount(), std::move(objectiveText));
 			}
 			else if (requirement.objectid() != 0)
 			{
-				quest.requiredObjects.emplace_back(requirement.objectid(), requirement.objectcount());
+				quest.requiredObjects.emplace_back(requirement.objectid(), requirement.objectcount(), std::move(objectiveText));
 			}
 		}
 

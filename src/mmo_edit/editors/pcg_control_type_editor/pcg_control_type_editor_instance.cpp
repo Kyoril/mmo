@@ -31,7 +31,7 @@ namespace mmo
 
 		const ImVec4 s_errorColor(1.0f, 0.35f, 0.35f, 1.0f);
 
-		const char* const s_shapeNames[] = { "Closed Loop (area)", "Open Spline (path)", "Volume (box)", "Point" };
+		const char* const s_shapeNames[] = { "Closed Loop (area)", "Open Spline (path)", "Volume (box)", "Point", "Rectangle (area)" };
 		const char* const s_propertyTypeNames[] = { "Float", "Int", "Bool", "Enum", "String", "Asset", "AssetList", "Color" };
 
 		String Trim(const String& text)

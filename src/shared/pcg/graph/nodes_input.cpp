@@ -12,6 +12,8 @@
 //              resolved tags and attributes; sourceId = control id. Volume footprints use only the yaw of the
 //              rotation (the rotated local x axis projected onto x/z); corners in local order (-x,-z), (+x,-z),
 //              (+x,+z), (-x,+z) at the height of the box bottom; volumeHeight = 2 * halfExtents.y.
+//              Rectangle -> Area: a closed linear spline of the four RectangleCorners (see rectangle_shape.h) at
+//              the control's height, with point ids 1..4; no volumeHeight.
 //              A Point control's point seed is Hash(nodeSeed, control id, 0, salt).
 // GraphParameters  output "Out": one Params item holding ctx.parameters, which the evaluator has merged over
 //              the graph's parameter defaults; the merge warnings are reported as node warnings.
@@ -23,6 +25,8 @@
 #include "evaluator.h"
 #include "node_registry.h"
 #include "node_util.h"
+
+#include "rectangle_shape.h"
 
 #include "pcg/pcg_random.h"
 
@@ -171,6 +175,17 @@ namespace mmo::pcg::graph
 					item.spline.interpolation = SplineInterpolation::Linear;
 					item.spline.points = VolumeFootprint(inst);
 					item.attributes["volumeHeight"] = 2.0f * std::fabs(inst.halfExtents.y);
+					bounds = SplineBounds(item.spline);
+					break;
+				case ControlShape::Rectangle:
+					item.kind = ItemKind::Area;
+					item.spline.closed = true;
+					item.spline.interpolation = SplineInterpolation::Linear;
+					{
+						const std::array<SplinePoint, 4> corners = RectangleCorners(inst);
+						item.spline.points.assign(corners.begin(), corners.end());
+					}
+					item.pointIds = { 1, 2, 3, 4 };
 					bounds = SplineBounds(item.spline);
 					break;
 				case ControlShape::Point:

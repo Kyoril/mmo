@@ -122,6 +122,7 @@ namespace mmo
 		m_missingTiles.clear();
 		m_pendingLoads.clear();
 		m_members.clear();
+		m_questAreas.clear();
 		m_highlightMask.reset();
 		m_highlightZone = 0;
 		m_hoverZone = 0;
@@ -171,6 +172,11 @@ namespace mmo
 	void WorldMap::UpdateMemberDots(std::vector<MapMemberDot> members)
 	{
 		m_members = std::move(members);
+	}
+
+	void WorldMap::UpdateQuestAreas(std::vector<MapQuestArea> areas)
+	{
+		m_questAreas = std::move(areas);
 	}
 
 	void WorldMap::SetFonts(FontPtr titleFont, FontPtr zoneFont, FontPtr subZoneFont)
@@ -875,6 +881,20 @@ namespace mmo
 		if (m_dotTexture)
 		{
 			m_buffer.SetActiveTexture(m_dotTexture);
+
+			// Quest objective areas below the member dots: a translucent gold disc at its true size,
+			// but never smaller than a few pixels, with a brighter core so a small one still reads.
+			for (const MapQuestArea& area : m_questAreas)
+			{
+				const float sx = static_cast<float>(m_view.WorldToScreenX(area.center.x));
+				const float sy = static_cast<float>(m_view.WorldToScreenZ(area.center.z));
+				const float minRadius = s_minQuestAreaPixels * textScale;
+				const float radius = std::max(minRadius, static_cast<float>(area.radius / m_view.unitsPerPixel));
+				GeometryHelper::CreateRect(m_buffer, 0x55FFD24D, Rect(sx - radius, sy - radius, sx + radius, sy + radius), Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
+				const float core = minRadius * 0.55f;
+				GeometryHelper::CreateRect(m_buffer, 0xE6FFD24D, Rect(sx - core, sy - core, sx + core, sy + core), Rect(0.0f, 0.0f, 1.0f, 1.0f), 1, 1);
+			}
+
 			for (const bool guildPass : { true, false })
 			{
 				for (const MapMemberDot& member : m_members)
@@ -1058,6 +1078,21 @@ namespace mmo
 				luabind::object entry = luabind::newtable(L);
 				entry["name"] = member.name;
 				entry["type"] = std::string(member.guild ? "guild" : "party");
+				members[index++] = entry;
+			}
+		}
+
+		// Quest objective areas under the cursor (inside the disc as drawn, at least its minimum size)
+		for (const MapQuestArea& area : m_questAreas)
+		{
+			const double radius = std::max(static_cast<double>(area.radius), s_minQuestAreaPixels * m_view.unitsPerPixel);
+			const double dx = area.center.x - worldX;
+			const double dz = area.center.z - worldZ;
+			if (dx * dx + dz * dz <= radius * radius)
+			{
+				luabind::object entry = luabind::newtable(L);
+				entry["name"] = area.title;
+				entry["type"] = std::string("questarea");
 				members[index++] = entry;
 			}
 		}

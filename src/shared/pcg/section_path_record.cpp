@@ -23,7 +23,8 @@ namespace mmo::pcg
 		/// 4: appends the mass layer (massEnabled, massHeight, massDepth, massRise, massNoiseAmplitude,
 		///    massNoiseWavelength, massDetailAmplitude, massDetailWavelength, massPaintLayer) and the facade variety
 		///    (mirrorCopies, facadeHeightJitter).
-		constexpr uint32 FormatVersion = 4;
+		/// 5: height mode KeepGround.
+		constexpr uint32 FormatVersion = 5;
 		/// Bytes per rect written by PutRect.
 		constexpr size_t RectBytes = 16;
 		/// Placement layout version shared with the oasis record.
@@ -97,7 +98,8 @@ namespace mmo::pcg
 		out = SectionPathRecord();
 		uint8 sequential = 0;
 		uint8 heightMode = 0;
-		const SectionHeightMode lastHeightMode = version >= 3 ? SectionHeightMode::SmoothedGround : SectionHeightMode::FollowGround;
+		const SectionHeightMode lastHeightMode = version >= 5 ? SectionHeightMode::KeepGround :
+			version >= 3 ? SectionHeightMode::SmoothedGround : SectionHeightMode::FollowGround;
 		if (!Get(reader, out.id) || !GetString(reader, out.name) || !GetString(reader, out.sectionAsset) ||
 			!Get(reader, out.params.seed) || !Get(reader, sequential) || sequential > 1 ||
 			!Get(reader, out.params.joinBlend) || !Get(reader, out.params.propDensity) || !Get(reader, heightMode) ||

@@ -14,6 +14,8 @@
 #include "pcg/graph_instance_record.h"
 #include "pcg/graph/controls.h"
 #include "pcg/graph/graph.h"
+#include "pcg/graph/rectangle_shape.h"
+#include "../selected_control_shape.h"
 #include "../selected_control_transform.h"
 #include "../selected_spline_point.h"
 #include "../spline_edit_controller.h"
@@ -29,6 +31,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -36,6 +39,29 @@
 namespace mmo
 {
 	class Camera;
+
+	/// @brief Optional transform of a new placed control of a transform shape (volume, rectangle, point), for
+	///        unattended runs (mmo_edit --pcg-new-control --half-extents / --yaw). Unset values keep the defaults.
+	struct NewPlacedControlTransform
+	{
+		/// Half extents on x and z in metres (volume and rectangle only; a volume keeps its default height).
+		std::optional<std::pair<float, float>> halfExtents;
+		/// Yaw around up, in degrees.
+		std::optional<float> yawDegrees;
+	};
+
+	/// @brief A whole-control transform of a placed control, for unattended runs (mmo_edit --pcg-transform-control).
+	///        Applied in this order: move, rotate, scale (see pcg::graph::TranslateControl, RotateControl and
+	///        ScaleControl). Unset values are skipped.
+	struct PlacedControlTransformEdit
+	{
+		/// World offset on x and z in metres.
+		std::optional<std::pair<float, float>> move;
+		/// Yaw around up about the control's pivot, in degrees.
+		std::optional<float> rotateDegrees;
+		/// Scale factors along world x and z about the control's pivot.
+		std::optional<std::pair<float, float>> scale;
+	};
 
 	/// @brief Edit mode for procedurally generated content. Three kinds of control objects:
 	///        - an oasis: a closed spline, a seed and parameters (terrain, paint, water and objects);
@@ -51,8 +77,9 @@ namespace mmo
 	///        placed controls as .hpcgc (JSON) in the same folder.
 	///        A clicked spline point becomes the editor selection (SelectedSplinePoint), so the transform
 	///        widget moves it and turns its tangents; its tangent handles are dragged in the viewport. A
-	///        placed volume or point becomes the editor selection as a SelectedControlTransform.
-	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner, public IControlTransformOwner
+	///        placed volume or point becomes the editor selection as a SelectedControlTransform; a placed loop or
+	///        spline is selected as a whole (SelectedControlShape) by its pivot marker or the details panel.
+	class ProceduralEditMode final : public WorldEditMode, public ISplinePointOwner, public IControlTransformOwner, public IControlShapeOwner
 	{
 	public:
 		/// @brief Creates the mode.
@@ -102,8 +129,8 @@ namespace mmo
 		/// @param ray The ray from the camera through the cursor.
 		void SetCursorRay(const Ray& ray);
 
-		/// @brief Whether a spline point is being dragged (the camera must not rotate then).
-		bool IsDragging() const { return m_splineEditor.IsDragging(); }
+		/// @brief Whether a spline point or a rectangle handle is being dragged (the camera must not rotate then).
+		bool IsDragging() const { return m_splineEditor.IsDragging() || m_rectangleDrag.active; }
 
 		/// @brief Loads every *.hpcg record of the folder (oases, section paths and graph instances), every *.hpcgc placed
 		///        control (kept also when its control type is missing) and the shared oasis recipe
@@ -209,18 +236,21 @@ namespace mmo
 
 		/// @brief Adds a placed control of a control type. Does not build anything. Loops get a closed and
 		///        splines an open Catmull-Rom spline through the points (heights from the terrain, which is
-		///        loaded under the points first), one point id per point; volumes (half extents 16 m) and
-		///        points sit at the single point, on the ground. The "New Control" menu uses this with the
-		///        viewport centre (loop: 4 point square of 32 m; spline: 2 points 32 m apart along the view;
-		///        volume and point: the centre).
+		///        loaded under the points first), one point id per point; volumes (half extents 16 m),
+		///        rectangles (20 m x 20 m) and points sit at the single point, on the ground. The "New Control"
+		///        menu uses this with the viewport centre (loop: 4 point square of 32 m; spline: 2 points 32 m
+		///        apart along the view; volume, rectangle and point: the centre).
 		/// @param typePath Asset path of the control type (.hctl).
-		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume or
-		///        point exactly one.
+		/// @param points World x/z of the points: a loop needs at least 3, a spline at least 2, a volume,
+		///        rectangle or point exactly one.
 		/// @param name Name of the control; empty picks "<type name> <n>".
 		/// @param id Receives the id of the new control.
 		/// @param error Receives the reason when the call returns false (e.g. "control type '...' not found").
+		/// @param transform Optional half extents and yaw instead of the defaults, for transform shapes only (volume,
+		///        rectangle, point; half extents not for a point). Checked before anything is added.
 		/// @return True if the control was added.
-		bool CreatePlacedControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name, uint64& id, String& error);
+		bool CreatePlacedControl(const String& typePath, const std::vector<std::pair<float, float>>& points, const String& name, uint64& id, String& error,
+			const NewPlacedControlTransform& transform = {});
 
 		/// @brief Checks property settings against a control type without changing anything.
 		/// @param typePath Asset path of the control type.
@@ -235,6 +265,14 @@ namespace mmo
 		/// @param error Receives the reason when the call returns false (nothing is changed then).
 		/// @return True if every setting was applied.
 		bool SetPlacedControlProperties(uint64 id, const std::vector<std::pair<String, String>>& settings, String& error);
+
+		/// @brief Moves, rotates and scales a placed control (any shape) as a whole, in that order. Does not build
+		///        anything.
+		/// @param id Id of the placed control.
+		/// @param edit The transform; unset parts are skipped.
+		/// @param error Receives the reason when the call returns false (nothing is changed then).
+		/// @return False if the id names no placed control or a value is not finite.
+		bool TransformPlacedControl(uint64 id, const PlacedControlTransformEdit& edit, String& error);
 
 		/// @brief Adds a graph instance over a closed area through the given x/z points (sharp corners: manual,
 		///        zero tangents, so the area is the polygon; heights from the terrain, which is loaded under the
@@ -352,6 +390,16 @@ namespace mmo
 
 		/// @brief Drops the transform selection when the editor selection drops it.
 		void OnControlTransformDeselected(const SelectedControlTransform& selectable) override;
+
+	public:
+		/// @brief Gets the placed loop or spline control with the id, or null.
+		pcg::graph::ControlInstance* FindShapeControl(uint64 controlId) override;
+
+		/// @brief Marks the control changed.
+		void OnControlShapeEdited(uint64 controlId) override;
+
+		/// @brief Drops the whole-control selection when the editor selection drops it.
+		void OnControlShapeDeselected(const SelectedControlShape& selectable) override;
 
 	private:
 		/// @brief Kind of a control object.
@@ -493,6 +541,9 @@ namespace mmo
 			/// @brief Whether this is a placed volume or point (no spline; edited through a SelectedControlTransform).
 			bool HasTransform() const { return kind == ControlKind::Placed && placed.spline.points.empty(); }
 
+			/// @brief Whether this is a placed loop or spline (can be selected as a whole through a SelectedControlShape).
+			bool HasShape() const { return kind == ControlKind::Placed && !placed.spline.points.empty(); }
+
 			/// @brief Shared empty content of placed controls.
 			static const pcg::OwnedContent& NoContent();
 		};
@@ -533,6 +584,11 @@ namespace mmo
 		/// @brief Whether a placed control without a spline is a volume (its type says so; also when the
 		///        type is missing, so its box stays visible and editable) rather than a point.
 		bool IsPlacedVolume(const Control& control);
+
+		/// @brief Whether a placed control without a spline is a rectangle (its type says so). A rectangle also counts
+		///        as a volume (IsPlacedVolume) for the gizmo; it is drawn as an outline on the ground with side and corner
+		///        handles instead of a box.
+		bool IsPlacedRectangle(const Control& control);
 
 		/// @brief "An oasis loop", "A section path" or "A placed control", for messages.
 		static const char* DescribeKind(const Control& control);
@@ -610,7 +666,41 @@ namespace mmo
 		/// @return Index of the control under the cursor, or -1.
 		int32 HitTestTransformControl(float screenX, float screenY) const;
 
-		/// @brief Draws placed volumes (rotated boxes) and points (marker with a yaw arrow).
+		/// @brief Makes the placed loop or spline at the index the editor selection as a whole (replacing whatever was
+		///        selected), so the transform widget moves, rotates and scales it about its pivot.
+		/// @param controlIndex Index of the control in the list.
+		void SelectShapeInEditor(int32 controlIndex);
+
+		/// @brief Drops the whole-control selection from the editor selection if it holds it.
+		void ClearShapeSelection();
+
+		/// @brief Index of the selected control if it is a placed loop or spline, else -1.
+		int32 GetSelectedShape() const;
+
+		/// @brief Screen position of the selected loop's or spline's pivot marker as drawn (pivot x/z at GetHandleHeight).
+		/// @return False if no placed loop or spline is selected or the marker is behind the camera.
+		bool ProjectShapePivot(ImVec2& screen) const;
+
+		/// @brief Hit-tests the pivot marker of the selected placed loop or spline (radius TransformHandleRadius).
+		bool HitTestShapePivot(float screenX, float screenY) const;
+
+		/// @brief Draws the pivot marker of the selected placed loop or spline (a diamond, unlike the round point handles).
+		void DrawShapePivot(ImDrawList& drawList) const;
+
+		/// @brief Index of the selected control if it is a placed rectangle, else -1.
+		int32 GetSelectedRectangle();
+
+		/// @brief Screen position of a rectangle handle as drawn (at GetHandleHeight).
+		/// @return False if the handle is behind the camera.
+		bool ProjectRectangleHandle(const pcg::graph::ControlInstance& instance, pcg::graph::RectangleHandle handle, ImVec2& screen) const;
+
+		/// @brief Hit-tests the handles of the selected rectangle in the viewport (radius TransformHandleRadius).
+		/// @param handle Receives the handle under the cursor.
+		/// @return True if a handle is under the cursor.
+		bool HitTestRectangleHandle(float screenX, float screenY, pcg::graph::RectangleHandle& handle);
+
+		/// @brief Draws placed volumes (rotated boxes), rectangles (outline on the ground, and the selected one's side and
+		///        corner handles) and points (marker with a yaw arrow).
 		void DrawPlacedTransforms(ImDrawList& drawList);
 
 		/// @brief Index of the control with the id or -1.
@@ -742,6 +832,10 @@ namespace mmo
 		/// selection; reset through OnControlTransformDeselected when the selection drops it).
 		SelectedControlTransform* m_transformSelectable = nullptr;
 
+		/// The handle of the loop or spline selected as a whole while the editor selection holds it (owned by the
+		/// selection; reset through OnControlShapeDeselected when the selection drops it).
+		SelectedControlShape* m_shapeSelectable = nullptr;
+
 		/// Control types of the placed controls, and the types the "New Control" menu offers.
 		ControlLibrary m_controlLibrary;
 
@@ -814,6 +908,23 @@ namespace mmo
 		float m_dragPlaneY = 0.0f;
 		float m_dragOffsetX = 0.0f;
 		float m_dragOffsetZ = 0.0f;
+
+		/// A rectangle side or corner handle being dragged: on the horizontal plane through the rectangle's position
+		/// (m_dragPlaneY), with the grab offset in m_dragOffsetX/Z.
+		struct RectangleDrag
+		{
+			bool active = false;
+			uint64 controlId = 0;
+			pcg::graph::RectangleHandle handle = pcg::graph::RectangleHandle::SidePosX;
+			/// Whether the drag changed the rectangle.
+			bool moved = false;
+		};
+		RectangleDrag m_rectangleDrag;
+
+		/// @brief Ends a rectangle handle drag like a button release (marks the control changed if the drag moved it).
+		///        Called on mouse up, as soon as the left button is found released anywhere (a release outside the
+		///        viewport sends no OnMouseUp), and before a new click is handled.
+		void EndRectangleDrag();
 
 		String m_status;
 		StatusLevel m_statusLevel = StatusLevel::Ok;

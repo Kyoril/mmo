@@ -6,6 +6,7 @@
 #include "client_context.h"
 #include "game_script.h"
 #include "systems/subsystem_client.h"
+#include "systems/cutscene_player.h"
 #include "systems/bug_report_client.h"
 #include "client.h"
 #include "game_client/audio_listener.h"
@@ -318,7 +319,11 @@ namespace mmo
 
 		/// Prefixes a binding key name with the modifier keys currently held, in a fixed
 		/// ALT-CTRL-SHIFT- order, so that bindings can tell CTRL-1 apart from 1.
-		String DecorateWithModifiers(const String& keyName)
+		/// @param keyName Plain name of the pressed key.
+		/// @param keyBindings When given, a modifier that is bound on its own (as in "hold Shift to
+		///        show action bar 2") is a key of its own and does not form combinations: the keys
+		///        pressed while it is held keep their plain names.
+		String DecorateWithModifiers(const String& keyName, const std::map<String, String>* keyBindings = nullptr)
 		{
 			// A modifier pressed on its own must keep its plain name, or it would decorate itself.
 			if (keyName.empty() || IsModifierKeyName(keyName))
@@ -326,16 +331,21 @@ namespace mmo
 				return keyName;
 			}
 
+			const auto formsCombinations = [keyBindings](const char* modifierKeyName)
+			{
+				return keyBindings == nullptr || keyBindings->find(modifierKeyName) == keyBindings->end();
+			};
+
 			String prefix;
 			if (Platform::IsAltKeyDown())
 			{
 				prefix += "ALT-";
 			}
-			if (Platform::IsControlKeyDown())
+			if (Platform::IsControlKeyDown() && formsCombinations("CONTROL"))
 			{
 				prefix += "CTRL-";
 			}
-			if (Platform::IsShiftKeyDown())
+			if (Platform::IsShiftKeyDown() && formsCombinations("SHIFT"))
 			{
 				prefix += "SHIFT-";
 			}
@@ -345,6 +355,7 @@ namespace mmo
 	}
 
 	IInputControl *WorldState::s_inputControl = nullptr;
+	WorldState *WorldState::s_luaWorldState = nullptr;
 	PlayerController *WorldState::s_playerController = nullptr;
 
 	WorldState::WorldState(GameStateMgr &gameStateManager, RealmConnector &realmConnector, const proto_client::Project &project, TimerQueue &timers, LootClient &lootClient, VendorClient &vendorClient,
@@ -635,6 +646,11 @@ namespace mmo
 
 		RemoveGameplayCommands();
 
+		AbortCutscene();
+		m_cutsceneConnections.disconnect();
+		m_cutscenePlayer.reset();
+
+		s_luaWorldState = nullptr;
 		s_inputControl = nullptr;
 		s_playerController = nullptr;
 		m_playerController.reset();
@@ -736,77 +752,124 @@ namespace mmo
 			return;
 		}
 
+		// The functions are registered once per Lua state and reach the world state through a
+		// static pointer. Registering them again on every ui reload would add a second overload with
+		// the same signature each time, and luabind then refuses every call as ambiguous.
+		s_luaWorldState = this;
+
+		lua_getglobal(L, "__WorldLuaFunctionsRegistered");
+		const bool alreadyRegistered = lua_toboolean(L, -1) != 0;
+		lua_pop(L, 1);
+		if (alreadyRegistered)
+		{
+			return;
+		}
+
+		lua_pushboolean(L, 1);
+		lua_setglobal(L, "__WorldLuaFunctionsRegistered");
+
+		// The list is parenthesized: a comma inside [] would be read as a multidimensional subscript
 		luabind::module(L)
-		[
+		[(
 			// Override SendPing to do hovered-object check + terrain raycast before sending
-			luabind::def<std::function<void()>>("SendPing", [this]()
+			luabind::def<std::function<void()>>("SendPing", []()
 			{
-				if (!m_playerController || !m_scene)
+				if (s_luaWorldState)
 				{
-					return;
+					s_luaWorldState->SendPingFromCursor();
 				}
+			}),
 
-				// 1) Check hovered object (unit or game object)
-				const auto hovered = m_playerController->GetHoveredObject();
-				if (hovered && hovered->IsUnit())
-				{
-					m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
-					return;
-				}
-
-				// 2) Terrain/collidable raycast using current mouse position
-				if (m_rayQuery)
-				{
-					const int32 mouseX = m_playerController->GetMouseX();
-					const int32 mouseY = m_playerController->GetMouseY();
-
-					int32 screenW = 1920, screenH = 1080;
-					GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
-
-					const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
-					const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
-
-					const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
-
-					m_rayQuery->ClearResult();
-					m_rayQuery->SetSortByDistance(true);
-					m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
-					m_rayQuery->SetRay(mouseRay);
-					m_rayQuery->Execute();
-
-					const auto& results = m_rayQuery->GetLastResult();
-					for (const auto& result : results)
-					{
-						if (!result.movable)
-						{
-							continue;
-						}
-
-						const ICollidable* collidable = result.movable->GetCollidable();
-						if (!collidable || !collidable->IsCollidable())
-						{
-							continue;
-						}
-
-						CollisionResult collision;
-						if (collidable->TestRayCollision(mouseRay, collision))
-						{
-							const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
-							m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
-							return;
-						}
-					}
-				}
-
-				// 3) Fallback: ping at player position
-				auto player = ObjectMgr::GetActivePlayer();
-				if (player)
-				{
-					const Vector3& pos = player->GetPosition();
-					m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
-				}
+			// Cutscenes: the overlay (black fade, subtitles, skip hint) reads these every frame
+			luabind::def<std::function<bool()>>("IsCutscenePlaying", []()
+			{
+				return s_luaWorldState != nullptr && s_luaWorldState->IsCutsceneActive();
+			}),
+			luabind::def<std::function<float()>>("GetCutsceneFade", []()
+			{
+				CutscenePlayer::View view;
+				const WorldState* state = s_luaWorldState;
+				return (state && state->m_cutscenePlayer && state->m_cutscenePlayer->GetView(view)) ? view.fade : 0.0f;
+			}),
+			luabind::def<std::function<std::string()>>("GetCutsceneSubtitle", []()
+			{
+				const WorldState* state = s_luaWorldState;
+				return (state && state->m_cutscenePlayer) ? std::string(state->m_cutscenePlayer->GetSubtitle()) : std::string();
+			}),
+			luabind::def<std::function<bool()>>("IsCutsceneSkipHintVisible", []()
+			{
+				const WorldState* state = s_luaWorldState;
+				return state && state->m_cutscenePlayer && state->m_cutscenePlayer->IsSkipHintVisible();
 			})
-		];
+		)];
+	}
+
+	void WorldState::SendPingFromCursor()
+	{
+		if (!m_playerController || !m_scene)
+		{
+			return;
+		}
+
+		// 1) Check hovered object (unit or game object)
+		const auto hovered = m_playerController->GetHoveredObject();
+		if (hovered && hovered->IsUnit())
+		{
+			m_realmConnector.SendPartyPingUnit(hovered->GetGuid());
+			return;
+		}
+
+		// 2) Terrain/collidable raycast using current mouse position
+		if (m_rayQuery)
+		{
+			const int32 mouseX = m_playerController->GetMouseX();
+			const int32 mouseY = m_playerController->GetMouseY();
+
+			int32 screenW = 1920, screenH = 1080;
+			GraphicsDevice::Get().GetViewport(nullptr, nullptr, &screenW, &screenH);
+
+			const float nx = static_cast<float>(mouseX) / static_cast<float>(screenW);
+			const float ny = static_cast<float>(mouseY) / static_cast<float>(screenH);
+
+			const Ray mouseRay = m_playerController->GetCamera().GetCameraToViewportRay(nx, ny, 1000.0f);
+
+			m_rayQuery->ClearResult();
+			m_rayQuery->SetSortByDistance(true);
+			m_rayQuery->SetQueryMask(1 << 6); // terrain + world models
+			m_rayQuery->SetRay(mouseRay);
+			m_rayQuery->Execute();
+
+			const auto& results = m_rayQuery->GetLastResult();
+			for (const auto& result : results)
+			{
+				if (!result.movable)
+				{
+					continue;
+				}
+
+				const ICollidable* collidable = result.movable->GetCollidable();
+				if (!collidable || !collidable->IsCollidable())
+				{
+					continue;
+				}
+
+				CollisionResult collision;
+				if (collidable->TestRayCollision(mouseRay, collision))
+				{
+					const Vector3 hitPoint = mouseRay.origin + mouseRay.GetDirection() * collision.penetrationDepth;
+					m_realmConnector.SendPartyPingPosition(hitPoint.x, hitPoint.y, hitPoint.z);
+					return;
+				}
+			}
+		}
+
+		// 3) Fallback: ping at player position
+		auto player = ObjectMgr::GetActivePlayer();
+		if (player)
+		{
+			const Vector3& pos = player->GetPosition();
+			m_realmConnector.SendPartyPingPosition(pos.x, pos.y, pos.z);
+		}
 	}
 
 	void WorldState::OnTargetSelectionChanged(uint64 monitoredGuid)
@@ -1081,6 +1144,12 @@ namespace mmo
 
 	bool WorldState::OnMouseDown(const MouseButton button, const int32 x, const int32 y)
 	{
+		if (IsCutsceneActive())
+		{
+			m_cutscenePlayer->ShowSkipHint();
+			return true;
+		}
+
 		if (m_bindings.ExecuteKey(MapMouseButton(button), BindingKeyState::Down))
 		{
 			return true;
@@ -1110,33 +1179,59 @@ namespace mmo
 	String WorldState::ResolveBindingKeyName(const int32 key) const
 	{
 		const String baseName = MapBindingKeyCode(key);
-		const String decoratedName = DecorateWithModifiers(baseName);
+
+		// While the options frame waits for a key, the whole combination is what the player means.
+		if (m_bindings.IsCapturing())
+		{
+			return DecorateWithModifiers(baseName);
+		}
+
+		const auto& keyBindings = m_bindings.GetAllKeyBindings();
+		const String decoratedName = DecorateWithModifiers(baseName, &keyBindings);
 		if (decoratedName == baseName)
 		{
 			return baseName;
 		}
 
-		// While the options frame waits for a key, the whole combination is what the player means.
-		if (m_bindings.IsCapturing())
-		{
-			return decoratedName;
-		}
-
 		// Combinations nobody bound fall back to the plain key, so that holding a modifier does not
 		// swallow an existing binding (Ctrl + W keeps moving the character forward).
-		const auto& keyBindings = m_bindings.GetAllKeyBindings();
 		return keyBindings.find(decoratedName) != keyBindings.end() ? decoratedName : baseName;
 	}
 
 	bool WorldState::OnKeyDown(const int32 key, bool repeat)
 	{
+		// A cutscene takes the keyboard: Escape asks to skip it, every other key shows how to
+		if (IsCutsceneActive())
+		{
+			if (!repeat)
+			{
+				if (MapBindingKeyCode(key) == "ESCAPE")
+				{
+					m_cutscenePlayer->RequestSkip();
+				}
+				else
+				{
+					m_cutscenePlayer->ShowSkipHint();
+				}
+			}
+
+			return true;
+		}
+
 		// A pending key capture waits for the key of a combination, not for its modifiers: holding
-		// Ctrl must not end the capture before the player pressed the key they want to bind.
+		// Ctrl must not end the capture before the player pressed the key they want to bind. A
+		// modifier is captured on its own once it is released without another key (OnKeyUp).
 		if (m_bindings.IsCapturing())
 		{
 			const String baseName = MapBindingKeyCode(key);
-			if (baseName.empty() || IsModifierKeyName(baseName))
+			if (baseName.empty())
 			{
+				return true;
+			}
+
+			if (IsModifierKeyName(baseName))
+			{
+				m_captureModifierKey = key;
 				return true;
 			}
 		}
@@ -1153,6 +1248,21 @@ namespace mmo
 
 	bool WorldState::OnKeyUp(const int32 key)
 	{
+		// A modifier pressed and released while a key capture is still pending is the key the
+		// player wants to bind. The capture takes key down events, so it is handed one.
+		const bool capturedModifier = m_captureModifierKey == key && m_bindings.IsCapturing();
+		if (m_captureModifierKey == key)
+		{
+			m_captureModifierKey = 0;
+		}
+
+		if (capturedModifier)
+		{
+			m_pressedKeyBindings.erase(key);
+			m_bindings.ExecuteKey(MapBindingKeyCode(key), BindingKeyState::Down);
+			return true;
+		}
+
 		String keyName;
 		if (const auto it = m_pressedKeyBindings.find(key); it != m_pressedKeyBindings.end())
 		{
@@ -1202,6 +1312,13 @@ namespace mmo
 		}
 
 		{
+			PROFILE_SCOPE("OnIdle::Cutscene");
+			UpdateCutscene(deltaSeconds);
+		}
+
+		const bool cutsceneCamera = m_playerController->HasCameraOverride();
+
+		{
 			PROFILE_SCOPE("OnIdle::SkyEnvironmentWind");
 
 			// Day/night clock, then the zone environment for the new hour, then the lights and sky.
@@ -1217,8 +1334,13 @@ namespace mmo
 			}
 			PublishWindShaderParameters(m_wind.GetState());
 
-			// Set the sky dome position to follow the player
-			if (m_playerController->GetRootNode())
+			// Set the sky dome position to follow the player, or the camera of a cutscene that may
+			// be far away from the player
+			if (cutsceneCamera)
+			{
+				m_skyComponent->SetPosition(m_playerController->GetCamera().GetDerivedPosition());
+			}
+			else if (m_playerController->GetRootNode())
 			{
 				m_skyComponent->SetPosition(m_playerController->GetRootNode()->GetPosition());
 			}
@@ -1238,7 +1360,11 @@ namespace mmo
 			{
 				PROFILE_SCOPE("OnIdle::Audio");
 				m_audio.SetListenerOrientation(audio_listener::FlattenedForward(m_playerController->GetCamera().GetDerivedDirection()), Vector3::UnitY);
-				m_audio.Update(m_playerController->GetControlledUnit()->GetPosition() + earOffset, deltaSeconds);
+
+				// During a cutscene the ears travel with the camera
+				m_audio.Update(cutsceneCamera
+					? m_playerController->GetCamera().GetDerivedPosition()
+					: m_playerController->GetControlledUnit()->GetPosition() + earOffset, deltaSeconds);
 			}
 
 			// Mesh sounds are selected around the same position the 3D listener sits at
@@ -1381,6 +1507,28 @@ namespace mmo
 				questDots.push_back({ unit.GetPosition(), dotType, unit.GetName() });
 			});
 			m_minimap.UpdateQuestGiverDots(std::move(questDots));
+
+			// Objective areas of active quests on this map. A complete quest's way home is the turn-in
+			// marker above its quest giver, so only unfinished ones get an area.
+			std::vector<MapQuestArea> questAreas;
+			for (uint32 i = 0; i < m_questClient.GetNumQuestLogEntries(); ++i)
+			{
+				const QuestLogEntry* entry = m_questClient.GetQuestLogEntry(i);
+				if (!entry || !entry->quest || entry->status != QuestStatus::Incomplete)
+				{
+					continue;
+				}
+
+				const QuestInfo& info = *entry->quest;
+				if (!info.hasObjectiveArea || info.objectiveAreaMapId != g_mapId)
+				{
+					continue;
+				}
+
+				questAreas.push_back({ Vector3(info.objectiveAreaX, 0.0f, info.objectiveAreaZ), info.objectiveAreaRadius, info.title, entry->questId });
+			}
+			m_minimap.UpdateQuestAreas(questAreas);
+			m_worldMap.UpdateQuestAreas(std::move(questAreas));
 		}
 
 		// Tick ping timers and remove expired ones
@@ -1523,10 +1671,13 @@ namespace mmo
 			PROFILE_SCOPE("WorldState::OnPaint");
 			FrameManager::Get().Draw();
 
-			// Draw world text frames
-			for (const auto &textFrame : m_worldTextFrames)
+			// Draw world text frames, unless the ui is hidden for a cutscene
+			if (!FrameManager::Get().IsUiHidden())
 			{
-				textFrame->Render();
+				for (const auto &textFrame : m_worldTextFrames)
+				{
+					textFrame->Render();
+				}
 			}
 
 			// Chat bubbles are NOT drawn here: they live in the frame tree under the WorldFrame
@@ -1611,7 +1762,10 @@ namespace mmo
 			// Crossfade zone music / ambience if the effective sounds changed.
 			{
 				PROFILE_SCOPE("Zone: Music");
-				m_zoneMusic.SetSound(musicSoundId);
+				if (!m_cutsceneMusic)
+				{
+					m_zoneMusic.SetSound(musicSoundId);
+				}
 			}
 			{
 				PROFILE_SCOPE("Zone: Ambience");
@@ -1877,6 +2031,12 @@ namespace mmo
 		m_playerController = std::make_unique<PlayerController>(*m_scene, m_realmConnector, m_lootClient, m_vendorClient, m_trainerClient, m_spellCast, m_bankClient);
 		s_inputControl = m_playerController.get();
 		s_playerController = m_playerController.get();
+
+		m_cutscenePlayer = std::make_unique<CutscenePlayer>(m_realmConnector, m_project, m_soundEntryPlayer, m_audio);
+		m_cutsceneConnections += {
+			m_cutscenePlayer->started.connect(*this, &WorldState::OnCutsceneStarted),
+			m_cutscenePlayer->ended.connect(*this, &WorldState::OnCutsceneEnded)
+		};
 
 		// Create the world grid in the scene. The world grid component will handle the rest for us
 		m_worldGrid = std::make_unique<WorldGrid>(*m_scene, "WorldGrid");
@@ -2233,6 +2393,8 @@ namespace mmo
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::SpellModChanged, *this, &WorldState::OnSpellModChanged);
 
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimePlayedResponse, *this, &WorldState::OnTimePlayedResponse);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CutsceneStart, *this, &WorldState::OnCutsceneStart);
+		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::CutsceneEnd, *this, &WorldState::OnCutsceneEnd);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::TimeSyncRequest, *this, &WorldState::OnTimeSyncRequest);
 		m_worldPacketHandlers += m_realmConnector.RegisterAutoPacketHandler(game::realm_client_packet::DebugLineOfSightResult, *this, &WorldState::OnDebugLineOfSightResult);
 
@@ -2279,6 +2441,8 @@ namespace mmo
 								 { Command_PetTame(cmd, args); }, ConsoleCommandCategory::Gm, "Tames the selected creature, ignoring the level check.");
 		Console::RegisterCommand("petmake", [this](const std::string &cmd, const std::string &args)
 								 { Command_PetMake(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature your temporary pet without a duration.");
+		Console::RegisterCommand("cutscene", [this](const std::string &cmd, const std::string &args)
+								 { Command_Cutscene(cmd, args); }, ConsoleCommandCategory::Gm, "Plays a cutscene for yourself: cutscene <cutsceneId>.");
 		Console::RegisterCommand("faceme", [this](const std::string &cmd, const std::string &args)
 								 { Command_FaceMe(cmd, args); }, ConsoleCommandCategory::Gm, "Makes the selected creature face towards you.");
 		Console::RegisterCommand("level", [this](const std::string &cmd, const std::string &args)
@@ -2345,6 +2509,7 @@ namespace mmo
 		Console::UnregisterCommand("petremove");
 		Console::UnregisterCommand("pettame");
 		Console::UnregisterCommand("petmake");
+		Console::UnregisterCommand("cutscene");
 		Console::UnregisterCommand("level");
 		Console::UnregisterCommand("money");
 		Console::UnregisterCommand("additem");
@@ -2653,8 +2818,27 @@ namespace mmo
 	void WorldState::WaitForWorldLoading()
 	{
 		ASSERT(m_playerController);
-		const auto position = m_playerController->GetControlledUnit()->GetPosition();
+		LoadWorldAround(m_playerController->GetControlledUnit()->GetPosition());
 
+		m_dispatcher.post([this]()
+			{
+				m_worldLoaded = true;
+				ILOG("World loading finished.");
+
+				// Hide loading screen - unless a cutscene is about to begin: its first picture may be
+				// somewhere else entirely, and the screen stays up until the world is loaded there.
+				if (m_cutscenePlayer && m_cutscenePlayer->HasPending())
+				{
+					m_cutsceneHoldsLoadingScreen = true;
+					return;
+				}
+
+				LoadingScreen::Hide();
+			});
+	}
+
+	void WorldState::LoadWorldAround(const Vector3& position)
+	{
 		// Ensure terrain is properly reloaded
 		PagePosition worldSize(64, 64);
 		const auto pagePos = PagePosition(static_cast<uint32>(GetTerrainPageIndex(position.x)), static_cast<uint32>(GetTerrainPageIndex(position.z)));
@@ -2776,14 +2960,7 @@ namespace mmo
 		LoadingScreen::SetProgress(1.0f);
 		LoadingScreen::Present(true);
 
-		m_dispatcher.post([this, jobsDone, dispatched]()
-			{
-				m_worldLoaded = true;
-				ILOG("World loading finished. Dispatched: " << dispatched << ", Jobs done: " << jobsDone);
-
-				// Hide loading screen
-				LoadingScreen::Hide(); 
-			});
+		DLOG("Loaded world around " << position << ". Dispatched: " << dispatched << ", Jobs done: " << jobsDone);
 	}
 
 	PacketParseResult WorldState::OnUpdateObject(game::IncomingPacket &packet)
@@ -4690,6 +4867,9 @@ namespace mmo
 		m_transferPending = true;
 		LoadingScreen::Show();
 
+		// A cutscene belongs to the map that is left
+		AbortCutscene();
+
 		g_mapId = mapId;
 
 		m_worldChangeHandlers.Clear();
@@ -5374,6 +5554,7 @@ namespace mmo
 		// WorldFrame and torn down together with the world UI on every world reload.
 		m_chatBubbleLayer = std::make_shared<Frame>("Frame", "ChatBubbleLayer");
 		m_chatBubbleLayer->SetClickable(false);
+		m_chatBubbleLayer->SetVisibleWhileUiHidden(false);
 		m_chatBubbleLayer->SetEnabled(false);
 
 		worldFrame->AddChild(m_chatBubbleLayer);

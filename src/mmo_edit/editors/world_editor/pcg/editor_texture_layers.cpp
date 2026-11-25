@@ -4,8 +4,10 @@
 
 #include "section_bake_job.h"
 
+#include "log/default_log_levels.h"
 #include "math/vector3.h"
 #include "pcg/section_asset.h"
+#include "scene_graph/material_manager.h"
 #include "terrain/constants.h"
 #include "terrain/page.h"
 #include "terrain/terrain.h"
@@ -33,6 +35,19 @@ namespace mmo
 		}
 
 		const auto key = std::make_pair(tileX, tileZ);
+		if (!m_overrides.empty())
+		{
+			const auto overridden = m_overrides.find(key);
+			if (overridden != m_overrides.end())
+			{
+				static const TileTextures none;
+				m_lastTileX = tileX;
+				m_lastTileZ = tileZ;
+				m_lastTile = overridden->second != nullptr ? overridden->second : &none;
+				return *m_lastTile;
+			}
+		}
+
 		auto cached = m_tiles.find(key);
 		if (cached == m_tiles.end())
 		{
@@ -133,12 +148,72 @@ namespace mmo
 		}
 	}
 
+	EditorTextureLayers::TileTextures EditorTextureLayers::ReadMaterial(const String& material) const
+	{
+		TileTextures textures;
+		const MaterialPtr loaded = material.empty() ? m_terrain.GetDefaultMaterial() : MaterialManager::Get().Load(material);
+		if (!loaded)
+		{
+			WLOG("PCG: terrain material " << material << " could not be loaded");
+			return textures;
+		}
+		textures.loaded = true;
+		for (uint8 layer = 0; layer < 4; ++layer)
+		{
+			textures.keys[layer] = GetTerrainLayerTextureKey(loaded, layer);
+			textures.normalized[layer] = pcg::NormalizeTextureKey(textures.keys[layer]);
+		}
+		return textures;
+	}
+
+	void EditorTextureLayers::LoadMaterialLayers(const String& material)
+	{
+		if (m_cacheOnly || m_materials.count(material) != 0)
+		{
+			return;
+		}
+		m_materials.emplace(material, ReadMaterial(material));
+	}
+
+	bool EditorTextureLayers::HasMaterialLayers(const String& material) const
+	{
+		return m_materials.count(material) != 0;
+	}
+
+	bool EditorTextureLayers::IsMaterialLoaded(const String& material) const
+	{
+		const auto it = m_materials.find(material);
+		return it != m_materials.end() && it->second.loaded;
+	}
+
+	const std::array<String, 4>* EditorTextureLayers::GetNormalizedMaterialLayers(const String& material) const
+	{
+		const auto it = m_materials.find(material);
+		return it != m_materials.end() ? &it->second.normalized : nullptr;
+	}
+
+	void EditorTextureLayers::SetTileMaterialOverrides(const std::vector<pcg::graph::TileMaterialRequest>& overrides)
+	{
+		m_overrideRequests = overrides;
+		m_overrides.clear();
+		m_lastTile = nullptr;
+		for (const pcg::graph::TileMaterialRequest& request : overrides)
+		{
+			LoadMaterialLayers(request.material);
+			const auto it = m_materials.find(request.material);
+			m_overrides[std::make_pair(request.tileX, request.tileZ)] = it != m_materials.end() ? &it->second : nullptr;
+		}
+	}
+
 	std::unique_ptr<EditorTextureLayers> EditorTextureLayers::CopyWarmCache() const
 	{
 		auto copy = std::make_unique<EditorTextureLayers>(m_terrain);
 		copy->m_tiles = m_tiles;
 		copy->m_queries = m_queries;
+		copy->m_materials = m_materials;
 		copy->m_cacheOnly = true;
+		// The override pointers point into this adapter's materials: rebuilt on the copy's.
+		copy->SetTileMaterialOverrides(m_overrideRequests);
 		return copy;
 	}
 

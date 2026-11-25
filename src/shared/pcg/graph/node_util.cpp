@@ -607,4 +607,36 @@ namespace mmo::pcg::graph
 		prepared.curve = std::make_unique<SegmentDistanceIndex>(path.GetSamples(), path.IsClosed(), ControlDistanceCell);
 		return true;
 	}
+
+	bool InsideAny(const std::vector<PreparedControl>& areas, const float x, const float z)
+	{
+		for (const PreparedControl& area : areas)
+		{
+			if (area.polygon->Contains(x, z))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	float ItemClearance(NodeOutput& out, const DataItem& item, const String& attribute)
+	{
+		if (attribute.empty())
+		{
+			return 0.0f;
+		}
+		const auto it = item.attributes.find(attribute);
+		if (it == item.attributes.end())
+		{
+			return 0.0f;
+		}
+		float value = 0.0f;
+		if (std::holds_alternative<bool>(it->second) || !ToNumber(it->second, value))
+		{
+			WarnOnce(out, "clearance attribute '" + attribute + "' is not a finite number on an item, 0 used");
+			return 0.0f;
+		}
+		return value;
+	}
 }

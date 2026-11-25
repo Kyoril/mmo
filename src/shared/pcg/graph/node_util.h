@@ -185,4 +185,21 @@ namespace mmo::pcg::graph
 	/// @return False (nothing prepared) for other kinds, too few points, non-finite or out of range geometry
 	///         (warning) and Areas whose spline is not closed (warning).
 	bool PrepareControl(NodeOutput& out, const DataItem& item, PreparedControl& prepared);
+
+	/// @brief A spline prepared for distance queries, with its removal radius (Difference, section exclusions).
+	struct SplineTarget
+	{
+		/// @brief The prepared spline.
+		PreparedControl control;
+
+		/// @brief Positions within this distance of the spline are removed.
+		float radius = 0.0f;
+	};
+
+	/// @brief Whether (x, z) lies inside any of the prepared areas (even-odd); every entry must have a polygon.
+	bool InsideAny(const std::vector<PreparedControl>& areas, float x, float z);
+
+	/// @brief The clearance of an item: its attribute of that name as a number, 0 if the name is empty or the item has
+	///        no such attribute. A Bool or non-finite value gives 0 with a warning.
+	float ItemClearance(NodeOutput& out, const DataItem& item, const String& attribute);
 }

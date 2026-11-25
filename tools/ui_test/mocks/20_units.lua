@@ -75,6 +75,19 @@ function UnitMethods:GetAura(index)
 	return (rawget(self, "auras") or {})[index + 1]
 end
 
+-- The spell a unit casts: castSpellName (nil while idle), castProgress and castInterrupted fields.
+function UnitMethods:GetCastSpellName()
+	return rawget(self, "castSpellName")
+end
+
+function UnitMethods:GetCastProgress()
+	return rawget(self, "castProgress") or 0
+end
+
+function UnitMethods:IsCastInterrupted()
+	return rawget(self, "castInterrupted") == true
+end
+
 function UnitMethods:GetKnownClassCount()
 	return #(rawget(self, "knownClasses") or {})
 end
@@ -109,6 +122,7 @@ function UiTest.MakeUnit(data)
 		power = { [0] = 50 },
 		maxPower = { [0] = 100 },
 		alive = true,
+		inCutscene = false,
 		friendly = true,
 		hostile = false,
 		guildName = "",

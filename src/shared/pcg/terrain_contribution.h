@@ -20,6 +20,12 @@ namespace mmo::pcg
 	/// Returns true if the two rectangles overlap or touch.
 	bool RectsOverlap(const WorldRect& a, const WorldRect& b);
 
+	/// Global tile index range (inclusive) of the tiles a rect overlaps with a positive area (merely touching a tile
+	/// border is no overlap; a degenerate rect gives the tile it lies in), clamped to the layout's tilesX / tilesZ when
+	/// they are known. Empty (minX > maxX or minZ > maxZ) for an inverted rect or one wholly off the terrain. The tile
+	/// material pass of ComputeTerrainSamples names materials on these tiles.
+	IntRect TileRangeOverlapping(const GridLayout& layout, const WorldRect& rect);
+
 	/// What a generator wants at a world position. weight 0 = leave untouched.
 	struct TerrainTarget
 	{
@@ -31,6 +37,10 @@ namespace mmo::pcg
 		uint8 waterType = 0;
 		float waterHeight = 0.0f;
 		bool setMaterial = false;
+		/// Tile material requested at this position; empty = none. Read in the terrain_channel::Material pass only.
+		/// A non-empty name is written to the tile whatever setMaterial says; with an empty name the tile gets the
+		/// call's material if setMaterial.
+		String material;
 	};
 
 	using TerrainTargetFunction = std::function<TerrainTarget(float x, float z, float baseHeight)>;
@@ -46,7 +56,7 @@ namespace mmo::pcg
 			Splat = 2,
 			/// waterType and waterHeight.
 			Water = 4,
-			/// setMaterial.
+			/// setMaterial and material.
 			Material = 8,
 			/// Every channel.
 			All = Heights | Splat | Water | Material
@@ -164,6 +174,8 @@ namespace mmo::pcg
 		std::vector<Water> waterSamples;
 		/// 1 = the tile's material is set.
 		std::vector<uint8> materialSamples;
+		/// Parallel to materialSamples: the material the target named for the tile, empty = no per-tile name.
+		std::vector<String> materialNames;
 	};
 
 	/// Evaluates the targets at every sample Apply writes over `rect`, reading only the base heights (the Get height
@@ -171,6 +183,9 @@ namespace mmo::pcg
 	/// threads (no target is called from two threads at once, but different targets run concurrently), water quads and
 	/// tile materials with targets[0]. Every target must return the same as targets[0]. Nothing is computed when
 	/// `targets` is empty. The terrain is not changed, so this may run on another thread while nothing writes it.
+	/// Tile materials are sampled at the centre of every tile of TileRangeOverlapping(rect) (and of every tile whose
+	/// centre lies in `rect`); a material the target names is honoured on all of them, setMaterial (the call's
+	/// material) only on the tiles whose centre lies in `rect`.
 	void ComputeTerrainSamples(const ITerrainAccess& terrain, const WorldRect& rect, const std::vector<ChannelTerrainTargetFunction>& targets,
 		TerrainSamples& out);
 

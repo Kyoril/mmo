@@ -116,6 +116,7 @@ namespace mmo
 			{ AuraType::ModHealingTakenPct, [](AuraEffect& self, bool apply){ self.HandleModHealingTakenPct(apply); } },
 			{ AuraType::ModPetStatsPct,     [](AuraEffect& self, bool apply){ self.HandleModPetStatsPct(apply); } },
 			{ AuraType::PetPassive,         [](AuraEffect& self, bool apply){ self.HandlePetPassive(apply); } },
+			{ AuraType::PreventAuraApplication, [](AuraEffect& self, bool apply){ self.HandlePreventAuraApplication(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -652,6 +653,72 @@ namespace mmo
 		{
 			RemovePetPassiveSpell(*pet, spellId);
 		}
+	}
+
+	void AuraEffect::HandlePreventAuraApplication(const bool apply) const
+	{
+		// Setting the mark needs nothing here: SingleCastState::ValidateTargetRequirements reads it
+		// and refuses the casts other units aim at the claimed unit.
+		if (!apply)
+		{
+			EndClaimFollow();
+		}
+	}
+
+	void AuraEffect::EndClaimFollow() const
+	{
+		GameUnitS& owner = m_container.GetOwner();
+
+		// No world instance left means the owner is being torn down (despawn, logout) rather than a
+		// claim ending in the world, and there is nothing left to send home.
+		WorldInstance* world = owner.GetWorldInstance();
+		if (!world)
+		{
+			return;
+		}
+
+		auto* creature = dynamic_cast<GameCreatureS*>(&owner);
+		if (!creature || creature->GetAI() == nullptr)
+		{
+			return;
+		}
+
+		// Only a follow this very claim started ends with it. A creature following somebody else,
+		// or nobody, is none of this aura's business.
+		const auto followed = creature->GetFollowedUnit();
+		if (!followed || followed->GetGuid() != m_container.GetCasterId())
+		{
+			return;
+		}
+
+		// Posted: this runs while the aura is still being taken off its owner, and resetting a
+		// creature removes auras of its own.
+		std::weak_ptr<GameCreatureS> weakCreature = std::static_pointer_cast<GameCreatureS>(creature->shared_from_this());
+		const uint64 casterId = m_container.GetCasterId();
+		world->GetUniverse().Post([weakCreature, casterId]()
+			{
+				const auto claimed = weakCreature.lock();
+				if (!claimed || !claimed->GetWorldInstance() || claimed->GetAI() == nullptr)
+				{
+					return;
+				}
+
+				// Somebody may have claimed, delivered or killed the creature in between.
+				const auto followed = claimed->GetFollowedUnit();
+				if (!followed || followed->GetGuid() != casterId || !claimed->IsAlive())
+				{
+					return;
+				}
+
+				claimed->ClearFollowedUnit();
+
+				// A creature in a fight is left to the fight: it resets by itself once that ends,
+				// and evading here would hand out a free heal to whoever started the fight.
+				if (!claimed->IsInCombat())
+				{
+					claimed->GetAI()->Reset();
+				}
+			});
 	}
 
 	void AuraEffect::HandlePeriodicDamage() const

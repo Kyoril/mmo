@@ -74,6 +74,30 @@ namespace mmo
 		/// @param degrees The yaw to add, in degrees.
 		void RotateCamera(float degrees);
 
+		/// @brief Takes the camera away from the player, fully or in part: the view is the player's own
+		///        camera blended towards the given placement. Used by cutscenes. The player camera keeps
+		///        being updated underneath, so blending back to it is seamless.
+		/// @param position Eye position in world space.
+		/// @param orientation Orientation in world space.
+		/// @param weight 0 shows the player's camera, 1 the given placement, values between blend.
+		/// @param fovDegrees Vertical field of view of the placement in degrees, or 0 to keep the
+		///        player camera's field of view.
+		void SetCameraOverride(const Vector3& position, const Quaternion& orientation, float weight, float fovDegrees);
+
+		/// @brief Gives the camera back to the player.
+		void ClearCameraOverride();
+
+		/// @brief Whether the camera is currently taken away from the player (see SetCameraOverride).
+		[[nodiscard]] bool HasCameraOverride() const { return m_cameraOverrideActive; }
+
+		/// @brief Locks or unlocks the player's control over the character and the camera. Locking
+		///        releases every held movement key and mouse button; the stop reaches the server
+		///        through the regular movement updates.
+		void SetInputLocked(bool locked);
+
+		/// @brief Whether the player's control is locked (see SetInputLocked).
+		[[nodiscard]] bool IsInputLocked() const { return m_inputLocked; }
+
 	private:
 		void SetupCamera();
 
@@ -103,10 +127,14 @@ namespace mmo
 
 		void SetOrbitModeEnabled(bool enable);
 
+		/// @brief Places the camera for the frame: on the player's camera node, or - while an
+		///        override is set - on its own node between the player's camera and the override.
+		void ApplyCameraOverride();
+
 	public:
 		void SetControlBit(const ControlFlags::Type flag, bool set) override;
 
-		void ToggleControlBit(const ControlFlags::Type flag) override { if (m_controlFlags & flag) { m_controlFlags &= ~flag; } else { m_controlFlags |= flag; } }
+		void ToggleControlBit(const ControlFlags::Type flag) override { if (m_inputLocked) { return; } if (m_controlFlags & flag) { m_controlFlags &= ~flag; } else { m_controlFlags |= flag; } }
 
 		void Jump() override;
 
@@ -160,6 +188,19 @@ namespace mmo
 
 		Vector3 m_desiredCameraLocation;
 		Quaternion m_savedOrientation;
+
+		/// @brief Node the camera sits on while it is taken away from the player. Child of the scene root.
+		SceneNode* m_overrideCameraNode { nullptr };
+		bool m_cameraOverrideActive { false };
+		/// @brief Whether the camera is currently attached to m_overrideCameraNode instead of m_cameraNode.
+		bool m_cameraOnOverrideNode { false };
+		Vector3 m_cameraOverridePosition;
+		Quaternion m_cameraOverrideOrientation;
+		float m_cameraOverrideWeight { 0.0f };
+		float m_cameraOverrideFov { 0.0f };
+		/// @brief The player camera's own field of view, restored when the override ends.
+		Radian m_defaultFovY { 0.0f };
+		bool m_inputLocked { false };
 
 		/// @brief Current camera-shake trauma in [0,1]; decays to zero over ~0.4s.
 		float m_cameraTrauma { 0.0f };

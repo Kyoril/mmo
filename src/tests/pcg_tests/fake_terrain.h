@@ -40,6 +40,8 @@ namespace
 			m_layout.pixelSpacing = 1.0;
 			m_layout.quadsPerTile = 8;
 			m_layout.verticesPerTile = 8;
+			m_layout.tilesX = static_cast<mmo::uint32>(tiles);
+			m_layout.tilesZ = static_cast<mmo::uint32>(tiles);
 			m_data.outer.assign(m_n * m_n, 10.0f);
 			m_data.inner.assign(m_q * m_q, 10.0f);
 			m_data.water.assign(m_n * m_n, 0.0f);

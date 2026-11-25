@@ -2,7 +2,9 @@ mmo_add_test(client_ui_tests lua)
 
 # The suite runs the shipped UI scripts themselves, so it needs to find them in the
 # data/client submodule. Passing the directory in keeps the tests independent of the
-# working directory ctest happens to start them in.
+# working directory ctest happens to start them in. The client source directory comes
+# along for the tests which check that a client side error reaches the UI at all.
 target_compile_definitions(client_ui_tests PRIVATE
 	MMO_UI_SCRIPT_DIR="${CMAKE_SOURCE_DIR}/data/client/Interface/GameUI"
-	MMO_CLIENT_LOCALES_DIR="${CMAKE_SOURCE_DIR}/data/client/Locales")
+	MMO_CLIENT_LOCALES_DIR="${CMAKE_SOURCE_DIR}/data/client/Locales"
+	MMO_CLIENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}/src/mmo_client")

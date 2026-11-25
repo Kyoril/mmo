@@ -4,6 +4,8 @@
 
 #include "http/http_server.h"
 
+#include <mutex>
+
 namespace mmo
 {
 	namespace web
@@ -43,6 +45,11 @@ namespace mmo
 			asio::io_service &m_ioService;
 			net::http::Server m_server;
 			Clients m_clients;
+
+			/// Protects m_clients: the accept callback, clientDisconnected() and Stop() each
+			/// run on whatever io thread asio happens to dispatch them on, with no strand
+			/// tying them together.
+			std::mutex m_clientsMutex;
 		};
 	}
 }

@@ -9,6 +9,7 @@
 #include "asio/high_resolution_timer.hpp"
 
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <queue>
 
@@ -86,6 +87,13 @@ namespace mmo
 
 		typedef std::priority_queue<EventEntry, std::vector<EventEntry>, EventEntry::IsLater> Queue;
 		typedef asio::high_resolution_timer Timer;
+
+		/// Guards every member below. The login server runs its io_service on two threads, so
+		/// AddEvent (from one connection's packet handler) and Update (the timer's own completion
+		/// handler) can run concurrently on the same TimerQueue -- as can Stop(), called from the
+		/// shutdown signal handler on whichever thread asio picks. Without this, concurrent
+		/// access to m_queue (a std::priority_queue, not thread-safe) corrupts it.
+		std::mutex m_mutex;
 
 		Timer m_timer;
 		std::optional<GameTime> m_timerTime;

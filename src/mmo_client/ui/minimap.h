@@ -10,6 +10,7 @@
 #include "base/signal.h"
 #include "base/typedefs.h"
 #include "map_member_dot.h"
+#include "map_quest_area.h"
 
 #include <functional>
 #include <map>
@@ -114,6 +115,10 @@ namespace mmo
 		/// @brief Updates the list of quest giver icons shown on the minimap.
 		void UpdateQuestGiverDots(std::vector<QuestGiverDot> dots);
 
+		/// @brief Updates the objective areas of the player's active quests. Areas entirely beyond the
+		///        minimap's edge are drawn as a marker on the edge, in their direction.
+		void UpdateQuestAreas(std::vector<MapQuestArea> areas);
+
 	private:
 		/// @brief Calculates the tile coordinates for a given world position.
 		/// @param worldPosition The world position to convert.
@@ -217,6 +222,18 @@ namespace mmo
 		TexturePtr m_questCompletableTexture;
 		GeometryBuffer m_questCompletableGeom;
 		std::vector<QuestGiverDot> m_questGiverDots;
+
+		/// @brief Translucent disc per quest objective area (unit radius, scaled to the area in metres).
+		GeometryBuffer m_questAreaGeom;
+		/// @brief Marker for an objective area beyond the minimap edge, drawn on the edge in its direction.
+		GeometryBuffer m_questAreaEdgeGeom;
+		std::vector<MapQuestArea> m_questAreas;
+
+		/// @brief True when no part of the area reaches into the visible minimap circle.
+		bool IsQuestAreaBeyondEdge(const MapQuestArea& area) const;
+
+		/// @brief Where an area's edge marker is drawn: on the minimap edge in the area's direction.
+		Vector3 GetQuestAreaEdgePosition(const MapQuestArea& area) const;
 
 	public:
 		struct PingDot

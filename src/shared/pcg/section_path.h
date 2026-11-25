@@ -125,7 +125,10 @@ namespace mmo::pcg
 		FollowGround,
 		/// Centre line height = the base ground under the spline averaged along the path over groundSmoothing metres
 		/// (follows the large shape of the hand-made base, levels its bumps and steps).
-		SmoothedGround
+		SmoothedGround,
+		/// The section contributes no height at all (terrain weight 0) and only paints; props stand on the ground the
+		/// caller passes to BuildSectionPlacements. Needs no base ground and cannot be combined with the mass layer.
+		KeepGround
 	};
 
 	/// Per-path settings of a section path.
@@ -308,7 +311,7 @@ namespace mmo::pcg
 	SectionCopyFacade GetCopyFacade(const SectionPathShape& shape, const SectionCopy& copy);
 
 	/// Sets one SectionPathParams field by its member name (e.g. "massHeight", "mirrorCopies") from text; bools take
-	/// 0/1/true/false, heightMode followSpline/followGround/smoothedGround. For unattended tools.
+	/// 0/1/true/false, heightMode followSpline/followGround/smoothedGround/keepGround. For unattended tools.
 	/// @return False with a message for an unknown name or a value that does not parse (params unchanged then).
 	bool SetSectionPathParam(SectionPathParams& params, const String& name, const String& value, String& error);
 
@@ -352,6 +355,9 @@ namespace mmo::pcg
 	/// @param remap Section layer to tile layer mapping at the position; empty = identity.
 	TerrainTarget EvaluateSectionTerrain(const SectionPathShape& shape, float x, float z, float baseHeight, const LayerRemapFunction& remap);
 
+	/// Tells whether a world position (x, z) lies in an excluded area.
+	using PlacementExcludeFunction = std::function<bool(float x, float z)>;
+
 	/// Places the baked props of every copy along the path. Per copy and baked placement p (variation from
 	/// Hash(seed, spanKey, copy, p.key, p.kind), the placement's rule found by asset; no rule = no jitter, swap or keepChance,
 	/// propDensity still applies):
@@ -389,6 +395,13 @@ namespace mmo::pcg
 	/// @param ground Final ground (base + this path's terrain). Empty = the centre line height of the height mode
 	///        at the prop's arc position (spline height, the base ground under the spline for FollowGround, or that
 	///        ground smoothed for SmoothedGround).
+	/// - exclusion: an optional `excluded` function cuts gaps by removing placements, never by moving the others. A
+	///   single placement is dropped if `excluded(x, z)` is true at its final position (after jitter); a run piece
+	///   is dropped if it is true at the midpoint of the piece's footprint ends. Runs are laid out exactly as
+	///   without exclusion and dropped pieces are simply not emitted, so every remaining placement keeps its key,
+	///   position, rotation and scale. An empty function excludes nothing and the output is unchanged.
 	/// @param out Cleared, then receives the placements sorted by key; keys are unique.
-	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out);
+	/// @param excluded Optional predicate on world x/z; true removes the placement or run piece there.
+	void BuildSectionPlacements(const SectionPathShape& shape, const std::function<float(float, float)>& ground, std::vector<Placement>& out,
+		const PlacementExcludeFunction& excluded = {});
 }

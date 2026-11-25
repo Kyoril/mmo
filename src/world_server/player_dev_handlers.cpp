@@ -27,9 +27,14 @@ namespace mmo
 			return;
 		}
 
-		DLOG("Creating monster with entry " << entry);
-
 		const auto* creatureEntry = m_project.units.getById(entry);
+		if (!creatureEntry)
+		{
+			ELOG("Unable to create monster: Unknown unit entry " << entry);
+			return;
+		}
+
+		DLOG("Creating monster with entry " << entry);
 
 		// Spawn a new creature
 		ASSERT(m_worldInstance);

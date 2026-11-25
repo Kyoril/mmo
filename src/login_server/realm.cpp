@@ -68,6 +68,19 @@ namespace mmo
 
 	void Realm::Destroy()
 	{
+		// Tearing the same link down twice would erase it from the manager twice, and that erase
+		// is guarded only by an assert -- in a release build it runs off the end of the list. Two
+		// teardowns are reachable here: PostDestroy() (the shutdown handler) can already have
+		// posted this call by the time the connection itself notices it was lost and calls
+		// connectionLost() -> Destroy() directly, or vice versa.
+		//
+		// Safe as a plain bool: Destroy() only ever runs on the connection's strand.
+		if (m_destroyed)
+		{
+			return;
+		}
+		m_destroyed = true;
+
 		m_pingTimeoutCountdown.Cancel();
 		m_authenticated = false;
 

@@ -117,6 +117,21 @@ Data: `<creature entry>`, `[<radius, default 15>]`, `[<despawn delay ms, default
 optional emote. This is the general "bring N of them back" objective: strayed livestock, rescued
 prisoners, lost children.
 
+**One follower belongs to one player.** The turnip spell's second effect applies a
+`PreventAuraApplication` aura (`src/shared/game/aura.h`) to the sow for one minute. While it is
+on her, every aura-applying cast anyone else aims at her fails with "Invalid target": a second
+player cannot offer their own turnip and walk off with a sow - and the progress she carries - that
+someone else is already leading. The aura is visible, so her buff frame shows that she is taken
+before anyone wastes a turnip on her.
+
+The mark has to expire, because a player who never hands her in leaves her claimed. When it does,
+the sow stops following and runs back to her spawn point (`AuraEffect::EndClaimFollow`), so a
+turnip buys a minute of her company and an abandoned sow is found where she belongs instead of
+standing in a field halfway to the farm. Her claim is gone with the mark, so anyone - the same
+player included - can offer her another turnip. A sow caught in a fight when the mark runs out
+only stops following; she resets with the fight, because evading on command would be a free heal
+for whoever started it.
+
 Three things this quest needed that were not there:
 
 - **The `Dummy` spell effect did nothing at all**, not even tell triggers about the cast. A spell
@@ -164,6 +179,26 @@ despawn after a minute" could not be written. All-zero coordinates now mean "at 
 while the Open spell's effect still held it, which is a use-after-free (an assertion in Debug). A
 used quest object is now disabled at once and removed on the next tick, and the Open effect keeps
 its target alive across the use. Found by the E2E scenario on the first lantern.
+
+### The road lamps — a quest object that is used without disappearing
+
+A quest object normally despawns the moment it is used, so one spawn cannot be clicked to full
+credit, and the spawner brings a fresh one back after its respawn delay. A lamp the player is asked
+to *light* must not vanish from its post, so a `QuestObject` whose entry carries a second data value
+(`data[1]`) switches to that **display** instead: it stays where it is, shows the used display and
+is unusable until it resets, which happens after the spawn's respawn delay — exactly as long as the
+despawn would have lasted. Without a reset delay (or outside a world instance) it despawns as
+before, or it would stay used forever and no one else could use it.
+
+The lanterns use it with two displays of the same mesh: `Unlit Road Lantern` (15), whose material
+instance sets the props master's `EmissiveGlow` to 0, and `Road Lantern` (10), the emissive one the
+road's own lamps use. Lighting one swaps 15 for 10.
+
+The eight spawns no longer stand between the road's lamp posts: they **are** eight of them. The
+eight `Road lantern` placements from the inn down to the ambush were removed from the world and the
+quest objects took their exact transforms, so the row reads as one line of lamps, eight of which
+happen to be dark. They have no point light of their own (an object display is a mesh, not a world
+model), so that stretch is darker at night than it was — the glow on the lit mesh is the only cue.
 
 ### Other patterns used (existing mechanics)
 
@@ -214,7 +249,8 @@ its target alive across the use. Found by the E2E scenario on the first lantern.
 - **The Crossroads Inn's interior.** Marta Coldwell stands behind the bar, at the spot Old Harbin
   has in the same building in Oakenshire. Not checked in the client.
 - **Visuals.** The quest objects reuse existing meshes (road lantern, brazier, root, boat, a small
-  rune stone). Lighting a lantern has no flame effect yet.
+  rune stone). Lighting a lantern has no flame effect yet; see "The road lamps" below for what it
+  does do.
 - **Locales.** English and German (Ihr/Euch) are written. French and Russian fall back to English.
 - **Not played in the real client.** The E2E client has no quest dialogue UI: the item-started
   quest (84), the gossip texts and the timed quest's countdown are verified on the server side only.

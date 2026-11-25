@@ -136,7 +136,7 @@ TEST_CASE("SectionPathRecord round trip keeps a closed loop and the loop setting
 	const size_t modeOffset = 8 + 8 + (4 + original.name.size()) + (4 + original.sectionAsset.size()) + 8 + 1 + 4 + 4;
 	REQUIRE(bytes[modeOffset] == static_cast<char>(SectionHeightMode::SmoothedGround));
 	std::vector<char> badMode = bytes;
-	badMode[modeOffset] = 3;
+	badMode[modeOffset] = 4;
 	CHECK_FALSE(Deserialize(badMode, loaded));
 }
 
@@ -146,7 +146,7 @@ TEST_CASE("SectionPathRecord reads versions 1 and 2 as open paths with default l
 	// and groundSmoothing (6 bytes) after the rect list of version 2, which version 1 does not have.
 	const SectionPathRecord original = MakePopulated();
 	std::vector<char> bytes = Serialize(original);
-	REQUIRE(bytes[4] == 4);
+	REQUIRE(bytes[4] == 5);
 	const size_t massBytes = 1 + 7 * 4 + 1 + 1 + 4;
 	const size_t loopBytes = 1 + 1 + 4;
 	const size_t rectBytes = 4 + 16 * original.builtRects.size();
@@ -176,15 +176,15 @@ TEST_CASE("SectionPathRecord reads versions 1 and 2 as open paths with default l
 	CHECK(loaded.pointIds == original.pointIds);
 	CHECK(loaded.content.placements.size() == 1);
 
-	// Rewriting upgrades to version 4 with no rects.
+	// Rewriting upgrades to version 5 with no rects.
 	const std::vector<char> rewritten = Serialize(loaded);
-	CHECK(rewritten[4] == 4);
+	CHECK(rewritten[4] == 5);
 	CHECK(rewritten.size() == v1.size() + 4 + loopBytes + massBytes);
 
 	// Unknown future versions are refused.
-	std::vector<char> v5 = bytes;
-	v5[4] = 5;
-	CHECK_FALSE(Deserialize(v5, loaded));
+	std::vector<char> v6 = bytes;
+	v6[4] = 6;
+	CHECK_FALSE(Deserialize(v6, loaded));
 }
 
 TEST_CASE("SectionPathRecord round trip keeps the mass and facade settings", "[section_path_record]")

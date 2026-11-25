@@ -21,5 +21,9 @@ namespace mmo::pcg
 		uint32 quadsPerTile = 8;
 		/// Outer vertex steps per tile.
 		uint32 verticesPerTile = 8;
+		/// Tiles of the terrain along x (global tile indices 0 .. tilesX - 1); 0 = not known (no clamping).
+		uint32 tilesX = 0;
+		/// Tiles of the terrain along z; 0 = not known (no clamping).
+		uint32 tilesZ = 0;
 	};
 }

@@ -30,6 +30,8 @@ namespace
 		std::vector<uint16> receivedOpCodes;
 		uint32 lostCount = 0;
 		uint32 malformedCount = 0;
+		/// What connectionPacketReceived answers, so a test can play a handler rejecting a packet.
+		PacketParseResult result = PacketParseResult::Pass;
 
 		void connectionLost() override
 		{
@@ -44,7 +46,7 @@ namespace
 		PacketParseResult connectionPacketReceived(game::IncomingPacket& packet) override
 		{
 			receivedOpCodes.push_back(packet.GetId());
-			return PacketParseResult::Pass;
+			return result;
 		}
 	};
 
@@ -202,12 +204,10 @@ TEST_CASE("GameConnectionClearsTheCipherWhenANewSessionStarts", "[game_connectio
 	CHECK_FALSE(pair.client->GetCrypt().IsInitialized());
 }
 
-// Reaching close() after the connection has already released its socket must not fault.
+// Reaching close() after the connection has already dropped a malformed peer must not fault.
 //
-// Dropping a malformed peer releases the socket outright, but the object stays alive and
-// reachable -- the UI can still call close() from a cancel button, and a state teardown will
-// call it unconditionally. IsConnected() and Disconnected() both null-check the socket for this
-// reason; close() must too.
+// The object stays alive and reachable after the drop -- the UI can still call close() from a
+// cancel button, and a state teardown will call it unconditionally.
 TEST_CASE("GameConnectionCloseAfterMalformedDropDoesNotFault", "[game_connection]")
 {
 	asio::io_service ioService;
@@ -216,9 +216,8 @@ TEST_CASE("GameConnectionCloseAfterMalformedDropDoesNotFault", "[game_connection
 	GameConnectedPair pair = MakeGameConnectedPair(ioService, serverListener, clientListener);
 
 	// A header announcing a body beyond the protocol ceiling is the deterministic way into the
-	// malformed-parse branch -- the branch that releases the socket. (An announced size *under*
-	// the ceiling is merely "incomplete" and would instead trip the receive-buffer cap, which
-	// tears down along a different path that keeps the socket.)
+	// malformed-parse branch. (An announced size *under* the ceiling is merely "incomplete" and
+	// would instead trip the receive-buffer cap.)
 	std::vector<char> garbage;
 
 	const uint16 opCode = static_cast<uint16>(game::client_realm_packet::ChatMessage);
@@ -237,10 +236,93 @@ TEST_CASE("GameConnectionCloseAfterMalformedDropDoesNotFault", "[game_connection
 		return serverListener.malformedCount > 0;
 	}));
 
-	// The socket is gone but the object is not. This is the call that faulted.
 	pair.server->close();
 
-	SUCCEED("close() tolerated a released socket");
+	SUCCEED("close() tolerated a dropped peer");
+}
+
+// A packet handler rejecting a packet ends the session -- and the client must be able to start
+// the next one through the same object.
+//
+// The game client keeps one RealmConnector for the whole process. When a handler rejected a
+// packet (e.g. an object update for a guid the client never heard of), the connection released
+// its socket and told the listener only through connectionMalformedPacket(), never
+// connectionLost(). The client ignored that callback and sat in a frozen world; once it does
+// return to the login screen, logging in again reaches getSocket() -- which named nothing.
+TEST_CASE("GameConnectionReconnectsAfterAHandlerRejectedAPacket", "[game_connection]")
+{
+	asio::io_service ioService;
+	GameRecordingListener serverListener;
+	GameRecordingListener clientListener;
+	GameConnectedPair pair = MakeGameConnectedPair(ioService, serverListener, clientListener);
+
+	clientListener.result = PacketParseResult::Disconnect;
+	pair.server->sendSinglePacket([](game::OutgoingPacket& packet)
+	{
+		packet.Start(game::realm_client_packet::ChatMessage);
+		packet << io::write_dynamic_range<uint16>(std::string("unknown object"));
+		packet.Finish();
+	});
+
+	REQUIRE(PumpGameUntil(ioService, [&clientListener]()
+	{
+		return clientListener.malformedCount > 0;
+	}));
+
+	// The drop is reported exactly once, through the malformed callback: the listener is detached
+	// before anything could report it a second time as a lost connection.
+	PumpGameUntil(ioService, []() { return false; }, std::chrono::milliseconds(200));
+	CHECK(clientListener.malformedCount == 1);
+	CHECK(clientListener.lostCount == 0);
+	CHECK_FALSE(pair.client->IsConnected());
+
+	// The next session, through the same client object.
+	asio::ip::tcp::acceptor acceptor(ioService,
+		asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), 0));
+	const uint16 port = acceptor.local_endpoint().port();
+
+	GameRecordingListener nextServerListener;
+	auto nextServer = game::Connection::Create(ioService, &nextServerListener);
+
+	bool accepted = false;
+	acceptor.async_accept(nextServer->getSocket(), [&accepted](const asio::error_code& error)
+	{
+		REQUIRE(!error);
+		accepted = true;
+	});
+
+	bool connected = false;
+	pair.client->getSocket().async_connect(
+		asio::ip::tcp::endpoint(asio::ip::address_v4::loopback(), port),
+		[&connected](const asio::error_code& error)
+	{
+		REQUIRE(!error);
+		connected = true;
+	});
+
+	REQUIRE(PumpGameUntil(ioService, [&accepted, &connected]()
+	{
+		return accepted && connected;
+	}));
+
+	GameRecordingListener nextClientListener;
+	pair.client->setListener(nextClientListener);
+	nextServer->startReceiving();
+	pair.client->startReceiving();
+
+	nextServer->sendSinglePacket([](game::OutgoingPacket& packet)
+	{
+		packet.Start(game::realm_client_packet::ChatMessage);
+		packet << io::write_dynamic_range<uint16>(std::string("welcome back"));
+		packet.Finish();
+	});
+
+	CHECK(PumpGameUntil(ioService, [&nextClientListener]()
+	{
+		return !nextClientListener.receivedOpCodes.empty();
+	}));
+	CHECK(nextClientListener.lostCount == 0);
+	CHECK(nextClientListener.malformedCount == 0);
 }
 
 // The same drop, but with a write in flight.

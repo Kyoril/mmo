@@ -110,25 +110,6 @@ namespace mmo::pcg::graph
 			return out;
 		}
 
-		/// A spline prepared for distance queries, with its removal radius (Difference).
-		struct SplineTarget
-		{
-			PreparedControl control;
-			float radius = 0.0f;
-		};
-
-		bool InsideAny(const std::vector<PreparedControl>& areas, const float x, const float z)
-		{
-			for (const PreparedControl& area : areas)
-			{
-				if (area.polygon->Contains(x, z))
-				{
-					return true;
-				}
-			}
-			return false;
-		}
-
 		bool HasAllTags(const std::set<String>& tags, const std::vector<String>& wanted)
 		{
 			return std::all_of(wanted.begin(), wanted.end(), [&](const String& t) { return tags.count(t) != 0; });
@@ -432,26 +413,6 @@ namespace mmo::pcg::graph
 				SplitPoints(item, itemKeep, kept, rejected);
 			}
 			return out;
-		}
-
-		float ItemClearance(NodeOutput& out, const DataItem& item, const String& attribute)
-		{
-			if (attribute.empty())
-			{
-				return 0.0f;
-			}
-			const auto it = item.attributes.find(attribute);
-			if (it == item.attributes.end())
-			{
-				return 0.0f;
-			}
-			float value = 0.0f;
-			if (std::holds_alternative<bool>(it->second) || !ToNumber(it->second, value))
-			{
-				WarnOnce(out, "clearance attribute '" + attribute + "' is not a finite number on an item, 0 used");
-				return 0.0f;
-			}
-			return value;
 		}
 
 		NodeOutput ExecuteDifference(const EvalContext&, uint64, const AttributeSet& settings, const std::map<String, Collection>& inputs)

@@ -60,6 +60,22 @@ namespace mmo
 		/// @return data[1] cast to uint32 if this is a Door with data_size > 1, otherwise 0.
 		uint32 GetPostUnlockLockType() const;
 
+		/// @brief Returns the display a used quest object switches to instead of despawning, e.g. the
+		///	lit variant of a road lantern. Such an object stays in the world, shows that it was used
+		///	and goes back to its normal display after the reset delay.
+		/// @return data[1] cast to uint32 if this is a QuestObject with data_size > 1, otherwise 0.
+		uint32 GetUsedDisplayId() const;
+
+		/// @brief Sets how long a used quest object keeps its used display before it becomes available
+		///	again. Fed from the spawner's respawn delay, so "used" lasts exactly as long as a despawn
+		///	would have. 0 means the object despawns on use instead (the behavior without a used display).
+		/// @param delay Delay in milliseconds.
+		void SetUsedResetDelay(GameTime delay) { m_usedResetDelay = delay; }
+
+		/// @brief Puts a used quest object back into its unused state: normal display, usable again.
+		///	No-op for objects without a used display.
+		void ResetAfterUse();
+
 		/// @brief Checks if this object can be used by the given player.
 		/// @param player The player attempting to use the object.
 		/// @return true if the object is usable, false otherwise.
@@ -108,6 +124,11 @@ namespace mmo
 		}
 
 	protected:
+		/// @brief Starts the timer which puts a used quest object back into its unused state.
+		/// @return true if the reset was scheduled, false if it could not be (no reset delay or the
+		///	object is not in a world instance), in which case the caller has to despawn instead.
+		bool ArmUsedReset();
+
 		void PrepareFieldMap() override;
 
 		void OnLootClosed(uint64 lootGuid);
@@ -129,6 +150,14 @@ namespace mmo
 		/// instance for the timer queue, which is only available once spawned).
 		std::unique_ptr<Countdown> m_autoCloseCountdown;
 		scoped_connection m_autoCloseEnded;
+
+		/// @brief Reset timer for used quest objects which stay in the world, lazily created on the
+		/// first use (needs the world instance for the timer queue, like the auto close above).
+		std::unique_ptr<Countdown> m_usedResetCountdown;
+		scoped_connection m_usedResetEnded;
+
+		/// @brief How long a used quest object keeps its used display. 0 = despawn on use instead.
+		GameTime m_usedResetDelay = 0;
 
 	public:
 		/// @brief Sets a per-spawn loot entry override for this world object.
