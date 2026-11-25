@@ -1167,6 +1167,7 @@ namespace mmo
 							   .def("GetPosStat", &UnitHandle::GetPosStat)
 							   .def("GetNegStat", &UnitHandle::GetNegStat)
 							   .def("IsAlive", &UnitHandle::IsAlive)
+							   .def("IsInCutscene", &UnitHandle::IsInCutscene)
 							   .def("GetType", &UnitHandle::GetType)
 							   .def("IsFriendly", &UnitHandle::IsFriendly)
 							   .def("IsHostile", &UnitHandle::IsHostile)

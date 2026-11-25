@@ -520,7 +520,7 @@ namespace mmo
 		// For remote players, the queue handles position updates directly -
 		// UnitMovement::Tick is not needed for them. But we must consume the
 		// input vector that was fed for animation detection purposes.
-		if (!isRemotePlayer)
+		if (!isRemotePlayer && !m_movementSuspended)
 		{
 			m_unitMovement->Tick(deltaTime);
 		}

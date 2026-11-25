@@ -943,6 +943,7 @@ namespace mmo
 		case game::client_realm_packet::CheatPetRemove:
 		case game::client_realm_packet::CheatPetTame:
 		case game::client_realm_packet::CheatPetMake:
+		case game::client_realm_packet::CheatPlayCutscene:
 			// Require GM level 2
 			if (!HasGMLevel(gm_level::SeniorGm))
 			{
@@ -3183,7 +3184,10 @@ namespace mmo
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetRemove, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetTame, *this, &Player::OnProxyPacket);
 			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPetMake, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CheatPlayCutscene, *this, &Player::OnProxyPacket);
 #endif
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneBegin, *this, &Player::OnProxyPacket);
+			m_proxyHandlers += RegisterAutoPacketHandler(game::client_realm_packet::CutsceneEnd, *this, &Player::OnProxyPacket);
 
 			RegisterPacketHandler(game::client_realm_packet::ChatMessage, *this, &Player::OnChatMessage);
 			RegisterPacketHandler(game::client_realm_packet::NameQuery, *this, &Player::OnNameQuery);

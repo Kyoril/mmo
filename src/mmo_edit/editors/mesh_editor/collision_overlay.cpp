@@ -20,6 +20,33 @@ namespace mmo
 		constexpr uint32 CutColor = 0x50FF3030u;            // red: render face removed by a Cut shape
 		constexpr uint32 SelectedColor = 0x70FFE030u;       // yellow: selected shape
 		constexpr uint32 EdgeColor = 0xA0FFFFFFu;
+
+		/// Darkens a colour by how far the face turns away from a fixed light, so that the faces of
+		/// adjacent boxes stay apart without edge lines.
+		uint32 ShadeByNormal(const uint32 color, const Vector3& a, const Vector3& b, const Vector3& c)
+		{
+			Vector3 normal = (b - a).Cross(c - a);
+			const float length = normal.GetLength();
+			if (length <= 0.0f)
+			{
+				return color;
+			}
+
+			normal /= length;
+			const Vector3 light = Vector3(0.4f, 0.8f, 0.3f).NormalizedCopy();
+			const float factor = 0.55f + 0.45f * std::abs(normal.Dot(light));
+			const auto channel = [&](const uint32 shift)
+			{
+				return static_cast<uint32>(static_cast<float>((color >> shift) & 0xFFu) * factor) << shift;
+			};
+			return (color & 0xFF000000u) | channel(16) | channel(8) | channel(0);
+		}
+
+		/// ARGB to ABGR, for materials that read vertex colours the way Recast/Detour debug drawing packs them.
+		uint32 ToAbgr(const uint32 color)
+		{
+			return (color & 0xFF00FF00u) | ((color >> 16) & 0xFFu) | ((color & 0xFFu) << 16);
+		}
 	}
 
 	CollisionOverlay::CollisionOverlay(Scene& scene, SceneNode& parent)
@@ -54,7 +81,7 @@ namespace mmo
 			return;
 		}
 
-		const MaterialPtr faceMaterial = MaterialManager::Get().Load("Models/Engine/AxisPlaneHighlight.hmat");
+		const MaterialPtr faceMaterial = MaterialManager::Get().Load(data.faceMaterial);
 		const MaterialPtr edgeMaterial = MaterialManager::Get().Load("Editor/Wireframe.hmat");
 		const auto& vertices = *data.vertices;
 		const auto& indices = *data.indices;
@@ -76,9 +103,31 @@ namespace mmo
 					color = SelectedColor;
 				}
 
+				if (data.shadeByNormal)
+				{
+					color = ShadeByNormal(color, a, b, c);
+				}
+				if (data.abgrColors)
+				{
+					color = ToAbgr(color);
+				}
+
 				// Both windings: collision is two-sided for the player, and the camera is often inside it.
-				triangles->AddTriangle(a, b, c).SetColor(color);
-				triangles->AddTriangle(a, c, b).SetColor(color);
+				if (data.surfaceOffset > 0.0f)
+				{
+					// Lift each winding off the face along its own normal, so depth-tested faces that lie
+					// exactly on render geometry (floors, walls) are not lost to z-fighting.
+					Vector3 normal = (b - a).Cross(c - a);
+					const float length = normal.GetLength();
+					const Vector3 offset = length > 0.0f ? normal * (data.surfaceOffset / length) : Vector3::Zero;
+					triangles->AddTriangle(a + offset, b + offset, c + offset).SetColor(color);
+					triangles->AddTriangle(a - offset, c - offset, b - offset).SetColor(color);
+				}
+				else
+				{
+					triangles->AddTriangle(a, b, c).SetColor(color);
+					triangles->AddTriangle(a, c, b).SetColor(color);
+				}
 			}
 
 			for (size_t i = 0; i + 2 < data.cutTriangles.size(); i += 3)

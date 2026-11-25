@@ -36,6 +36,7 @@ namespace mmo
 		m_propConnections += AddProperty("Color").Changed.connect(this, &Frame::OnColorPropertyChanged);
 		m_propConnections += AddProperty("Clickable").Changed.connect(this, &Frame::OnClickablePropertyChanged);
 		m_propConnections += AddProperty("MousePassThrough", "false").Changed.connect(this, &Frame::OnMousePassThroughPropertyChanged);
+		m_propConnections += AddProperty("VisibleWhileUiHidden").Changed.connect(this, &Frame::OnVisibleWhileUiHiddenPropertyChanged);
 		m_propConnections += AddProperty("DragEnabled").Changed.connect(this, &Frame::OnDragEnabledPropertyChanged);
 		m_propConnections += AddProperty("DropEnabled").Changed.connect(this, &Frame::OnDropEnabledPropertyChanged);
 	}
@@ -1000,8 +1001,12 @@ namespace mmo
 			gx.SetTransformMatrix(TransformType::Projection, gx.MakeOrthographicMatrix(0.0f, 0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 100.0f));
 		}
 
-		// Draw self
-		DrawSelf();
+		// Draw self. While the ui is hidden (a cutscene plays), only the frames that asked to stay
+		// are drawn; the others still pass the call on, since a frame that stays may be inside them.
+		if (!FrameManager::Get().IsUiHidden() || IsVisibleWhileUiHidden())
+		{
+			DrawSelf();
+		}
 
 		// Clip rect applied to clipped children: this frame's rect intersected with any clip rect
 		// inherited from ancestors, so nested clipped frames can never draw outside an ancestor's clip area
@@ -1862,6 +1867,24 @@ namespace mmo
 	void Frame::OnMousePassThroughPropertyChanged(const Property& property)
 	{
 		m_mousePassThrough = property.GetBoolValue();
+	}
+
+	void Frame::OnVisibleWhileUiHiddenPropertyChanged(const Property& property)
+	{
+		SetVisibleWhileUiHidden(property.GetBoolValue());
+	}
+
+	bool Frame::IsVisibleWhileUiHidden() const
+	{
+		for (const Frame* frame = this; frame != nullptr; frame = frame->m_parent)
+		{
+			if (frame->m_visibleWhileUiHidden >= 0)
+			{
+				return frame->m_visibleWhileUiHidden != 0;
+			}
+		}
+
+		return false;
 	}
 
 	void Frame::OnDragEnabledPropertyChanged(const Property& property)

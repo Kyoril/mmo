@@ -152,6 +152,7 @@ namespace mmo
 				MMO_HANDLE_TRIGGER_ACTION(RandomTrigger)
 				MMO_HANDLE_TRIGGER_ACTION(SetFaction)
 				MMO_HANDLE_TRIGGER_ACTION(DeliverFollowers)
+				MMO_HANDLE_TRIGGER_ACTION(PlayCutscene)
 
 #undef MMO_HANDLE_TRIGGER_ACTION
 
@@ -1856,6 +1857,26 @@ namespace mmo
 				creature->threatened(*triggering, 1.0f);
 			}
 		}
+	}
+
+	void TriggerHandler::HandlePlayCutscene(const proto::TriggerAction& action, TriggerContext& context)
+	{
+		GameObjectS* target = GetActionTarget(action, context);
+		if (target == nullptr || !target->IsPlayer())
+		{
+			WLOG("TRIGGER_ACTION_PLAY_CUTSCENE: Needs a player target - action ignored");
+			return;
+		}
+
+		const uint32 cutsceneId = static_cast<uint32>(GetActionData(action, 0));
+		const auto player = m_playerManager.GetPlayerByCharacterGuid(target->GetGuid());
+		if (!player)
+		{
+			return;
+		}
+
+		// Refusals (wrong map, in combat, ...) are logged by the player itself where they matter
+		player->StartCutscene(cutsceneId);
 	}
 
 	void TriggerHandler::HandleDeliverFollowers(const proto::TriggerAction& action, TriggerContext& context)

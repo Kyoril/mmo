@@ -91,6 +91,9 @@ namespace mmo
 		FramePtr m_levelText;
 		/// Skull shown instead of the level for hostile units far above the player.
 		FramePtr m_levelSkull;
+		/// Marker left of the health bar while the player behind the unit watches a cutscene. Missing
+		/// if the loaded ui has no template for it.
+		FramePtr m_cutsceneIcon;
 		/// Level and skull state currently shown, so the text is only rewritten on changes.
 		int32 m_shownLevel = -1;
 		bool m_levelShowsSkull = false;

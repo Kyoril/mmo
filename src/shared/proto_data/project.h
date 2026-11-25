@@ -67,6 +67,7 @@
 #include "shared/proto_data/water_profiles.pb.h"
 #include "shared/proto_data/environment_profiles.pb.h"
 #include "shared/proto_data/loading_tips.pb.h"
+#include "shared/proto_data/cutscenes.pb.h"
 
 namespace mmo
 {
@@ -127,6 +128,7 @@ namespace mmo
 		typedef TemplateManager<mmo::proto::WaterProfiles, mmo::proto::WaterProfile> WaterProfileManager;
 		typedef TemplateManager<mmo::proto::EnvironmentProfiles, mmo::proto::EnvironmentProfile> EnvironmentProfileManager;
 		typedef TemplateManager<mmo::proto::LoadingTips, mmo::proto::LoadingTip> LoadingTipManager;
+		typedef TemplateManager<mmo::proto::Cutscenes, mmo::proto::CutsceneEntry> CutsceneManager;
 
 		/// Gets the combat settings with all configurable combat formula parameters.
 		/// If no combat_settings file was loaded, defaults from the proto definition are used.
@@ -232,6 +234,9 @@ namespace mmo
 
 			/// Tips shown on the client's loading screen. Authored here, consumed by the client only.
 			LoadingTipManager loadingTips;
+
+			/// Camera flights through the world. The client plays them, the world server follows their path.
+			CutsceneManager cutscenes;
 
 			/// Combat settings containing all configurable combat formula parameters.
 			CombatSettings combatSettings;
@@ -369,6 +374,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("water_profiles", waterProfiles, true));
 				managers.push_back(ManagerEntry("environment_profiles", environmentProfiles, true));
 				managers.push_back(ManagerEntry("loading_tips", loadingTips, true));
+				managers.push_back(ManagerEntry("cutscenes", cutscenes, true));
 
 				virtual_dir::FileSystemReader virtualDirectory(realmDataPath);
 				if (!RealmProjectLoader::load(
@@ -462,6 +468,7 @@ namespace mmo
 				managers.push_back(ManagerEntry("water_profiles", "water_profiles", waterProfiles));
 				managers.push_back(ManagerEntry("environment_profiles", "environment_profiles", environmentProfiles));
 				managers.push_back(ManagerEntry("loading_tips", "loading_tips", loadingTips));
+				managers.push_back(ManagerEntry("cutscenes", "cutscenes", cutscenes));
 
 				if (!RealmProjectSaver::save(realmDataPath, managers))
 				{

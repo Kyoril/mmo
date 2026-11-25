@@ -11,7 +11,7 @@ if(WIN32)
 	file(GLOB d3d11_ps_shaders "shaders/PS_*.hlsl")
 
 	target_sources(graphics_d3d11 PRIVATE ${d3d11_sources} ${d3d11_headers} ${d3d11_vs_shaders} ${d3d11_ps_shaders})
-	source_group(src\\FILES ${d3d11_sources} ${d3d11_headers})
+	source_group(src FILES ${d3d11_sources} ${d3d11_headers})
 	source_group(src\\shaders FILES ${d3d11_vs_shaders})
 	source_group(src\\shaders FILES ${d3d11_ps_shaders})
 	

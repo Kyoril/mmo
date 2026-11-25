@@ -50,6 +50,7 @@ namespace mmo
 		const std::string NameplateCastBarTemplateName("NameplateCastBarTemplate");
 		const std::string NameplateLevelTemplateName("NameplateLevelTemplate");
 		const std::string NameplateSkullTemplateName("NameplateSkullTemplate");
+		const std::string NameplateCutsceneTemplateName("NameplateCutsceneTemplate");
 
 		// Gap between the health bar's right end and the level text or skull.
 		constexpr float NameplateLevelGap = 6.0f;
@@ -280,6 +281,17 @@ namespace mmo
 		AddChild(m_levelText);
 		AddChild(m_levelSkull);
 
+		// Optional: a ui without the template simply shows no marker
+		if (const FramePtr cutsceneTemplate = FrameManager::Get().Find(NameplateCutsceneTemplateName))
+		{
+			m_cutsceneIcon = std::make_shared<Frame>("Frame", GetName() + "_Cutscene");
+			cutsceneTemplate->Copy(*m_cutsceneIcon);
+			m_cutsceneIcon->SetClickable(false);
+			m_cutsceneIcon->SetEnabled(false);
+			m_cutsceneIcon->SetVisible(false);
+			AddChild(m_cutsceneIcon);
+		}
+
 		// Name spans the top of the plate; the bar spans the bottom (height from template).
 		m_nameText->SetAnchor(anchor_point::Left, anchor_point::Left, nullptr, 0.0f);
 		m_nameText->SetAnchor(anchor_point::Right, anchor_point::Right, nullptr, 0.0f);
@@ -307,6 +319,13 @@ namespace mmo
 		{
 			level->SetAnchor(anchor_point::Left, anchor_point::Right, m_healthBar, NameplateLevelGap);
 			level->SetAnchor(anchor_point::VerticalCenter, anchor_point::VerticalCenter, m_healthBar, 0.0f);
+		}
+
+		// The cutscene marker mirrors the level on the left side of the health bar
+		if (m_cutsceneIcon)
+		{
+			m_cutsceneIcon->SetAnchor(anchor_point::Right, anchor_point::Left, m_healthBar, -NameplateLevelGap);
+			m_cutsceneIcon->SetAnchor(anchor_point::VerticalCenter, anchor_point::VerticalCenter, m_healthBar, 0.0f);
 		}
 	}
 
@@ -365,6 +384,11 @@ namespace mmo
 		}
 
 		SetOpacity(selected || hovered ? 1.0f : NameplateUnselectedOpacity);
+
+		if (m_cutsceneIcon)
+		{
+			m_cutsceneIcon->SetVisible(unit.IsInCutscene());
+		}
 
 		UpdateLevel(unit);
 		UpdateCastBar(unit);

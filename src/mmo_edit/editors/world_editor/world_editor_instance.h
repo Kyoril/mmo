@@ -954,6 +954,11 @@ namespace mmo
 		/// @brief Turns the scene's fog and atmosphere on or off, like the World Settings "Show Fog" box.
 		void SetFogEnabled(const bool enabled) { m_scene.SetFogEnabled(enabled); }
 
+		/// @brief Makes CaptureViewpoint draw the collision geometry around the camera as a translucent,
+		///        depth-tested overlay (walkable green, too steep orange), for checking authored collision.
+		/// @param radius Collision of objects whose bounds come closer than this to the camera is drawn; 0 turns it off.
+		void SetCaptureCollisionRadius(const float radius) { m_captureCollisionRadius = std::max(radius, 0.0f); }
+
 		/// @brief Gets how many pages around the camera the distant terrain covers.
 		[[nodiscard]] uint32 GetFarTerrainRadius() const { return m_farTerrainRadius; }
 
@@ -1237,6 +1242,18 @@ namespace mmo
 
 		/// @brief Dirty kits used by other loaded placements, waiting for the save prompt.
 		std::vector<String> m_pendingKitSaves;
+
+		/// @brief Collision overlay of CaptureViewpoint (see SetCaptureCollisionRadius); exists only while capturing.
+		std::unique_ptr<CollisionOverlay> m_captureCollisionOverlay;
+		/// @brief World-space vertices and triangle list shown by m_captureCollisionOverlay.
+		std::vector<Vector3> m_captureCollisionVertices;
+		std::vector<uint32> m_captureCollisionIndices;
+		/// @brief Radius around the camera whose collision CaptureViewpoint draws (0: none).
+		float m_captureCollisionRadius{0.0f};
+
+		/// @brief Collects the world-space collision triangles of every collidable mesh entity and
+		///        instanced collision proxy whose bounds come within `radius` of `center`.
+		void CollectCollisionAround(const Vector3 &center, float radius, std::vector<Vector3> &vertices, std::vector<uint32> &indices);
 
 		/// @brief Collision display of the selected building's kit props; exists only while shown.
 		std::unique_ptr<CollisionOverlay> m_kitCollisionOverlay;

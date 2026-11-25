@@ -76,7 +76,15 @@ namespace mmo
 		ForEachSubscriber(
 		    tiles.begin(),
 			tiles.end(),
-		    onSubscriber);
+			[&center, &onSubscriber](TileSubscriber& subscriber)
+			{
+				// A client with a second point of view (RemoteView) is subscribed twice; it decides
+				// which of the two receives what starts at this tile.
+				if (subscriber.AcceptsBroadcastFrom(center))
+				{
+					onSubscriber(subscriber);
+				}
+			});
 	}
 	
 	static bool IsInSight(

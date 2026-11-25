@@ -142,3 +142,22 @@ function WorldMapCenterOnPlayer() end
 function WorldMapShowWholeMap() end
 function WorldMapZoomIn() end
 function WorldMapZoomOut() end
+
+-- Cutscenes: none plays unless a scenario says so (UiTest.data.cutscene).
+UiTest.data.cutscene = { playing = false, fade = 0, subtitle = "", skipHint = false }
+
+function IsCutscenePlaying()
+	return UiTest.data.cutscene.playing
+end
+
+function GetCutsceneFade()
+	return UiTest.data.cutscene.fade
+end
+
+function GetCutsceneSubtitle()
+	return UiTest.data.cutscene.subtitle
+end
+
+function IsCutsceneSkipHintVisible()
+	return UiTest.data.cutscene.skipHint
+end
