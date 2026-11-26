@@ -906,8 +906,8 @@ Several global objects are available for use in Lua scripts:
 - **quality** (number): The item quality
 - **armor** (number): The item's armor value
 - **block** (number): The item's block value
-- **minDamage** (number): The item's minimum damage
-- **maxDamage** (number): The item's maximum damage
+- **minDamage** (number): The item's minimum damage, rounded down to a whole number
+- **maxDamage** (number): The item's maximum damage, rounded down to a whole number
 - **dps** (number): The item's damage per second
 - **attackTime** (number): The item's attack time
 - **bagSlots** (number): The number of slots if the item is a bag

@@ -78,6 +78,9 @@ Keeping", are offered from level 6 instead of 8, because the dispatch run and th
 bring players through the north gate that early.
 
 Two of the seventeen are plain kills (89, and 83's final target). Total quest experience is 15,300.
+Every one of the seventeen grants the same amount again as class experience (`rewardclassxp` ==
+`rewardxp`, the convention the rest of the catalog follows), so class leveling keeps pace along the
+whole stretch.
 
 ### Ambient life
 

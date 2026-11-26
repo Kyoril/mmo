@@ -35,7 +35,11 @@ The following systems are fully implemented and should not be suggested as futur
   - **Merge (fast):** `/ship` merges a feature branch into `develop` after a green fast
     gate for HEAD — protocol check, build, unit tests, tool tests, then the same server
     targets built and tested on Linux in WSL (`tools/gate/linux_gate.sh`; gcc catches what
-    MSVC does not, and the servers ship on Linux).
+    MSVC does not, and the servers ship on Linux). The fast gate runs only the steps the
+    branch's changes can affect (`tools/gate/select_steps.py`): a Python tool change skips
+    both C++ builds and runs that tool's tests, a docs change runs the protocol check alone;
+    anything under `src/`, `deps/`, `cmake/` or unknown runs everything (`-All` forces it).
+    Tool tests run in parallel (`tools/gate/run_tool_tests.py`).
     It runs the gate itself when needed. `/gate` runs the same check on demand;
     `/gate full` adds E2E and a code review for risky changes.
   - **Nightly (full):** the GitHub "Nightly Release" workflow (below) runs the full gate

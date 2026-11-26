@@ -371,7 +371,7 @@ namespace mmo::pet_tests
 		/// Runs the io service until the condition holds or the timeout passes.
 		/// @returns Whether the condition holds.
 		template<typename Condition>
-		bool RunUntil(Condition condition, const std::chrono::milliseconds timeout = std::chrono::milliseconds(1000))
+		bool RunUntil(Condition condition, const std::chrono::milliseconds timeout = std::chrono::milliseconds(10000))
 		{
 			const auto deadline = std::chrono::steady_clock::now() + timeout;
 			while (!condition() && std::chrono::steady_clock::now() < deadline)

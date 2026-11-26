@@ -518,7 +518,8 @@ namespace mmo
 				static_cast<uint32>(rollValue),
 				playerName,
 				itemInfo.name,
-				static_cast<uint32>(itemInfo.quality));
+				static_cast<uint32>(itemInfo.quality),
+				static_cast<uint32>(itemInfo.id));
 		});
 
 		return PacketParseResult::Pass;

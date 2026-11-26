@@ -533,9 +533,12 @@ namespace mmo
 
 		const char* GetIcon() const;
 
-		float GetMinDamage() const;
+		/// Gets the minimum weapon damage, rounded down to a whole number. The tooltip renders
+		/// the damage range with an integer format, so this matches ItemHandle::GetMinDamage.
+		int32 GetMinDamage() const;
 
-		float GetMaxDamage() const;
+		/// Gets the maximum weapon damage, rounded down to a whole number.
+		int32 GetMaxDamage() const;
 
 		float GetAttackSpeed() const;
 

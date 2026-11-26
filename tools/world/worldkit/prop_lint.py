@@ -124,7 +124,44 @@ def _painted_road(query, x: float, z: float) -> bool:
     return query.terrain_kind_at(x, z) in ROAD_KINDS and query.water_depth_at(x, z) <= SUBMERGED_DEPTH
 
 
-def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) -> list[Violation]:
+class OverlapIndex:
+    """`others` bucketed on a grid, so the overlap check of one prop looks only at the props that can
+    reach it instead of at every prop of the world (13 000 props made a world run take half an hour).
+    Each prop is filed under every cell its conservative footprint circle touches, so a single large
+    asset does not widen everyone's search. Candidates come back in the order of `others`, so the
+    first overlap found is the same as with a full scan."""
+
+    CELL = 8.0
+
+    def __init__(self, others: list[PlacedProp], catalog: dict):
+        self.others = others
+        self.cells: dict[tuple[int, int], list[int]] = {}
+        for index, other in enumerate(others):
+            info = catalog.get(other.asset)
+            if info is None or info.error:
+                continue  # never a candidate: the full scan skips these too
+            for cell in self._cells(other.x, other.z, info.radius * other.scale):
+                self.cells.setdefault(cell, []).append(index)
+
+    def _cells(self, x: float, z: float, radius: float):
+        size = self.CELL
+        x0, z0 = math.floor((x - radius) / size), math.floor((z - radius) / size)
+        x1, z1 = math.floor((x + radius) / size), math.floor((z + radius) / size)
+        return [(cx, cz) for cx in range(x0, x1 + 1) for cz in range(z0, z1 + 1)]
+
+    def near(self, x: float, z: float, radius: float) -> list[PlacedProp]:
+        """Every indexed prop whose conservative footprint circle can touch a circle of `radius` at
+        (x, z): two circles that touch have overlapping bounding squares, so they share a cell."""
+        found: set[int] = set()
+        for cell in self._cells(x, z, radius):
+            found.update(self.cells.get(cell, ()))
+        return [self.others[index] for index in sorted(found)]
+
+
+def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp],
+              index: OverlapIndex | None = None) -> list[Violation]:
+    """`index`: an OverlapIndex over `others` (lint_props and lint_world_props build one); without
+    it every prop of `others` is a candidate for the overlap check."""
     found: list[Violation] = []
     name = prop.asset.rsplit("/", 1)[-1]
 
@@ -168,7 +205,8 @@ def lint_prop(prop: PlacedProp, context: PropContext, others: list[PlacedProp]) 
         for road in context.roads for i in range(len(road) - 1))
     if near_road:
         add("prop_on_road", "error" if collides else "warning", "stands on or next to a road")
-    for other in others:
+    candidates = others if index is None else index.near(prop.x, prop.z, info.radius * prop.scale)
+    for other in candidates:
         if other.key == prop.key:
             continue
         other_info = context.catalog.get(other.asset)
@@ -219,11 +257,13 @@ def _sorted(violations: list[Violation]) -> list[Violation]:
 def lint_props(props: list[PlacedProp], context: PropContext) -> list[Violation]:
     """New props checked against the world and against each other."""
     others = [*context.existing, *props]
-    out = [v for prop in props for v in lint_prop(prop, context, others)]
+    index = OverlapIndex(others, context.catalog)
+    out = [v for prop in props for v in lint_prop(prop, context, others, index)]
     return _sorted(out + _grid_warnings(props))
 
 
 def lint_world_props(context: PropContext) -> list[Violation]:
     """Every existing prop and tree, for the content audit's props domain."""
-    out = [v for prop in context.existing for v in lint_prop(prop, context, context.existing)]
+    index = OverlapIndex(context.existing, context.catalog)
+    out = [v for prop in context.existing for v in lint_prop(prop, context, context.existing, index)]
     return _sorted(out + _grid_warnings(context.existing))
