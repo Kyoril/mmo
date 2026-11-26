@@ -24,7 +24,7 @@ import world_fixtures as fx  # noqa: E402
 from worldkit.assets import build_catalog  # noqa: E402
 from worldkit.constants import CELL_SIZE, PIXEL_SIZE  # noqa: E402
 from worldkit.geometry import quat_from_yaw_tilt  # noqa: E402
-from worldkit.prop_lint import PlacedProp, PropContext, _inside_quad, lint_props, lint_world_props, props_from_entities  # noqa: E402
+from worldkit.prop_lint import OverlapIndex, PlacedProp, PropContext, _inside_quad, lint_props, lint_world_props, props_from_entities  # noqa: E402
 from worldkit.query import WorldQuery  # noqa: E402
 from worldkit.snapshot import build_snapshot  # noqa: E402
 from worldkit.spawns import SpawnRecord, spawn_key  # noqa: E402
@@ -171,6 +171,31 @@ class PropLintTests(unittest.TestCase):
 
 
 @fx.requires_live_data
+class OverlapIndexTests(unittest.TestCase):
+	"""The grid must find every prop a full scan would consider, in the same order."""
+
+	def test_near_matches_a_full_scan_in_order(self):
+		import random
+		rng = random.Random(7)
+		catalog = {"small": types.SimpleNamespace(radius=1.5, error=None),
+			"huge": types.SimpleNamespace(radius=60.0, error=None),
+			"broken": types.SimpleNamespace(radius=1.0, error="unreadable")}
+		others = [PlacedProp("p{}".format(i), rng.choice(["small", "small", "small", "huge", "broken", "missing"]), "wobj",
+			(rng.uniform(-200, 200), 0.0, rng.uniform(-200, 200)), (1.0, 0.0, 0.0, 0.0), rng.uniform(0.5, 2.0))
+			for i in range(400)]
+		index = OverlapIndex(others, catalog)
+		for prop in others[:120]:
+			info = catalog.get(prop.asset)
+			if info is None or info.error:
+				continue
+			radius = info.radius * prop.scale
+			expected = [other for other in others if catalog.get(other.asset) is not None and not catalog[other.asset].error
+				and ((other.x - prop.x) ** 2 + (other.z - prop.z) ** 2) ** 0.5 <= radius + catalog[other.asset].radius * other.scale]
+			near = index.near(prop.x, prop.z, radius)
+			self.assertEqual([other.key for other in near if other in expected], [other.key for other in expected])
+			self.assertEqual(near, sorted(near, key=others.index))
+
+
 class PropLintCliTests(unittest.TestCase):
 	"""The shipped world's findings change with the user's content, so these only check the CLI's structure."""
 
@@ -179,9 +204,12 @@ class PropLintCliTests(unittest.TestCase):
 		sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "world"))
 		import prop_lint  # noqa: E402
 		cls.prop_lint = prop_lint
+		# Linting the shipped world takes minutes; it runs once, and every CLI run below reports on
+		# that result. Before 2026-11-26 each of the three tests linted the whole map itself.
+		cls.collected = prop_lint.collect(0)
 
 	def main(self, argv):
-		with contextlib.redirect_stdout(io.StringIO()):
+		with contextlib.redirect_stdout(io.StringIO()), 				mock.patch.object(self.prop_lint, "collect", lambda map_id: self.collected):
 			return self.prop_lint.main(argv)
 
 	def test_shipped_world_run_is_structurally_sound(self):
