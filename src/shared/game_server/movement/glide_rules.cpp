@@ -279,7 +279,10 @@ namespace mmo
 			m_carriedRise = GetGlideRiseCarry(updraft, m_settings);
 		}
 
-		const bool valid = IsGlideSpeedValid(m_lastPosition, position, dt, updraft, m_settings, m_risePool + m_carriedRise);
+		// Inside an updraft the lift is the allowance (plus rounding); the carried upward speed only
+		// counts once the glider has left it, so the two never add up to a faster climb.
+		const float riseAllowance = updraft > 0.0f ? m_risePool : m_risePool + m_carriedRise;
+		const bool valid = IsGlideSpeedValid(m_lastPosition, position, dt, updraft, m_settings, riseAllowance);
 
 		// Outside of an updraft, height gained uses up carried upward speed first, then the rounding
 		// pool; height lost refills the pool.

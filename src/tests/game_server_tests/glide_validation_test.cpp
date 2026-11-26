@@ -505,3 +505,23 @@ TEST_CASE("The client time clamp", "[glide]")
 	CHECK(ClampGlideClientTime(5000, 1000, 1300, 1000) == 2300);
 	CHECK(ClampGlideClientTime(1200, 1000, 1300, 1000) == 1200);
 }
+
+TEST_CASE("Inside an updraft a glider climbs no faster than the updraft lifts", "[glide]")
+{
+	const TraversalSettings settings;
+	std::vector<UpdraftVolume> updrafts(1);
+	updrafts[0].center = Vector3(0.0f, 50.0f, 0.0f);
+	updrafts[0].radius = 100.0f;
+	updrafts[0].strength = 8.0f;
+
+	// An honest climb at the updraft's 8 m/s passes.
+	GlideMoveValidator honest;
+	honest.Begin(Vector3(0.0f, 40.0f, 0.0f), 1000, 1000, 0.0f, settings);
+	CHECK(honest.Check(Vector3(1.0f, 42.0f, 0.0f), 1250, 1250, updrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(honest.Check(Vector3(2.0f, 44.0f, 0.0f), 1500, 1500, updrafts) == GlideMoveValidator::Result::Ok);
+
+	// Climbing 5 m every quarter second (20 m/s) is far beyond the lift, however long it lasts.
+	GlideMoveValidator cheater;
+	cheater.Begin(Vector3(0.0f, 40.0f, 0.0f), 1000, 1000, 0.0f, settings);
+	CHECK(cheater.Check(Vector3(1.0f, 45.0f, 0.0f), 1250, 1250, updrafts) == GlideMoveValidator::Result::Violation);
+}

@@ -4528,7 +4528,7 @@ namespace mmo
 		const bool bothMoving = IsMoving() && victim->IsMoving();
 		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
 		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange) ||
-			UnreachableTargetTracker::IsAboveMeleeHeight(GetPosition(), victim->GetPosition(), victim->GetMovementInfo().IsFalling(), effectiveRange))
+			UnreachableTargetTracker::IsOutOfMeleeHeight(GetPosition(), GetMovementInfo().IsFalling(), victim->GetPosition(), victim->GetMovementInfo().IsFalling(), effectiveRange))
 		{
 			if (!isOffhand)
 			{
