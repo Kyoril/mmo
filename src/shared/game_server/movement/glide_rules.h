@@ -29,8 +29,13 @@ namespace mmo
 		/// frame-rate variation), the same factor the regular speed check uses.
 		constexpr float SpeedTolerance = 1.35f;
 
-		/// Height a glider may gain per checked interval without an updraft (physics rounding).
+		/// Height a glider may gain without an updraft or carried upward speed (physics rounding). It is
+		/// a pool: rising uses it up and only sinking refills it, so small rises never add up to a climb.
 		constexpr float RiseToleranceMeters = 0.5f;
+
+		/// How far a glide's client timestamps may run ahead of the server's receive clock since the
+		/// glide started. Later timestamps are clamped, so forged times cannot buy distance or lift.
+		constexpr GameTime TimestampLeadMs = 1000;
 
 		/// The glide speed check only measures intervals at least this long. Shorter intervals are
 		/// accumulated into the next one, so packets sent in quick succession (facing changes while
@@ -172,7 +177,16 @@ namespace mmo
 	/// @param settings The traversal tuning values.
 	/// @param carriedRise Height the glider may gain from upward speed it carries (GetGlideRiseCarry).
 	/// @return Whether the move is possible for an honest glider.
-	[[nodiscard]] bool IsGlideSpeedValid(const Vector3& from, const Vector3& to, GameTime dt, float updraftStrength, const TraversalSettings& settings, float carriedRise = 0.0f);
+	[[nodiscard]] bool IsGlideSpeedValid(const Vector3& from, const Vector3& to, GameTime dt, float updraftStrength, const TraversalSettings& settings, float riseAllowance = glide_rules::RiseToleranceMeters);
+
+	/// Clamps a glide packet's client time so it runs at most glide_rules::TimestampLeadMs ahead of the
+	/// server's receive clock since the glide started. Counted over the whole glide, so packets that
+	/// arrive bunched after a lag spike keep their (legitimate) client times.
+	/// @param clientTime The packet's client time (converted to server time).
+	/// @param beginClientTime The client time of the glide start.
+	/// @param receiveTime When the server received the packet.
+	/// @param beginReceiveTime When the server received the glide start.
+	[[nodiscard]] GameTime ClampGlideClientTime(GameTime clientTime, GameTime beginClientTime, GameTime receiveTime, GameTime beginReceiveTime);
 
 	/// @param now The current time.
 	/// @param stopTime When the server ended the glide (ForceStopGlide sent, Vigor ran out).
@@ -217,10 +231,11 @@ namespace mmo
 		/// Starts following a glide.
 		/// @param position Where the glide starts.
 		/// @param time When the glide starts.
+		/// @param receiveTime When the server received the glide start.
 		/// @param upwardSpeed The upward speed at the start (a glide opened during a jump). Capped at
 		///	       TraversalSettings::defaultUpdraftStrength, so a client cannot claim any lift it likes.
 		/// @param settings The traversal tuning values (copied).
-		void Begin(const Vector3& position, GameTime time, float upwardSpeed, const TraversalSettings& settings);
+		void Begin(const Vector3& position, GameTime time, GameTime receiveTime, float upwardSpeed, const TraversalSettings& settings);
 
 		/// Stops following the glide.
 		void End() { m_active = false; }
@@ -232,15 +247,19 @@ namespace mmo
 		/// glide_rules::MinCheckIntervalMs (and positions with an older time) are skipped and measured
 		/// as part of the next interval.
 		/// @param position The glider's new position.
-		/// @param time The time of the new position.
+		/// @param time The time of the new position (clamped with ClampGlideClientTime).
+		/// @param receiveTime When the server received the position.
 		/// @param updrafts The updraft volumes of the map.
-		[[nodiscard]] Result Check(const Vector3& position, GameTime time, const std::vector<UpdraftVolume>& updrafts);
+		[[nodiscard]] Result Check(const Vector3& position, GameTime time, GameTime receiveTime, const std::vector<UpdraftVolume>& updrafts);
 
 	private:
 		TraversalSettings m_settings;
 		Vector3 m_lastPosition;
 		GameTime m_lastTime = 0;
+		GameTime m_beginTime = 0;
+		GameTime m_beginReceiveTime = 0;
 		float m_carriedRise = 0.0f;
+		float m_risePool = glide_rules::RiseToleranceMeters;
 		bool m_active = false;
 	};
 }

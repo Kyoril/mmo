@@ -4516,7 +4516,7 @@ namespace mmo
 		if (change == GlideFlagChange::Start)
 		{
 			m_glideForceStopTime = 0;
-			m_glideValidator.Begin(info.position, info.timestamp, info.jumpVelocity.y, settings);
+			m_glideValidator.Begin(info.position, info.timestamp, GetAsyncTimeMs(), info.jumpVelocity.y, settings);
 			m_character->SetVigorGliding(true, GetUpdraftStrength(updrafts, info.position) > 0.0f);
 
 			// The glider starts braking at the speed of the fall it interrupts. From here on the fall
@@ -4539,7 +4539,7 @@ namespace mmo
 		}
 
 		// Every packet of a glide, including the one that ends it, counts for the speed check.
-		if (m_glideValidator.Check(info.position, info.timestamp, updrafts) == GlideMoveValidator::Result::Violation)
+		if (m_glideValidator.Check(info.position, info.timestamp, GetAsyncTimeMs(), updrafts) == GlideMoveValidator::Result::Violation)
 		{
 			WLOG("[AntiCheat] Glide violation of player " << m_character->GetName() << ": too fast or rising without an updraft at "
 				<< info.position << " (flags " << log_hex_digit(info.movementFlags) << ")");
