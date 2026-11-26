@@ -138,6 +138,14 @@ namespace mmo
 				constexpr float pi = 3.14159265358979f;
 				const float currentAngle = std::atan2(velocity.z, velocity.x);
 				float delta = std::remainder(inputAngle - currentAngle, 2.0f * pi);
+
+				// A (near) reversal always turns the same way, so the owner and the remote copies,
+				// which derive the input with different rounding, do not turn in opposite directions.
+				constexpr float reversalTolerance = 0.01f;
+				if (std::abs(delta) > pi - reversalTolerance)
+				{
+					delta = std::abs(delta);
+				}
 				const float maxTurn = settings.glideTurnRate * seconds;
 				if (std::abs(delta) > maxTurn)
 				{

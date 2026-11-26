@@ -257,3 +257,14 @@ TEST_CASE("Glide direction reaches the input when the turn is smaller than one s
 	CHECK(v.x == Approx(10.0f / length));
 	CHECK(v.z == Approx(1.0f / length));
 }
+
+TEST_CASE("A glide reversal turns the same way however the input rounds", "[traversal]")
+{
+	// Owner and remote copies derive the reversed input slightly differently; both must turn alike.
+	const TraversalSettings s;
+	const Vector3 left = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(-1.0f, 0.0f, 1e-5f), 0.0f, s, 0.1f);
+	const Vector3 right = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(-1.0f, 0.0f, -1e-5f), 0.0f, s, 0.1f);
+
+	CHECK(left.z == Approx(right.z));
+	CHECK(left.x == Approx(right.x));
+}
