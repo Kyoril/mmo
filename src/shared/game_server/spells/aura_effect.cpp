@@ -117,6 +117,7 @@ namespace mmo
 			{ AuraType::ModPetStatsPct,     [](AuraEffect& self, bool apply){ self.HandleModPetStatsPct(apply); } },
 			{ AuraType::PetPassive,         [](AuraEffect& self, bool apply){ self.HandlePetPassive(apply); } },
 			{ AuraType::PreventAuraApplication, [](AuraEffect& self, bool apply){ self.HandlePreventAuraApplication(apply); } },
+			{ AuraType::DrainVigor,         [](AuraEffect& self, bool apply){ self.HandleDrainVigor(apply); } },
 			{ AuraType::PeriodicTriggerSpell,  [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicHeal,          [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
 			{ AuraType::PeriodicEnergize,      [](AuraEffect& self, bool apply){ if (apply) self.HandlePeriodicBase(); } },
@@ -663,6 +664,18 @@ namespace mmo
 		{
 			EndClaimFollow();
 		}
+	}
+
+	void AuraEffect::HandleDrainVigor(const bool apply) const
+	{
+		GameUnitS& owner = m_container.GetOwner();
+		if (!owner.IsPlayer())
+		{
+			return;
+		}
+
+		// The player settles Vigor at the old drain before the new one applies.
+		owner.AsPlayer().ModifyVigorDrain(GetBasePoints(), apply);
 	}
 
 	void AuraEffect::EndClaimFollow() const

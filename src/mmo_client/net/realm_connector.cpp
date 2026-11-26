@@ -42,6 +42,8 @@ namespace mmo
 		case game::client_realm_packet::MoveEnded: return "MOVE_ENDED";
 		case game::client_realm_packet::MoveStartWalk: return "MOVE_START_WALK";
 		case game::client_realm_packet::MoveStopWalk: return "MOVE_STOP_WALK";
+		case game::client_realm_packet::MoveStartGlide: return "MOVE_START_GLIDE";
+		case game::client_realm_packet::MoveStopGlide: return "MOVE_STOP_GLIDE";
 		case game::client_realm_packet::MoveChargeAck: return "MOVE_CHARGE_ACK";
 		default: return "UNKNOWN";
 		}

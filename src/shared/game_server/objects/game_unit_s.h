@@ -877,6 +877,7 @@ namespace mmo
 		/// @param itemGuid The GUID of the item used to cast the spell (optional).
 		/// @param ignoreKnownSpellCheck If true, skips the check whether the unit actually knows the spell.
 		///        This is meant for server-authoritative casts (e.g. triggers) where no client packet is involved.
+		///        Such casts (and procs) also go off while the unit glides; all others fail with FailedMoving then.
 		/// @returns The result of the spell cast.
 		SpellCastResult CastSpell(const SpellTargetMap &target, const proto::SpellEntry &spell, uint32 castTimeMs, bool isProc = false, uint64 itemGuid = 0, bool ignoreKnownSpellCheck = false);
 
@@ -1009,6 +1010,11 @@ namespace mmo
 		///	so the spell does not remove the aura it just granted itself.
 		void RemoveAurasByInterrupt(uint32 interruptFlags, uint32 excludeSpellId = 0);
 
+		/// Removes every applied aura that has at least one effect of the given aura type.
+		/// @param type The aura type.
+		/// @return The number of auras removed.
+		uint32 RemoveAurasByType(AuraType type);
+
 		/// Removes the caster's auras that are interrupted by deliberately casting a spell (e.g. Stealth).
 		/// This must be invoked at the moment the spell "goes off" (SpellGo) and before its effects are
 		/// applied, so that any concealment aura (Stealth) is gone before damage lands and the victim
@@ -1129,6 +1135,12 @@ namespace mmo
 		/// @param position The new position vector.
 		/// @param facing The new facing direction.
 		virtual void Teleport(uint32 mapId, const Vector3 &position, const Radian &facing);
+
+	protected:
+		/// Executed right before the unit is teleported (on the same map or to another one).
+		virtual void OnTeleporting() {}
+
+	public:
 
 		/// Modifies the character spell modifiers by applying or misapplying a new mod.
 		/// @param mod The spell modifier to apply or misapply.
@@ -1903,6 +1915,12 @@ public:
 		/// Called when the unit is killed.
 		/// @param killer The unit that killed this unit.
 		virtual void OnKilled(GameUnitS *killer);
+
+		/// Called on every real change of the combat state, before the combat flag flips: by
+		/// SetInCombat (also before the EnterCombat interrupt auras are removed) and by OnKilled,
+		/// which clears the flag directly. Every place that changes the InCombat flag must call it.
+		/// @param inCombat The new combat state.
+		virtual void OnCombatStateChanging(bool inCombat) {}
 
 		/// Called when a spell is learned by the unit.
 		/// @param spell The spell entry that was learned.

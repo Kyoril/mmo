@@ -362,6 +362,13 @@ namespace mmo
 
 		void SetVelocity(const Vector3& velocity) { m_velocity = velocity; }
 
+		/// @brief Sets the function that returns the updraft strength at a position (0 or less for
+		///	no updraft). Gliding units are lifted by it. Without a provider there are no updrafts.
+		void SetUpdraftProvider(std::function<float(const Vector3&)> provider) { m_updraftProvider = std::move(provider); }
+
+		/// @return The updraft strength at the given position, 0 without a provider.
+		[[nodiscard]] float GetUpdraftStrength(const Vector3& position) const { return m_updraftProvider ? m_updraftProvider(position) : 0.0f; }
+
 		/// @brief Moves a controlled character based on input vector
 		/// @param inputVector Direction and magnitude of desired movement
 		/// @param deltaTime Time step for movement
@@ -986,6 +993,9 @@ namespace mmo
 		float m_idleGroundRecheckTimer = 0.0f;
 
 		Vector3 m_gravityDirection = Vector3::NegativeUnitY;
+
+		/// Returns the updraft strength at a position (see SetUpdraftProvider).
+		std::function<float(const Vector3&)> m_updraftProvider;
 
 		MovementMode m_movementMode = MovementMode::None;
 

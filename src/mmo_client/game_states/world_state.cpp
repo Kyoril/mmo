@@ -68,6 +68,8 @@
 #include "game/shutdown_countdown.h"
 #include "game/damage_school.h"
 #include "game_client/game_player_c.h"
+#include "game_client/game_aura_c.h"
+#include "game_client/unit_movement.h"
 #include "game/trade_skill_announce.h"
 #include "game/spell_target_map.h"
 #include "game_client/game_item_c.h"
@@ -1060,6 +1062,68 @@ namespace mmo
 		{
 			m_predictedPower = power;
 			FrameManager::Get().TriggerLuaEvent("PLAYER_POWER_CHANGED");
+		}
+
+		UpdatePredictedVigor(*player);
+	}
+
+	void WorldState::UpdatePredictedVigor(GamePlayerC& player)
+	{
+		VigorPredictor& predictor = player.GetVigorPredictor();
+		const GameTime now = GetAsyncTimeMs();
+
+		// The first values arrived with the object's creation, not as a field update.
+		if (!predictor.IsAnchored())
+		{
+			predictor.Anchor(player.Get<float>(object_fields::Vigor), player.GetMaxVigor(), now);
+		}
+
+		// Same inputs the server's VigorTracker settles with: glide drain (halved in an updraft),
+		// DrainVigor auras (Dash), combat, and the ground (swimming counts as ground).
+		VigorActivity activity = VigorActivity::Idle;
+		if (player.IsGliding())
+		{
+			activity = m_areaTriggerManager.GetUpdraftStrength(player.GetPosition()) > 0.0f
+				? VigorActivity::GlidingInUpdraft
+				: VigorActivity::Gliding;
+		}
+
+		float extraDrain = 0.0f;
+		for (uint32 i = 0; i < player.GetAuraCount(); ++i)
+		{
+			const GameAuraC* aura = player.GetAura(i);
+			if (!aura || aura->IsExpired() || !aura->GetSpell())
+			{
+				continue;
+			}
+
+			for (const auto& effect : aura->GetSpell()->effects())
+			{
+				if (effect.aura() == aura_type::DrainVigor)
+				{
+					extraDrain += static_cast<float>(effect.basepoints());
+				}
+			}
+		}
+
+		if (activity == VigorActivity::Idle && extraDrain > 0.0f)
+		{
+			activity = VigorActivity::Draining;
+		}
+
+		const bool grounded = !player.GetUnitMovement() || !player.GetUnitMovement()->IsFalling();
+		predictor.Advance(now, activity, extraDrain, player.IsInCombat(), grounded);
+
+		// Out of Vigor: close the glider ourselves rather than wait for the server's forced stop
+		// (it tolerates the prediction being a little late).
+		if (predictor.ConsumeBecameEmpty() && player.IsGliding())
+		{
+			player.StopGlide();
+		}
+
+		if (predictor.ConsumeChangeNotification(now))
+		{
+			FrameManager::Get().TriggerLuaEvent("PLAYER_VIGOR_CHANGED");
 		}
 	}
 
@@ -3053,6 +3117,13 @@ namespace mmo
 				if (object->GetTypeId() == ObjectTypeId::Player)
 				{
 					m_partyInfo.OnPlayerSpawned(static_cast<GamePlayerC &>(*object));
+
+					// Updrafts lift gliding players: the own one and the remote copies of others, so
+					// both simulate the glide the server validates.
+					static_cast<GamePlayerC &>(*object).SetUpdraftProvider([this](const Vector3 &position)
+					{
+						return m_areaTriggerManager.GetUpdraftStrength(position);
+					});
 				}
 
 				// Pet state: the persistent pet coming into sight, temporary pets, persistent pet names.

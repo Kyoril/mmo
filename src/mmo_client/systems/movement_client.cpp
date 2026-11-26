@@ -38,6 +38,8 @@ namespace mmo
 			game::realm_client_packet::MoveFallLand,
 			game::realm_client_packet::MoveStartSwim,
 			game::realm_client_packet::MoveStopSwim,
+			game::realm_client_packet::MoveStartGlide,
+			game::realm_client_packet::MoveStopGlide,
 			game::realm_client_packet::MoveStartWalk,
 			game::realm_client_packet::MoveStopWalk,
 			game::realm_client_packet::MoveEnded,
@@ -64,6 +66,7 @@ namespace mmo
 		}
 
 		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::MoveTeleportAck, *this, &MovementClient::OnMoveTeleport);
+		m_handlers += m_connector.RegisterAutoPacketHandler(game::realm_client_packet::ForceStopGlide, *this, &MovementClient::OnForceStopGlide);
 
 		const uint16 speedPackets[] = {
 			game::realm_client_packet::MoveSetWalkSpeed,
@@ -357,10 +360,42 @@ namespace mmo
 		DLOG("Received teleport notification to " << movementInfo.position << ": Applying...");
 		unit->ApplyMovementInfo(movementInfo);
 
+		// A teleport ends a glide. The server already sent ForceStopGlide (answered with
+		// MoveStopGlide), so the flag is only cleared here, without another packet.
+		unit->ClearGliding();
+
 		// Send ack to the server
 		m_connector.SendMoveTeleportAck(ackId, unit->GetMovementInfo());
 
 		m_listener->OnControlledUnitTeleported(previousPosition, unit->GetPosition());
+
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult MovementClient::OnForceStopGlide(game::IncomingPacket &packet)
+	{
+		uint64 guid;
+		if (!(packet >> io::read<uint64>(guid)))
+		{
+			ELOG("Failed to read ForceStopGlide packet!");
+			return PacketParseResult::Disconnect;
+		}
+
+		const std::shared_ptr<GameUnitC> &unit = m_playerController->GetControlledUnit();
+		if (!unit || unit->GetGuid() != guid)
+		{
+			// Only the own character's glide can be stopped.
+			return PacketParseResult::Pass;
+		}
+
+		// The server ended the glide (refused start, no Vigor, damage, teleport). It expects a
+		// MoveStopGlide in any case: until then it drops movement packets without the Gliding flag.
+		// If the glider is already closed (landed, or stopped before this arrived), the stop is
+		// redundant, which the server accepts.
+		if (!unit->StopGlide())
+		{
+			m_connector.SendMovementUpdate(unit->GetGuid(), game::client_realm_packet::MoveStopGlide, unit->GetMovementInfo());
+		}
 
 		return PacketParseResult::Pass;
 	}

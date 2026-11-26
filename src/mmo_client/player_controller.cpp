@@ -589,10 +589,21 @@ namespace mmo
 			return;
 		}
 
-		// Can't jump when dead, rooted or while the server controls our movement (charge)
-		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsRooted() ||
-			m_controlledUnit->IsMovementControlledByServer())
+		// Can't jump when dead or while the server controls our movement (charge)
+		if (!m_controlledUnit->IsAlive() || m_controlledUnit->IsMovementControlledByServer())
 		{
+			return;
+		}
+
+		// Rooted: no jump and no new glide, but an open glider can still be closed. Otherwise a
+		// root in an updraft would lift the player until Vigor runs out.
+		if (m_controlledUnit->IsRooted())
+		{
+			if (m_controlledUnit->IsGliding())
+			{
+				m_controlledUnit->StopGlide();
+			}
+
 			return;
 		}
 
@@ -600,6 +611,14 @@ namespace mmo
 		if (m_controlledUnit->GetMovementInfo().IsSwimming())
 		{
 			m_swimAscend = true;
+			return;
+		}
+
+		// In the air, the jump key opens or closes the glider instead. A mid-air jump is not
+		// possible anyway (one jump at a time), so the jump state is left alone.
+		if (m_controlledUnit->GetUnitMovement() && m_controlledUnit->GetUnitMovement()->IsFalling())
+		{
+			m_controlledUnit->TryToggleGlide();
 			return;
 		}
 
@@ -778,6 +797,12 @@ namespace mmo
 			break;
 		case MovementEventType::StopWalk:
 			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopWalk, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StartGlide:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStartGlide, movementEvent.movementInfo);
+			break;
+		case MovementEventType::StopGlide:
+			SendMovementUpdateWithInfo(game::client_realm_packet::MoveStopGlide, movementEvent.movementInfo);
 			break;
 		default:
 			// Unknown event type

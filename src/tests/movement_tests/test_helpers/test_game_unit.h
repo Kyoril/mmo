@@ -40,7 +40,20 @@ namespace mmo
 			m_locallyControlled = locallyControlled;
 		}
 
+		/// @brief Reports this unit as a player character (only players simulate swimming).
+		ObjectTypeId GetTypeId() const override
+		{
+			return m_reportsAsPlayer ? ObjectTypeId::Player : ObjectTypeId::Unit;
+		}
+
+		/// @brief Makes this unit report itself as a player character. The field map stays a unit's.
+		void SetReportsAsPlayerForTest(const bool reportsAsPlayer)
+		{
+			m_reportsAsPlayer = reportsAsPlayer;
+		}
+
 	private:
 		bool m_locallyControlled = true;
+		bool m_reportsAsPlayer = false;
 	};
 }

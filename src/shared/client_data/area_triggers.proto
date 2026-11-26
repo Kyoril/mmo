@@ -12,6 +12,10 @@ message AreaTriggerEntry {
 	optional float box_y = 9;
 	optional float box_z = 10;
 	optional float box_o = 11;
+	/// Upward speed while gliding inside the trigger volume. 0 (or unset) means it is no updraft.
+	/// Same field number as the server schema: the editor exports ClientDB as a byte copy, and 12
+	/// and 13 are the server's trigger ids there.
+	optional float updraft_strength = 14;
 }
 
 message AreaTriggers {

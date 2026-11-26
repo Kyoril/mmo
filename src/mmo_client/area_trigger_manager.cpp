@@ -21,15 +21,52 @@ namespace mmo
 			{
 				m_triggers.push_back(&trigger);
 			}
+
+			// Updraft volumes, converted exactly like the world server's BuildUpdraftVolumes: a
+			// radius wins, box_x/y/z are the full box size, box_o is its facing.
+			if (trigger.map() != mapId || !trigger.has_updraft_strength() || trigger.updraft_strength() <= 0.0f)
+			{
+				continue;
+			}
+
+			UpdraftVolume volume;
+			volume.center = Vector3(trigger.x(), trigger.y(), trigger.z());
+			volume.strength = trigger.updraft_strength();
+			if (trigger.has_radius())
+			{
+				if (trigger.radius() <= 0.0f)
+				{
+					continue;
+				}
+
+				volume.radius = trigger.radius();
+			}
+			else if (trigger.has_box_x() && trigger.has_box_y() && trigger.has_box_z())
+			{
+				volume.halfExtents = Vector3(trigger.box_x() * 0.5f, trigger.box_y() * 0.5f, trigger.box_z() * 0.5f);
+				volume.orientation = trigger.has_box_o() ? trigger.box_o() : 0.0f;
+			}
+			else
+			{
+				continue;
+			}
+
+			m_updrafts.push_back(volume);
 		}
 
-		ILOG("Loaded " << m_triggers.size() << " area triggers for map " << mapId);
+		ILOG("Loaded " << m_triggers.size() << " area triggers (" << m_updrafts.size() << " updrafts) for map " << mapId);
 	}
 
 	void AreaTriggerManager::ClearTriggers()
 	{
 		m_triggers.clear();
+		m_updrafts.clear();
 		m_activeTriggers.clear();
+	}
+
+	float AreaTriggerManager::GetUpdraftStrength(const Vector3& position) const
+	{
+		return mmo::GetUpdraftStrength(m_updrafts, position);
 	}
 
 	void AreaTriggerManager::CheckForTriggerOverlap(

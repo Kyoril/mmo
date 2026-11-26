@@ -15,6 +15,9 @@ message AreaTriggerEntry {
 	optional float box_o = 11;
 	optional uint32 on_enter_trigger = 12;
 	optional uint32 on_exit_trigger = 13;
+	/// Upward speed while gliding inside the trigger volume. 0 (or unset) means it is no updraft.
+	/// The client reads the same field number from ClientDB, which is a byte copy of this file.
+	optional float updraft_strength = 14;
 }
 
 message AreaTriggers {

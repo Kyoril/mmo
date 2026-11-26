@@ -3,6 +3,7 @@
 #include "game_object_c.h"
 #include "game_unit_c.h"
 #include "item_display_applier.h"
+#include "vigor_predictor.h"
 #include "game/item.h"
 #include "game/movement_info.h"
 #include "game/trade_skill.h"
@@ -71,6 +72,28 @@ namespace mmo
 		{
 			return Get<uint32>(object_fields::TalentPoints);
 		}
+
+		/// The Vigor the glider and the UI see. For the own character (regeneration prediction on)
+		///	this is the prediction between the server's writes, otherwise the replicated value.
+		float GetPredictedVigor() const override
+		{
+			if (PredictsRegeneration() && m_vigorPredictor.IsAnchored())
+			{
+				return m_vigorPredictor.GetCurrent();
+			}
+
+			return Get<float>(object_fields::Vigor);
+		}
+
+		/// The replicated maximum Vigor (0 while the character knows no traversal ability).
+		[[nodiscard]] float GetMaxVigor() const
+		{
+			return Get<float>(object_fields::MaxVigor);
+		}
+
+		/// The own character's Vigor prediction. WorldState advances it every frame; GamePlayerC
+		///	re-anchors it whenever the server writes Vigor or MaxVigor.
+		[[nodiscard]] VigorPredictor& GetVigorPredictor() { return m_vigorPredictor; }
 
 		const proto_client::ClassEntry* GetClass() const;
 
@@ -185,6 +208,9 @@ namespace mmo
 		}
 
 	protected:
+		/// Re-anchors the Vigor prediction when the server wrote Vigor or MaxVigor.
+		void OnFieldsApplied() override;
+
 		virtual void SetupSceneObjects() override;
 
 		void OnDisplayIdChanged() override;
@@ -229,6 +255,9 @@ namespace mmo
 
 		/// Item subclass of the equipped chest armor. 0 = none.
 		uint32 m_chestSubclass = 0;
+
+		/// Vigor prediction of the own character (see GetVigorPredictor).
+		VigorPredictor m_vigorPredictor;
 
 	protected:
 		String m_name;

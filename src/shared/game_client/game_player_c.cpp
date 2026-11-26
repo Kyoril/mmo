@@ -6,6 +6,7 @@
 #include "object_mgr.h"
 #include "sound_entry_player.h"
 #include "unit_movement.h"
+#include "base/clock.h"
 #include "client_data/project.h"
 #include "game/emote_defs.h"
 #include "game/item.h"
@@ -60,6 +61,23 @@ namespace mmo
 	void GamePlayerC::Update(const float deltaTime)
 	{
 		GameUnitC::Update(deltaTime);
+	}
+
+	void GamePlayerC::OnFieldsApplied()
+	{
+		GameUnitC::OnFieldsApplied();
+
+		if (!PredictsRegeneration())
+		{
+			return;
+		}
+
+		// The server writes Vigor only on transitions; each write is the new anchor. This runs
+		// before the fieldsChanged handlers, so nothing reads a stale prediction in between.
+		if (WasChanged(object_fields::Vigor) || WasChanged(object_fields::MaxVigor))
+		{
+			m_vigorPredictor.Anchor(Get<float>(object_fields::Vigor), Get<float>(object_fields::MaxVigor), GetAsyncTimeMs());
+		}
 	}
 
 	void GamePlayerC::InitializeFieldMap()

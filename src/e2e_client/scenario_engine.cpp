@@ -700,6 +700,29 @@ namespace mmo
 			return unit ? static_cast<int32>(unit->GetMaxPower()) : -1;
 		}
 
+		/// Run speed of a unit in yards per second, as the server last set it (creation or a forced
+		/// speed change: Dash, slows, GM.SetSpeed). -1 for an unknown unit.
+		float luaGetRunSpeed(const std::string& guid)
+		{
+			const BotUnit* unit = findUnit(guid);
+			return unit ? unit->GetSpeed(movement_type::Run) : -1.0f;
+		}
+
+		/// Vigor of our own character as the server last replicated it. The server writes it only on
+		/// transitions (an ability starting or ending, empty, full), never per tick.
+		float luaGetVigor()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? selfUnit->GetVigor() : -1.0f;
+		}
+
+		/// Maximum Vigor of our own character (0 while it knows no traversal ability).
+		float luaGetMaxVigor()
+		{
+			const BotUnit* selfUnit = self();
+			return selfUnit ? selfUnit->GetMaxVigor() : -1.0f;
+		}
+
 		bool luaIsAlive(const std::string& guid)
 		{
 			const BotUnit* unit = findUnit(guid);
@@ -2210,6 +2233,9 @@ namespace mmo
 				luabind::def_lambda("GetPower", &luaGetPower),
 				luabind::def_lambda("GetMaxPower", &luaGetMaxPower),
 				luabind::def_lambda("IsAlive", &luaIsAlive),
+				luabind::def_lambda("GetRunSpeed", &luaGetRunSpeed),
+				luabind::def_lambda("GetVigor", &luaGetVigor),
+				luabind::def_lambda("GetMaxVigor", &luaGetMaxVigor),
 				luabind::def_lambda("MeleeSwingCount", &luaMeleeSwingCount),
 				luabind::def_lambda("OffhandSwingCount", &luaOffhandSwingCount),
 				luabind::def_lambda("IsAutoAttacking", &luaIsAutoAttacking),
