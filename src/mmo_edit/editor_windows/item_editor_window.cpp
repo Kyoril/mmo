@@ -216,13 +216,23 @@ namespace mmo
 		"Relic",
 		"Glider"};
 
-	/// Names of the non-attribute item stat types, indexed by item_stat::Type. Every other type below
-	/// item_stat::AttributeStart is retired: 2..6 held the five hard-coded attributes and 7..31 were
-	/// combat ratings the server never applied. Attribute stats are item_stat::AttributeStart +
-	/// attribute id and take their name from the project's attributes.
-	static const char *s_statTypeStrings[] = {
-		"Mana",
-		"Health"};
+	/// Names of the non-attribute item stat types. Every other type below item_stat::AttributeStart is
+	/// retired: 2..6 held the five hard-coded attributes and 7..31 were combat ratings the server never
+	/// applied. Attribute stats are item_stat::AttributeStart + attribute id and take their name from
+	/// the project's attributes.
+	struct ItemStatTypeName
+	{
+		uint32 type;
+		const char *name;
+	};
+
+	static const ItemStatTypeName s_statTypeNames[] = {
+		{item_stat::Mana, "Mana"},
+		{item_stat::Health, "Health"},
+		{item_stat::GlideSpeed, "Glide Speed (%)"},
+		{item_stat::GlideAgility, "Glide Agility (%)"},
+		{item_stat::GlideLift, "Glide Lift (%)"},
+		{item_stat::GlideEndurance, "Glide Endurance (%)"}};
 
 	namespace
 	{
@@ -235,9 +245,12 @@ namespace mmo
 				return GetAttributeLabel(attributes, static_cast<uint32>(attributeId));
 			}
 
-			if (statType < std::size(s_statTypeStrings))
+			for (const ItemStatTypeName &entry : s_statTypeNames)
 			{
-				return s_statTypeStrings[statType];
+				if (entry.type == statType)
+				{
+					return entry.name;
+				}
 			}
 
 			if (statType < item_stat::AttributeStart)
@@ -1271,12 +1284,12 @@ namespace mmo
 
 							ImGui::Separator();
 
-							for (uint32 j = 0; j < std::size(s_statTypeStrings); ++j)
+							for (const ItemStatTypeName &entry : s_statTypeNames)
 							{
-								ImGui::PushID(static_cast<int>(j));
-								if (ImGui::Selectable(s_statTypeStrings[j], statType == j))
+								ImGui::PushID(static_cast<int>(entry.type));
+								if (ImGui::Selectable(entry.name, statType == entry.type))
 								{
-									stat->set_type(j);
+									stat->set_type(entry.type);
 								}
 								ImGui::PopID();
 							}
