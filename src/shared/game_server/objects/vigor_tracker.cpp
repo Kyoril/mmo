@@ -55,6 +55,12 @@ namespace mmo
 		m_state.current = hadNone ? newMax : std::clamp(m_state.current, 0.0f, newMax);
 	}
 
+	void VigorTracker::SetSettings(const GameTime now, const TraversalSettings& settings)
+	{
+		Settle(now);
+		m_settings = settings;
+	}
+
 	void VigorTracker::Settle(const GameTime now)
 	{
 		if (now <= m_lastSettle)

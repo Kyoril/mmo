@@ -435,3 +435,14 @@ TEST_CASE("Teleport clears glide", "[glide]")
 	CHECK_FALSE(player->GetVigor().IsGliding());
 	CHECK_FALSE(player->GetMovementInfo().IsGliding());
 }
+
+TEST_CASE("A faster glider is validated against its own forward speed", "[glide]")
+{
+	TraversalSettings faster;
+	faster.glideForwardSpeed = 15.0f;
+	const Vector3 from(0.0f, 50.0f, 0.0f);
+	const Vector3 to(19.0f, 47.5f, 0.0f);
+
+	CHECK(IsGlideSpeedValid(from, to, 1000, 0.0f, faster));
+	CHECK_FALSE(IsGlideSpeedValid(from, to, 1000, 0.0f, TraversalSettings()));
+}

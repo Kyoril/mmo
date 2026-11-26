@@ -410,3 +410,19 @@ TEST_CASE("A gliding player cannot cast", "[vigor][glide]")
 	world.RemoveGameObject(*player);
 	io.stop();
 }
+
+TEST_CASE("Changing the settings settles the drain at the old rate first", "[vigor]")
+{
+	VigorTracker tracker;
+	tracker.Reset(0, 100.0f);
+	tracker.SetGrounded(0, false);
+	tracker.SetGliding(0, true, false);
+
+	TraversalSettings slower;
+	slower.glideDrainPerSecond = 4.0f;
+	tracker.SetSettings(1000, slower);
+
+	// Start cost 5, one second at 8, one second at 4.
+	CHECK(tracker.GetCurrent(2000) == Approx(83.0f));
+	CHECK(tracker.GetMax() == Approx(100.0f));
+}
