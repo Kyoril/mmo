@@ -110,4 +110,5 @@ class Verifier:
 			os.remove(report)
 		ok = self._run([self.powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
 			os.path.join(self.worktree.path, "tools", "gate", "verify.ps1"), "-Tier", tier])
-		return {"ok": ok, "tier": tier, "report": report if os.path.exists(report) else "", "output_tail": self.last_output[-2000:]}
+		return {"ok": ok, "tier": tier, "report": report if os.path.exists(report) else "", "output_tail": self.last_output[-2000:],
+			"timed_out": bool(self.last_timed_out)}

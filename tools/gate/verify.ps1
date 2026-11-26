@@ -154,6 +154,8 @@ try
 		# One ctest run covers every suite mmo_add_test() registered, so a new suite needs no
 		# edit here. --output-on-failure names the failing suite and prints its output into
 		# tools/gate/logs/tests.log.
+		# Not --parallel: game_server_tests alone is most of the step, and its real-time tests
+		# (aura ticks, pet timers) failed on time under the extra load on 2026-11-26.
 		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
 	}
 
@@ -165,7 +167,10 @@ try
 	# some tool tests need the protoc built by it.
 	if ($ok)
 	{
-		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
+		# In parallel processes (tools/gate/run_tool_tests.py): run one after the other in a single
+		# process the tool tests took 37 minutes on 2026-11-26, nearly all of it waiting on git
+		# and PowerShell subprocesses.
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("tools/gate/run_tool_tests.py", "--start-dir", "tools/tests")
 	}
 
 	# The deployer ships to the live server; its tests gate every merge like the C++ suites.

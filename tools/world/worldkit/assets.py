@@ -8,6 +8,7 @@ parser code, so only changed assets are re-parsed. A WMO has collision when any 
 from __future__ import annotations
 
 import dataclasses
+import functools
 import hashlib
 import json
 import math
@@ -63,8 +64,10 @@ class AssetInfo:
         """Model-space rectangle under the asset: (min_x, min_z, max_x, max_z)."""
         return (self.bounds_min[0], self.bounds_min[2], self.bounds_max[0], self.bounds_max[2])
 
-    @property
+    @functools.cached_property
     def radius(self) -> float:
+        # Cached: the prop lint asks for it for every pair of nearby props (135 million times per
+        # world run before 2026-11-26).
         x0, z0, x1, z1 = self.footprint
         return max(math.hypot(x, z) for x in (x0, x1) for z in (z0, z1))
 

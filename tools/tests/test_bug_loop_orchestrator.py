@@ -282,6 +282,8 @@ class FakeWorktree:
 		self.shipped_heads.append(head)
 		if self.branch_heads.get(branch, head) != head:
 			return gitops.ShipResult(False, "", "branch moved after gating")
+		if getattr(self, "gate_on_ship", False) and not fast_gate():
+			return gitops.ShipResult(False, "", "the fast gate on the merge is red (origin/develop or submodule master moved)")
 		self.shipped.append((branch, message))
 		return self.ship_result
 
@@ -377,7 +379,7 @@ class FakeVerifier:
 
 	def gate(self, tier):
 		self.gates.append(tier)
-		return {"ok": self.gate_ok, "tier": tier}
+		return {"ok": self.gate_ok, "tier": tier, "timed_out": getattr(self, "timed_out", False)}
 
 
 class LoopTests(unittest.TestCase):
@@ -970,6 +972,22 @@ class LoopTests(unittest.TestCase):
 		self.now += datetime.timedelta(minutes=2)
 		self.loop.poll_once()
 		self.assertEqual(self.worktree.shipped_heads, ["head1", "head1"])
+		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
+
+	def test_a_timed_out_merge_gate_retries_instead_of_reapplying(self):
+		# On 2026-11-26 a gate of more than an hour hit the loop's timeout and parked four ships as "red".
+		self.park_with_decision("ship", head="head1")
+		self.worktree.gate_on_ship = True
+		self.verifier.gate_ok = False
+		self.verifier.timed_out = True
+		self.loop.poll_once()
+		self.assertEqual(self.reapply_inputs(), [])
+		self.assertNotIn("parked", self.outcomes())
+		self.assertIn(loop.GATE_TIMEOUT_REASON, self.api.notes(BUG_ID)[-1])
+		self.verifier.gate_ok = True
+		self.verifier.timed_out = False
+		self.now += datetime.timedelta(minutes=2)
+		self.loop.poll_once()
 		self.assertEqual(self.api.bugs[BUG_ID]["status"], "resolved")
 
 	def test_the_mandate_gives_up_only_after_its_rounds(self):

@@ -48,6 +48,9 @@ MANDATE_GAVE_UP = "the bug loop could not carry out your ship decision"
 # A maintainer's ship whose merge gate is red while develop is red in CI: develop's breakage, not the fix's.
 WAIT_GREEN_REASON = "the fast gate on the merge is red while develop is red"
 MERGE_GATE_RED = "the fast gate on the merge is red"
+# The gate on the merge ran out of time: nothing is known about the fix (on 2026-11-26 a gate of more than
+# an hour, 37 minutes of it tool tests, parked four ships as "red").
+GATE_TIMEOUT_REASON = "the fast gate on the merge timed out"
 # How much of the earlier diff a restarted refix sees.
 EARLIER_DIFF_LIMIT = 40000
 # Every feature parks for the maintainer: only a hash-bound "ship" decision merges one.
@@ -1451,8 +1454,15 @@ class BugLoop:
 			label = "maintainer decision" if by_maintainer else "gate green at " + head[:8]
 		message = "Merge {} (bug-loop, {})\n\nBug {}: {}\n\n{}".format(branch, label, bug_id, summary, CO_AUTHOR)
 		self._stage("shipping", bug_id, branch, detail=label)
+		gates = []
+
+		def fast_gate():
+			gates.append(self.verifier.gate("fast"))
+			return gates[-1]["ok"]
 		with self.lock():
-			result = self.worktree.ship(branch, head, message, lambda: self.verifier.gate("fast")["ok"])
+			result = self.worktree.ship(branch, head, message, fast_gate)
+		if not result.ok and gates and gates[-1].get("timed_out") and result.reason.startswith(MERGE_GATE_RED):
+			result = result._replace(reason=GATE_TIMEOUT_REASON)
 		resolved = self._write_resolutions(bug_id)
 		if not result.ok and by_maintainer and not emergency and bug_id != self.state.emergency_ticket():
 			self._mandate_obstacle(bug_id, branch, summary, head, result)
