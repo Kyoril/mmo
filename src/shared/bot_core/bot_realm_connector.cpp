@@ -2342,9 +2342,14 @@ namespace mmo
 			{
 				unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
 			}
-			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor) || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			// Separately: a partial update carries only the changed field, the other one reads as 0.
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor))
 			{
-				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor), fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
+				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			{
+				unit.SetMaxVigor(fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
 			}
 		}
 
