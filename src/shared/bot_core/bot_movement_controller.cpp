@@ -114,6 +114,12 @@ namespace mmo
 			return m_status;
 		}
 
+		// In the air after a jump: the air movement lands the bot (BotContext::UpdateAirMovement).
+		if (context.IsAirborne())
+		{
+			return m_status;
+		}
+
 		if ((movement.movementFlags & movement_flags::Falling) != 0)
 		{
 			context.SendLandedPacket();

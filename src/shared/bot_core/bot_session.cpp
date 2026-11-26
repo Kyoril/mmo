@@ -62,6 +62,7 @@ namespace mmo
 		// than inside the blocking MoveTo call is what lets a bot keep walking while its owner is
 		// doing something else - an AI deciding on its next action, or a scenario waiting on a
 		// condition.
+		m_context->UpdateAirMovement();
 		static_cast<void>(m_movementController.Update(*m_context));
 	}
 
@@ -447,6 +448,7 @@ namespace mmo
 				// Characters spawn with the FALLING flag set; the server only accepts its
 				// removal via MoveFallLand (or a jump). Any other movement packet - including
 				// MoveSetFacing - would fail movement validation until this is sent.
+				m_context->ResetAirMovement();
 				m_context->SendLandedPacket();
 
 				m_context->SetWorldReady(true);
@@ -460,8 +462,14 @@ namespace mmo
 				// position without the flag would be refused, every packet of it, so the bot takes
 				// the new position, lands, and lets whatever was walking plan again from here.
 				m_context->UpdateMovementInfo(m_realm->GetMovementInfo());
+				m_context->ResetAirMovement();
 				m_context->SendLandedPacket();
 				m_movementController.Reset();
+			});
+
+		m_realm->GliderForceStopped.connect([this]()
+			{
+				m_context->OnGliderForceStopped();
 			});
 
 		m_realm->LoggedOut.connect([this]()

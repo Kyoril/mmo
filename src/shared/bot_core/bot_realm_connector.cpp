@@ -663,6 +663,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveStartGlide, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveStopGlide, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::ForceStopGlide, *this, &BotRealmConnector::OnForceStopGlide);
 		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnCreatureMove);
 
 		// Spell/state packets
@@ -4007,6 +4008,22 @@ namespace mmo
 	PacketParseResult BotRealmConnector::OnLogoutResponse(game::IncomingPacket& packet)
 	{
 		LoggedOut();
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnForceStopGlide(game::IncomingPacket& packet)
+	{
+		uint64 guid = 0;
+		if (!(packet >> io::read<uint64>(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (guid == m_selectedCharacterGuid)
+		{
+			GliderForceStopped();
+		}
+
 		return PacketParseResult::Pass;
 	}
 

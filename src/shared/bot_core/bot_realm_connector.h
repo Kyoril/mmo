@@ -160,6 +160,10 @@ namespace mmo
 		/// @brief Emitted after the server teleported the bot within its map and the teleport was
 		///        acknowledged. The bot now falls at the new position (GetMovementInfo).
 		signal<void()> Teleported;
+		/// @brief Emitted when the server ended the bot's own glide (ForceStopGlide): the glide was
+		///        refused, Vigor ran out, or the glider was taken off. The bot answers with
+		///        MoveStopGlide.
+		signal<void()> GliderForceStopped;
 		/// @brief Emitted when the server roots, stuns, puts to sleep, fears or disorients the bot,
 		///        or lifts it: the ack opcode to answer with, the ack id, and whether it applies.
 		///        Every one of them must be acked with the Rooted flag set or cleared, or the
@@ -1181,6 +1185,8 @@ namespace mmo
 		PacketParseResult OnMailSendResult(game::IncomingPacket& packet);
 		PacketParseResult OnMailTakeResult(game::IncomingPacket& packet);
 		PacketParseResult OnLogoutResponse(game::IncomingPacket& packet);
+
+		PacketParseResult OnForceStopGlide(game::IncomingPacket& packet);
 		PacketParseResult OnChannelList(game::IncomingPacket& packet);
 		PacketParseResult OnChannelNotify(game::IncomingPacket& packet);
 
