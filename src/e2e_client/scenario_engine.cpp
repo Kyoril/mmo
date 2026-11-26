@@ -18,6 +18,7 @@
 #include "luabind/luabind.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
@@ -1338,6 +1339,92 @@ namespace mmo
 			return reached;
 		}
 
+		// ============================================================
+		// Air movement (jump, fall, glide)
+		// ============================================================
+
+		/// Height the next Jump lands at; NaN means "where the jump starts".
+		float g_landingHeight = std::numeric_limits<float>::quiet_NaN();
+
+		void luaSetLandingHeight(const float height)
+		{
+			g_landingHeight = height;
+		}
+
+		bool luaJump()
+		{
+			BotContext& context = g_runtime->session->GetContext();
+			const float start = context.GetMovementInfo().position.y;
+			const float landing = std::isnan(g_landingHeight) ? start : g_landingHeight;
+			g_landingHeight = std::numeric_limits<float>::quiet_NaN();
+
+			const bool jumped = context.Jump(landing);
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("Jump", { { "from", start }, { "landing", landing }, { "result", jumped } });
+			}
+			return jumped;
+		}
+
+		bool luaOpenGlider()
+		{
+			const bool opened = g_runtime->session->GetContext().OpenGlider();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("OpenGlider", { { "result", opened } });
+			}
+			return opened;
+		}
+
+		bool luaCloseGlider()
+		{
+			const bool closed = g_runtime->session->GetContext().CloseGlider();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("CloseGlider", { { "result", closed } });
+			}
+			return closed;
+		}
+
+		void luaSetGlideDirection(const float x, const float z)
+		{
+			g_runtime->session->GetContext().SetGlideDirection(Vector3(x, 0.0f, z));
+		}
+
+		bool luaIsGliding()
+		{
+			return g_runtime->session->GetContext().IsGliding();
+		}
+
+		bool luaIsFalling()
+		{
+			return g_runtime->session->GetContext().IsAirborne();
+		}
+
+		/// Blocks until the bot landed after a jump, or the timeout passed.
+		bool luaWaitUntilLanded(const float timeoutSeconds)
+		{
+			BotContext& context = g_runtime->session->GetContext();
+			const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int64>(timeoutSeconds * 1000.0f));
+			while (context.IsAirborne())
+			{
+				if (std::chrono::steady_clock::now() >= until)
+				{
+					break;
+				}
+
+				// The air movement is advanced by BotSession::Update, which pumpChecked drives.
+				pumpChecked();
+			}
+
+			const bool landed = !context.IsAirborne();
+			if (g_runtime->transcript)
+			{
+				g_runtime->transcript->Action("WaitUntilLanded", { { "y", context.GetMovementInfo().position.y }, { "result", landed } });
+			}
+			return landed;
+		}
+
 		void luaSendChat(const std::string& message, const std::string& channel, const std::string& target)
 		{
 			ChatType type = ChatType::Say;
@@ -1453,7 +1540,7 @@ namespace mmo
 		void luaEquipBackpackItemTo(const uint32 packIndex, const uint32 equipSlot)
 		{
 			if (packIndex >= player_inventory_pack_slots::End - player_inventory_pack_slots::Start ||
-				equipSlot >= player_equipment_slots::End)
+				(equipSlot >= player_equipment_slots::End && equipSlot != player_glider_slots::Slot))
 			{
 				abortScenario(bot_exit_code::ScenarioFailed, "EquipBackpackItemTo: slot out of range");
 			}
@@ -2308,6 +2395,14 @@ namespace mmo
 				luabind::def_lambda("StartAttack", &luaStartAttack),
 				luabind::def_lambda("StopAttack", &luaStopAttack),
 				luabind::def_lambda("MoveToImpl", &luaMoveTo),
+				luabind::def_lambda("SetLandingHeight", &luaSetLandingHeight),
+				luabind::def_lambda("Jump", &luaJump),
+				luabind::def_lambda("OpenGlider", &luaOpenGlider),
+				luabind::def_lambda("CloseGlider", &luaCloseGlider),
+				luabind::def_lambda("SetGlideDirection", &luaSetGlideDirection),
+				luabind::def_lambda("IsGliding", &luaIsGliding),
+				luabind::def_lambda("IsFalling", &luaIsFalling),
+				luabind::def_lambda("WaitUntilLanded", &luaWaitUntilLanded),
 				luabind::def_lambda("SendAreaTrigger", &luaSendAreaTrigger),
 				luabind::def_lambda("SendChatImpl", &luaSendChat),
 				luabind::def_lambda("GetWhisperCount", []() { return static_cast<uint32>(g_runtime->whispers.size()); }),

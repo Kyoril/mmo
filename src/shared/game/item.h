@@ -387,6 +387,16 @@ namespace mmo
 			// 7 - 31 were combat ratings the server never applied. All are retired: attribute stats
 			// use AttributeStart + attribute id. Do not reuse these numbers.
 
+			/// Glide stats (percent), applied only by the item in the glider slot (see game/glide_stats.h).
+			/// Faster horizontal glide speed.
+			GlideSpeed = 32,
+			/// Faster turning of the glide direction.
+			GlideAgility = 33,
+			/// Slower sinking while gliding.
+			GlideLift = 34,
+			/// Less Vigor drained while gliding.
+			GlideEndurance = 35,
+
 			/// First attribute stat: AttributeStart + attribute id increases that attribute
 			/// (attribute ids are below MaxAttributes, see game/attribute.h).
 			AttributeStart = 64

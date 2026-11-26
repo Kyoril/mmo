@@ -153,7 +153,13 @@ namespace mmo
 		return upwardSpeed * upwardSpeed / (2.0f * settings.glideVerticalAccel);
 	}
 
-	bool IsGlideSpeedValid(const Vector3& from, const Vector3& to, const GameTime dt, const float updraftStrength, const TraversalSettings& settings, const float carriedRise)
+	GameTime ClampGlideClientTime(const GameTime clientTime, const GameTime beginClientTime, const GameTime receiveTime, const GameTime beginReceiveTime)
+	{
+		const GameTime serverElapsed = receiveTime > beginReceiveTime ? receiveTime - beginReceiveTime : 0;
+		return std::min(clientTime, beginClientTime + serverElapsed + glide_rules::TimestampLeadMs);
+	}
+
+	bool IsGlideSpeedValid(const Vector3& from, const Vector3& to, const GameTime dt, const float updraftStrength, const TraversalSettings& settings, const float riseAllowance)
 	{
 		const float seconds = static_cast<float>(dt) / 1000.0f;
 
@@ -169,7 +175,7 @@ namespace mmo
 		}
 
 		// Sinking is never limited here: the glider may have been opened in a fast fall.
-		float allowedRise = glide_rules::RiseToleranceMeters + std::max(0.0f, carriedRise);
+		float allowedRise = std::max(0.0f, riseAllowance);
 		if (updraftStrength > 0.0f)
 		{
 			allowedRise += updraftStrength * glide_rules::SpeedTolerance * seconds;
@@ -242,17 +248,21 @@ namespace mmo
 		return volumes;
 	}
 
-	void GlideMoveValidator::Begin(const Vector3& position, const GameTime time, const float upwardSpeed, const TraversalSettings& settings)
+	void GlideMoveValidator::Begin(const Vector3& position, const GameTime time, const GameTime receiveTime, const float upwardSpeed, const TraversalSettings& settings)
 	{
 		m_settings = settings;
 		m_lastPosition = position;
 		m_lastTime = time;
+		m_beginTime = time;
+		m_beginReceiveTime = receiveTime;
+		m_risePool = glide_rules::RiseToleranceMeters;
 		m_carriedRise = GetGlideRiseCarry(std::min(upwardSpeed, settings.defaultUpdraftStrength), settings);
 		m_active = true;
 	}
 
-	GlideMoveValidator::Result GlideMoveValidator::Check(const Vector3& position, const GameTime time, const std::vector<UpdraftVolume>& updrafts)
+	GlideMoveValidator::Result GlideMoveValidator::Check(const Vector3& position, const GameTime clientTime, const GameTime receiveTime, const std::vector<UpdraftVolume>& updrafts)
 	{
+		const GameTime time = ClampGlideClientTime(clientTime, m_beginTime, receiveTime, m_beginReceiveTime);
 		if (!m_active || time < m_lastTime + glide_rules::MinCheckIntervalMs)
 		{
 			return Result::Skipped;
@@ -269,13 +279,26 @@ namespace mmo
 			m_carriedRise = GetGlideRiseCarry(updraft, m_settings);
 		}
 
-		const bool valid = IsGlideSpeedValid(m_lastPosition, position, dt, updraft, m_settings, m_carriedRise);
+		// Inside an updraft the lift is the allowance (plus rounding); the carried upward speed only
+		// counts once the glider has left it, so the two never add up to a faster climb.
+		const float riseAllowance = updraft > 0.0f ? m_risePool : m_risePool + m_carriedRise;
+		const bool valid = IsGlideSpeedValid(m_lastPosition, position, dt, updraft, m_settings, riseAllowance);
 
-		// Outside of an updraft, every bit of height gained uses up carried upward speed.
+		// Outside of an updraft, height gained uses up carried upward speed first, then the rounding
+		// pool; height lost refills the pool.
 		if (updraft <= 0.0f)
 		{
 			const float rise = position.y - m_lastPosition.y;
-			m_carriedRise = std::max(0.0f, m_carriedRise - std::max(0.0f, rise));
+			if (rise > 0.0f)
+			{
+				const float fromCarry = std::min(m_carriedRise, rise);
+				m_carriedRise -= fromCarry;
+				m_risePool = std::max(0.0f, m_risePool - (rise - fromCarry));
+			}
+			else
+			{
+				m_risePool = std::min(glide_rules::RiseToleranceMeters, m_risePool - rise);
+			}
 		}
 
 		m_lastPosition = position;

@@ -37,6 +37,12 @@ namespace mmo
 		/// @param maxVigor The new maximum.
 		void SetMax(GameTime now, float maxVigor);
 
+		/// Replaces the tuning values (the equipped glider changed). The time passed so far is settled
+		/// at the old values first; current and maximum Vigor stay as they are.
+		/// @param now The current time.
+		/// @param settings The new tuning values (copied).
+		void SetSettings(GameTime now, const TraversalSettings& settings);
+
 		/// Applies the time passed since the last settle to the state.
 		/// @param now The current time. Times before the last settle are ignored.
 		void Settle(GameTime now);

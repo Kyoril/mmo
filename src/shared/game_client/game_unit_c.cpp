@@ -3783,6 +3783,12 @@ namespace mmo
 		}
 	}
 
+	void GameUnitC::SetTraversalSettings(const TraversalSettings& settings)
+	{
+		m_traversalSettings = settings;
+		m_remoteMovementRenderer.SetTraversalSettings(settings);
+	}
+
 	void GameUnitC::OnStartSwimming()
 	{
 		const bool wasSwimming = (m_movementInfo.movementFlags & movement_flags::Swimming) != 0;

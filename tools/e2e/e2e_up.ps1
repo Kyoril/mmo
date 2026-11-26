@@ -15,9 +15,10 @@ param(
 	[ValidateSet("Debug", "RelWithDebInfo", "Release")]
 	[string]$BuildConfig = "Debug",
 	# Map 0 is the open-world dev map; map 1 is the crypt dungeon (Sevrin Wax
-	# encounter). Both are hosted by default so the full scenario suite can
-	# exercise dungeon content without every caller having to know that.
-	[string]$HostedMaps = "0,1"
+	# encounter); map 2 is the Collision playground with the traversal test field
+	# (updrafts for the glide scenarios). All are hosted by default so the full
+	# scenario suite can exercise them without every caller having to know that.
+	[string]$HostedMaps = "0,1,2"
 )
 
 $ErrorActionPreference = "Stop"

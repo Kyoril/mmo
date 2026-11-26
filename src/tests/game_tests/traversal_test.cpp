@@ -229,3 +229,42 @@ TEST_CASE("Glide horizontal decay without input", "[traversal]")
 	v = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(0.0f, 0.0f, 0.0f), 0.0f, s, 0.5f);
 	CHECK(std::sqrt(v.x * v.x + v.z * v.z) == Approx(4.0f));
 }
+
+TEST_CASE("Glide direction turns toward the input at the turn rate", "[traversal]")
+{
+	const TraversalSettings s;
+	const Vector3 v = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), 0.0f, s, 0.1f);
+
+	CHECK(std::sqrt(v.x * v.x + v.z * v.z) == Approx(10.0f));
+	CHECK(std::atan2(v.z, v.x) == Approx(0.3f).margin(0.001f));
+}
+
+TEST_CASE("Glide direction takes the input direction when nearly standing still", "[traversal]")
+{
+	const TraversalSettings s;
+	const Vector3 v = StepGlideVelocity(Vector3(0.2f, -2.5f, 0.0f), Vector3(0.0f, 0.0f, 1.0f), 0.0f, s, 0.1f);
+
+	CHECK(v.x == Approx(0.0f).margin(1e-4f));
+	CHECK(v.z == Approx(10.0f));
+}
+
+TEST_CASE("Glide direction reaches the input when the turn is smaller than one step", "[traversal]")
+{
+	const TraversalSettings s;
+	const Vector3 v = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(1.0f, 0.0f, 0.1f), 0.0f, s, 0.1f);
+
+	const float length = std::sqrt(1.0f + 0.01f);
+	CHECK(v.x == Approx(10.0f / length));
+	CHECK(v.z == Approx(1.0f / length));
+}
+
+TEST_CASE("A glide reversal turns the same way however the input rounds", "[traversal]")
+{
+	// Owner and remote copies derive the reversed input slightly differently; both must turn alike.
+	const TraversalSettings s;
+	const Vector3 left = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(-1.0f, 0.0f, 1e-5f), 0.0f, s, 0.1f);
+	const Vector3 right = StepGlideVelocity(Vector3(10.0f, -2.5f, 0.0f), Vector3(-1.0f, 0.0f, -1e-5f), 0.0f, s, 0.1f);
+
+	CHECK(left.z == Approx(right.z));
+	CHECK(left.x == Approx(right.x));
+}

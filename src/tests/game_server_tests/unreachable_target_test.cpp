@@ -63,3 +63,41 @@ TEST_CASE("Reaching the victim once ends the unreachable streak", "[unreachable_
 	tracker.Reset();
 	CHECK_FALSE(tracker.ShouldEvade(start + 100000));
 }
+
+TEST_CASE("An airborne victim high above is out of melee height", "[unreachable_target]")
+{
+	CHECK(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 8.0f, 0.0f), true, 5.0f));
+}
+
+TEST_CASE("A jumping victim stays within melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.3f, 0.0f), true, 5.0f));
+}
+
+TEST_CASE("A victim on the ground is never out of melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 8.0f, 0.0f), false, 5.0f));
+}
+
+TEST_CASE("A victim below the attacker is not out of melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, -8.0f, 0.0f), true, 5.0f));
+}
+
+TEST_CASE("Melee height works both ways between an airborne and a grounded unit", "[unreachable_target]")
+{
+	const Vector3 ground(0.0f, 0.0f, 0.0f);
+	const Vector3 high(1.0f, 8.0f, 0.0f);
+
+	// A glider high above can neither be hit nor hit back.
+	CHECK(UnreachableTargetTracker::IsOutOfMeleeHeight(ground, false, high, true, 5.0f));
+	CHECK(UnreachableTargetTracker::IsOutOfMeleeHeight(high, true, ground, false, 5.0f));
+
+	// Both on the ground (a slope or a ledge): unchanged.
+	CHECK_FALSE(UnreachableTargetTracker::IsOutOfMeleeHeight(ground, false, high, false, 5.0f));
+
+	// A short jump stays within reach in both directions.
+	const Vector3 jump(1.0f, 1.3f, 0.0f);
+	CHECK_FALSE(UnreachableTargetTracker::IsOutOfMeleeHeight(ground, false, jump, true, 5.0f));
+	CHECK_FALSE(UnreachableTargetTracker::IsOutOfMeleeHeight(jump, true, ground, false, 5.0f));
+}

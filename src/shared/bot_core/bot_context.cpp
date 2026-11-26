@@ -5,8 +5,11 @@
 #include "bot_object_manager.h"
 #include "bot_movement_math.h"
 #include "bot_unit.h"
+#include "bot_nav_service.h"
+#include "bot_updrafts.h"
 
 #include "base/clock.h"
+#include "game_protocol/game_protocol.h"
 #include "log/default_log_levels.h"
 
 #include <cmath>
@@ -92,6 +95,148 @@ namespace mmo
 	{
 		m_cachedMovementInfo = info;
 		m_hasAuthoritativeMovementInfo = true;
+	}
+
+	bool BotContext::Jump(const float landingHeight)
+	{
+		if (m_air.IsAirborne())
+		{
+			return false;
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags |= movement_flags::Falling;
+		info.jumpVelocity = Vector3(0.0f, BotJumpSpeed, 0.0f);
+		info.fallTime = 0;
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveJump, info);
+
+		m_air.Jump(info.position, BotJumpSpeed, landingHeight);
+		m_lastAirTick = info.timestamp;
+		m_lastAirHeartbeat = info.timestamp;
+		return true;
+	}
+
+	bool BotContext::OpenGlider()
+	{
+		UpdateAirMovement();
+		if (!m_air.IsAirborne() || m_air.IsGliding())
+		{
+			return false;
+		}
+
+		m_air.OpenGlider();
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags |= movement_flags::Falling | movement_flags::Gliding;
+		info.jumpVelocity = m_air.GetVelocity();
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStartGlide, info);
+		return true;
+	}
+
+	bool BotContext::CloseGlider()
+	{
+		UpdateAirMovement();
+		if (!m_air.IsGliding())
+		{
+			return false;
+		}
+
+		m_air.CloseGlider();
+		MovementInfo info = GetMovementInfo();
+		info.movementFlags &= ~movement_flags::Gliding;
+		info.jumpVelocity = m_air.GetVelocity();
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStopGlide, info);
+		return true;
+	}
+
+	void BotContext::SetGlideDirection(const Vector3& direction)
+	{
+		m_air.SetGlideDirection(direction);
+	}
+
+	void BotContext::OnGliderForceStopped()
+	{
+		// The server ended the glide (or refused to start it): answer with MoveStopGlide while the
+		// Gliding flag is still set, and fall on.
+		UpdateAirMovement();
+		m_air.CloseGlider();
+		MovementInfo info = GetMovementInfo();
+		if ((info.movementFlags & movement_flags::Gliding) == 0)
+		{
+			return;
+		}
+
+		info.movementFlags &= ~movement_flags::Gliding;
+		info.jumpVelocity = m_air.GetVelocity();
+		info.timestamp = GetServerTime();
+		SendMovementUpdate(game::client_realm_packet::MoveStopGlide, info);
+	}
+
+	void BotContext::ResetAirMovement()
+	{
+		m_air.Reset();
+	}
+
+	void BotContext::UpdateAirMovement()
+	{
+		if (!m_air.IsAirborne())
+		{
+			return;
+		}
+
+		if (HasCurrentMapId() && m_updraftMapId != GetCurrentMapId())
+		{
+			m_updraftMapId = GetCurrentMapId();
+			m_updrafts.clear();
+			if (m_navService && m_navService->GetProject())
+			{
+				m_updrafts = BuildBotUpdraftVolumes(m_navService->GetProject()->areaTriggers.getTemplates(), m_updraftMapId);
+			}
+		}
+
+		const GameTime now = GetServerTime();
+		if (now <= m_lastAirTick)
+		{
+			return;
+		}
+
+		// Small fixed steps, so a slow tick does not change the trajectory.
+		float remaining = static_cast<float>(now - m_lastAirTick) / 1000.0f;
+		m_lastAirTick = now;
+		BotAirMovement::Step step;
+		step.position = m_air.GetPosition();
+		step.velocity = m_air.GetVelocity();
+		const TraversalSettings settings;
+		while (remaining > 0.0f && m_air.IsAirborne())
+		{
+			const float dt = std::min(remaining, 1.0f / 60.0f);
+			remaining -= dt;
+			step = m_air.Advance(dt, m_updrafts, settings);
+		}
+
+		MovementInfo info = GetMovementInfo();
+		info.position = step.position;
+		info.jumpVelocity = step.velocity;
+		info.timestamp = now;
+
+		if (step.landed)
+		{
+			info.movementFlags &= ~(movement_flags::Falling | movement_flags::Gliding);
+			SendMovementUpdate(game::client_realm_packet::MoveFallLand, info);
+			return;
+		}
+
+		if (now >= m_lastAirHeartbeat + BotAirHeartbeatMs)
+		{
+			m_lastAirHeartbeat = now;
+			SendMovementUpdate(game::client_realm_packet::MoveHeartBeat, info);
+		}
+		else
+		{
+			UpdateMovementInfo(info);
+		}
 	}
 
 	void BotContext::SendLandedPacket()

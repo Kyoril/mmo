@@ -165,3 +165,18 @@ TEST_CASE("Predictor applies the glide start cost when the glider opens", "[vigo
 	CHECK(predictor.GetCurrent() == Approx(0.0f));
 	CHECK(predictor.ConsumeBecameEmpty());
 }
+
+TEST_CASE("The predictor drains at the glider's rate after SetSettings", "[vigor_predictor]")
+{
+	TraversalSettings enduring;
+	enduring.glideDrainPerSecond = 2.0f;
+
+	VigorPredictor predictor;
+	predictor.SetSettings(enduring);
+	predictor.Anchor(100.0f, 100.0f, 0);
+	predictor.Advance(0, VigorActivity::Idle, 0.0f, false, false);
+
+	// Opening the glider costs 5, then one second at 2.
+	predictor.Advance(1000, VigorActivity::Gliding, 0.0f, false, false);
+	CHECK(predictor.GetCurrent() == Approx(93.0f));
+}

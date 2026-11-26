@@ -129,3 +129,35 @@ TEST_CASE("Without the glider spell an equipped glider does nothing", "[glider_g
 	CHECK(player->HasGliderEquipped());
 	CHECK_FALSE(player->CanUseTraversal(traversal_spells::Glider));
 }
+
+TEST_CASE("An equipped glider's glide stats set the player's glide settings", "[glider_slot]")
+{
+	asio::io_service io;
+	TimerQueue timers(io);
+	proto::Project project;
+	auto* entry = project.items.add(182);
+	entry->set_name("Swift Test Glider");
+	entry->set_maxstack(1);
+	entry->set_inventorytype(inventory_type::Glider);
+	auto* speed = entry->add_stats();
+	speed->set_type(item_stat::GlideSpeed);
+	speed->set_value(20);
+	auto* lift = entry->add_stats();
+	lift->set_type(item_stat::GlideLift);
+	lift->set_value(40);
+
+	auto player = test::MakeUnit(project, timers);
+	player->Set<uint64>(object_fields::Guid, 1);
+
+	auto glider = std::make_shared<GameItemS>(project, *entry);
+	glider->Initialize();
+	glider->Set<uint64>(object_fields::Guid, CreateEntryGUID(9, entry->id(), GuidType::Item));
+	player->GetInventory().AddItemToSlot(glider, GliderAbsoluteSlot);
+
+	CHECK(player->GetVigor().GetSettings().glideForwardSpeed == Approx(12.0f));
+	CHECK(player->GetVigor().GetSettings().glideSinkSpeed == Approx(1.5f));
+
+	player->GetInventory().RemoveItem(GliderAbsoluteSlot);
+	CHECK(player->GetVigor().GetSettings().glideForwardSpeed == Approx(10.0f));
+	CHECK(player->GetVigor().GetSettings().glideSinkSpeed == Approx(2.5f));
+}

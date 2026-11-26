@@ -663,6 +663,7 @@ namespace mmo
 		RegisterPacketHandler(game::realm_client_packet::MoveFallLand, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveStartGlide, *this, &BotRealmConnector::OnMovementPacket);
 		RegisterPacketHandler(game::realm_client_packet::MoveStopGlide, *this, &BotRealmConnector::OnMovementPacket);
+		RegisterPacketHandler(game::realm_client_packet::ForceStopGlide, *this, &BotRealmConnector::OnForceStopGlide);
 		RegisterPacketHandler(game::realm_client_packet::CreatureMove, *this, &BotRealmConnector::OnCreatureMove);
 
 		// Spell/state packets
@@ -2341,9 +2342,14 @@ namespace mmo
 			{
 				unit.SetNextLevelXp(fieldMap.GetFieldValue<uint32>(object_fields::NextLevelXp));
 			}
-			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor) || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			// Separately: a partial update carries only the changed field, the other one reads as 0.
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::Vigor))
 			{
-				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor), fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
+				unit.SetVigor(fieldMap.GetFieldValue<float>(object_fields::Vigor));
+			}
+			if (creation || fieldMap.IsFieldMarkedAsChanged(object_fields::MaxVigor))
+			{
+				unit.SetMaxVigor(fieldMap.GetFieldValue<float>(object_fields::MaxVigor));
 			}
 		}
 
@@ -4007,6 +4013,22 @@ namespace mmo
 	PacketParseResult BotRealmConnector::OnLogoutResponse(game::IncomingPacket& packet)
 	{
 		LoggedOut();
+		return PacketParseResult::Pass;
+	}
+
+	PacketParseResult BotRealmConnector::OnForceStopGlide(game::IncomingPacket& packet)
+	{
+		uint64 guid = 0;
+		if (!(packet >> io::read<uint64>(guid)))
+		{
+			return PacketParseResult::Disconnect;
+		}
+
+		if (guid == m_selectedCharacterGuid)
+		{
+			GliderForceStopped();
+		}
+
 		return PacketParseResult::Pass;
 	}
 

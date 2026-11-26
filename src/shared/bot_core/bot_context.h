@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "bot_air_movement.h"
 #include "bot_startup_types.h"
 #include "bot_unit.h"
 
@@ -90,6 +91,39 @@ namespace mmo
 		/// Characters spawn with the FALLING flag set and must send MoveFallLand
 		/// to properly remove it before other movement can occur.
 		void SendLandedPacket();
+
+		/// Jumps from where the bot stands (MoveJump). It lands once it is back down at the given height.
+		/// @param landingHeight Height of the ground the bot lands on.
+		/// @return False if the bot is already in the air.
+		bool Jump(float landingHeight);
+
+		/// Opens the glider while in the air (MoveStartGlide). The server may refuse it with
+		/// ForceStopGlide (see OnGliderForceStopped).
+		/// @return False if the bot is not in the air or already glides.
+		bool OpenGlider();
+
+		/// Closes the glider (MoveStopGlide); the bot falls on.
+		/// @return False if the bot does not glide.
+		bool CloseGlider();
+
+		/// Sets the horizontal direction the glider steers to (zero: no input).
+		void SetGlideDirection(const Vector3& direction);
+
+		/// Advances the air movement: position, heartbeats every BotAirHeartbeatMs and the landing
+		/// (MoveFallLand). Call every tick.
+		void UpdateAirMovement();
+
+		/// The server ended the glide: closes the glider and answers with MoveStopGlide.
+		void OnGliderForceStopped();
+
+		/// Ends any air movement without a packet (teleports and world changes land the bot).
+		void ResetAirMovement();
+
+		/// Whether the bot is in the air after a jump.
+		[[nodiscard]] bool IsAirborne() const { return m_air.IsAirborne(); }
+
+		/// Whether the bot glides.
+		[[nodiscard]] bool IsGliding() const { return m_air.IsGliding(); }
 
 		/// Updates the bot's local movement information.
 		/// @param info The new movement information.
@@ -371,6 +405,15 @@ namespace mmo
 		uint32 m_currentMapId { 0 };
 		bool m_hasAuthoritativeMovementInfo { false };
 		MovementInfo m_cachedMovementInfo;
+
+		/// Air movement after a jump (see Jump).
+		BotAirMovement m_air;
+		GameTime m_lastAirTick { 0 };
+		GameTime m_lastAirHeartbeat { 0 };
+
+		/// Updraft volumes of m_updraftMapId, loaded on the first air tick on that map.
+		std::vector<UpdraftVolume> m_updrafts;
+		uint32 m_updraftMapId { 0xFFFFFFFF };
 		
 		/// Custom state storage for actions and profiles
 		std::map<std::string, std::string> m_customState;

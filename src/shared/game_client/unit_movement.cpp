@@ -357,7 +357,7 @@ namespace mmo
 		// Gliding: the glide model moves the unit along its input, as on the owning client.
 		if (m_movementMode == MovementMode::Falling && m_movedUnit.IsGliding())
 		{
-			m_velocity = StepGlideVelocity(m_velocity, lateralInput, GetUpdraftStrength(currentPos), TraversalSettings(), deltaTime);
+			m_velocity = StepGlideVelocity(m_velocity, lateralInput, GetUpdraftStrength(currentPos), m_movedUnit.GetTraversalSettings(), deltaTime);
 			currentPos += m_velocity * deltaTime;
 			GetUpdatedNode().SetPosition(currentPos);
 			return;
@@ -1675,7 +1675,7 @@ namespace mmo
 		// unscaled movement input. Collision and landing are handled exactly like a normal fall.
 		const bool bGliding = m_movedUnit.IsGliding();
 		const Vector3 glideDirection = bGliding ? ProjectToGravityFloor(m_acceleration) : Vector3::Zero;
-		const TraversalSettings glideSettings;
+		const TraversalSettings& glideSettings = m_movedUnit.GetTraversalSettings();
 
 		const bool bHasLimitedAirControl = !bGliding && ShouldLimitAirControl(fallAcceleration);
 

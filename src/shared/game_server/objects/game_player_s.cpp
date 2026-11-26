@@ -2,6 +2,8 @@
 
 #include "game_player_s.h"
 
+#include "game_server/glide_item_stats.h"
+
 #include <algorithm>
 #include <ctime>
 
@@ -482,9 +484,11 @@ namespace mmo
 		const auto &itemEntry = item.GetEntry();
 
 		// The inventory sets or clears the glider slot field before it applies or removes the
-		// item's stats, so the Vigor pool can follow the slot here.
+		// item's stats, so the Vigor pool can follow the slot here. The glider's glide stats set the
+		// glide settings regardless of durability, as clients (which cannot see it) do the same.
 		if (itemEntry.inventorytype() == inventory_type::Glider)
 		{
+			m_vigor.SetSettings(GetAsyncTimeMs(), apply ? ApplyGlideModifiers(TraversalSettings(), GetGlideModifiers(itemEntry)) : TraversalSettings());
 			UpdateMaxVigor();
 			if (!apply)
 			{

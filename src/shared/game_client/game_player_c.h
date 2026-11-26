@@ -228,6 +228,9 @@ namespace mmo
 		/// Requests the equipped glider's item data; NotifyItemData then sets the glider's look.
 		void OnGliderChanged(uint64);
 
+		/// Sets the glide settings of the unit and of the Vigor prediction.
+		void ApplyGliderTraversalSettings(const TraversalSettings& settings);
+
 		void RefreshDisplay();
 
 		void OnGuildChanged(uint64);

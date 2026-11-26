@@ -116,6 +116,9 @@ namespace mmo
 		///	no updraft). Gliding remote players are lifted by it.
 		void SetUpdraftProvider(std::function<float(const Vector3&)> provider) { m_updraftProvider = std::move(provider); }
 
+		/// @brief Sets the glide settings the remote glide is simulated with (the glider's glide stats).
+		void SetTraversalSettings(const TraversalSettings& settings) { m_traversalSettings = settings; }
+
 	private:
 		/// @brief Computes the velocity vector for a given movement state.
 		Vector3 ComputeVelocity(const Vector3& forward, const Vector3& right,

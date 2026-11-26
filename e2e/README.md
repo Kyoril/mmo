@@ -167,7 +167,16 @@ true: the realm disconnects a client that accepts with no invitation pending), `
 `IsInParty()`, `GetPartyMemberCount()`, `EquipFromBackpack()` (asks the server to equip every
 backpack item; empty slots and unwearable items are rejected harmlessly),
 `EquipBackpackItemTo(packIndex, equipSlot)` (moves backpack slot `packIndex`, 0-based, into an
-equipment slot, e.g. 16 = off hand, which auto-equip never picks for a one-handed weapon),
+equipment slot, e.g. 16 = off hand, which auto-equip never picks for a one-handed weapon, or 86 =
+the glider slot),
+`SetLandingHeight(y)` (ground height the next `Jump` lands at; default: where the jump starts — the
+bot has no ground query, so a jump from a height needs it), `Jump() -> bool` (MoveJump; the bot then
+falls with the server's fall gravity), `OpenGlider() -> bool` / `CloseGlider() -> bool`
+(MoveStartGlide / MoveStopGlide while in the air; a glide the server refuses comes back as
+ForceStopGlide, which the bot answers by closing the glider), `SetGlideDirection(x, z)` (horizontal
+steering, 0/0 for none), `IsGliding()`, `IsFalling()` (in the air after a jump),
+`WaitUntilLanded(timeoutSeconds) -> bool` (blocks until the bot is down at its landing height;
+updraft area triggers lift a gliding bot like the client),
 `LootUnit(g)` (opens the loot window on a corpse or world object; the character must
 be within loot range), `TakeLootItem(slot)` (takes the item in a slot of the open loot window,
 slots count from 0), `ReleaseLoot(g)` (closes it),

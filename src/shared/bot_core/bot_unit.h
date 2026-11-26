@@ -395,8 +395,11 @@ namespace mmo
 		/// @brief Gets the experience points required for the next level (players only).
 		uint32 GetNextLevelXp() const { return m_nextLevelXp; }
 
-		/// @brief Sets the replicated Vigor and maximum Vigor (the bot's own player only).
-		void SetVigor(float vigor, float maxVigor) { m_vigor = vigor; m_maxVigor = maxVigor; }
+		/// @brief Sets the replicated Vigor (the bot's own player only).
+		void SetVigor(float vigor) { m_vigor = vigor; }
+
+		/// @brief Sets the replicated maximum Vigor (the bot's own player only).
+		void SetMaxVigor(float maxVigor) { m_maxVigor = maxVigor; }
 
 		/// @brief Gets the Vigor the server last replicated. It only changes on transitions (an ability
 		///        starting or ending), so a drain in progress is not visible until it ends.

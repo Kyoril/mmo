@@ -46,6 +46,9 @@ namespace mmo
 		/// Horizontal speed (units per second) while gliding with input.
 		float glideForwardSpeed = 10.0f;
 
+		/// How fast (radians per second) the horizontal glide direction turns toward the input.
+		float glideTurnRate = 3.0f;
+
 		/// Vertical acceleration (units per second squared) towards the target vertical speed.
 		float glideVerticalAccel = 12.0f;
 

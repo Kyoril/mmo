@@ -125,7 +125,7 @@ TEST_CASE("Rising outside updraft fails, inside passes", "[glide]")
 	// Upward speed carried out of an updraft still lifts for a moment.
 	const float carry = GetGlideRiseCarry(settings.defaultUpdraftStrength, settings);
 	CHECK(carry == Approx(8.0f * 8.0f / (2.0f * settings.glideVerticalAccel)));
-	CHECK(IsGlideSpeedValid(from, Vector3(5.0f, 52.0f, 0.0f), 1000, 0.0f, settings, carry));
+	CHECK(IsGlideSpeedValid(from, Vector3(5.0f, 52.0f, 0.0f), 1000, 0.0f, settings, glide_rules::RiseToleranceMeters + carry));
 	CHECK(GetGlideRiseCarry(-3.0f, settings) == Approx(0.0f));
 }
 
@@ -139,26 +139,26 @@ TEST_CASE("Glide validator follows updraft exits and skips short intervals", "[g
 
 	GlideMoveValidator validator;
 	CHECK_FALSE(validator.IsActive());
-	CHECK(validator.Check(Vector3(100.0f, 0.0f, 0.0f), 1000, updrafts) == GlideMoveValidator::Result::Skipped);
+	CHECK(validator.Check(Vector3(100.0f, 0.0f, 0.0f), 1000, 1000, updrafts) == GlideMoveValidator::Result::Skipped);
 
-	validator.Begin(Vector3(0.0f, 48.0f, 0.0f), 1000, 0.0f, settings);
+	validator.Begin(Vector3(0.0f, 48.0f, 0.0f), 1000, 1000, 0.0f, settings);
 	REQUIRE(validator.IsActive());
 
 	// Too short to measure: skipped, measured with the next one.
-	CHECK(validator.Check(Vector3(0.5f, 48.5f, 0.0f), 1100, updrafts) == GlideMoveValidator::Result::Skipped);
+	CHECK(validator.Check(Vector3(0.5f, 48.5f, 0.0f), 1100, 1100, updrafts) == GlideMoveValidator::Result::Skipped);
 
 	// Rising inside the updraft.
-	CHECK(validator.Check(Vector3(2.0f, 51.0f, 0.0f), 1500, updrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(2.0f, 51.0f, 0.0f), 1500, 1500, updrafts) == GlideMoveValidator::Result::Ok);
 
 	// Leaving it at the top while still carrying upward speed.
-	CHECK(validator.Check(Vector3(4.0f, 55.5f, 0.0f), 2000, updrafts) == GlideMoveValidator::Result::Ok);
-	CHECK(validator.Check(Vector3(9.0f, 57.0f, 0.0f), 2500, updrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(4.0f, 55.5f, 0.0f), 2000, 2000, updrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(9.0f, 57.0f, 0.0f), 2500, 2500, updrafts) == GlideMoveValidator::Result::Ok);
 
 	// The carried speed is used up: rising further is a violation.
-	CHECK(validator.Check(Vector3(14.0f, 59.0f, 0.0f), 3000, updrafts) == GlideMoveValidator::Result::Violation);
+	CHECK(validator.Check(Vector3(14.0f, 59.0f, 0.0f), 3000, 3000, updrafts) == GlideMoveValidator::Result::Violation);
 
 	// Too fast.
-	CHECK(validator.Check(Vector3(30.0f, 58.0f, 0.0f), 3500, updrafts) == GlideMoveValidator::Result::Violation);
+	CHECK(validator.Check(Vector3(30.0f, 58.0f, 0.0f), 3500, 3500, updrafts) == GlideMoveValidator::Result::Violation);
 
 	validator.End();
 	CHECK_FALSE(validator.IsActive());
@@ -170,13 +170,13 @@ TEST_CASE("Glide opened during a jump may still rise, but only by a capped jump 
 	const std::vector<UpdraftVolume> noUpdrafts;
 
 	GlideMoveValidator validator;
-	validator.Begin(Vector3(0.0f, 10.0f, 0.0f), 1000, 7.0f, settings);
-	CHECK(validator.Check(Vector3(3.0f, 12.0f, 0.0f), 1500, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	validator.Begin(Vector3(0.0f, 10.0f, 0.0f), 1000, 1000, 7.0f, settings);
+	CHECK(validator.Check(Vector3(3.0f, 12.0f, 0.0f), 1500, 1500, noUpdrafts) == GlideMoveValidator::Result::Ok);
 
 	// A client claiming an absurd jump speed gets no more than the default updraft would give.
 	GlideMoveValidator cheater;
-	cheater.Begin(Vector3(0.0f, 10.0f, 0.0f), 1000, 500.0f, settings);
-	CHECK(cheater.Check(Vector3(3.0f, 20.0f, 0.0f), 1500, noUpdrafts) == GlideMoveValidator::Result::Violation);
+	cheater.Begin(Vector3(0.0f, 10.0f, 0.0f), 1000, 1000, 500.0f, settings);
+	CHECK(cheater.Check(Vector3(3.0f, 20.0f, 0.0f), 1500, 1500, noUpdrafts) == GlideMoveValidator::Result::Violation);
 }
 
 TEST_CASE("Glide past empty within grace is not a violation", "[glide]")
@@ -434,4 +434,94 @@ TEST_CASE("Teleport clears glide", "[glide]")
 	player->EndGlide();
 	CHECK_FALSE(player->GetVigor().IsGliding());
 	CHECK_FALSE(player->GetMovementInfo().IsGliding());
+}
+
+TEST_CASE("A faster glider is validated against its own forward speed", "[glide]")
+{
+	TraversalSettings faster;
+	faster.glideForwardSpeed = 15.0f;
+	const Vector3 from(0.0f, 50.0f, 0.0f);
+	const Vector3 to(19.0f, 47.5f, 0.0f);
+
+	CHECK(IsGlideSpeedValid(from, to, 1000, 0.0f, faster));
+	CHECK_FALSE(IsGlideSpeedValid(from, to, 1000, 0.0f, TraversalSettings()));
+}
+
+TEST_CASE("Small rises cannot add up to a climb without an updraft", "[glide]")
+{
+	const TraversalSettings settings;
+	const std::vector<UpdraftVolume> noUpdrafts;
+
+	GlideMoveValidator validator;
+	validator.Begin(Vector3(0.0f, 50.0f, 0.0f), 1000, 1000, 0.0f, settings);
+
+	CHECK(validator.Check(Vector3(2.0f, 50.4f, 0.0f), 1300, 1300, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	const auto second = validator.Check(Vector3(4.0f, 50.8f, 0.0f), 1600, 1600, noUpdrafts);
+	const auto third = validator.Check(Vector3(6.0f, 51.2f, 0.0f), 1900, 1900, noUpdrafts);
+	CHECK((second == GlideMoveValidator::Result::Violation || third == GlideMoveValidator::Result::Violation));
+}
+
+TEST_CASE("Sinking refills the rise tolerance", "[glide]")
+{
+	const TraversalSettings settings;
+	const std::vector<UpdraftVolume> noUpdrafts;
+
+	GlideMoveValidator validator;
+	validator.Begin(Vector3(0.0f, 50.0f, 0.0f), 1000, 1000, 0.0f, settings);
+
+	CHECK(validator.Check(Vector3(2.0f, 50.4f, 0.0f), 1300, 1300, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(4.0f, 49.4f, 0.0f), 1600, 1600, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(6.0f, 49.8f, 0.0f), 1900, 1900, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(8.0f, 50.2f, 0.0f), 2200, 2200, noUpdrafts) == GlideMoveValidator::Result::Violation);
+}
+
+TEST_CASE("Client timestamps cannot run ahead of the server clock", "[glide]")
+{
+	const TraversalSettings settings;
+	const std::vector<UpdraftVolume> noUpdrafts;
+
+	GlideMoveValidator validator;
+	validator.Begin(Vector3(0.0f, 50.0f, 0.0f), 1000, 1000, 0.0f, settings);
+
+	// Claims four seconds, but only 0.3 s passed on the server: at most 1.3 s (17.55 m) count.
+	CHECK(validator.Check(Vector3(30.0f, 45.0f, 0.0f), 5000, 1300, noUpdrafts) == GlideMoveValidator::Result::Violation);
+}
+
+TEST_CASE("Packets that arrive bunched after a lag spike stay valid", "[glide]")
+{
+	const TraversalSettings settings;
+	const std::vector<UpdraftVolume> noUpdrafts;
+
+	GlideMoveValidator validator;
+	validator.Begin(Vector3(0.0f, 50.0f, 0.0f), 1000, 1000, 0.0f, settings);
+
+	CHECK(validator.Check(Vector3(5.0f, 48.75f, 0.0f), 1500, 2600, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(10.0f, 47.5f, 0.0f), 2000, 2600, noUpdrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(validator.Check(Vector3(15.0f, 46.25f, 0.0f), 2500, 2600, noUpdrafts) == GlideMoveValidator::Result::Ok);
+}
+
+TEST_CASE("The client time clamp", "[glide]")
+{
+	CHECK(ClampGlideClientTime(5000, 1000, 1300, 1000) == 2300);
+	CHECK(ClampGlideClientTime(1200, 1000, 1300, 1000) == 1200);
+}
+
+TEST_CASE("Inside an updraft a glider climbs no faster than the updraft lifts", "[glide]")
+{
+	const TraversalSettings settings;
+	std::vector<UpdraftVolume> updrafts(1);
+	updrafts[0].center = Vector3(0.0f, 50.0f, 0.0f);
+	updrafts[0].radius = 100.0f;
+	updrafts[0].strength = 8.0f;
+
+	// An honest climb at the updraft's 8 m/s passes.
+	GlideMoveValidator honest;
+	honest.Begin(Vector3(0.0f, 40.0f, 0.0f), 1000, 1000, 0.0f, settings);
+	CHECK(honest.Check(Vector3(1.0f, 42.0f, 0.0f), 1250, 1250, updrafts) == GlideMoveValidator::Result::Ok);
+	CHECK(honest.Check(Vector3(2.0f, 44.0f, 0.0f), 1500, 1500, updrafts) == GlideMoveValidator::Result::Ok);
+
+	// Climbing 5 m every quarter second (20 m/s) is far beyond the lift, however long it lasts.
+	GlideMoveValidator cheater;
+	cheater.Begin(Vector3(0.0f, 40.0f, 0.0f), 1000, 1000, 0.0f, settings);
+	CHECK(cheater.Check(Vector3(1.0f, 45.0f, 0.0f), 1250, 1250, updrafts) == GlideMoveValidator::Result::Violation);
 }
