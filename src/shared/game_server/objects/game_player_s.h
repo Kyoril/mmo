@@ -131,6 +131,10 @@ namespace mmo
 		/// Fired when the character unlocks a new emote (not fired for default-known emotes).
 		signal<void(uint32)> emoteLearned;
 
+		/// Fired when the glider leaves the glider slot (unequipped, swapped out or destroyed), so a
+		/// running glide can be ended.
+		signal<void()> gliderUnequipped;
+
 		/// Fired when a trade skill is learned or its cap changes. Parameter: skill id.
 		signal<void(uint32 skillId)> tradeSkillLearned;
 		/// Fired when the value of a trade skill changes. Parameter: skill id.
@@ -169,11 +173,15 @@ namespace mmo
 		[[nodiscard]] const VigorTracker& GetVigor() const { return m_vigor; }
 
 		/// @param spellId The traversal spell (traversal_spells::Glider or traversal_spells::Dash).
-		/// @return Whether the character knows the spell and has a Vigor pool (MaxVigor > 0). Does
+		/// @return Whether the character knows the spell and has a Vigor pool (MaxVigor > 0), and for
+		///	        the glider also has a glider equipped (HasGliderEquipped). Does
 		///	        not look at the current Vigor: a drain spell cast at 0 Vigor is refused by the
 		///	        cast validation, and glide starts are checked against the current value by the
 		///	        glide validation.
 		[[nodiscard]] bool CanUseTraversal(uint32 spellId) const;
+
+		/// Whether an item is equipped in the glider slot (player_glider_slots::Slot).
+		[[nodiscard]] bool HasGliderEquipped() const;
 
 		/// Starts or stops gliding (or changes the updraft state of a glide) and replicates the
 		/// resulting Vigor.

@@ -135,6 +135,14 @@ namespace mmo
 					ForceStopGlide("damage taken");
 				}
 			}),
+			// Taking the glider off (or losing it) mid-air closes the glider; not a violation.
+			m_character->gliderUnequipped.connect([this]()
+			{
+				if (m_character->GetVigor().IsGliding())
+				{
+					ForceStopGlide("glider unequipped");
+				}
+			}),
 
 			// Combat history for bug reports
 			m_character->damageTakenAmount.connect([this](GameUnitS* attacker, const uint32 amount, const uint32 school)

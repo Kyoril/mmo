@@ -51,6 +51,8 @@ namespace mmo
 			// No fallback candidate on purpose: a rig without a "Loot" clip must play its
 			// normal idle rather than freeze in some unrelated pose.
 			{ proto_client::ANIM_SLOT_LOOT, { "Loot" } },
+			// Rigs without a glide pose keep falling in their falling loop.
+			{ proto_client::ANIM_SLOT_GLIDE, { "Glide", "Falling" } },
 		};
 
 		constexpr BuiltinBinding builtinWalk[] = {

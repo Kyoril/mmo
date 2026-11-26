@@ -64,6 +64,7 @@
 #include "terrain/far_terrain.h"
 #include "terrain/ocean_mask.h"
 #include "terrain/terrain.h"
+#include "game_client/updraft_visuals.h"
 
 #include <map>
 #include <optional>
@@ -956,6 +957,12 @@ namespace mmo
 
 		/// 3D world ping visualizer.
 		std::unique_ptr<WorldPingVisualizer> m_worldPingVisualizer;
+
+		/// Particle columns over the current map's updrafts.
+		std::unique_ptr<UpdraftVisuals> m_updraftVisuals;
+
+		/// Whether the own player glided inside an updraft last frame (updraft sound edge).
+		bool m_playerGlidingInUpdraft = false;
 
 		bool m_timeSyncResponseSent = false;
 

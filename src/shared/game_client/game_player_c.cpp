@@ -1,4 +1,5 @@
 #include "game_player_c.h"
+#include "glider_display.h"
 
 #include "floor_surface_query.h"
 #include "footstep_audio.h"
@@ -48,6 +49,9 @@ namespace mmo
 
 			m_equipmentChangedHandler = RegisterMirrorHandler(object_fields::InvSlotHead, player_inventory_pack_slots::Start * 2, *this, &GamePlayerC::OnEquipmentChanged);
 			OnEquipmentChanged(GetGuid());
+
+			m_gliderChangedHandler = RegisterMirrorHandler(object_fields::VisibleGlider_0, 1, *this, &GamePlayerC::OnGliderChanged);
+			OnGliderChanged(GetGuid());
 
 			m_guildChangedHandler = RegisterMirrorHandler(object_fields::Guild, 2, *this, &GamePlayerC::OnGuildChanged);
 			OnGuildChanged(GetGuid());
@@ -115,6 +119,19 @@ namespace mmo
 
 	void GamePlayerC::NotifyItemData(const ItemInfo& data)
 	{
+		// The glider is drawn by the glider visual, not as a worn item.
+		if (data.inventoryType == inventory_type::Glider)
+		{
+			if (data.id == Get<uint32>(object_fields::VisibleGlider_0))
+			{
+				const proto_client::ItemDisplayEntry* display = m_project.itemDisplays.getById(data.displayId);
+				SetGliderAttachment(display
+					? ResolveGliderAttachment(*display, Get<uint32>(object_fields::DisplayId), &ResolveModelMeshFile)
+					: std::nullopt);
+			}
+			return;
+		}
+
 		if (data.displayId == 0)
 		{
 			return;
@@ -348,6 +365,19 @@ namespace mmo
 		RefreshItemDisplayAttachmentBones(*m_entity, m_itemAttachments, m_weaponsDrawn);
 	}
 
+	void GamePlayerC::OnGliderChanged(uint64)
+	{
+		const uint32 gliderEntry = Get<uint32>(object_fields::VisibleGlider_0);
+		if (gliderEntry == 0)
+		{
+			SetGliderAttachment(std::nullopt);
+			return;
+		}
+
+		// NotifyItemData resolves the look once the item data is known.
+		m_netDriver.GetItemData(gliderEntry, std::static_pointer_cast<GamePlayerC>(shared_from_this()));
+	}
+
 	void GamePlayerC::OnEquipmentChanged(uint64)
 	{
 		// First ensure customization options are applied to properly display the character
@@ -397,6 +427,9 @@ namespace mmo
 		// Notify listeners about the (now empty) equipment visuals; each item re-applies and
 		// notifies again once its display data arrives.
 		equipmentVisualsChanged();
+
+		// A new model may pick another variant of the glider's display.
+		OnGliderChanged(GetGuid());
 	}
 
 	void GamePlayerC::RegisterFootstepHandlers()

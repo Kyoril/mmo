@@ -213,7 +213,8 @@ namespace mmo
 		"Thrown",
 		"Ranged Right",
 		"Quiver",
-		"Relic"};
+		"Relic",
+		"Glider"};
 
 	/// Names of the non-attribute item stat types, indexed by item_stat::Type. Every other type below
 	/// item_stat::AttributeStart is retired: 2..6 held the five hard-coded attributes and 7..31 were

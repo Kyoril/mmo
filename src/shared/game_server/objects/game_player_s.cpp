@@ -109,7 +109,17 @@ namespace mmo
 
 	bool GamePlayerS::CanUseTraversal(const uint32 spellId) const
 	{
+		if (spellId == traversal_spells::Glider && !HasGliderEquipped())
+		{
+			return false;
+		}
+
 		return m_vigor.GetMax() > 0.0f && HasSpell(spellId);
+	}
+
+	bool GamePlayerS::HasGliderEquipped() const
+	{
+		return Get<uint64>(object_fields::GliderSlot) != 0;
 	}
 
 	void GamePlayerS::SetVigorGliding(const bool gliding, const bool inUpdraft)
@@ -192,7 +202,9 @@ namespace mmo
 
 	float GamePlayerS::ComputeMaxVigor() const
 	{
-		const bool knowsTraversal = HasSpell(traversal_spells::Glider) || HasSpell(traversal_spells::Dash);
+		// The glider spell is a base spell every character knows; it only counts with a glider on.
+		const bool canGlide = HasSpell(traversal_spells::Glider) && HasGliderEquipped();
+		const bool knowsTraversal = canGlide || HasSpell(traversal_spells::Dash);
 		return knowsTraversal ? m_vigor.GetSettings().maxVigor : 0.0f;
 	}
 
@@ -468,6 +480,17 @@ namespace mmo
 	void GamePlayerS::ApplyItemStats(const GameItemS &item, const bool apply)
 	{
 		const auto &itemEntry = item.GetEntry();
+
+		// The inventory sets or clears the glider slot field before it applies or removes the
+		// item's stats, so the Vigor pool can follow the slot here.
+		if (itemEntry.inventorytype() == inventory_type::Glider)
+		{
+			UpdateMaxVigor();
+			if (!apply)
+			{
+				gliderUnequipped();
+			}
+		}
 
 		// Check if item requires proficiency
 		if (itemEntry.inventorytype() != inventory_type::NonEquip)

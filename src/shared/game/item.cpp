@@ -43,6 +43,7 @@ namespace mmo
 			"RANGED_RIGHT",
 			"QUIVER",
 			"RELIC",
+			"GLIDER",
 		};
 
 		static_assert(std::size(s_inventoryTypeStrings) == inventory_type::Count_, "InventoryType strings mismatch");
@@ -135,6 +136,9 @@ namespace mmo
 			break;
 		case inventory_type::Tabard:
 			slots[0] = player_equipment_slots::Tabard;
+			break;
+		case inventory_type::Glider:
+			slots[0] = player_glider_slots::Slot;
 			break;
 		default:
 			break;

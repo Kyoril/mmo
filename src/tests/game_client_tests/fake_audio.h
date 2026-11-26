@@ -163,8 +163,9 @@ namespace mmo
 		{
 		}
 
-		void Set3DPosition(ChannelIndex, const Vector3&) override
+		void Set3DPosition(ChannelIndex channelIndex, const Vector3& position) override
 		{
+			channelPositions[channelIndex] = position;
 		}
 
 		float GetSoundLength(SoundIndex) override

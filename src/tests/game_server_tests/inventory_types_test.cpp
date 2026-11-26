@@ -481,3 +481,27 @@ TEST_CASE("InventoryResult<T> - Success and failure with value", "[inventory][ty
 		REQUIRE(receivedValue == 42);
 	}
 }
+
+TEST_CASE("The glider slot is an equipment slot after the buyback range", "[glider_slot]")
+{
+	const InventorySlot glider = InventorySlot::FromAbsolute(0xFF56);
+	CHECK(glider.GetSlot() == player_glider_slots::Slot);
+	CHECK(glider.IsEquipment());
+	CHECK_FALSE(glider.IsBuyBack());
+	CHECK_FALSE(glider.IsInventory());
+	CHECK_FALSE(glider.IsBagBar());
+	CHECK(IsGliderSlot(player_glider_slots::Slot));
+	CHECK_FALSE(IsGliderSlot(player_equipment_slots::Head));
+
+	// The slots around it keep their meaning.
+	CHECK(InventorySlot::FromAbsolute(0xFF13).IsBagBar());
+	CHECK(InventorySlot::FromAbsolute(0xFF55).IsBuyBack());
+	CHECK_FALSE(InventorySlot::FromAbsolute(0xFF13).IsEquipment());
+	CHECK(player_glider_slots::Slot == player_buy_back_slots::End);
+}
+
+TEST_CASE("The comparison slot of a glider is the glider slot", "[glider_slot]")
+{
+	CHECK(GetComparisonEquipmentSlot(inventory_type::Glider, 0) == static_cast<int32>(player_glider_slots::Slot));
+	CHECK(GetComparisonEquipmentSlot(inventory_type::Glider, 1) == -1);
+}

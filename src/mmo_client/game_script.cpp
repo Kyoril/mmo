@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "game_script.h"
+#include "game/inventory_fields.h"
 #include "base/chat_text.h"
 #include "base/localization.h"
 #include "client_locale.h"
@@ -572,6 +573,11 @@ namespace mmo
 				{
 					const uint8 slotFieldOffset = (static_cast<uint8>(slotId & 0xFF) - player_inventory_slots::End) * 2;
 					itemGuid = unit->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
+				}
+				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
+						 IsGliderSlot(static_cast<uint8>(slotId & 0xFF)))
+				{
+					itemGuid = unit->Get<uint64>(GetInventorySlotField(static_cast<uint8>(slotId & 0xFF)));
 				}
 				else if ((static_cast<uint16>(slotId) >> 8) == player_inventory_slots::Bag_0 &&
 						 (slotId & 0xFF) >= player_equipment_slots::Start &&

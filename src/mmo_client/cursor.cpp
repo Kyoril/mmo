@@ -1,5 +1,6 @@
 
 #include "cursor.h"
+#include "game/inventory_fields.h"
 
 #include "frame_ui/frame_mgr.h"
 #include "graphics/texture_mgr.h"
@@ -207,6 +208,11 @@ namespace mmo
 		{
 			const uint8 slotFieldOffset = (static_cast<uint8>(slot & 0xFF) - player_inventory_slots::End) * 2;
 			itemGuid = player->Get<uint64>(object_fields::PackSlot_1 + slotFieldOffset);
+		}
+		else if ((static_cast<uint16>(slot) >> 8) == player_inventory_slots::Bag_0 &&
+			IsGliderSlot(static_cast<uint8>(slot & 0xFF)))
+		{
+			itemGuid = player->Get<uint64>(GetInventorySlotField(static_cast<uint8>(slot & 0xFF)));
 		}
 		else if ((static_cast<uint16>(slot) >> 8) == player_inventory_slots::Bag_0 &&
 			(slot & 0xFF) >= player_equipment_slots::Start &&

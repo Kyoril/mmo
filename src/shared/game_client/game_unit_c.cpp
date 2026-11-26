@@ -142,6 +142,13 @@ namespace mmo
 	{
 		UpdateSparkEmitter(false);
 
+		// Detaches from the entity, which the base class destroys after this destructor.
+		m_gliderVisual.reset();
+		if (s_soundEntryPlayer)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+		}
+
 		// Ensure quest giver status is removed
 		SetQuestGiverStatus(questgiver_status::None);
 
@@ -219,6 +226,60 @@ namespace mmo
 				m_sparkEmitterNode = nullptr;
 			}
 		}
+	}
+
+	void GameUnitC::SetGliderAttachment(std::optional<GliderAttachment> attachment)
+	{
+		m_gliderAttachment = std::move(attachment);
+
+		// The next frame builds the glider with the new look if the unit still glides.
+		m_gliderVisual.reset();
+	}
+
+	void GameUnitC::UpdateGliderVisual(const float deltaTime, const bool isDead)
+	{
+		const bool gliding = IsGliding() && !isDead;
+		if (!m_gliderVisual && gliding && m_entity && m_gliderAttachment)
+		{
+			m_gliderVisual = std::make_unique<GliderVisual>(m_scene, *m_entity, GetGuid(), *m_gliderAttachment);
+		}
+
+		glider_event::Type event = glider_event::None;
+		if (m_gliderVisual)
+		{
+			event = m_gliderVisual->Update(gliding, deltaTime);
+			if (event == glider_event::Closed)
+			{
+				m_gliderVisual.reset();
+			}
+		}
+
+		const GliderSoundCues::Cue cue = m_gliderSoundCues.Update(gliding, event);
+		if (!s_soundEntryPlayer)
+		{
+			return;
+		}
+
+		const Vector3 position = GetPosition();
+		if (cue.playOpen)
+		{
+			s_soundEntryPlayer->PlayEntry(glider_sounds::Open, position);
+		}
+		if (cue.startLoop)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+			m_gliderWindChannel = s_soundEntryPlayer->PlayEntry(glider_sounds::WindLoop, position, GliderWindLoopPriority);
+		}
+		if (cue.playClose)
+		{
+			s_soundEntryPlayer->PlayEntry(glider_sounds::Close, position);
+		}
+		if (cue.stopLoop)
+		{
+			s_soundEntryPlayer->StopChannel(m_gliderWindChannel);
+		}
+
+		s_soundEntryPlayer->MoveChannel(m_gliderWindChannel, position);
 	}
 
 	void GameUnitC::AddYawInput(const Radian &value)
@@ -515,6 +576,7 @@ namespace mmo
 		UpdateNormalMovement(deltaTime, isDead);
 
 		UpdateAnimation(deltaTime, isDead);
+		UpdateGliderVisual(deltaTime, isDead);
 
 		if (m_transition == TransitionState::Spawning && UpdateTransitionEffect(deltaTime) >= 1.0f)
 		{
@@ -666,8 +728,10 @@ namespace mmo
 		const float inputVector2DSize = (m_inputVector * Vector3(1.0f, 0.0f, 1.0f)).GetLength();
 		ctx.moving = m_unitMovement && m_unitMovement->IsMovingOnGround() && inputVector2DSize > 0.1f;
 		ctx.pathMoving = IsFollowingPath();
+		// A glider hovering in an updraft barely moves vertically but must keep its glide pose.
+		ctx.gliding = IsGliding();
 		ctx.airborne = m_unitMovement && m_unitMovement->IsFalling() &&
-			std::abs(m_unitMovement->GetVelocity().y) > 0.05f;
+			(ctx.gliding || std::abs(m_unitMovement->GetVelocity().y) > 0.05f);
 		ctx.verticalVelocity = m_unitMovement ? m_unitMovement->GetVelocity().y : 0.0f;
 		ctx.swimming = m_movementInfo.IsSwimming();
 		ctx.walkMode = IsWalkModeEnabled();
@@ -2947,6 +3011,8 @@ namespace mmo
 
 		// The previous model's outfit meshes hang off bones which do not survive a mesh change.
 		ClearModelItemAttachments();
+		// So does the glider; it is created again on the new entity while the unit glides.
+		m_gliderVisual.reset();
 
 		if (m_entity)
 			m_entity->SetVisible(modelEntry != nullptr);
@@ -3641,13 +3707,21 @@ namespace mmo
 		}
 	}
 
+	glider_usability::Type GameUnitC::GetGliderUsability() const
+	{
+		GliderUsabilityInput input;
+		input.knowsGlider = HasSpell(traversal_spells::Glider);
+		input.hasGliderEquipped = HasGliderEquipped();
+		input.predictedVigor = GetPredictedVigor();
+		input.alive = IsAlive();
+		input.rooted = IsRooted();
+		input.serverControlled = IsMovementControlledByServer();
+		return EvaluateGliderUsability(input);
+	}
+
 	bool GameUnitC::IsGliderUsable() const
 	{
-		return HasSpell(traversal_spells::Glider) &&
-			GetPredictedVigor() > 0.0f &&
-			IsAlive() &&
-			!IsRooted() &&
-			!IsMovementControlledByServer();
+		return GetGliderUsability() == glider_usability::Usable;
 	}
 
 	bool GameUnitC::TryToggleGlide()

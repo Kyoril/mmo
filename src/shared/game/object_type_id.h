@@ -388,8 +388,17 @@ namespace mmo
 			/// @brief float maximum vigor (one uint32 slot).
 			MaxVigor,
 
+			/// @brief 64 bit guid of the item in the glider slot (player_glider_slots::Slot). The
+			///	glider slot follows the buyback range, so its fields follow everything else.
+			GliderSlot,
+
+			/// @brief Visible glider, laid out like one VisibleItem block (creator guid, entry, properties).
+			VisibleGlider_CREATOR = GliderSlot + 2,
+			VisibleGlider_0 = VisibleGlider_CREATOR + 2,
+			VisibleGlider_PROPERTIES = VisibleGlider_0 + 12,
+
 			// Field count
-			PlayerFieldCount = MaxVigor + 1,
+			PlayerFieldCount = VisibleGlider_PROPERTIES + 1,
 		};
 
 		enum ItemFields

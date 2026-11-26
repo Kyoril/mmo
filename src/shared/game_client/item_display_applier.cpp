@@ -272,4 +272,9 @@ namespace mmo
 			ApplyItemBoneTransform(attachment.attachment, *bone);
 		}
 	}
+
+	String ResolveModelMeshFile(const uint32 modelId)
+	{
+		return ResolveModelMesh(modelId);
+	}
 }

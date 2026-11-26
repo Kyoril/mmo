@@ -46,8 +46,11 @@ namespace mmo
 
 		/// @brief Plays a sound entry at a world position. Non-looped 3D sounds out of
 		/// hearing range are not started at all.
+		/// @param priority Channel priority (see IAudio::PlaySound3D). Long-lived loops should use
+		///	a priority above 1.0, or one-shots steal their channel once all channels are busy and
+		///	the caller keeps moving or stopping a channel that now plays another sound.
 		/// @return The channel the sound plays on, or InvalidChannel.
-		ChannelIndex PlayEntry(uint32 soundId, const Vector3& position);
+		ChannelIndex PlayEntry(uint32 soundId, const Vector3& position, float priority = 1.0f);
 
 		/// @brief Plays a sound entry as a streamed, positioned loop (e.g. a river or waterfall).
 		/// The file is picked like for PlayEntry (shuffle bag) but loaded through
@@ -59,6 +62,14 @@ namespace mmo
 		///	a priority above 1.0, or one-shots steal their channel once all channels are busy.
 		/// @return The channel the sound plays on, or InvalidChannel.
 		ChannelIndex PlayEntryPositionedLoop(uint32 soundId, const Vector3& position, float minDistance, float maxDistance, float priority = 1.0f);
+
+		/// @brief Moves a playing positional voice, e.g. a loop that follows a unit.
+		/// @param channel Channel returned by one of the play methods; InvalidChannel is ignored.
+		void MoveChannel(ChannelIndex channel, const Vector3& position);
+
+		/// @brief Stops a voice started by one of the play methods and resets the index to
+		///	InvalidChannel. Stopping an InvalidChannel does nothing.
+		void StopChannel(ChannelIndex& channel);
 
 		/// @brief Gets the length of the (first) sound file of an entry in seconds.
 		float GetEntryLength(uint32 soundId) const;

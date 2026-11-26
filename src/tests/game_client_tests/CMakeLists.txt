@@ -22,6 +22,11 @@ target_sources(game_client_tests PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience_scan.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/class_name_localizer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/vigor_predictor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/animation/airborne_slot.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glider_fold_state.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/updraft_placement.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glider_sound_cues.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glider_usability.cpp
 	# The bot's unit model is self-contained; pet_friendliness_test checks its reaction rules.
 	${CMAKE_CURRENT_SOURCE_DIR}/../../shared/bot_core/bot_unit.cpp
 )
@@ -44,6 +49,7 @@ if (MMO_BUILD_CLIENT OR MMO_BUILD_EDITOR)
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/trade_skill_list.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/water_ambience.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/../../shared/game_client/glider_display.cpp
 	)
 	target_link_libraries(game_client_tests client_data)
 else()
@@ -57,6 +63,7 @@ else()
 		${CMAKE_CURRENT_SOURCE_DIR}/test_spell_text_formatter.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_trade_skill_list.cpp
 		${CMAKE_CURRENT_SOURCE_DIR}/test_water_ambience.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/test_glider_display.cpp
 		PROPERTIES HEADER_FILE_ONLY TRUE
 	)
 endif()

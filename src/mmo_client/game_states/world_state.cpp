@@ -1,6 +1,7 @@
 // Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 
 #include "world_state.h"
+#include "game/inventory_fields.h"
 
 #include "deferred_shading/ocean_profile.h"
 #include "client_context.h"
@@ -490,6 +491,7 @@ namespace mmo
 
 		m_debugPathVisualizer = std::make_unique<DebugPathVisualizer>(*m_scene);
 		m_worldPingVisualizer = std::make_unique<WorldPingVisualizer>(*m_scene);
+		m_updraftVisuals = std::make_unique<UpdraftVisuals>(*m_scene);
 
 		// Register world renderer
 		FrameManager::Get().RegisterFrameRenderer("WorldRenderer", [this](const std::string &name)
@@ -615,6 +617,7 @@ namespace mmo
 		CombatVignette::Destroy();
 
 		m_worldPingVisualizer.reset();
+		m_updraftVisuals.reset();
 		m_debugPathVisualizer.reset();
 		m_foliage.reset();
 		m_farTerrain.reset();
@@ -1087,6 +1090,14 @@ namespace mmo
 				? VigorActivity::GlidingInUpdraft
 				: VigorActivity::Gliding;
 		}
+
+		// A rising whoosh each time the own glider catches an updraft.
+		const bool glidingInUpdraft = activity == VigorActivity::GlidingInUpdraft;
+		if (glidingInUpdraft && !m_playerGlidingInUpdraft)
+		{
+			m_soundEntryPlayer.PlayEntry(glider_sounds::Updraft, player.GetPosition());
+		}
+		m_playerGlidingInUpdraft = glidingInUpdraft;
 
 		float extraDrain = 0.0f;
 		for (uint32 i = 0; i < player.GetAuraCount(); ++i)
@@ -3192,7 +3203,7 @@ namespace mmo
 					// Old handlers for now
 					m_playerObservers += object->fieldsChanged.connect([this](uint64 guid, uint16 fieldIndex, uint16 fieldCount)
 																	   {
-							if ((object_fields::PackSlot_1 > fieldIndex && object_fields::InvSlotHead <= fieldIndex + fieldCount))
+							if (FieldRangeChangesEquipment(fieldIndex, fieldCount))
 							{
 								FrameManager::Get().TriggerLuaEvent("EQUIPMENT_CHANGED");
 							}
@@ -5290,6 +5301,12 @@ namespace mmo
 
 	bool WorldState::LoadMap()
 	{
+		// The old map's updraft columns, also when loading the new map fails.
+		if (m_updraftVisuals)
+		{
+			m_updraftVisuals->Clear();
+		}
+
 		// The distant terrain belongs to the old world's terrain.
 		m_farTerrain.reset();
 
@@ -5349,6 +5366,10 @@ namespace mmo
 
 		// Load area triggers for this map
 		m_areaTriggerManager.LoadTriggersForMap(map->id(), m_project.areaTriggers);
+		if (m_updraftVisuals)
+		{
+			m_updraftVisuals->Show(m_areaTriggerManager.GetUpdrafts());
+		}
 
 		// Apply terrain LOD setting from console variable
 		if (m_worldInstance->HasTerrain() && s_terrainLodEnabledVar)

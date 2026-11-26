@@ -43,6 +43,10 @@ namespace mmo
 		/// while airborne.
 		float verticalVelocity{0.0f};
 
+		/// True while the unit glides (the Gliding movement flag is set); only meaningful while
+		/// airborne.
+		bool gliding{false};
+
 		/// True while the unit is swimming.
 		bool swimming{false};
 

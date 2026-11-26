@@ -269,6 +269,13 @@ namespace mmo
 			}
 			break;
 
+		case player_glider_slots::Slot:
+			if (inventoryType != inventory_type::Glider)
+			{
+				return InventoryResult<void>::Failure(inventory_change_failure::ItemDoesNotGoToSlot);
+			}
+			break;
+
 		default:
 			// Unknown equipment slot
 			return InventoryResult<void>::Failure(inventory_change_failure::ItemDoesNotGoToSlot);

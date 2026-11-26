@@ -20,6 +20,10 @@
 #include "unit_movement.h"
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
+#include "glider_visual.h"
+#include "glider_sound_cues.h"
+#include "glider_usability.h"
+#include "shared/audio/audio.h"
 #include "animation/animation_context.h"
 #include "unit_cast_info.h"
 #include "base/clock.h"
@@ -224,6 +228,12 @@ namespace mmo
 		/// @brief Whether this unit could open its glider right now: it knows the Glider spell, has
 		///	Vigor left, is alive, not rooted (stuns root the client too) and not moved by the server.
 		///	Does not check whether the unit is in the air (TryToggleGlide does).
+		/// @brief Whether a glider is equipped. Only players have a glider slot (GamePlayerC).
+		[[nodiscard]] virtual bool HasGliderEquipped() const { return false; }
+
+		/// @brief Whether the glider can be opened now, and if not, whether the player is told why.
+		[[nodiscard]] glider_usability::Type GetGliderUsability() const;
+
 		[[nodiscard]] virtual bool IsGliderUsable() const;
 
 		/// @brief The Vigor the client assumes this unit has right now. The only place that decides
@@ -316,6 +326,15 @@ namespace mmo
 		/// @param active If true, creates and plays the emitter; if false, destroys it.
 		void UpdateSparkEmitter(bool active);
 
+		/// @brief Shows, unfolds and folds the glider while the unit glides (see GliderVisual).
+		void UpdateGliderVisual(float deltaTime, bool isDead);
+
+	public:
+		/// @brief Sets how the unit's glider looks (from its equipped glider item), or nothing if it
+		///	has none. A glider shown at the moment is rebuilt with the new look.
+		void SetGliderAttachment(std::optional<GliderAttachment> attachment);
+
+	protected:
 		void OnEntryChanged();
 
 		void OnScaleChanged() const;
@@ -1071,6 +1090,18 @@ namespace mmo
 	protected:
 		/// @brief Layered animation controller owning all animation state selection and weights.
 		std::unique_ptr<AnimationController> m_animationController;
+
+		/// The visible glider while the unit glides or folds it; null otherwise.
+		std::unique_ptr<GliderVisual> m_gliderVisual;
+
+		/// Look of the equipped glider; without one no glider is drawn (sounds still play).
+		std::optional<GliderAttachment> m_gliderAttachment;
+
+		/// When the glider's open/close sounds and wind loop play.
+		GliderSoundCues m_gliderSoundCues;
+
+		/// Channel of the glider's wind loop while it plays.
+		ChannelIndex m_gliderWindChannel = InvalidChannel;
 
 		/// @brief Weapon category of the equipped main-hand item, fed into the animation
 		/// controller to select weapon-specific combat idle override sets.

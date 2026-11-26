@@ -618,6 +618,13 @@ namespace mmo
 		// possible anyway (one jump at a time), so the jump state is left alone.
 		if (m_controlledUnit->GetUnitMovement() && m_controlledUnit->GetUnitMovement()->IsFalling())
 		{
+			if (!m_controlledUnit->IsGliding() &&
+				m_controlledUnit->GetGliderUsability() == glider_usability::NoGliderEquipped)
+			{
+				FrameManager::Get().TriggerLuaEvent("GAME_ERROR", "ERR_NO_GLIDER_EQUIPPED");
+				return;
+			}
+
 			m_controlledUnit->TryToggleGlide();
 			return;
 		}

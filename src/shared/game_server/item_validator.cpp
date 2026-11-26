@@ -369,6 +369,13 @@ namespace mmo
 			}
 			break;
 
+		case player_glider_slots::Slot:
+			if (invType != inventory_type::Glider)
+			{
+				return InventoryResult<void>::Failure(inventory_change_failure::ItemDoesNotGoToSlot);
+			}
+			break;
+
 		case player_equipment_slots::Waist:
 			if (invType != inventory_type::Waist)
 			{

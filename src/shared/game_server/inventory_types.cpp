@@ -17,8 +17,8 @@ namespace mmo
 
 	bool InventorySlot::IsEquipment() const noexcept
 	{
-		return (GetBag() == player_inventory_slots::Bag_0) && 
-		       (GetSlot() < player_equipment_slots::End);
+		return (GetBag() == player_inventory_slots::Bag_0) &&
+		       (GetSlot() < player_equipment_slots::End || IsGliderSlot(GetSlot()));
 	}
 
 	bool InventorySlot::IsBag() const noexcept
