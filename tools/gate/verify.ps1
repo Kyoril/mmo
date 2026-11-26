@@ -31,8 +31,6 @@ if ($SkipE2E)
 }
 
 $python = if ($env:MMO_GATE_PYTHON) { $env:MMO_GATE_PYTHON } else { "python" }
-# Concurrent C++ test suites: half the cores, so tests with real-time deadlines keep headroom.
-$ctestJobs = [Math]::Max(2, [int]([Environment]::ProcessorCount / 2))
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 # Windows PowerShell 5.1 has no $IsWindows; it only runs on Windows.
@@ -156,9 +154,9 @@ try
 		# One ctest run covers every suite mmo_add_test() registered, so a new suite needs no
 		# edit here. --output-on-failure names the failing suite and prints its output into
 		# tools/gate/logs/tests.log.
-		# --parallel: the suites are independent processes; the step then takes about as long as
-		# game_server_tests alone instead of the sum of all suites.
-		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure", "--parallel", "$ctestJobs") -WorkingDirectory (Join-Path $repoRoot "build")
+		# Not --parallel: game_server_tests alone is most of the step, and its real-time tests
+		# (aura ticks, pet timers) failed on time under the extra load on 2026-11-26.
+		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
 	}
 
 	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,

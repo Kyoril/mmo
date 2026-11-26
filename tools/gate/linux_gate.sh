@@ -66,7 +66,7 @@ step "build ${targets[*]}"
 cmake --build "$work/build" --config Debug -t "${targets[@]}" || exit 1
 
 step "tests"
-(cd "$work/build" && ctest -C Debug --output-on-failure --parallel "$(( $(nproc) / 2 > 2 ? $(nproc) / 2 : 2 ))") || exit 1
+(cd "$work/build" && ctest -C Debug --output-on-failure) || exit 1
 
 step "deployer tests"
 (cd "$work/src" && python3 -m unittest discover -s deploy/deployer/tests -t deploy/deployer -p 'test_*.py') || exit 1
