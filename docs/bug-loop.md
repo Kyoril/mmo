@@ -410,7 +410,10 @@ or refixes the bug, or the loop gives up.
   did not touch (added regression tests are fine). Guard findings, the fixer's confidence and the
   reviewer's questions were the maintainer's to weigh, and they did. A red gate or a failed proof
   first gets the usual self-correction rounds.
-- **Lost push race and other ship failures:** the ship is tried again a minute later.
+- **Lost push race, a merge gate that timed out, and other ship failures:** the ship is tried
+  again a minute later. A gate that ran out of time (the loop allows an hour) says nothing about
+  the fix; on 2026-11-26 a gate slowed to over an hour by 37 minutes of tool tests parked four
+  ships as "red".
 - **No Claude** (budget used up, logged out): a needed re-application waits; the ship is queued
   with a retry time (00:05 UTC the next day for the budget), nothing is used up.
 - **Giving up:** after `mandate_rounds` (3) obstacles, or when the re-applied fix leaves what was

@@ -31,6 +31,8 @@ if ($SkipE2E)
 }
 
 $python = if ($env:MMO_GATE_PYTHON) { $env:MMO_GATE_PYTHON } else { "python" }
+# Concurrent C++ test suites: half the cores, so tests with real-time deadlines keep headroom.
+$ctestJobs = [Math]::Max(2, [int]([Environment]::ProcessorCount / 2))
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 # Windows PowerShell 5.1 has no $IsWindows; it only runs on Windows.
@@ -154,7 +156,9 @@ try
 		# One ctest run covers every suite mmo_add_test() registered, so a new suite needs no
 		# edit here. --output-on-failure names the failing suite and prints its output into
 		# tools/gate/logs/tests.log.
-		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure") -WorkingDirectory (Join-Path $repoRoot "build")
+		# --parallel: the suites are independent processes; the step then takes about as long as
+		# game_server_tests alone instead of the sum of all suites.
+		$ok = Invoke-GateStep -Name "tests" -Exe "ctest" -Arguments @("-C", "Debug", "--output-on-failure", "--parallel", "$ctestJobs") -WorkingDirectory (Join-Path $repoRoot "build")
 	}
 
 	# Discovery rather than a list of filenames: a tool test that nobody runs rots silently,
@@ -165,7 +169,10 @@ try
 	# some tool tests need the protoc built by it.
 	if ($ok)
 	{
-		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "tools/tests", "-p", "test_*.py")
+		# In parallel processes (tools/gate/run_tool_tests.py): run one after the other in a single
+		# process the tool tests took 37 minutes on 2026-11-26, nearly all of it waiting on git
+		# and PowerShell subprocesses.
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("tools/gate/run_tool_tests.py", "--start-dir", "tools/tests")
 	}
 
 	# The deployer ships to the live server; its tests gate every merge like the C++ suites.
