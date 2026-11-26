@@ -4,7 +4,9 @@
 # only) -> E2E. Writes tools/gate/last_report.json and exits 0 only if every step passed.
 #
 # Tiers:
-#   fast  protocol check, build, unit tests, tool tests, Linux check (a few min incremental). What /ship requires.
+#   fast  protocol check, build, unit tests, tool tests, Linux check. What /ship requires. Runs only the
+#         steps the change can affect (tools/gate/select_steps.py): a Python tool change skips the
+#         C++ builds, a documentation change runs the protocol check alone. -All runs every step.
 #   full  fast + E2E (~8.5 min). Run by the GitHub nightly (on Linux), /gate full and release_check.ps1.
 #
 # Usage:
@@ -22,7 +24,9 @@ param(
 	[switch]$SkipE2E,
 	# all_tests is an aggregate that every mmo_add_test() suite adds itself to, so a new
 	# test suite never needs an edit here.
-	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "all_tests")
+	[string[]]$Targets = @("login_server", "realm_server", "world_server", "e2e_client", "all_tests"),
+	# The fast tier without the selection by changed files: every step runs.
+	[switch]$All
 )
 
 if ($SkipE2E)
@@ -124,6 +128,23 @@ $dirty = [bool](& git -C $repoRoot status --porcelain)
 Push-Location $repoRoot
 try
 {
+	# Which steps the change needs. The full tier always runs everything; so does a selection
+	# that fails (git unreachable, a broken script): it never skips on doubt.
+	$selection = [pscustomobject]@{ cpp = $true; tool_tests = "all"; deployer = $true; reason = "every step runs" }
+	if ($Tier -eq "fast" -and -not $All)
+	{
+		try
+		{
+			$selected = (& $python (Join-Path $repoRoot "tools/gate/select_steps.py") --base origin/develop) | ConvertFrom-Json
+			if ($LASTEXITCODE -eq 0 -and $selected) { $selection = $selected }
+		}
+		catch
+		{
+			Write-Host ("change selection failed, every step runs: {0}" -f $_) -ForegroundColor Yellow
+		}
+	}
+	Write-Host ("== selection: {0}" -f $selection.reason)
+
 	# First, and before the build, because it costs milliseconds and answers a question the
 	# build cannot: did the wire format change without the version bump that makes incompatible
 	# peers get rejected instead of silently misparsing each other?
@@ -144,12 +165,12 @@ try
 		& (Join-Path $repoRoot "tools/sync_skills.ps1") -Check
 	}
 
-	if ($ok)
+	if ($ok -and $selection.cpp)
 	{
 		$ok = Invoke-GateStep -Name "build" -Exe "cmake" -Arguments (@("--build", "build", "--config", "Debug", "-t") + $Targets)
 	}
 
-	if ($ok)
+	if ($ok -and $selection.cpp)
 	{
 		# One ctest run covers every suite mmo_add_test() registered, so a new suite needs no
 		# edit here. --output-on-failure names the failing suite and prints its output into
@@ -165,16 +186,21 @@ try
 	# milliseconds and keeps the step free of exclusions. Named separately so a failure here
 	# does not read as the protocol checker itself being broken. Runs after the build because
 	# some tool tests need the protoc built by it.
-	if ($ok)
+	if ($ok -and $selection.tool_tests -ne "none")
 	{
 		# In parallel processes (tools/gate/run_tool_tests.py): run one after the other in a single
 		# process the tool tests took 37 minutes on 2026-11-26, nearly all of it waiting on git
 		# and PowerShell subprocesses.
-		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments @("tools/gate/run_tool_tests.py", "--start-dir", "tools/tests")
+		$toolArgs = @("tools/gate/run_tool_tests.py", "--start-dir", "tools/tests")
+		if ($selection.tool_tests -ne "all")
+		{
+			$toolArgs += @("--modules", (@($selection.tool_tests) -join ","))
+		}
+		$ok = Invoke-GateStep -Name "tool_tests" -Exe $python -Arguments $toolArgs
 	}
 
-	# The deployer ships to the live server; its tests gate every merge like the C++ suites.
-	if ($ok)
+	# The deployer ships to the live server; its tests gate every merge that can touch it.
+	if ($ok -and $selection.deployer)
 	{
 		$ok = Invoke-GateStep -Name "deployer_tests" -Exe $python -Arguments @("-m", "unittest", "discover", "-s", "deploy/deployer/tests", "-t", "deploy/deployer", "-p", "test_*.py")
 	}
@@ -183,14 +209,14 @@ try
 	# test that only runs where symlinks work, passes here and turns the nightly red. On Windows
 	# the same targets therefore build and test once more in WSL (Ubuntu 24.04, like CI); on
 	# Linux the steps above already were that check.
-	if ($ok -and $onWindows -and -not (Get-Command wsl.exe -ErrorAction SilentlyContinue))
+	if ($ok -and $selection.cpp -and $onWindows -and -not (Get-Command wsl.exe -ErrorAction SilentlyContinue))
 	{
 		Write-Host "WSL is not installed - the Linux check cannot run (see tools/gate/linux_gate.sh)." -ForegroundColor Red
 		$steps += [ordered]@{ name = "linux"; passed = $false; exit_code = -1; log = $null; duration_s = 0 }
 		$allPassed = $false
 		$ok = $false
 	}
-	elseif ($ok -and $onWindows)
+	elseif ($ok -and $selection.cpp -and $onWindows)
 	{
 		$checkout = (& wsl.exe -e wslpath -a ($repoRoot -replace '\\', '/'))
 		$script = "$checkout/tools/gate/linux_gate.sh"
@@ -231,6 +257,8 @@ finally
 		config = "Debug"
 		tier = $Tier
 		e2e_skipped = ($Tier -ne "full")
+		# What the change needed (fast tier): the steps not listed in `steps` were not affected.
+		selection = $(if ($selection) { $selection.reason } else { "every step runs" })
 		steps = $steps
 		passed = $reportPassed
 	} | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $PSScriptRoot "last_report.json") -Encoding UTF8
