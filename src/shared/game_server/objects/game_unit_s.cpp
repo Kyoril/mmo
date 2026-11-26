@@ -2,6 +2,8 @@
 
 #include "game_unit_s.h"
 
+#include "game_server/ai/unreachable_target.h"
+
 #include "game_server/cc_movement_controller.h"
 #include "game_server/pets/pet_manager.h"
 #include "game_server/emote_utils.h"
@@ -4525,7 +4527,8 @@ namespace mmo
 		const float attackRange = GetMeleeReach() + victim->GetMeleeReach();
 		const bool bothMoving = IsMoving() && victim->IsMoving();
 		const float effectiveRange = attackRange + (bothMoving ? MELEE_CHASE_RANGE_BONUS : 0.0f);
-		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange))
+		if (victim->GetSquaredDistanceTo(GetPosition(), false) > (effectiveRange * effectiveRange) ||
+			UnreachableTargetTracker::IsAboveMeleeHeight(GetPosition(), victim->GetPosition(), victim->GetMovementInfo().IsFalling(), effectiveRange))
 		{
 			if (!isOffhand)
 			{

@@ -63,3 +63,23 @@ TEST_CASE("Reaching the victim once ends the unreachable streak", "[unreachable_
 	tracker.Reset();
 	CHECK_FALSE(tracker.ShouldEvade(start + 100000));
 }
+
+TEST_CASE("An airborne victim high above is out of melee height", "[unreachable_target]")
+{
+	CHECK(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 8.0f, 0.0f), true, 5.0f));
+}
+
+TEST_CASE("A jumping victim stays within melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.3f, 0.0f), true, 5.0f));
+}
+
+TEST_CASE("A victim on the ground is never out of melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 8.0f, 0.0f), false, 5.0f));
+}
+
+TEST_CASE("A victim below the attacker is not out of melee height", "[unreachable_target]")
+{
+	CHECK_FALSE(UnreachableTargetTracker::IsAboveMeleeHeight(Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, -8.0f, 0.0f), true, 5.0f));
+}

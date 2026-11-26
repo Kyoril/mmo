@@ -800,7 +800,11 @@ namespace mmo
 			// us: no swing lands through it and no path leads through it, so the fight could never
 			// end. Keep the unreachable streak running so we evade below like any other victim we
 			// cannot get to.
-			if (controlled.IsInLineOfSightOf(target))
+			// An airborne victim (gliding) high above is out of reach of every melee swing: count
+			// it as unreachable too, so we evade instead of waiting underneath.
+			const bool aboveMeleeHeight = UnreachableTargetTracker::IsAboveMeleeHeight(controlled.GetPosition(), target.GetPosition(),
+				target.GetMovementInfo().IsFalling(), controlled.GetMeleeReach() + target.GetMeleeReach());
+			if (!aboveMeleeHeight && controlled.IsInLineOfSightOf(target))
 			{
 				m_unreachable.Update(false, GetAsyncTimeMs());
 				return true;
@@ -812,7 +816,7 @@ namespace mmo
 				return true;
 			}
 
-			DLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " has no line of sight to its victim in melee range, evading");
+			DLOG("Creature 0x" << std::hex << controlled.GetGuid() << std::dec << " cannot reach its victim in melee range (no line of sight or airborne above), evading");
 			GetAI().Reset();
 			return false;
 		}

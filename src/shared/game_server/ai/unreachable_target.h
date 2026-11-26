@@ -43,6 +43,19 @@ namespace mmo
 			return !IsFlatWithin(pathEnd, slot, acceptance + Slack) && !IsFlatWithin(pathEnd, victim, attackRange + Slack);
 		}
 
+		/// @brief Checks whether an airborne victim (falling or gliding) is higher above the attacker
+		///	than its melee reach, so no melee swing can land on it. A victim on the ground or below the
+		///	attacker never is: ground combat on slopes stays as it is.
+		/// @param attacker Where the attacker stands.
+		/// @param victim Where the victim is.
+		/// @param victimAirborne Whether the victim falls or glides.
+		/// @param attackRange The attacker's melee range against the victim.
+		/// @return True if the victim is out of melee height.
+		static bool IsAboveMeleeHeight(const Vector3& attacker, const Vector3& victim, const bool victimAirborne, const float attackRange)
+		{
+			return victimAirborne && victim.y - attacker.y > attackRange;
+		}
+
 		/// @brief Records the outcome of one chase move.
 		/// @param unreachable Whether the victim could not be reached this time.
 		/// @param now Current time.
