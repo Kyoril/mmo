@@ -209,18 +209,24 @@ namespace mmo
 			return nullptr;
 		}
 
-		// Indexed by item_stat::Type; the retired types 2 - 31 and attribute stats have no key
-		static const char* s_statTypeStrings[] = {
-			"MANA",
-			"HEALTH"
-		};
-
-		if (stats[index].type >= std::size(s_statTypeStrings))
+		// The retired types 2 - 31 and attribute stats have no key
+		switch (stats[index].type)
 		{
+		case item_stat::Mana:
+			return "MANA";
+		case item_stat::Health:
+			return "HEALTH";
+		case item_stat::GlideSpeed:
+			return "GLIDE_SPEED";
+		case item_stat::GlideAgility:
+			return "GLIDE_AGILITY";
+		case item_stat::GlideLift:
+			return "GLIDE_LIFT";
+		case item_stat::GlideEndurance:
+			return "GLIDE_ENDURANCE";
+		default:
 			return nullptr;
 		}
-
-		return s_statTypeStrings[stats[index].type];
 	}
 
 	int32 ItemInfo::GetStatAttribute(const int32 index) const

@@ -124,12 +124,37 @@ namespace mmo
 	{
 		Vector3 result = velocity;
 
-		// Horizontal: full forward speed along the input, or decay to a stop without input.
+		// Horizontal: full forward speed, turning toward the input at the turn rate, or decay to a
+		// stop without input. From (nearly) standing still the glider takes the input direction.
 		const float inputLength = std::sqrt(desiredHorizontalDir.x * desiredHorizontalDir.x + desiredHorizontalDir.z * desiredHorizontalDir.z);
 		if (inputLength > 1e-6f)
 		{
-			result.x = desiredHorizontalDir.x / inputLength * settings.glideForwardSpeed;
-			result.z = desiredHorizontalDir.z / inputLength * settings.glideForwardSpeed;
+			const float inputAngle = std::atan2(desiredHorizontalDir.z, desiredHorizontalDir.x);
+			float angle = inputAngle;
+
+			const float currentSpeed = std::sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+			if (currentSpeed >= 1.0f)
+			{
+				constexpr float pi = 3.14159265358979f;
+				const float currentAngle = std::atan2(velocity.z, velocity.x);
+				float delta = std::remainder(inputAngle - currentAngle, 2.0f * pi);
+				const float maxTurn = settings.glideTurnRate * seconds;
+				if (std::abs(delta) > maxTurn)
+				{
+					angle = currentAngle + (delta > 0.0f ? maxTurn : -maxTurn);
+				}
+			}
+
+			if (angle == inputAngle)
+			{
+				result.x = desiredHorizontalDir.x / inputLength * settings.glideForwardSpeed;
+				result.z = desiredHorizontalDir.z / inputLength * settings.glideForwardSpeed;
+			}
+			else
+			{
+				result.x = std::cos(angle) * settings.glideForwardSpeed;
+				result.z = std::sin(angle) * settings.glideForwardSpeed;
+			}
 		}
 		else
 		{
