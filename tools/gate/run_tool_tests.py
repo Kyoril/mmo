@@ -95,6 +95,7 @@ def main(argv=None):
 	parser.add_argument("--start-dir", default=os.path.join("tools", "tests"))
 	parser.add_argument("--jobs", type=int, default=min(16, os.cpu_count() or 4))
 	parser.add_argument("--pattern", default="test_*.py")
+	parser.add_argument("--modules", default="", help="comma-separated test modules to run instead of discovering all")
 	parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
 	parser.add_argument("ids", nargs="*", help=argparse.SUPPRESS)
 	args = parser.parse_args(argv)
@@ -103,7 +104,10 @@ def main(argv=None):
 
 	root = os.getcwd()
 	sys.path.insert(0, os.path.abspath(args.start_dir))
-	suite = unittest.defaultTestLoader.discover(args.start_dir, pattern=args.pattern)
+	if args.modules:
+		suite = unittest.defaultTestLoader.loadTestsFromNames([name for name in args.modules.split(",") if name])
+	else:
+		suite = unittest.defaultTestLoader.discover(args.start_dir, pattern=args.pattern)
 	# A module that does not import cannot be re-run by name in a worker: report its error here.
 	broken = [test for test in _iter_tests(suite) if type(test).__module__.startswith("unittest.")]
 	if broken:
