@@ -38,6 +38,10 @@ namespace mmo
 		/// @param grounded Whether the character stands on the ground or swims (regeneration allowed).
 		void Advance(GameTime now, VigorActivity activity, float extraDrainPerSecond, bool inCombat, bool grounded);
 
+		/// @brief Replaces the tuning values (the equipped glider changed).
+		/// @param settings The new tuning values (copied).
+		void SetSettings(const TraversalSettings& settings) { m_settings = settings; }
+
 		/// @brief Whether the predictor received a server value yet.
 		[[nodiscard]] bool IsAnchored() const { return m_anchored; }
 

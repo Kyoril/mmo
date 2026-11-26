@@ -1,4 +1,6 @@
 #include "game_player_c.h"
+
+#include "game/glide_stats.h"
 #include "glider_display.h"
 
 #include "floor_surface_query.h"
@@ -128,6 +130,9 @@ namespace mmo
 				SetGliderAttachment(display
 					? ResolveGliderAttachment(*display, Get<uint32>(object_fields::DisplayId), &ResolveModelMeshFile)
 					: std::nullopt);
+
+				// The glider's glide stats, as the server applies them (see GamePlayerS::ApplyItemStats).
+				ApplyGliderTraversalSettings(ApplyGlideModifiers(TraversalSettings(), GetGlideModifiers(data)));
 			}
 			return;
 		}
@@ -365,8 +370,17 @@ namespace mmo
 		RefreshItemDisplayAttachmentBones(*m_entity, m_itemAttachments, m_weaponsDrawn);
 	}
 
+	void GamePlayerC::ApplyGliderTraversalSettings(const TraversalSettings& settings)
+	{
+		SetTraversalSettings(settings);
+		m_vigorPredictor.SetSettings(settings);
+	}
+
 	void GamePlayerC::OnGliderChanged(uint64)
 	{
+		// Base settings until the new glider's item data arrives, so no previous glider's stats linger.
+		ApplyGliderTraversalSettings(TraversalSettings());
+
 		const uint32 gliderEntry = Get<uint32>(object_fields::VisibleGlider_0);
 		if (gliderEntry == 0)
 		{

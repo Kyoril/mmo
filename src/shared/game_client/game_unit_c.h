@@ -20,6 +20,7 @@
 #include "unit_movement.h"
 #include "movement_event.h"
 #include "remote_movement_renderer.h"
+#include "game/traversal.h"
 #include "glider_visual.h"
 #include "glider_sound_cues.h"
 #include "glider_usability.h"
@@ -261,6 +262,13 @@ namespace mmo
 		/// @brief Sets the function that returns the updraft strength at a position (0 for none).
 		///	Used by the glide physics of the own unit and the remote simulation alike.
 		void SetUpdraftProvider(std::function<float(const Vector3&)> provider);
+
+		/// @brief Sets the glide settings of this unit (the base settings with the equipped glider's
+		///	glide stats). Used by the own unit's glide physics and the remote simulation alike.
+		void SetTraversalSettings(const TraversalSettings& settings);
+
+		/// @brief Gets the glide settings of this unit (see SetTraversalSettings).
+		[[nodiscard]] const TraversalSettings& GetTraversalSettings() const { return m_traversalSettings; }
 
 		/// @brief Visually pitches the character mesh by the current swim pitch while actively
 		/// swimming forward/backward, and smoothly returns it to level (0 pitch) when idle or out of
@@ -1163,6 +1171,9 @@ namespace mmo
 
 		/// @brief Buffered movement queue for remote players.
 		RemoteMovementRenderer m_remoteMovementRenderer;
+
+		/// @brief Glide settings of this unit (see SetTraversalSettings).
+		TraversalSettings m_traversalSettings;
 
 		GameTime m_lastHeartbeat = 0;
 

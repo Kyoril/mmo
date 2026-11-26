@@ -132,6 +132,62 @@ namespace mmo
 		CHECK(travelled <= kSettings.glideForwardSpeed * 1.35f);
 	}
 
+	TEST_CASE("Own gliding unit moves at its glider's forward speed", "[glide]")
+	{
+		proto_client::Project project;
+		TestScene scene;
+		TestNetClient net;
+
+		TraversalSettings faster;
+		faster.glideForwardSpeed = 15.0f;
+		const auto unit = CreateGlidingOwnUnit(scene, net, project, Vector3(0.0f, 100.0f, 0.0f), 0.0f);
+		unit->SetTraversalSettings(faster);
+
+		SimulateMovement(*unit, Vector3(kRunSpeed, 0.0f, 0.0f), 60, kFrame);
+
+		const Vector3 velocity = unit->GetUnitMovement()->GetVelocity();
+		const float horizontal = std::sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+		INFO("velocity = (" << velocity.x << ", " << velocity.y << ", " << velocity.z << ")");
+		CHECK(horizontal == Approx(15.0f).margin(0.01f));
+	}
+
+	TEST_CASE("Own gliding unit sinks at its glider's sink speed", "[glide]")
+	{
+		proto_client::Project project;
+		TestScene scene;
+		TestNetClient net;
+
+		TraversalSettings floaty;
+		floaty.glideSinkSpeed = 1.0f;
+		const auto unit = CreateGlidingOwnUnit(scene, net, project, Vector3(0.0f, 100.0f, 0.0f), -15.0f);
+		unit->SetTraversalSettings(floaty);
+
+		SimulateMovement(*unit, Vector3::Zero, 120, kFrame);
+
+		CHECK(unit->GetUnitMovement()->GetVelocity().y == Approx(-1.0f).margin(0.01f));
+	}
+
+	TEST_CASE("Remote gliding unit sinks at its glider's sink speed", "[glide]")
+	{
+		proto_client::Project project;
+		TestScene scene;
+		TestNetClient net;
+
+		TraversalSettings floaty;
+		floaty.glideSinkSpeed = 1.0f;
+		const Vector3 start(0.0f, 100.0f, 0.0f);
+		const auto remote = CreateUnit(scene, net, project, start, false);
+		remote->SetTraversalSettings(floaty);
+		remote->EnqueueRemoteMovement(GlidePacket(start, Vector3(0.0f, -15.0f, 0.0f), 1000));
+
+		for (int frame = 0; frame < 120; ++frame)
+		{
+			remote->UpdateRemoteMovement(kFrame);
+		}
+
+		CHECK(remote->GetUnitMovement()->GetVelocity().y == Approx(-1.0f).margin(0.01f));
+	}
+
 	TEST_CASE("Remote unit with Gliding flag sinks at glide speed", "[glide]")
 	{
 		proto_client::Project project;
