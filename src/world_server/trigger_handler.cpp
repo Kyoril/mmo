@@ -4,6 +4,7 @@
 #include "vector_sink.h"
 #include "base/utilities.h"
 #include "game_server/ai/creature_facing.h"
+#include "game_server/chat_text_tokens.h"
 #include "game_server/objects/game_creature_s.h"
 #include "game_server/objects/game_world_object_s.h"
 #include "game_server/world/universe.h"
@@ -332,6 +333,25 @@ namespace mmo
 		ExecuteTrigger(*trigger, context, 0);
 	}
 
+	namespace
+	{
+		/// Substitutes the authored name token in a trigger's chat text and in every localized
+		/// variant of it, so that no raw "$N" ever reaches a player.
+		/// @param localizedTexts Copy of the action's localized texts, substituted in place.
+		/// @param text The action's default text.
+		/// @param name Name of the unit the chat line is about, empty if there is none.
+		/// @returns The substituted default text.
+		String SubstituteChatTexts(google::protobuf::RepeatedPtrField<proto::LocalizedString>& localizedTexts, const String& text, const String& name)
+		{
+			for (proto::LocalizedString& localizedText : localizedTexts)
+			{
+				localizedText.set_value(SubstituteChatNameToken(localizedText.value(), name));
+			}
+
+			return SubstituteChatNameToken(text, name);
+		}
+	}
+
 	void TriggerHandler::HandleSay(const proto::TriggerAction& action, TriggerContext& context)
 	{
 		GameObjectS* target = GetActionTarget(action, context);
@@ -354,8 +374,12 @@ namespace mmo
 			return;
 		}
 
-		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatSay(GetActionText(action, 0), &action.texts_loc());
+		const auto triggeringUnit = context.triggeringUnit.lock();
+		const String triggeringName = triggeringUnit ? triggeringUnit->GetName() : String();
+
+		auto localizedTexts = action.texts_loc();
+		const String text = SubstituteChatTexts(localizedTexts, GetActionText(action, 0), triggeringName);
+		target->AsUnit().ChatSay(text, &localizedTexts);
 
 		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
@@ -386,8 +410,12 @@ namespace mmo
 			return;
 		}
 
-		auto triggeringUnit = context.triggeringUnit.lock();
-		target->AsUnit().ChatYell(GetActionText(action, 0), &action.texts_loc());
+		const auto triggeringUnit = context.triggeringUnit.lock();
+		const String triggeringName = triggeringUnit ? triggeringUnit->GetName() : String();
+
+		auto localizedTexts = action.texts_loc();
+		const String text = SubstituteChatTexts(localizedTexts, GetActionText(action, 0), triggeringName);
+		target->AsUnit().ChatYell(text, &localizedTexts);
 
 		// Optional voice line, heard as far as the chat line is
 		if (action.data_size() > 0)
@@ -418,7 +446,12 @@ namespace mmo
 			return;
 		}
 
-		target->AsUnit().ChatEmote(GetActionText(action, 0), &action.texts_loc());
+		const auto triggeringUnit = context.triggeringUnit.lock();
+		const String triggeringName = triggeringUnit ? triggeringUnit->GetName() : String();
+
+		auto localizedTexts = action.texts_loc();
+		const String text = SubstituteChatTexts(localizedTexts, GetActionText(action, 0), triggeringName);
+		target->AsUnit().ChatEmote(text, &localizedTexts);
 
 		// Optional sound, heard as far as the emote text is
 		if (action.data_size() > 0)
