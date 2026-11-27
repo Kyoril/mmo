@@ -1,14 +1,16 @@
 # Copyright (C) 2019 - 2025, Kyoril. All rights reserved.
 """Loads the protobuf game data (data/editor/data/*.data) for world tooling.
 
-Schemas are compiled with the repository's protoc via the tracked quest skill's proto_runtime, so
-worldkit always reads the same schema version as the authoring skills.
+Schemas are compiled with the repository's protoc from src/shared/proto_data, so worldkit always
+reads the same schema version as the authoring skills.
 """
 
 from __future__ import annotations
 
 import importlib
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,6 +31,34 @@ _CATALOGS = {
 _MODULES: dict[str, dict] = {}
 
 
+# Where CMake leaves protoc: next to the build dir in a single-config build (Makefiles, Ninja),
+# in a per-configuration subdirectory in a multi-config one (Visual Studio, Ninja Multi-Config),
+# and without the .exe suffix on everything that is not Windows.
+_PROTOC_NAMES = ("protoc.exe", "protoc")
+_PROTOC_CONFIGS = ("", "Release", "RelWithDebInfo", "Debug")
+
+
+def find_protoc(repo: Path = REPO) -> Path:
+    base = repo / "build" / "_deps" / "protobuf-build"
+    candidates = [base / config / name for config in _PROTOC_CONFIGS for name in _PROTOC_NAMES]
+    candidates += [path for name in _PROTOC_NAMES for path in sorted(base.glob("*/" + name))]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"Unable to locate protoc under {base}")
+
+
+def _compile_proto_modules(repo: Path) -> Path:
+    proto_dir = repo / "src" / "shared" / "proto_data"
+    out_dir = Path(tempfile.mkdtemp(prefix="mmo_worldkit_proto_"))
+    proto_files = sorted(path.name for path in proto_dir.glob("*.proto"))
+    subprocess.run([str(find_protoc(repo)), f"-I{proto_dir}", f"--python_out={out_dir}", *proto_files],
+                   check=True, cwd=proto_dir)
+    if str(out_dir) not in sys.path:
+        sys.path.insert(0, str(out_dir))
+    return out_dir
+
+
 def load_proto_modules(repo: Path = REPO) -> dict:
     key = str(repo)
     if key not in _MODULES:
@@ -38,8 +68,7 @@ def load_proto_modules(repo: Path = REPO) -> dict:
         # A skill script that imports worldkit has usually compiled the schemas already; each compile
         # leaves a temp dir behind, so only compile when the generated modules are not importable.
         if not all(module in sys.modules for module, _, _ in _CATALOGS.values()):
-            from proto_runtime import compile_proto_modules
-            compile_proto_modules(repo)
+            _compile_proto_modules(repo)
         _MODULES[key] = {name: importlib.import_module(module) for name, (module, _, _) in _CATALOGS.items()}
     return _MODULES[key]
 
